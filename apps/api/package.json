@@ -1,0 +1,21 @@
+{
+  "name": "@rodzina/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/server.ts src/jobs/heartbeat.ts --format esm --platform node --target node22 --out-dir dist --external fastify --external @fastify/static --external better-sqlite3 --external drizzle-orm --external zod --sourcemap"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.5",
+    "better-sqlite3": "^12.2.0",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.5.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.11",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.5"
+  }
+}

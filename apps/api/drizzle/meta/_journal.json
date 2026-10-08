@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1791483051468,
+      "tag": "0000_married_the_enforcers",
+      "breakpoints": true
+    }
+  ]
+}
