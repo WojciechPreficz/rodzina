@@ -47,7 +47,7 @@ Ten dokument jest samowystarczalny i przeznaczony do przekazania agentowi AI lub
 - **Hosting docelowy.** Współdzielony hosting cPanel w vh.pl, aplikacja pod subdomeną istniejącej domeny właściciela, przez HTTPS. Właściciel ma już na tym hostingu aplikację wdrożoną tą samą metodą (zip, aplikacja w cPanel, Phusion Passenger, SQLite w katalogu danych). Wzorzec deployu: [portfel/DEPLOY.md](https://github.com/WojciechPreficz/portfel/blob/main/DEPLOY.md). Wzorujemy się tylko na sposobie wdrożenia, nie na stacku.
 - **Fazy 0-7 są realizowane i testowane wyłącznie lokalnie.** Faktyczne wdrożenie na serwer to osobna faza 8, wykonywana dopiero po ukończeniu faz 0-7. W każdej fazie aplikacja musi jednak pozostawać **gotowa do wdrożenia** (sekcja 1.1).
 - **Język.** UI wyłącznie po polsku. Kod, nazwy, komentarze i commity po angielsku. README i dokumentacja w `docs/` po polsku.
-- **Zasada pracy.** Agent realizuje **jedną fazę naraz**. Kończy ją dopiero wtedy, gdy wszystkie kryteria akceptacji są spełnione oraz przechodzą `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` i `npm run release:smoke`. Każdą decyzję, której plan nie rozstrzyga, zapisuje w `docs/DECISIONS.md` (data, decyzja, powód).
+- **Zasada pracy.** Agent realizuje **jeden krok jednej fazy naraz** (fazy 1-9 są podzielone na kroki, sekcja 1.2; faza 0 jest realizowana w całości). Fazę kończy dopiero wtedy, gdy wszystkie kroki są gotowe, wszystkie kryteria akceptacji są spełnione oraz przechodzą `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` i `npm run release:smoke`. Każdą decyzję, której plan nie rozstrzyga, zapisuje w `docs/DECISIONS.md` (data, decyzja, powód).
 
 ### 1.1 Gotowość do deployu w każdej fazie (Definition of Done)
 
@@ -62,14 +62,30 @@ Każda faza, która to dotyczy, musi:
 
 ### Szablon polecenia dla agenta
 
+### 1.2 Kroki w obrębie fazy
+
+Fazy 1-9 są podzielone na **kroki** (np. 1.1, 1.2, 2.1). Opis kroków jest w każdej fazie w sekcji "Kroki realizacji". Zasady:
+
+- Agent realizuje **jeden krok naraz**: jeden krok to jeden czat i jeden commit (Conventional Commits, np. `feat(api): ...`). Kroki wykonujemy w podanej kolejności.
+- Krok jest gotowy, gdy przechodzą `npm run lint`, `npm run typecheck`, `npm test` i `npm run build` oraz spełnione są warunki "Gotowe, gdy" z jego opisu. Pełne kryteria akceptacji fazy, punkty z sekcji 1.1 i `npm run release:smoke` obowiązują w **ostatnim kroku fazy**. Wcześniej `release:smoke` uruchamiamy tylko tam, gdzie opis kroku to wskazuje (zmiany w konfiguracji, jobach, zależnościach).
+- Krok nie zostawia aplikacji w stanie połowicznym: endpointy i ekrany z kroku działają od początku do końca, a nieużywany kod "na zapas" nie powstaje. Każdy krok dodaje tylko te tabele, których sam używa, a migracje commituje razem z krokiem.
+- Kroki API i logiki mają testy automatyczne, a kroki UI testy komponentów oraz krótką weryfikację ręczną opisaną w kroku. Każdy krok UI sprawdzamy w dwóch szerokościach: telefon (ok. 390 px) i desktop w Chrome. Układ nie może się rozjeżdżać na szerokim ekranie.
+- Jeśli krok wymaga czegoś z późniejszego kroku (np. tabeli, której jeszcze nie ma), to błąd podziału. Agent zatrzymuje się, opisuje problem w `docs/DECISIONS.md` i pyta, zamiast implementować fragment kolejnego kroku.
+
+### Szablon polecenia dla agenta
+
 ```text
-Przeczytaj AGENTS.md oraz docs/PLAN.md. Zrealizuj wyłącznie Fazę N.
-Nie implementuj niczego z sekcji "Poza zakresem" ani z kolejnych faz.
+Przeczytaj AGENTS.md oraz docs/PLAN.md (sekcje 1-5 i opis Fazy N).
+Zrealizuj wyłącznie Fazę N, krok N.K.
+Nie implementuj niczego z innych kroków, z sekcji "Poza zakresem" ani z kolejnych faz.
 Nie wdrażaj niczego na serwer - testujemy lokalnie (poza fazą 8).
 Zanim zaczniesz, wypisz listę plików, które utworzysz/zmienisz.
-Na koniec pokaż, jak spełniłeś każde kryterium akceptacji
+Na koniec pokaż, jak spełniłeś warunki "Gotowe, gdy" tego kroku.
+W ostatnim kroku fazy pokaż też każde kryterium akceptacji fazy
 oraz punkty "Gotowość do deployu" z sekcji 1.1.
 ```
+
+Dla fazy 0 (bez kroków) polecenie brzmi: "Zrealizuj wyłącznie Fazę 0", a na końcu agent pokazuje wszystkie kryteria akceptacji.
 
 
 ### Testowanie na Androidzie lokalnie (bez serwera)
@@ -82,12 +98,36 @@ Service worker, instalacja PWA i push wymagają bezpiecznego kontekstu, czyli HT
 
 Telefon traktuje tę stronę jak `localhost`, więc da się zainstalować PWA i odebrać push. **Instalację PWA, service worker i push testujemy na buildzie produkcyjnym (`npm run build && npm start`, port 3000)**, bo service worker w trybie dev Vite działa zawodnie. Tryb dev służy do pracy nad UI. Opis trafia do `docs/DEVELOPMENT.md` w fazie 0.
 
+### Testowanie lokalnie na komputerze (bez telefonu)
+
+Aplikację da się w całości uruchomić i testować na komputerze. `localhost` jest bezpiecznym kontekstem, więc w Chrome na desktopie działają service worker, instalacja PWA i push tak samo jak na telefonie. Komputer nie zastępuje jednak końcowej weryfikacji na Androidzie (platforma docelowa), tylko przyspiesza codzienną pracę.
+
+| Tryb | Komenda i adres | Do czego |
+| --- | --- | --- |
+| Dev | `npm run dev`, `http://localhost:5173` | praca nad UI, szybkie przeładowania |
+| Produkcyjny | `npm run build && npm start`, `http://localhost:3000` | manifest, service worker, instalacja PWA, push, offline |
+
+Oba tryby używają portu API 3000, więc nie uruchamiaj ich jednocześnie.
+
+1. **Podgląd mobilny.** W Chrome otwórz DevTools (F12) i włącz tryb urządzenia (Ctrl+Shift+M, na macOS Cmd+Shift+M), np. Pixel 7. Sprawdza to układ i dotyk, ale nie zastępuje prawdziwego telefonu.
+2. **Manifest i service worker.** Na buildzie produkcyjnym (port 3000) w DevTools > Application sprawdź:
+   - Manifest: brak błędów, ikony 192/512/maskable;
+   - Service Workers: status "activated and running". Przy pracy nad `sw.ts` zaznacz "Update on reload".
+3. **Instalacja PWA.** Ikona instalacji w pasku adresu Chrome albo menu > "Zainstaluj Rodzina". Aplikacja otwiera się w osobnym oknie (standalone).
+4. **Push (od fazy 3).** Na buildzie produkcyjnym uruchom w drugim terminalu `npm run dev:cron`, wejdź w Więcej > Powiadomienia, kliknij "Włącz powiadomienia", a potem "Wyślij testowe". System musi zezwalać Chrome na powiadomienia (Windows: sprawdź tryb "Nie przeszkadzać" i Focus Assist, macOS: Ustawienia > Powiadomienia > Chrome). Przypomnienie z przyszłą datą sprawdzisz bez czekania: `npm run job:reminders -- --now=<ISO>`.
+5. **Offline (faza 4).** DevTools > Network > przełącznik "Offline", potem powrót do "No throttling".
+6. **Dwóch domowników naraz.** Ciasteczko `sid` jest wspólne dla wszystkich portów `localhost`, więc drugą osobę zaloguj w oknie incognito albo w drugim profilu Chrome. Tak testujemy też synchronizację (zmiana widoczna w drugim oknie po maksymalnie 20 s).
+7. **Testy automatyczne.** `npm test` (Vitest), `npm run test:e2e` (Playwright headless) oraz `npm run release:smoke` (sprawdza paczkę release). Push i instalacja PWA nie są pokryte przez e2e, bo testujemy je ręcznie.
+
+**Ograniczenia:** zachowanie powiadomień (oszczędzanie baterii, kanały powiadomień, tryb Doze) na desktopie różni się od Androida, więc kryteria akceptacji fazy 3 i 8 dotyczące push zawsze potwierdzamy na telefonie. Opis trafia do `docs/DEVELOPMENT.md` w fazie 0, razem z sekcją o Androidzie.
+
 ## 2. Podjęte decyzje (nie zmieniać bez wpisu w DECISIONS.md)
 
 - **Nazwa robocza** repo i pakietu: `rodzina`.  Prefiks zmiennych środowiskowych: `RODZINA_`. Zmiana nazwy jest możliwa przed fazą 0.
 - **Licencja:** MIT.
 - **Runtime:** Node 24 . Node 20 nie jest już wspierany (koniec wsparcia: kwiecień 2026). W fazie 8 wybieramy najwyższą z tych wersji dostępną w cPanel - obecnie 24
 - **Monorepo:** npm workspaces, bez Nx i bez Turborepo.
+- **Skrypty wieloplatformowe (Windows, macOS, Linux):** w `package.json` nie używamy składni powłoki specyficznej dla systemu (np. `VAR=wartość komenda`). Zmienne środowiskowe ustawia `cross-env`, a równoległe uruchamianie `concurrently` (obie jako devDependencies). Skrypty w `scripts/` to pliki `.mjs`, bez `bash`. Dotyczy to też `dev`, `dev:cron` i `release`.
 - **Frontend:** React 19, Vite, TypeScript (strict), React Router (tryb biblioteki), TanStack Query, Mantine (+ `@mantine/dates`, `@mantine/notifications`, `@mantine/form`), Schedule-X (`@schedule-x/react`) do widoku kalendarza, `vite-plugin-pwa` w trybie `injectManifest`.
 - **Backend:** Fastify, `fastify-type-provider-zod`, Drizzle ORM + SQLite, `@node-rs/argon2` (prebuilt, bez kompilacji), `web-push`, `rrule`, `date-fns` + `@date-fns/tz`, `@fastify/cookie`, `@fastify/rate-limit`, `@fastify/static`.
 - **Sterownik SQLite:** domyślnie `better-sqlite3`. Cała zależność od sterownika siedzi wyłącznie w `apps/api/src/db/client.ts`, żeby w fazie 8 dało się go podmienić na `@libsql/client` w jednym pliku, gdyby `better-sqlite3` nie zainstalował się na serwerze.
@@ -208,7 +248,7 @@ rodzina/
 ### Skrypty root (`package.json`)
 
 - `dev`: równolegle API (`tsx watch --env-file=apps/api/.env apps/api/src/server.ts`, port 3000) i Vite (port 5173 z proxy `/api`)
-- `start`: uruchamia zbudowaną aplikację produkcyjnie (`node apps/api/server.cjs` z `RODZINA_ENV_FILE=apps/api/.env`, port 3000, API i frontend razem). Używa tego samego portu co API w `dev`, więc oba nie mogą działać jednocześnie, co trzeba opisać w `DEVELOPMENT.md`.
+- `start`: uruchamia zbudowaną aplikację produkcyjnie (`cross-env RODZINA_ENV_FILE=apps/api/.env node apps/api/server.cjs`, port 3000, API i frontend razem). Używa tego samego portu co API w `dev`, więc oba nie mogą działać jednocześnie, co trzeba opisać w `DEVELOPMENT.md`.
 - `dev:cron`: uruchamia joby co minutę lokalnie (symulacja crona)
 - `job:reminders`, `job:backup`: jednorazowe uruchomienie joba
 - `build`: shared, web, api (bundling przez `tsup`, natywne zależności jako external)
@@ -347,6 +387,38 @@ rodzina/
 - Akceptacja zaproszenia i reset hasła.
 - Więcej, a w nim Rodzina: lista domowników z kolorami, generowanie zaproszenia z przyciskiem kopiuj/udostępnij (Web Share API), dodanie dziecka, kod rodziny.
 
+**Kroki realizacji:**
+
+#### Krok 1.1 - Fundament auth: schemat, sesje, rejestracja i logowanie
+
+- **Zakres:** migracje `families`, `users`, `sessions`, `invitations`, `password_resets`. Hashowanie argon2id (hasło i PIN). Plugin sesji (cookie `sid`, 60 dni, przedłużanie przy aktywności, `request.user`). Wymuszanie sesji na `/api/*` z listą wyjątków publicznych z sekcji 4. Ochrona CSRF (`Origin` kontra `request.host`, tylko `application/json`). Rate limit logowania. Jednolita obsługa błędów z kodami z sekcji 4. Endpointy `register-family` (z `RODZINA_ALLOW_REGISTRATION`), `login`, `logout`, `me`.
+- **Gotowe, gdy:** testy API (`app.inject`, baza `:memory:`) pokrywają rejestrację, logowanie poprawne i błędne, rate limit, brak sesji (401), wygasłą sesję, wyłączoną rejestrację (403) oraz CSRF (obcy `Origin` dostaje 403, właściwy przechodzi). Hasła i PIN-y nie pojawiają się w odpowiedziach ani w logach. (+ `release:smoke`, bo dochodzą migracje i zmienne środowiskowe.)
+
+#### Krok 1.2 - Domownicy, uprawnienia i ustawienia rodziny
+
+- **Zakres:** `GET /api/members`, `POST /api/members/child`, `PATCH /api/members/:id`, `DELETE /api/members/:id`, `PATCH /api/family`, `POST /api/family/join-code/rotate`. Moduł uprawnień (`permissions.ts`) z macierzą ról `admin` / `member` / `child` z tej fazy, który wykorzystają kolejne fazy. Reguła ostatniego admina. Usunięcie domownika kasuje jego sesje. Repozytoria przyjmują `familyId` jako pierwszy argument.
+- **Gotowe, gdy:** testy macierzy ról, dziecko zmienia tylko własne imię i kolor, nie da się usunąć ostatniego admina, użytkownik rodziny A dostaje 404 na zasobach rodziny B.
+
+#### Krok 1.3 - Zaproszenia, logowanie dzieci i reset hasła (API kompletne)
+
+- **Zakres:** `POST /api/invitations`, `GET /api/invitations/:token`, `POST /api/invitations/:token/accept`, `GET /api/auth/family-members?joinCode=`, `POST /api/auth/login-child`, `POST /api/members/:id/password-reset-link`, `POST /api/auth/reset-password`. Tokeny zapisywane jako hash.
+- **Gotowe, gdy:** testy zaproszenia (ważne, wygasłe, użyte), `family-members` zwraca wyłącznie `id`, imię i kolor dzieci, `login-child` (poprawny PIN, błędny PIN, zły kod rodziny, rate limit), reset hasła (ważny, wygasły, użyty), rotacja kodu rodziny unieważnia stary kod.
+
+#### Krok 1.4 - UI: klient API, sesja i ekrany dla dorosłych
+
+- **Zakres:** klient `fetch` (JSON, ciasteczka, komunikaty błędów z `error.message`), hook `useMe`, strażnik tras z parametrem `next` (tylko ścieżki wewnętrzne, wykorzystają go deep linki z faz 2 i 3). Ekrany: powitanie (z przyciskami "Załóż rodzinę" i "Zaloguj się"; przycisk "Jestem dzieckiem" dochodzi w kroku 1.6), rejestracja, logowanie, wylogowanie w Więcej. Teksty w `i18n/pl.ts`.
+- **Gotowe, gdy:** testy komponentów (walidacja formularzy, przekierowanie na logowanie i powrót na `next`, odrzucenie `next` spoza aplikacji). Ręcznie: rejestracja, widoczna dolna nawigacja, odświeżenie strony nie wylogowuje, wylogowanie działa.
+
+#### Krok 1.5 - UI: Więcej > Rodzina
+
+- **Zakres:** lista domowników z kolorami, generowanie zaproszenia z przyciskiem kopiuj/udostępnij (Web Share API), dodanie dziecka (imię, PIN, kolor), kod rodziny z rotacją, edycja własnego imienia i koloru, a dla admina zmiana roli, nowy PIN dziecka, usunięcie domownika i link resetu hasła.
+- **Gotowe, gdy:** testy komponentów (widoczność akcji zależna od roli). Ręcznie: admin dodaje dziecko i generuje link zaproszenia, a link da się skopiować.
+
+#### Krok 1.6 - UI: dołączanie i logowanie dzieci, e2e i domknięcie fazy
+
+- **Zakres:** ekran "Jestem dzieckiem" (kod rodziny, kafelki z imionami, klawiatura PIN), `/zaproszenie/:token` (podgląd rodziny i akceptacja), reset hasła. Smoke e2e Playwright (headless): rejestracja, zaproszenie, akceptacja w drugim kontekście, obie osoby na liście. Aktualizacja `.env.example` i `DEPLOY.md`.
+- **Gotowe, gdy:** wszystkie kryteria akceptacji fazy 1, punkty z sekcji 1.1 i `release:smoke`. Ręcznie na Androidzie: po zamknięciu i ponownym otwarciu PWA użytkownik nadal jest zalogowany.
+
 **Kryteria akceptacji:**
 
 - Testy API (`app.inject`, baza `:memory:`) pokrywają: rejestrację, logowanie poprawne i błędne, rate limit, zaproszenie (ważne, wygasłe, użyte), logowanie dziecka, izolację rodzin (użytkownik rodziny A dostaje 404 na zasobach rodziny B) i uprawnienia ról.
@@ -423,7 +495,45 @@ rodzina/
 - **Tryb "Odległy termin":** data z precyzją "dzień" albo "miesiąc" i lista przypomnień. Każde przypomnienie to "N dni/tygodni/miesięcy przed" (`offset` z jednostką kalendarzową) albo "w wybranym dniu" (`absolute`).
 - **Presety przypomnień:** w chwili rozpoczęcia, 15 min, 1 godz., 1 dzień, 2 dni, 1 tydzień przed oraz własne. Wybór odbiorcy: uczestnicy (domyślnie), dorośli, cała rodzina albo "tylko ja". "Tylko ja" zapisuje się przez `/api/reminders/mine`, więc jest dostępne także dla osób, które nie mogą edytować wydarzenia (np. dziecka). Wtedy formularz pokazuje wyłącznie sekcję "Moje przypomnienia".
 - **Szczegóły wydarzenia:** przy edycji lub usunięciu wystąpienia cyklu pytanie "Tylko to / To i następne / Wszystkie".
+- **Adres szczegółów (deep link):** trasa `/kalendarz/wydarzenie/:eventId?data=YYYY-MM-DD`, gdzie `data` to `occurrenceDate` wystąpienia. Dla wydarzeń jednorazowych i odległych `data` jest opcjonalna (domyślnie `start_date`). Trasa działa po wejściu z zewnątrz (powiadomienie, zakładka, odświeżenie). Niezalogowany użytkownik trafia na logowanie i po zalogowaniu wraca na ten adres (parametr `next`, dozwolone tylko ścieżki wewnętrzne). Gdy wydarzenie albo wystąpienie nie istnieje (usunięte, anulowane), strona pokazuje komunikat "Tego wydarzenia już nie ma" z linkiem do kalendarza. Adres jest wspólny dla UI i powiadomień, a budowany w jednej funkcji `eventUrl(eventId, occurrenceDate)` w `packages/shared`.
 - **Sekcja "Odległe terminy"** na stronie kalendarza: lista najbliższych wydarzeń `distant` z odliczaniem ("za 1 rok i 7 mies.").
+
+**Kroki realizacji:**
+
+#### Krok 2.1 - Logika czasu w `shared` (bez bazy i UI)
+
+- **Zakres:** `packages/shared/src/time.ts` z `expandOccurrences` i `computeNextFireAt` według opisu powyżej (typy `offset` i `absolute`, jednostki kalendarzowe, baza 09:00 dla terminów bez godziny, ostatni dzień miesiąca). Źródło przypomnienia jako "coś z terminem lub wystąpieniami", żeby fazy 6 i 7 użyły funkcji bez zmian.
+- **Gotowe, gdy:** wszystkie obowiązkowe testy `time.ts` z tej fazy przechodzą (zmiana czasu w marcu i październiku, `UNTIL` i `COUNT`, wyjątki, wydarzenie odległe z trzema przypomnieniami, "1 dzień przed" przy zmianie czasu, "3 miesiące przed 31 maja", "1 miesiąc przed 31 marca", `offset` podąża za terminem, a `absolute` nie).
+
+#### Krok 2.2 - Wydarzenia: tabele i CRUD całych wydarzeń
+
+- **Zakres:** schematy zod w `shared` z regułami walidacji `kind` / `date_precision`. Migracje `events`, `event_participants`, `event_exceptions` (klucze `created_by` z `ON DELETE SET NULL`). Endpointy `POST /api/events` (single, recurring, distant), `GET /api/events/:id`, `PATCH` i `DELETE` wyłącznie dla `scope=all` (inne wartości `scope` dostają 400 do kroku 2.4), `GET /api/occurrences` (maksymalnie 62 dni, filtr `userId`, bez wydarzeń `distant` z precyzją `month`), `GET /api/events/upcoming-distant`. Uprawnienia: dziecko edytuje i usuwa tylko własne wydarzenia.
+- **Gotowe, gdy:** testy API: CRUD, walidacja trzech rodzajów wydarzeń, `occurrences` dla cyklu i dla `distant` (dzień a miesiąc), 403 dla dziecka na cudzym wydarzeniu, izolacja rodzin, usunięcie domownika zostawia jego wydarzenia z `created_by = null`.
+
+#### Krok 2.3 - Przypomnienia wydarzeń (wspólne i osobiste)
+
+- **Zakres:** migracja `reminders` (wszystkie kolumny z sekcji 5, w tym nullable `task_id` i `document_id`). Przypomnienia wspólne w body wydarzenia (`reminders: [...]`, tablica zastępuje tylko wspólne). Przypomnienia osobiste: `GET/POST/DELETE /api/reminders/mine` z `eventId` (moduł wspólny dla przyszłych źródeł). Walidacja `audience` dla wydarzeń i zasada "dokładnie jedno źródło". Przeliczanie `next_fire_at` przy każdym zapisie przez `computeNextFireAt`. Kaskady przy usuwaniu wydarzenia i domownika.
+- **Gotowe, gdy:** testy API: edycja wydarzenia przez jedną osobę nie usuwa osobistych przypomnień innych osób, dziecko dodaje sobie przypomnienie do cudzego wydarzenia (200), ale nie może go edytować (403), `offset` podąża za zmianą daty, `absolute` z przeszłości ma `next_fire_at = null`, usunięcie domownika kasuje jego przypomnienia osobiste.
+
+#### Krok 2.4 - Serie: wyjątki oraz zakresy `this` i `following`
+
+- **Zakres:** `PATCH` i `DELETE` z `scope=this|following` i `occurrenceDate`. `this` tworzy lub aktualizuje wyjątek (albo `is_cancelled`). `following` kończy serię przez `UNTIL` w dniu poprzednim i tworzy nową serię od `occurrenceDate`, kopiując uczestników i wszystkie przypomnienia (wspólne i osobiste, z zachowaniem `user_id` i `created_by`). `GET /api/events/:id` zwraca wyjątki, a `occurrences` je stosuje. Przeliczenie `next_fire_at` po zmianie serii.
+- **Gotowe, gdy:** testy API: "To i następne" nie zmienia przeszłych wystąpień i przenosi do nowej serii osobiste przypomnienia innych osób, wyjątek anulowany i przesunięty jest widoczny w `occurrences`, brak `occurrenceDate` przy `this` / `following` daje 400. API kalendarza jest kompletne.
+
+#### Krok 2.5 - UI: widok kalendarza, szczegóły i wydarzenia jednorazowe
+
+- **Zakres:** Schedule-X (agenda miesiąca, tydzień, dzień, `pl-PL`, poniedziałek jako początek tygodnia), adapter `features/calendar/toScheduleX.ts`, kolory domowników i filtr "pokaż tylko", odświeżanie po powrocie do karty i co 20 s. FAB "+" otwiera na tym etapie formularz wydarzenia jednorazowego (tytuł, opis, miejsce, uczestnicy, całodniowe, data, godzina, czas trwania). Szczegóły wydarzenia z edycją i usunięciem (`scope=all`), ukrywanie przycisków dziecku przy cudzym wydarzeniu. Trasa `/kalendarz/wydarzenie/:eventId?data=` (deep link) i funkcja `eventUrl` w `shared`.
+- **Gotowe, gdy:** testy komponentów (formularz, adapter dat, ukrywanie przycisków dla dziecka), test e2e deep linku (także przez logowanie), ręcznie: wydarzenie dodane w jednym kontekście przeglądarki pojawia się w drugim po maksymalnie 20 s albo od razu po powrocie do karty.
+
+#### Krok 2.6 - UI: powtarzanie, odległe terminy i zakresy edycji
+
+- **Zakres:** wybór trybu po kliknięciu FAB ("Jednorazowe", "Powtarzające się", "Odległy termin"). Kreator powtarzania bez wpisywania RRULE, z funkcjami `rruleFromWizard` i `wizardFromRrule` oraz opisem po polsku w `shared`. Tryb "Odległy termin" (precyzja dzień albo miesiąc). Sekcja "Odległe terminy" z odliczaniem. Dialog "Tylko to / To i następne / Wszystkie" przy edycji i usuwaniu wystąpienia cyklu.
+- **Gotowe, gdy:** test round-trip RRULE (kreator, zapis, odczyt, te same ustawienia), test opisu po polsku (np. "co tydzień we wtorek i czwartek do 30 czerwca"), testy komponentów. Ręcznie: seria "co tydzień we wtorek i czwartek", edycja "To i następne" nie rusza przeszłości, termin "maj 2028" widać tylko w sekcji odległych.
+
+#### Krok 2.7 - UI: przypomnienia i domknięcie fazy
+
+- **Zakres:** wspólny komponent `ReminderPicker` (użyją go też fazy 6 i 7): presety (w chwili rozpoczęcia, 15 min, 1 godz., 1 dzień, 2 dni, 1 tydzień przed), własne "N dni/tygodni/miesięcy przed", "w wybranym dniu" (`absolute`), wybór odbiorcy (uczestnicy domyślnie, dorośli, cała rodzina, "tylko ja"). Sekcja "Moje przypomnienia" dla osób bez prawa edycji (np. dziecko). Oznaczenie "nieaktualne" z opcją usunięcia. Aktualizacja `DEPLOY.md`.
+- **Gotowe, gdy:** testy komponentów (wspólne trafiają do body wydarzenia, "tylko ja" do `/api/reminders/mine`), wszystkie kryteria akceptacji fazy 2, punkty z sekcji 1.1 i `release:smoke`.
 
 **Kryteria akceptacji:**
 
@@ -431,6 +541,7 @@ rodzina/
 - Wydarzenie dodane w jednym kontekście przeglądarki pojawia się w drugim po maksymalnie 20 s albo od razu po powrocie do karty.
 - Z `rrule` zapisanym przez kreator i odczytanym z powrotem kreator pokazuje te same ustawienia (test round-trip).
 - Edycja "To i następne" nie zmienia przeszłych wystąpień.
+- Wejście na `/kalendarz/wydarzenie/:eventId?data=...` otwiera właściwe wystąpienie (także po odświeżeniu), a dla niezalogowanego prowadzi przez logowanie z powrotem na ten adres (test e2e). Dla usuniętego wydarzenia pokazuje komunikat, nie błąd.
 - Dziecko nie może edytować cudzego wydarzenia, ani w API (403), ani w UI (brak przycisków), ale może dodać do niego własne przypomnienie przez `/api/reminders/mine`.
 - Edycja wydarzenia przez jedną osobę nie usuwa osobistych przypomnień innych osób (test API).
 - Edycja "To i następne" przenosi do nowej serii osobiste przypomnienia innych osób (test API).
@@ -459,7 +570,7 @@ rodzina/
 - `jobs/send-reminders.ts`:
   - Przyjmuje opcjonalną flagę `--now=<ISO>`, która nadpisuje bieżący czas (do testów manualnych i jednostkowych).
   - **Rezerwacja w jednej transakcji SQLite** (`BEGIN IMMEDIATE`): wybiera `reminders` z `next_fire_at <= now` i od razu, w tej samej transakcji, ustawia im `last_sent_at = now` oraz **nowe `next_fire_at`** (kolejny termin wyliczony przez `computeNextFireAt` albo null dla jednorazowych). Dopiero po zatwierdzeniu transakcji wysyła powiadomienia. Dzięki temu drugie równoległe uruchomienie nie wybierze tych samych wierszy.
-  - Treść buduje przez `buildReminderPayload` per źródło (na razie tylko wydarzenia), np. "Jutro 17:00: Basen (Zosia)" albo "Za 3 miesiące: USG nogi".
+  - Treść buduje przez `buildReminderPayload` per źródło (na razie tylko wydarzenia), np. "Jutro 17:00: Basen (Zosia)" albo "Za 3 miesiące: USG nogi". Payload zawiera `url` zbudowany przez `eventUrl(eventId, occurrenceDate)` z fazy 2, gdzie `occurrenceDate` to wystąpienie, którego dotyczy przypomnienie. Fazy 6 i 7 dodają własne adresy w tej samej funkcji.
   - Odbiorców wyznacza przez `resolveRecipients` (sekcja 2).
   - Subskrypcje z odpowiedzią 404/410 usuwa.
   - Przypomnienia spóźnione o więcej niż 2 godziny (np. po awarii crona) rezerwuje tak samo, ale bez wysyłki, i loguje. Wyjątek: przypomnienia liczone od daty bez godziny (bazowa 09:00) mają tolerancję 12 godzin.
@@ -476,6 +587,33 @@ rodzina/
   - Krótka instrukcja instalacji PWA na Androidzie (Chrome, menu, "Zainstaluj aplikację").
 - Baner w kalendarzu "Włącz powiadomienia, aby dostawać przypomnienia", pokazywany, gdy użytkownik ma przypomnienia, a nie ma subskrypcji.
 
+**Kroki realizacji:**
+
+#### Krok 3.1 - Odbiorcy i treść przypomnień (bez wysyłki)
+
+- **Zakres:** `resolveRecipients(reminder, source)` dla wartości `participants`, `family`, `adults`, `owner` i `user` (reguła `list_members` dojdzie w fazie 6), z filtrem widoczności i awaryjnym odbiorcą `adults`. `buildReminderPayload` dla wydarzeń z polem `url` budowanym przez `eventUrl`. Czysty serwis w API, bez `web-push` i bez joba.
+- **Gotowe, gdy:** testy każdej wartości `audience`, brak uczestników kieruje do twórcy, usunięty twórca kieruje do dorosłych, treści "Jutro 17:00: Basen (Zosia)" i "Za 3 miesiące: USG nogi".
+
+#### Krok 3.2 - Job wysyłki i subskrypcje
+
+- **Zakres:** migracja `push_subscriptions`. Konfiguracja VAPID w `config.ts` i `npm run vapid:generate`. `jobs/send-reminders.ts` z flagą `--now=<ISO>`, rezerwacją w jednej transakcji `BEGIN IMMEDIATE` (z nowym `next_fire_at`), obsługą spóźnień (2 godziny, 12 godzin dla terminów bez godziny), usuwaniem subskrypcji przy 404 i 410 oraz logiem do stdout. Wysyłka przez wstrzykiwany interfejs `PushSender` (w testach mock `web-push`). `dev:cron` uruchamia job w pętli. `smoke-release.mjs` generuje testowe klucze VAPID i uruchamia `send-reminders.js`. Aktualizacja `.env.example` i `DEPLOY.md`.
+- **Gotowe, gdy:** testy joba na sztucznym czasie: przypomnienie wysyłane dokładnie raz także przy dwóch równoległych uruchomieniach, cykliczne dostaje kolejne `next_fire_at`, 410 usuwa subskrypcję, pusta lista odbiorców kieruje do dorosłych, spóźnione jest rezerwowane bez wysyłki. (+ `release:smoke`.)
+
+#### Krok 3.3 - Push API i service worker
+
+- **Zakres:** `GET /api/push/public-key`, `POST /api/push/subscriptions` (upsert po `endpoint`), `DELETE /api/push/subscriptions`, `POST /api/push/test` (przez ten sam `PushSender`). W `sw.ts` obsługa `push` (`showNotification` z `tag`, `data.url`, `icon`, `badge`) i `notificationclick` (fokus istniejącego okna albo otwarcie `data.url`).
+- **Gotowe, gdy:** testy API (upsert, usunięcie, test z mockiem, tylko własne subskrypcje, 401 bez sesji). Ręcznie można wysłać push z DevTools (Application > Service Workers > Push), jeszcze bez ekranu w UI.
+
+#### Krok 3.4 - UI: Powiadomienia
+
+- **Zakres:** Więcej > Powiadomienia (status: nieobsługiwane, zablokowane, włączone na tym urządzeniu; "Włącz powiadomienia" wyłącznie po kliknięciu; "Wyślij testowe"; krótka instrukcja instalacji PWA na Androidzie). Baner w kalendarzu "Włącz powiadomienia, aby dostawać przypomnienia", gdy użytkownik ma przypomnienia, a nie ma subskrypcji.
+- **Gotowe, gdy:** testy komponentów statusów i baneru. Ręcznie, na buildzie produkcyjnym z równoległym `npm run dev:cron`, na desktopie i Androidzie: testowy push dociera, przypomnienie "za 10 minut" przychodzi o czasie, a kliknięcie otwiera szczegóły właściwego wystąpienia.
+
+#### Krok 3.5 - Backup, porządki i domknięcie fazy
+
+- **Zakres:** `jobs/backup-db.ts` (`VACUUM INTO <RODZINA_BACKUP_DIR>/rodzina-YYYY-MM-DD.db`, 14 ostatnich kopii), skrypt `job:backup`, zmienna `RODZINA_BACKUP_DIR`. Usunięcie joba `heartbeat` i jego wpisu w `smoke-release.mjs`. `smoke-release.mjs` uruchamia też `backup-db.js`. `DEPLOY.md`: cron co 5 minut dla przypomnień i dzienny dla backupu, wyjście do `~/rodzina-data/logs/`.
+- **Gotowe, gdy:** test backupu (plik powstaje, rotacja do 14 kopii), wszystkie kryteria akceptacji fazy 3, punkty z sekcji 1.1 i `release:smoke`.
+
 **Kryteria akceptacji:**
 
 - Test jednostkowy joba (mock `web-push`, sztuczny czas):
@@ -486,7 +624,7 @@ rodzina/
 - Lokalnie na Androidzie, na buildzie produkcyjnym (`npm run build && npm start`, przekierowanie portu 3000, równolegle `npm run dev:cron`):
   - testowy push dociera,
   - przypomnienie "za 10 minut" przychodzi o czasie z dokładnością do cyklu crona,
-  - kliknięcie powiadomienia otwiera szczegóły właściwego wystąpienia.
+  - kliknięcie powiadomienia otwiera `/kalendarz/wydarzenie/:eventId?data=...` właściwego wystąpienia, także gdy aplikacja była zamknięta albo użytkownik był wylogowany (wraca na ten adres po zalogowaniu).
 - Spełnione punkty z sekcji 1.1, w tym `release:smoke` z jobami.
 
 **Poza zakresem:** iOS, powiadomienia o zmianach dokonanych przez innych, ciche godziny, e-mail/SMS.
@@ -526,6 +664,23 @@ rodzina/
 - Baner "Jesteś offline - zmiany zostaną wysłane po odzyskaniu połączenia".
 - Dotyczy tylko modułu zakupów.
 
+**Kroki realizacji:**
+
+#### Krok 4.1 - API zakupów
+
+- **Zakres:** migracje `shopping_lists`, `shopping_items`, `shopping_history`. Stała lista kategorii w `shared`. Wszystkie endpointy z tej fazy (listy, pozycje, `clear-checked`, `suggestions`). Domyślna lista "Zakupy" przy pierwszym wejściu. Aktualizacja historii przy dodaniu pozycji i podpowiadanie kategorii. Pola `checked_by` i `checked_at`. Uprawnienia dziecka: przegląda, dodaje i odhacza dowolne pozycje, edytuje i usuwa tylko własne, bez "Wyczyść kupione" i zarządzania listami.
+- **Gotowe, gdy:** testy API: CRUD, izolacja rodzin, podpowiedzi z historii (maksymalnie 8, sortowanie po `use_count` i `last_used_at`), `clear-checked`, uprawnienia dziecka.
+
+#### Krok 4.2 - UI: lista zakupów
+
+- **Zakres:** zakładka Zakupy z zakładkami list i zarządzaniem listami (dodaj, zmień nazwę, usuń, dla dorosłych). Parser szybkiego dodawania w `shared` ("mleko 2l", "jajka 10 szt"). Podpowiedzi. Pozycje pogrupowane po kategoriach, odhaczanie (przekreślenie, przeniesienie na dół, "kupił(a): Ania"), edycja i usuwanie (swipe albo menu), "Wyczyść kupione" z potwierdzeniem. `refetchInterval` 20 s, `refetchOnWindowFocus` i mutacje optymistyczne.
+- **Gotowe, gdy:** test parsera i komponentu dodawania, ukrywanie akcji niedostępnych dla dziecka. Ręcznie: odhaczenie w jednym kontekście przeglądarki jest widoczne w drugim po maksymalnie 20 s.
+
+#### Krok 4.3 - Słaby zasięg i domknięcie fazy
+
+- **Zakres:** `@tanstack/query-sync-storage-persister` (cache w localStorage), mutacje z `networkMode: 'offlineFirst'` wznawiane po powrocie sieci (`resumePausedMutations`), baner "Jesteś offline - zmiany zostaną wysłane po odzyskaniu połączenia". Tylko moduł zakupów.
+- **Gotowe, gdy:** wszystkie kryteria akceptacji fazy 4, w tym ręcznie w trybie offline (DevTools): odhaczenie 3 pozycji i dodanie 1, a po włączeniu sieci zmiany widać w drugim kontekście. Punkty z sekcji 1.1 i `release:smoke`.
+
 **Kryteria akceptacji:**
 
 - Testy API: CRUD, izolacja rodzin, podpowiedzi z historii, `clear-checked`.
@@ -557,6 +712,28 @@ rodzina/
 - Formularz: nazwa dania z podpowiedziami (wybór podpowiedzi uzupełnia składniki), notatka, lista składników.
 - Akcje tygodnia: "Skopiuj poprzedni tydzień", "Dodaj składniki do listy zakupów" (wybór listy i dań, potem podsumowanie).
 - Karta "Dziś na obiad" na górze kalendarza (lekki dashboard).
+
+**Kroki realizacji:**
+
+#### Krok 5.1 - API planu obiadów
+
+- **Zakres:** migracje `meals` i `meal_ingredients`. `GET /api/meals?weekStart=` (poniedziałek, 7 dni z posiłkami i składnikami), `PUT` i `DELETE /api/meals/:date/:slot`, `POST /api/meals/copy-week`, `GET /api/meals/suggestions`. Uprawnienia: dziecko ma tylko odczyt.
+- **Gotowe, gdy:** testy API: upsert, copy-week z `overwrite` i bez, podpowiedzi z ostatnio użytymi składnikami, walidacja `weekStart` (tylko poniedziałek), 403 dla dziecka na zapisie, izolacja rodzin.
+
+#### Krok 5.2 - API: składniki do listy zakupów
+
+- **Zakres:** `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Funkcja `mergeQuantities` w `shared` (normalizacja nazwy, łączenie ilości tekstowo, np. "500 g + 1 kg"). Wykorzystuje serwis zakupów z fazy 4 (także historię). Zwraca liczbę dodanych pozycji. Decyzję, czy scalać także z pozycjami już obecnymi na liście, agent zapisuje w `DECISIONS.md`.
+- **Gotowe, gdy:** testy jednostkowe `mergeQuantities` i testy API (scalanie duplikatów, filtr `mealIds`, lista innej rodziny daje 404, izolacja rodzin).
+
+#### Krok 5.3 - UI: tydzień obiadów
+
+- **Zakres:** zakładka Obiady z widokiem tygodnia (pon-nd), strzałkami i przyciskiem "dziś". Karta dnia albo "+ Dodaj obiad". Formularz (nazwa z podpowiedziami, które po wyborze uzupełniają składniki, notatka, lista składników), usuwanie, "Skopiuj poprzedni tydzień" z pytaniem o nadpisanie. Dziecko widzi tylko odczyt.
+- **Gotowe, gdy:** testy komponentów formularza i podpowiedzi. Ręcznie: zaplanowanie 5 obiadów i skopiowanie tygodnia.
+
+#### Krok 5.4 - UI: dodawanie do listy zakupów, karta "Dziś na obiad" i domknięcie fazy
+
+- **Zakres:** akcja "Dodaj składniki do listy zakupów" (wybór listy i dań, potem podsumowanie), karta "Dziś na obiad" na górze kalendarza.
+- **Gotowe, gdy:** wszystkie kryteria akceptacji fazy 5, w tym ręcznie: 5 zaplanowanych obiadów i przeniesienie składników daje poprawnie pogrupowaną listę zakupów. Punkty z sekcji 1.1 i `release:smoke`.
 
 **Kryteria akceptacji:**
 
@@ -611,6 +788,33 @@ rodzina/
 - Formularz zadania: tytuł, notatka, termin (data i opcjonalnie godzina), przypisanie, przypomnienia.
 - Ustawienia listy (tylko właściciel): nazwa, wybór domowników do udostępnienia, usuń. Dla członka: "Opuść listę".
 - Karta "Dziś do zrobienia" na górze kalendarza, obok "Dziś na obiad".
+
+**Kroki realizacji:**
+
+#### Krok 6.1 - Listy zadań: model i widoczność
+
+- **Zakres:** migracje `task_lists`, `task_list_members` i `tasks` (cały model tej fazy). Serwis dostępu `canAccessList` (właściciel albo członek, wszyscy pozostali, łącznie z adminem, dostają 404). `GET/POST /api/tasks/lists`, `PATCH` i `DELETE /api/tasks/lists/:id`, `POST /api/tasks/lists/:id/leave`. Domyślna lista "Moje zadania" tworzona przy pierwszym wejściu każdego użytkownika (także dziecka), nieusuwalna. Rozszerzenie usuwania domownika o regułę list z sekcji 2 (prywatne listy usuwane, udostępnione przechodzą na pierwszego członka z `is_default=false`).
+- **Gotowe, gdy:** testy API: 404 dla użytkownika spoza listy (także admina), 403 dla członka przy zmianie udostępnienia i usunięciu, listy domyślnej nie da się usunąć, `leave`, usunięcie domownika (przeniesienie albo usunięcie jego list), izolacja rodzin.
+
+#### Krok 6.2 - Zadania: CRUD i widoki
+
+- **Zakres:** `GET /api/tasks/lists/:id/tasks?status=open|done|all`, `POST /api/tasks/lists/:id/tasks`, `PATCH /api/tasks/:id`, `DELETE /api/tasks/:id`, `GET /api/tasks/today`. `assignee_id` tylko z grona właściciela i członków listy. Odhaczenie ustawia `done_by` i `done_at`. Liczniki otwartych zadań w `GET /api/tasks/lists`. Klucze do `users` z `ON DELETE SET NULL`.
+- **Gotowe, gdy:** testy API: CRUD, filtr statusu, `today` (zadania na dziś lub przeterminowane ze wszystkich widocznych list, bez cudzych prywatnych), przypisanie osoby spoza listy daje 400, dostęp tylko przez listę (404 spoza niej), izolacja rodzin.
+
+#### Krok 6.3 - Przypomnienia zadań
+
+- **Zakres:** dopisanie `list_members` do enuma `audience`. Walidacja `audience` per źródło (zadania: `owner`, `list_members`, `user`; `family` i `adults` dają 400). Przypomnienia w body tworzenia i edycji zadania oraz `/api/reminders/mine` z `taskId`. Odhaczenie ustawia `next_fire_at = null`, odznaczenie przelicza od nowa. `resolveRecipients` dla zadań (`owner` to osoba przypisana, a bez niej właściciel listy; filtr widoczności; pusta lista odbiorców oznacza brak wysyłki i wpis w logu, bez awaryjnego `adults`). `buildReminderPayload` dla zadań (np. "Dziś: Zapłacić za przedszkole") z adresem `taskUrl(listId, taskId)` w `shared` (trasa `/zadania/:listId?zadanie=:taskId` powstaje w kroku 6.4).
+- **Gotowe, gdy:** testy API i joba: przypomnienie trafia do osoby przypisanej, a bez niej do właściciela, po opuszczeniu listy przez członka jego przypomnienia "tylko ja" z tej listy nie są wysyłane, zadanie z prywatnej listy nigdy nie trafia do osoby spoza listy, `family` i `adults` dla zadania dają 400, odhaczenie czyści przypomnienie, a odznaczenie przywraca je z przeliczonym `next_fire_at`. (+ `release:smoke`.)
+
+#### Krok 6.4 - UI: zakładka Zadania
+
+- **Zakres:** nowa zakładka w dolnej nawigacji (Kalendarz, Zadania, Zakupy, Obiady, Więcej). Lista list (najpierw "Moje zadania", przy udostępnionych awatary członków), tworzenie nowej listy. Widok listy: szybkie dodawanie, zadanie z checkboxem, terminem (czerwony po terminie) i awatarem osoby przypisanej, sekcja "Zrobione" zwinięta. Formularz zadania (tytuł, notatka, termin z opcjonalną godziną, przypisanie). Trasa `/zadania/:listId?zadanie=:taskId`. Odświeżanie co 20 s. Bez przypomnień i udostępniania (krok 6.5).
+- **Gotowe, gdy:** testy komponentów (checkbox, przeterminowanie, zwijanie "Zrobione"). Ręcznie: dodanie, odhaczenie i edycja zadania w "Moje zadania".
+
+#### Krok 6.5 - UI: udostępnianie, przypomnienia, "Dziś do zrobienia" i domknięcie fazy
+
+- **Zakres:** ustawienia listy (właściciel: nazwa, wybór domowników do udostępnienia, usunięcie; członek: "Opuść listę"). Przypomnienia w formularzu zadania przez `ReminderPicker` z fazy 2 z ograniczonym zestawem odbiorców (domyślnie osoba przypisana albo właściciel, "wszyscy na liście" dla list udostępnionych, "tylko ja"). Presety "w dniu terminu", "dzień przed", własne. Karta "Dziś do zrobienia" na górze kalendarza obok "Dziś na obiad".
+- **Gotowe, gdy:** wszystkie kryteria akceptacji fazy 6, w tym ręcznie: lista udostępniona drugiemu domownikowi pojawia się u niego po maksymalnie 20 s, a po cofnięciu udostępnienia znika. Punkty z sekcji 1.1 i `release:smoke`.
 
 **Kryteria akceptacji:**
 
@@ -675,6 +879,28 @@ rodzina/
 - Plakietka na pozycji "Więcej" w nawigacji, gdy jakiś dokument jest w stanie `expiring` albo `expired`.
 - `buildReminderPayload` dla dokumentów, np. "Za 30 dni wygasa: OC Skoda (15.11.2026)".
 
+**Kroki realizacji:**
+
+#### Krok 7.1 - Typy, statusy i CRUD dokumentów
+
+- **Zakres:** w `shared` stała lista typów z domyślnymi przypomnieniami, `getDocumentStatus` (`valid`, `expiring`, `expired`, próg `expiring` osobno dla każdego typu) i schematy zod. Migracja `documents` (`holder_user_id` z `ON DELETE SET NULL`, bez pola numeru dokumentu). `GET /api/documents` (sortowanie po `expires_on`, ze statusem), `POST`, `PATCH`, `DELETE`. Uprawnienia: dziecko ma tylko odczyt. W tym kroku `POST` jeszcze nie ustawia przypomnień.
+- **Gotowe, gdy:** testy statusów na granicy progu `expiring` dla każdego typu i w dniu wygaśnięcia, testy CRUD, 403 dla dziecka na zapisie, izolacja rodzin.
+
+#### Krok 7.2 - Przypomnienia dokumentów i odnowienie
+
+- **Zakres:** domyślne przypomnienia typu ustawiane przy `POST`, gdy nie podano `reminders`. Przypomnienia w body dokumentu i `/api/reminders/mine` z `documentId`. Walidacja `audience` (`family`, `adults`, `owner`, `user`; domyślnie `adults`). `POST /api/documents/:id/renew` z przeliczeniem `next_fire_at`. `resolveRecipients` dla dokumentów (`owner` to posiadacz, a bez niego twórca), `buildReminderPayload` (np. "Za 30 dni wygasa: OC Skoda (15.11.2026)") i `documentUrl` w `shared`. Czas wysyłki 09:00 lokalnie.
+- **Gotowe, gdy:** testy: domyślne przypomnienia per typ, `renew` przelicza `next_fire_at` (`offset` podąża, `absolute` z przeszłości jest nieaktualne), job wysyła przypomnienia dokumentów (domyślnie do dorosłych, `owner` z awaryjnym twórcą), działa flaga `--now`. (+ `release:smoke`.)
+
+#### Krok 7.3 - UI: lista i formularz dokumentów
+
+- **Zakres:** Więcej > Dokumenty: lista z kolorowym statusem i tekstem "ważny do 12.05.2028 (za 1 rok i 7 mies.)", filtr (osoby, pojazdy, wszystkie). Formularz z wyborem typu, który dopasowuje pola (posiadacz albo pojazd), ostrzeżeniem "Nie wpisuj numerów dokumentów" i domyślnymi przypomnieniami do edycji przez `ReminderPicker`. Edycja i usuwanie. Dziecko widzi tylko odczyt.
+- **Gotowe, gdy:** testy komponentów (dopasowanie pól do typu, ukrycie edycji dla dziecka, kolory statusów). Ręcznie: dodanie dokumentu każdego typu.
+
+#### Krok 7.4 - UI: odnowienie, plakietka i domknięcie fazy
+
+- **Zakres:** akcja "Odnowiono" (nowa data ważności). Plakietka na pozycji "Więcej" w nawigacji, gdy jakiś dokument jest w stanie `expiring` albo `expired`. Trasa szczegółów dokumentu (adres z push). Sekcja "Moje przypomnienia" ("tylko ja").
+- **Gotowe, gdy:** wszystkie kryteria akceptacji fazy 7, w tym ręcznie na Androidzie: dokument z terminem za 31 dni i przypomnieniem 30 dni przed generuje push o 09:00 następnego dnia (job z `--now=<ISO>`). Punkty z sekcji 1.1 i `release:smoke`.
+
 **Kryteria akceptacji:**
 
 - Testy:
@@ -694,7 +920,7 @@ rodzina/
 
 **Cel:** aplikacja z faz 0-7 działa produkcyjnie na subdomenie właściciela przez HTTPS, a crony i push działają na Androidzie. Tę fazę wykonuje **właściciel z pomocą agenta**: właściciel klika w cPanel, a agent prowadzi według `DEPLOY.md` i poprawia kod lub instrukcję, gdy coś nie działa.
 
-**Kroki** (wszystkie są opisane w `DEPLOY.md`, ta faza je wykonuje i weryfikuje):
+**Procedura wdrożenia** (wszystkie punkty są opisane w `DEPLOY.md`, ta faza je wykonuje i weryfikuje):
 
 1. W cPanel utworzenie subdomeny (np. `rodzina.<domena>`) i włączenie SSL przez AutoSSL. Sprawdzenie, że `https://` działa i ma ważny certyfikat.
 2. Sprawdzenie dostępnej wersji Node w **Setup Node.js App** i wybór 24 albo 22 (obie testuje CI). Jeśli dostępne są tylko starsze wersje, zatrzymujemy się i agent ocenia, co trzeba zmienić. Decyzja trafia do `DECISIONS.md`.
@@ -714,6 +940,28 @@ rodzina/
 7. Dodanie cronów z `DEPLOY.md` (przypomnienia co 5 min i backup dzienny) z pełną ścieżką do node z nodevenv.
 8. Założenie rodziny, potem `RODZINA_ALLOW_REGISTRATION=false` i restart.
 9. Opisanie w `DEPLOY.md` procedury aktualizacji wersji: nowy zip, rozpakowanie z nadpisaniem `dist/`, `public/` i `drizzle/`, Run NPM Install, restart. Migracje uruchamiają się same. Przed aktualizacją trzeba zrobić backup na serwerze: `cd ~/rodzina && <ścieżka do node z nodevenv> --env-file=/home/<user>/rodzina-data/.env dist/jobs/backup-db.js`.
+
+**Kroki realizacji** (numery w nawiasach to punkty procedury wdrożenia powyżej):
+
+#### Krok 8.1 - Hosting i paczka (punkty 1-3)
+
+- **Zakres:** subdomena i AutoSSL, sprawdzenie dostępnych wersji Node i decyzja w `DECISIONS.md`, `npm run release`, wgranie i rozpakowanie `release.zip`.
+- **Gotowe, gdy:** `https://` na subdomenie działa z ważnym certyfikatem, wersja Node jest zapisana w `DECISIONS.md`, a `DEPLOY.md` poprawiono tam, gdzie panel cPanel różnił się od instrukcji.
+
+#### Krok 8.2 - Konfiguracja i pierwsze uruchomienie (punkty 4-6)
+
+- **Zakres:** katalogi `~/rodzina-data/`, `logs/`, `backups/`, plik `.env` (porównany linia po linii z `.env.example`, nowe klucze VAPID), Setup Node.js App, Run NPM Install (w razie problemu z `better-sqlite3` podmiana sterownika na `@libsql/client` w `db/client.ts` i nowa paczka), restart.
+- **Gotowe, gdy:** `/api/health` zwraca `ok: true` i `dbOk: true`, a opis napotkanych problemów jest w `DEPLOY.md`.
+
+#### Krok 8.3 - Crony, rodzina i push (punkty 7-8)
+
+- **Zakres:** crony przypomnień (co 5 minut) i backupu (dziennie) z pełną ścieżką do node z nodevenv. Założenie rodziny, potem `RODZINA_ALLOW_REGISTRATION=false` i restart. Instalacja PWA z subdomeny na Androidzie.
+- **Gotowe, gdy:** na Androidzie aplikacja instaluje się i loguje, sesja przetrwa zamknięcie aplikacji, testowy push dociera, a przypomnienie "za 15 minut" przychodzi z opóźnieniem nie większym niż 5 minut.
+
+#### Krok 8.4 - Weryfikacja końcowa i procedura aktualizacji (punkt 9)
+
+- **Zakres:** druga osoba dołącza przez link zaproszenia. Po dobie kontrola backupu i logów obu cronów. Opisanie i jednokrotne przećwiczenie aktualizacji (backup, nowy zip, nadpisanie `dist/`, `public/` i `drizzle/`, Run NPM Install, restart).
+- **Gotowe, gdy:** spełnione są wszystkie kryteria akceptacji fazy 8, a `DEPLOY.md` odzwierciedla faktycznie wykonane kroki.
 
 **Kryteria akceptacji:**
 
@@ -750,6 +998,28 @@ Realizowana tylko, jeśli właściciel zdecyduje się upublicznić projekt. Nie 
   - Nagłówki ustawione przez `@fastify/helmet` z CSP dopasowanym do Vite i SW.
   - Brak sekretów w repo i w historii gita.
 - Tag `v0.1.0` i GitHub Release z `release.zip`, budowanym w workflow `release.yml` przy pushu tagu.
+
+**Kroki realizacji:**
+
+#### Krok 9.1 - Przegląd bezpieczeństwa
+
+- **Zakres:** test izolacji rodzin dla każdego endpointu (i prywatności list zadań), `@fastify/helmet` z CSP dopasowanym do Vite i service workera, skan repo i historii gita pod kątem sekretów.
+- **Gotowe, gdy:** testy izolacji przechodzą, PWA, service worker i push nadal działają z włączonym CSP (sprawdzone na buildzie produkcyjnym), skan nie znajduje sekretów. (+ `release:smoke`.)
+
+#### Krok 9.2 - Docker i wariant VPS
+
+- **Zakres:** `Dockerfile` i `docker-compose.yml` z wolumenem na `/data`, wariant VPS/Docker w `docs/DEPLOY.md`. Sposób uruchamiania jobów (przypomnienia i backup) w kontenerze agent wybiera i zapisuje w `DECISIONS.md`.
+- **Gotowe, gdy:** `docker compose up` startuje aplikację, `/api/health` zwraca `ok: true`, dane przetrwają restart kontenera, a joby działają zgodnie z opisem w `DEPLOY.md`.
+
+#### Krok 9.3 - Dokumentacja i pliki repozytorium
+
+- **Zakres:** `README.md` po polsku (opis, funkcje, szybki start lokalny, link do `DEPLOY.md`, roadmapa; miejsce na zrzuty ekranu, które robi właściciel), `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE` (bug i pomysł), szablon PR.
+- **Gotowe, gdy:** obca osoba jest w stanie postawić aplikację lokalnie wyłącznie na podstawie README.
+
+#### Krok 9.4 - Wydanie
+
+- **Zakres:** workflow `release.yml` budujący `release.zip` przy pushu tagu, tag `v0.1.0`, GitHub Release.
+- **Gotowe, gdy:** wydanie zawiera gotowy zip, a kryteria akceptacji fazy 9 są spełnione.
 
 **Kryteria akceptacji:** obca osoba jest w stanie postawić aplikację lokalnie wyłącznie na podstawie README, a w Dockerze na podstawie `DEPLOY.md`. Release zawiera gotowy zip.
 

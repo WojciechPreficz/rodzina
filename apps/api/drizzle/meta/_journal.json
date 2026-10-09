@@ -8,6 +8,69 @@
       "when": 1791483051468,
       "tag": "0000_married_the_enforcers",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791483051470,
+      "tag": "0001_auth_foundation",
+      "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791483051471,
+      "tag": "0002_create_users",
+      "breakpoints": false
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791483051472,
+      "tag": "0003_create_sessions",
+      "breakpoints": false
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791483051473,
+      "tag": "0004_create_invitations",
+      "breakpoints": false
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791483051474,
+      "tag": "0005_create_password_resets",
+      "breakpoints": false
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791483051475,
+      "tag": "0006_create_families_join_code_unique",
+      "breakpoints": false
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791483051476,
+      "tag": "0007_create_users_email_unique",
+      "breakpoints": false
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791483051477,
+      "tag": "0008_create_invitations_token_hash_unique",
+      "breakpoints": false
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791483051478,
+      "tag": "0009_create_password_resets_token_hash_unique",
+      "breakpoints": false
     }
   ]
 }
