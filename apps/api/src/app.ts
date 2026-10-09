@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt } from 'drizzle-orm';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
@@ -10,14 +10,17 @@ import {
   generateJoinCode,
   getOriginHost,
   hashPassword,
+  hashPin,
   hashToken,
   isJsonMutation,
   isValidPassword,
+  isValidPin,
   normalizeEmail,
   randomToken,
   SESSION_TTL_MS,
   verifyPassword,
 } from './auth.js';
+import { canEditMemberProfile, canManageFamilyMembers, canSetChildPin, canUpdateMemberRole } from './permissions.js';
 import type { AppConfig } from './config.js';
 import type { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
@@ -114,6 +117,22 @@ function isPublicApiRequest(method: string, url: string): boolean {
   return false;
 }
 
+function findFamilyMember(database: Database, familyId: string, userId: string): (typeof schema.users.$inferSelect) | undefined {
+  return database.db.select().from(schema.users).where(and(eq(schema.users.id, userId), eq(schema.users.familyId, familyId))).get();
+}
+
+function countAdmins(database: Database, familyId: string): number {
+  return database.db.select().from(schema.users).where(and(eq(schema.users.familyId, familyId), eq(schema.users.role, 'admin'))).all().length;
+}
+
+function buildMemberPayload(user: { id: string; familyId: string; displayName: string; email: string | null; role: 'admin' | 'member' | 'child'; color: string; createdAt: number; updatedAt: number } | undefined): PublicAuthUser | null {
+  if (!user) {
+    return null;
+  }
+
+  return serializeUser(user);
+}
+
 function getLoginRateLimitKey(ip: string, email: string): string {
   return `${ip}:${email}`;
 }
@@ -201,7 +220,7 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     database.db.update(schema.sessions).set({ expiresAt: nextExpiry }).where(eq(schema.sessions.id, sessionHash)).run();
 
     request.user = serializeUser(userRecord);
-    request.familyId = userRecord.family_id;
+    request.familyId = userRecord.familyId;
   });
 
   app.get('/api/health', async (_request, reply) => {
@@ -291,6 +310,10 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     const family = database.db.select().from(schema.families).where(eq(schema.families.id, familyId)).get();
     const user = database.db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
 
+    if (!family || !user) {
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odtworzyć rodziny lub użytkownika po rejestracji.');
+    }
+
     reply.setCookie('sid', sessionToken, {
       path: '/',
       httpOnly: true,
@@ -360,12 +383,15 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       maxAge: 60 * 60 * 24 * 60,
     });
 
-    const family = database.db.select().from(schema.families).where(eq(schema.families.id, user.family_id)).get();
+    const family = database.db.select().from(schema.families).where(eq(schema.families.id, user.familyId)).get();
+    if (!family) {
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odczytać rodziny po zalogowaniu.');
+    }
 
     return {
       ok: true,
       user: serializeUser(user),
-      family: family ? { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode } : null,
+      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
     };
   });
 
@@ -385,10 +411,269 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     }
 
     const family = database.db.select().from(schema.families).where(eq(schema.families.id, request.user.familyId)).get();
+    if (!family) {
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Brak danych rodziny dla aktywnego użytkownika.');
+    }
+
     return {
       ok: true,
       user: request.user,
-      family: family ? { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode } : null,
+      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
+    };
+  });
+
+  app.get('/api/members', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    const members = database.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.familyId, request.familyId))
+      .orderBy(asc(schema.users.createdAt))
+      .all();
+
+    return {
+      ok: true,
+      members: members.map((member) => buildMemberPayload(member)),
+    };
+  });
+
+  app.post('/api/members/child', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    if (!canManageFamilyMembers(request.user.role) || !canSetChildPin(request.user.role)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może dodać dziecko.');
+    }
+
+    const parsed = z
+      .object({
+        displayName: z.string().trim().min(2),
+        pin: z.string().trim().min(4).max(6),
+        color: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+      })
+      .safeParse(request.body ?? {});
+
+    if (!parsed.success) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane dziecka są niepoprawne.');
+    }
+
+    const { displayName, pin, color } = parsed.data;
+    if (!isValidPin(pin)) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'PIN musi mieć od 4 do 6 cyfr.');
+    }
+
+    const now = Date.now();
+    const memberId = crypto.randomUUID();
+    const pinHash = await hashPin(pin);
+
+    database.db
+      .insert(schema.users)
+      .values({
+        id: memberId,
+        familyId: request.familyId,
+        displayName,
+        email: null,
+        passwordHash: null,
+        pinHash,
+        role: 'child',
+        color: color ?? '#7BC6B9',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    const created = database.db.select().from(schema.users).where(eq(schema.users.id, memberId)).get();
+    if (!created) {
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie udało się pobrać utworzonego użytkownika.');
+    }
+
+    return reply.code(201).send({ ok: true, member: buildMemberPayload(created) });
+  });
+
+  app.patch('/api/members/:id', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    const memberId = (request.params as { id?: string } | undefined)?.id;
+    if (!memberId) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Brak identyfikatora użytkownika.');
+    }
+
+    const targetUser = findFamilyMember(database, request.familyId, memberId);
+    if (!targetUser) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Użytkownik nie istnieje w tej rodzinie.');
+    }
+
+    const isSelf = targetUser.id === request.user.id;
+    if (!canEditMemberProfile(request.user.role, request.user.id, targetUser.id)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Brak uprawnień do edycji tego użytkownika.');
+    }
+
+    const parsed = z
+      .object({
+        displayName: z.string().trim().min(2).optional(),
+        color: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        role: z.enum(['admin', 'member', 'child']).optional(),
+        pin: z.string().trim().min(4).max(6).optional(),
+      })
+      .safeParse(request.body ?? {});
+
+    if (!parsed.success) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane użytkownika są niepoprawne.');
+    }
+
+    const update = parsed.data;
+    if (request.user.role !== 'admin' && !isSelf) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może edytować innych domowników.');
+    }
+
+    if (request.user.role !== 'admin') {
+      if (update.role || update.pin) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Dziecko i członek nie mogą zmieniać roli ani PIN-u.');
+      }
+    }
+
+    if (update.role) {
+      if (!canUpdateMemberRole(request.user.role)) {
+        return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może zmieniać role.');
+      }
+
+      if (targetUser.role === 'admin' && update.role !== 'admin' && countAdmins(database, request.familyId) <= 1) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'Nie można odebrać ostatniej roli administratora.');
+      }
+    }
+
+    if (update.pin) {
+      if (!canSetChildPin(request.user.role) || (targetUser.role !== 'child' && !(update.role === 'child'))) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'PIN można ustawić tylko dla dziecka.');
+      }
+      if (!isValidPin(update.pin)) {
+        return sendError(reply, 400, 'VALIDATION_ERROR', 'PIN musi mieć od 4 do 6 cyfr.');
+      }
+    }
+
+    const nextUpdatedAt = Date.now();
+    const values: Partial<typeof schema.users.$inferSelect> = {
+      updatedAt: nextUpdatedAt,
+    };
+
+    if (update.displayName) {
+      values.displayName = update.displayName;
+    }
+
+    if (update.color) {
+      values.color = update.color;
+    }
+
+    if (request.user.role === 'admin' && update.role) {
+      values.role = update.role;
+    }
+
+    if (request.user.role === 'admin' && update.pin) {
+      values.pinHash = await hashPin(update.pin);
+    }
+
+    if (Object.keys(values).length <= 1) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Brak danych do zmiany.');
+    }
+
+    database.db.update(schema.users).set(values).where(eq(schema.users.id, memberId)).run();
+
+    const updated = database.db.select().from(schema.users).where(eq(schema.users.id, memberId)).get();
+    if (!updated) {
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie udało się pobrać zaktualizowanego użytkownika.');
+    }
+
+    return {
+      ok: true,
+      member: buildMemberPayload(updated),
+    };
+  });
+
+  app.delete('/api/members/:id', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    if (!canManageFamilyMembers(request.user.role)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może usuwać domowników.');
+    }
+
+    const memberId = (request.params as { id?: string } | undefined)?.id;
+    if (!memberId) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Brak identyfikatora użytkownika.');
+    }
+
+    const targetUser = findFamilyMember(database, request.familyId, memberId);
+    if (!targetUser) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Użytkownik nie istnieje w tej rodzinie.');
+    }
+
+    if (targetUser.role === 'admin' && countAdmins(database, request.familyId) <= 1) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Nie można usunąć ostatniego administratora.');
+    }
+
+    database.db.delete(schema.sessions).where(eq(schema.sessions.userId, memberId)).run();
+    database.db.delete(schema.users).where(eq(schema.users.id, memberId)).run();
+
+    return { ok: true, deleted: true };
+  });
+
+  app.patch('/api/family', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    if (!canManageFamilyMembers(request.user.role)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może zmieniać nazwę rodziny.');
+    }
+
+    const parsed = z.object({ name: z.string().trim().min(2) }).safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Nazwa rodziny jest niepoprawna.');
+    }
+
+    database.db.update(schema.families).set({ name: parsed.data.name }).where(eq(schema.families.id, request.familyId)).run();
+    const updated = database.db.select().from(schema.families).where(eq(schema.families.id, request.familyId)).get();
+    if (!updated) {
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odczytać zaktualizowanej rodziny.');
+    }
+
+    return {
+      ok: true,
+      family: {
+        id: updated.id,
+        name: updated.name,
+        timezone: updated.timezone,
+        joinCode: updated.joinCode,
+      },
+    };
+  });
+
+  app.post('/api/family/join-code/rotate', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    if (!canManageFamilyMembers(request.user.role)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może odświeżyć kod rodziny.');
+    }
+
+    let nextJoinCode = generateJoinCode();
+    while (database.db.select().from(schema.families).where(eq(schema.families.joinCode, nextJoinCode)).get()) {
+      nextJoinCode = generateJoinCode();
+    }
+
+    database.db.update(schema.families).set({ joinCode: nextJoinCode }).where(eq(schema.families.id, request.familyId)).run();
+
+    return {
+      ok: true,
+      joinCode: nextJoinCode,
     };
   });
 

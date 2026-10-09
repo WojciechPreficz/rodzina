@@ -5,20 +5,23 @@ import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
+import { hashToken, randomToken } from './auth.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../drizzle');
 
-function getSessionHeader(response: { headers: Record<string, string | string[] | undefined> }): string {
-  const setCookie = response.headers['set-cookie'];
+function getSessionHeader(response: { headers?: Record<string, string | string[] | number | undefined> }): string {
+  const setCookie = response.headers?.['set-cookie'];
+
   if (Array.isArray(setCookie)) {
-    return setCookie[0];
+    const firstValue = setCookie[0];
+    return typeof firstValue === 'string' ? firstValue : '';
   }
 
   if (typeof setCookie === 'string') {
-    return setCookie.split(';')[0];
+    return setCookie.split(';')[0] ?? '';
   }
 
   return '';
@@ -198,5 +201,136 @@ describe('auth API', () => {
 
     expect(disabledResponse.statusCode).toBe(403);
     expect(disabledResponse.json().error.code).toBe('FORBIDDEN');
+  });
+
+  it('manages family members, permissions, and family settings', async () => {
+    const testApp = await createTestApp();
+    app = testApp.app;
+    database = testApp.database;
+
+    const adminResponse = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register-family',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: {
+        familyName: 'Rodzina Testowa',
+        displayName: 'Anna',
+        email: 'anna@example.com',
+        password: '12345678',
+      },
+    });
+
+    expect(adminResponse.statusCode).toBe(201);
+    const adminCookie = getSessionHeader(adminResponse);
+
+    const membersResponse = await app.inject({
+      method: 'GET',
+      url: '/api/members',
+      headers: { cookie: adminCookie },
+    });
+    expect(membersResponse.statusCode).toBe(200);
+    expect(membersResponse.json().members).toHaveLength(1);
+
+    const childResponse = await app.inject({
+      method: 'POST',
+      url: '/api/members/child',
+      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: {
+        displayName: 'Kasia',
+        pin: '1234',
+        color: '#FF5733',
+      },
+    });
+
+    expect(childResponse.statusCode).toBe(201);
+    const childMember = childResponse.json().member;
+    expect(childMember.role).toBe('child');
+
+    const childSessionValue = randomToken();
+    database!.db
+      .insert(schema.sessions)
+      .values({
+        id: hashToken(childSessionValue),
+        userId: childMember.id,
+        expiresAt: Date.now() + 1000 * 60 * 60,
+        createdAt: Date.now(),
+        userAgent: 'vitest',
+      })
+      .run();
+
+    const childPatchResponse = await app.inject({
+      method: 'PATCH',
+      url: `/api/members/${childMember.id}`,
+      headers: { 'content-type': 'application/json', cookie: `sid=${childSessionValue}`, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: {
+        displayName: 'Kasia Nowa',
+        color: '#00FF00',
+        role: 'member',
+      },
+    });
+
+    expect(childPatchResponse.statusCode).toBe(403);
+
+    const childAllowedPatchResponse = await app.inject({
+      method: 'PATCH',
+      url: `/api/members/${childMember.id}`,
+      headers: { 'content-type': 'application/json', cookie: `sid=${childSessionValue}`, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: {
+        displayName: 'Kasia Nowa',
+        color: '#00FF00',
+      },
+    });
+
+    expect(childAllowedPatchResponse.statusCode).toBe(200);
+    expect(childAllowedPatchResponse.json().member.displayName).toBe('Kasia Nowa');
+
+    const familyPatchResponse = await app.inject({
+      method: 'PATCH',
+      url: '/api/family',
+      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { name: 'Nowa Nazwa Rodziny' },
+    });
+
+    expect(familyPatchResponse.statusCode).toBe(200);
+    expect(familyPatchResponse.json().family.name).toBe('Nowa Nazwa Rodziny');
+
+    const rotateResponse = await app.inject({
+      method: 'POST',
+      url: '/api/family/join-code/rotate',
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+    });
+
+    expect(rotateResponse.statusCode).toBe(200);
+    expect(rotateResponse.json().joinCode).toHaveLength(6);
+
+    const lastAdminDeleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/api/members/${adminResponse.json().user.id}`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+    });
+
+    expect(lastAdminDeleteResponse.statusCode).toBe(400);
+
+    const secondFamilyResponse = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register-family',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: {
+        familyName: 'Druga Rodzina',
+        displayName: 'Marek',
+        email: 'marek@example.com',
+        password: '12345678',
+      },
+    });
+
+    const secondFamilyId = secondFamilyResponse.json().user.id;
+    const crossFamilyPatchResponse = await app.inject({
+      method: 'PATCH',
+      url: `/api/members/${secondFamilyId}`,
+      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { displayName: 'Marek Zmodyfikowany' },
+    });
+
+    expect(crossFamilyPatchResponse.statusCode).toBe(404);
   });
 });
