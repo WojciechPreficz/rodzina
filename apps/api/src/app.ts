@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull } from 'drizzle-orm';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
@@ -177,7 +177,7 @@ function checkRateLimit(key: string): boolean {
     return true;
   }
 
-  if (existing.count >= 9) {
+  if (existing.count >= 10) {
     return false;
   }
 
@@ -278,6 +278,13 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
 
     const nextExpiry = Date.now() + SESSION_TTL_MS;
     database.db.update(schema.sessions).set({ expiresAt: nextExpiry }).where(eq(schema.sessions.id, sessionHash)).run();
+    reply.setCookie('sid', rawSession, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.NODE_ENV === 'production',
+      maxAge: SESSION_TTL_MS / 1000,
+    });
 
     request.user = serializeUser(userRecord);
     request.familyId = userRecord.familyId;
@@ -321,37 +328,44 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     const userId = crypto.randomUUID();
     const now = Date.now();
     const passwordHash = await hashPassword(password);
-    let joinCode = generateJoinCode();
+    try {
+      database.db.transaction((tx) => {
+        let joinCode = generateJoinCode();
 
-    while (database.db.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get()) {
-      joinCode = generateJoinCode();
+        while (tx.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get()) {
+          joinCode = generateJoinCode();
+        }
+
+        tx.insert(schema.families)
+          .values({
+            id: familyId,
+            name: familyName,
+            timezone: 'Europe/Warsaw',
+            joinCode,
+            createdAt: now,
+          })
+          .run();
+
+        tx.insert(schema.users)
+          .values({
+            id: userId,
+            familyId,
+            displayName,
+            email: normalizedEmail,
+            passwordHash,
+            role: 'admin',
+            color: '#5C7CFA',
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+      });
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return sendError(reply, 409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
+      }
+      throw error;
     }
-
-    database.db
-      .insert(schema.families)
-      .values({
-        id: familyId,
-        name: familyName,
-        timezone: 'Europe/Warsaw',
-        joinCode,
-        createdAt: now,
-      })
-      .run();
-
-    database.db
-      .insert(schema.users)
-      .values({
-        id: userId,
-        familyId,
-        displayName,
-        email: normalizedEmail,
-        passwordHash,
-        role: 'admin',
-        color: '#5C7CFA',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
 
     const sessionToken = randomToken();
     const sessionHash = hashToken(sessionToken);
@@ -516,7 +530,6 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
 
     const isValid = await verifyPin(user.pinHash, pin);
     if (!isValid) {
-      clearLoginRateLimit(loginKey);
       return sendError(reply, 401, 'UNAUTHORIZED', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
     }
 
@@ -769,22 +782,45 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     const passwordHash = await hashPassword(parsed.data.password);
     const now = Date.now();
 
-    database.db
-      .insert(schema.users)
-      .values({
-        id: userId,
-        familyId: family.id,
-        displayName: parsed.data.displayName,
-        email: normalizedEmail,
-        passwordHash,
-        role: invitation.role,
-        color: '#5C7CFA',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-
-    database.db.update(schema.invitations).set({ usedAt: now }).where(eq(schema.invitations.id, invitation.id)).run();
+    let accepted = false;
+    try {
+      accepted = database.db.transaction((tx) => {
+        const claimed = tx
+          .update(schema.invitations)
+          .set({ usedAt: now })
+          .where(
+            and(
+              eq(schema.invitations.id, invitation.id),
+              isNull(schema.invitations.usedAt),
+              gt(schema.invitations.expiresAt, now),
+            ),
+          )
+          .run();
+        if (claimed.changes !== 1) return false;
+        tx.insert(schema.users)
+          .values({
+            id: userId,
+            familyId: family.id,
+            displayName: parsed.data.displayName,
+            email: normalizedEmail,
+            passwordHash,
+            role: invitation.role,
+            color: '#5C7CFA',
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+        return true;
+      });
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return sendError(reply, 409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
+      }
+      throw error;
+    }
+    if (!accepted) {
+      return sendError(reply, 410, 'USED', 'Zaproszenie wygasło lub zostało już wykorzystane.');
+    }
 
     await createSessionForUser(reply, request, database, userId, config);
 
@@ -889,17 +925,28 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     const passwordHash = await hashPassword(password);
     const now = Date.now();
 
-    database.db
-      .update(schema.users)
-      .set({ passwordHash, updatedAt: now })
-      .where(eq(schema.users.id, resetRequest.userId))
-      .run();
-
-    database.db
-      .update(schema.passwordResets)
-      .set({ usedAt: now })
-      .where(eq(schema.passwordResets.id, resetRequest.id))
-      .run();
+    const reset = database.db.transaction((tx) => {
+      const claimed = tx
+        .update(schema.passwordResets)
+        .set({ usedAt: now })
+        .where(
+          and(
+            eq(schema.passwordResets.id, resetRequest.id),
+            isNull(schema.passwordResets.usedAt),
+            gt(schema.passwordResets.expiresAt, now),
+          ),
+        )
+        .run();
+      if (claimed.changes !== 1) return false;
+      tx.update(schema.users)
+        .set({ passwordHash, updatedAt: now })
+        .where(eq(schema.users.id, resetRequest.userId))
+        .run();
+      return true;
+    });
+    if (!reset) {
+      return sendError(reply, 410, 'USED', 'Token resetu hasła wygasł lub został już wykorzystany.');
+    }
 
     return { ok: true };
   });
@@ -955,6 +1002,14 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     if (update.role) {
       if (!canUpdateMemberRole(request.user.role)) {
         return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może zmieniać role.');
+      }
+      if ((targetUser.role === 'child') !== (update.role === 'child')) {
+        return sendError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Nie można zmieniać konta dziecka w konto dorosłego ani odwrotnie.',
+        );
       }
 
       if (targetUser.role === 'admin' && update.role !== 'admin' && countAdmins(database, request.familyId) <= 1) {

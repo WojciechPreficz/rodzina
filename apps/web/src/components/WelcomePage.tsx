@@ -17,6 +17,9 @@ export function WelcomePage() {
           <Button component={Link} to="/login" variant="light" size="lg" radius="md">
             {labels.login}
           </Button>
+          <Button component={Link} to="/login-child" variant="default" size="lg" radius="md">
+            {labels.childLogin}
+          </Button>
         </Stack>
       </Stack>
     </Paper>

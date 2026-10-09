@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -131,7 +131,7 @@ describe('FamilyPage', () => {
     renderFamilyPage();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Edytuj: Zosia' }));
-    expect(await screen.findByLabelText('Imię i nazwisko')).toHaveValue('Zosia');
+    expect(await screen.findByRole('textbox', { name: /Imię i nazwisko/ })).toHaveValue('Zosia');
     expect(screen.getByRole('radiogroup', { name: 'Kolor' })).toBeInTheDocument();
     expect(screen.queryByText('Rola')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Nowy PIN')).not.toBeInTheDocument();
@@ -160,7 +160,7 @@ describe('FamilyPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Dodaj dziecko' }));
     fireEvent.change(await screen.findByLabelText(/Imię i nazwisko/), { target: { value: 'Kuba' } });
     fireEvent.change(screen.getByLabelText(/^PIN/), { target: { value: '1234' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Dodaj dziecko' }).at(-1)!);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Dodaj dziecko' }));
 
     expect(await screen.findByText('Kuba')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/members/child', expect.objectContaining({ method: 'POST' }));

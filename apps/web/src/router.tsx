@@ -7,6 +7,8 @@ import { MorePage } from './components/MorePage.js';
 import { WelcomePage } from './components/WelcomePage.js';
 import { labels } from './i18n/pl.js';
 import { FamilyPage } from './features/family/FamilyPage.js';
+import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/JoinPages.js';
+import { AuthLayout } from './components/AuthLayout.js';
 
 export const router = createBrowserRouter([
   {
@@ -14,11 +16,19 @@ export const router = createBrowserRouter([
     element: <AuthProvider />,
     children: [
       {
-        element: <PublicOnlyRoute />,
+        element: <AuthLayout />,
         children: [
-          { path: 'witaj', element: <WelcomePage /> },
-          { path: 'register', element: <RegisterPage /> },
-          { path: 'login', element: <LoginPage /> },
+          { path: 'zaproszenie/:token', element: <InvitationPage /> },
+          { path: 'reset-hasla/:token', element: <ResetPasswordPage /> },
+          {
+            element: <PublicOnlyRoute />,
+            children: [
+              { path: 'witaj', element: <WelcomePage /> },
+              { path: 'register', element: <RegisterPage /> },
+              { path: 'login', element: <LoginPage /> },
+              { path: 'login-child', element: <ChildLoginPage /> },
+            ],
+          },
         ],
       },
       {

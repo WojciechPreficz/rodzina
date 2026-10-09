@@ -118,7 +118,7 @@ describe('auth API', () => {
       },
     });
 
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 11; i += 1) {
       const response = await app.inject({
         method: 'POST',
         url: '/api/auth/login',
@@ -130,7 +130,7 @@ describe('auth API', () => {
         },
         payload: { email: 'tester@example.com', password: 'wrong-password' },
       });
-      if (i < 9) {
+      if (i < 10) {
         expect(response.statusCode).toBe(401);
       } else {
         expect(response.statusCode).toBe(429);

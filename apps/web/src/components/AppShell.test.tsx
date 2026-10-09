@@ -96,6 +96,51 @@ describe('AppShell', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Utwórz rodzinę' }));
-    await waitFor(() => expect(screen.getByText('Nazwa rodziny jest wymagane.')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Nazwa rodziny musi mieć co najmniej 2 znaki.')).toBeInTheDocument());
+  });
+
+  it('sends registration fields to the API and returns to the requested page', async () => {
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: url !== '/api/auth/me',
+      text: async () =>
+        JSON.stringify(
+          url === '/api/auth/me'
+            ? { error: { message: 'Brak sesji.' } }
+            : { user: { id: 'u1', displayName: 'Anna' }, family: { id: 'f1', name: 'Kowalscy' } },
+        ),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={['/register?next=%2Fzakupy']}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/zakupy" element={<div>Registered destination</div>} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText('Nazwa rodziny'), { target: { value: 'Kowalscy' } });
+    fireEvent.change(screen.getByLabelText('Imię i nazwisko'), { target: { value: 'Anna' } });
+    fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'anna@example.com' } });
+    fireEvent.change(screen.getByLabelText('Hasło'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Utwórz rodzinę' }));
+    expect(await screen.findByText('Registered destination')).toBeInTheDocument();
+    const registration = fetchMock.mock.calls.find(([url]) => url === '/api/auth/register-family');
+    expect(registration).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/register-family',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          familyName: 'Kowalscy',
+          displayName: 'Anna',
+          email: 'anna@example.com',
+          password: 'password123',
+        }),
+      }),
+    );
   });
 });

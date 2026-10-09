@@ -1,23 +1,14 @@
 import { Alert, Button, Group, Paper, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
-import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useState } from 'react';
 import { apiFetch, sanitizeNextPath } from '../api.js';
 import { useMe, type AuthUser, type Family } from '../auth.js';
 
 import { labels } from '../i18n/pl.js';
 
-function getValidationError(field: string, value: string) {
-  if (!value.trim()) {
-    return `${field} jest wymagane.`;
-  }
-
-  return '';
-}
-
 export function RegisterPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = useLocation();
   const { setSession } = useMe();
   const [form, setForm] = useState({ familyName: '', displayName: '', email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
@@ -34,10 +25,10 @@ export function RegisterPage() {
     event.preventDefault();
 
     const nextErrors: Record<string, string> = {
-      familyName: getValidationError('Nazwa rodziny', form.familyName),
-      displayName: getValidationError('Imię', form.displayName),
-      email: form.email.trim() && /.+@.+\..+/.test(form.email) ? '' : 'E-mail jest niepoprawny.',
-      password: form.password.trim() && form.password.length >= 8 ? '' : 'Hasło musi mieć co najmniej 8 znaków.',
+      familyName: form.familyName.trim().length >= 2 ? '' : labels.familyNameError,
+      displayName: form.displayName.trim().length >= 2 ? '' : labels.displayNameError,
+      email: form.email.trim() && /.+@.+\..+/.test(form.email) ? '' : labels.emailError,
+      password: form.password.length >= 8 ? '' : labels.passwordError,
     };
 
     setFieldErrors(nextErrors);
@@ -49,12 +40,17 @@ export function RegisterPage() {
     try {
       const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/register-family', {
         method: 'POST',
-        body: JSON.stringify({/* bez zmian */}),
+        body: JSON.stringify({
+          ...form,
+          familyName: form.familyName.trim(),
+          displayName: form.displayName.trim(),
+          email: form.email.trim(),
+        }),
       });
       setSession(response.user, response.family);
       navigate(next, { replace: true });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Nie udało się utworzyć rodziny.');
+      setError(requestError instanceof Error ? requestError.message : labels.registrationError);
     }
   };
 
@@ -104,7 +100,7 @@ export function RegisterPage() {
               <Button
                 type="button"
                 variant="default"
-                onClick={() => navigate(`/login?next=${encodeURIComponent(location.pathname + location.search)}`)}
+                onClick={() => navigate(`/login?next=${encodeURIComponent(next)}`)}
               >
                 {labels.login}
               </Button>
@@ -136,8 +132,8 @@ export function LoginPage() {
     event.preventDefault();
 
     const nextErrors = {
-      email: form.email.trim() && /.+@.+\..+/.test(form.email) ? '' : 'E-mail jest wymagany.',
-      password: form.password.trim() && form.password.length >= 8 ? '' : 'Hasło musi mieć co najmniej 8 znaków.',
+      email: form.email.trim() && /.+@.+\..+/.test(form.email) ? '' : labels.loginEmailError,
+      password: form.password.length >= 8 ? '' : labels.passwordError,
     };
 
     setFieldErrors(nextErrors);
@@ -154,7 +150,7 @@ export function LoginPage() {
       setSession(response.user, response.family);
       navigate(next, { replace: true });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Nie udało się zalogować.');
+      setError(requestError instanceof Error ? requestError.message : labels.loginError);
     }
   };
 
@@ -194,6 +190,9 @@ export function LoginPage() {
               </Button>
               <Button type="submit">{labels.login}</Button>
             </Group>
+            <Button variant="subtle" onClick={() => navigate(`/login-child?next=${encodeURIComponent(next)}`)}>
+              {labels.childLogin}
+            </Button>
           </Stack>
         </form>
       </Stack>

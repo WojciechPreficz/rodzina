@@ -85,6 +85,15 @@ try {
     fail('serwer nie dostarczył index.html.');
   }
 
+  for (const route of ['/zaproszenie/smoke-token', '/reset-hasla/smoke-token', '/login-child']) {
+    const response = await fetch(`http://127.0.0.1:${port}${route}`);
+    if (!response.ok || !(await response.text()).includes('<div id="root"></div>')) {
+      fail(`serwer nie dostarczył SPA dla ${route}.`);
+    }
+  }
+  const protectedResponse = await fetch(`http://127.0.0.1:${port}/api/auth/me`);
+  if (protectedResponse.status !== 401) fail('auth/me nie wymaga sesji.');
+
   const manifestResponse = await fetch(`http://127.0.0.1:${port}/manifest.webmanifest`);
   const manifest = await manifestResponse.json();
   if (
