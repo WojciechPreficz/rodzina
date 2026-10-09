@@ -117,15 +117,40 @@ function isPublicApiRequest(method: string, url: string): boolean {
   return false;
 }
 
-function findFamilyMember(database: Database, familyId: string, userId: string): (typeof schema.users.$inferSelect) | undefined {
-  return database.db.select().from(schema.users).where(and(eq(schema.users.id, userId), eq(schema.users.familyId, familyId))).get();
+function findFamilyMember(
+  database: Database,
+  familyId: string,
+  userId: string,
+): typeof schema.users.$inferSelect | undefined {
+  return database.db
+    .select()
+    .from(schema.users)
+    .where(and(eq(schema.users.id, userId), eq(schema.users.familyId, familyId)))
+    .get();
 }
 
 function countAdmins(database: Database, familyId: string): number {
-  return database.db.select().from(schema.users).where(and(eq(schema.users.familyId, familyId), eq(schema.users.role, 'admin'))).all().length;
+  return database.db
+    .select()
+    .from(schema.users)
+    .where(and(eq(schema.users.familyId, familyId), eq(schema.users.role, 'admin')))
+    .all().length;
 }
 
-function buildMemberPayload(user: { id: string; familyId: string; displayName: string; email: string | null; role: 'admin' | 'member' | 'child'; color: string; createdAt: number; updatedAt: number } | undefined): PublicAuthUser | null {
+function buildMemberPayload(
+  user:
+    | {
+        id: string;
+        familyId: string;
+        displayName: string;
+        email: string | null;
+        role: 'admin' | 'member' | 'child';
+        color: string;
+        createdAt: number;
+        updatedAt: number;
+      }
+    | undefined,
+): PublicAuthUser | null {
   if (!user) {
     return null;
   }
@@ -398,7 +423,10 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
   app.post('/api/auth/logout', async (request, reply) => {
     const sessionToken = request.cookies?.sid;
     if (sessionToken) {
-      database.db.delete(schema.sessions).where(eq(schema.sessions.id, hashToken(sessionToken))).run();
+      database.db
+        .delete(schema.sessions)
+        .where(eq(schema.sessions.id, hashToken(sessionToken)))
+        .run();
     }
 
     reply.clearCookie('sid', { path: '/' });
@@ -410,7 +438,11 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
     }
 
-    const family = database.db.select().from(schema.families).where(eq(schema.families.id, request.user.familyId)).get();
+    const family = database.db
+      .select()
+      .from(schema.families)
+      .where(eq(schema.families.id, request.user.familyId))
+      .get();
     if (!family) {
       return sendError(reply, 500, 'INTERNAL_ERROR', 'Brak danych rodziny dla aktywnego użytkownika.');
     }
@@ -453,7 +485,11 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       .object({
         displayName: z.string().trim().min(2),
         pin: z.string().trim().min(4).max(6),
-        color: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        color: z
+          .string()
+          .trim()
+          .regex(/^#[0-9A-Fa-f]{6}$/)
+          .optional(),
       })
       .safeParse(request.body ?? {});
 
@@ -517,7 +553,11 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     const parsed = z
       .object({
         displayName: z.string().trim().min(2).optional(),
-        color: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        color: z
+          .string()
+          .trim()
+          .regex(/^#[0-9A-Fa-f]{6}$/)
+          .optional(),
         role: z.enum(['admin', 'member', 'child']).optional(),
         pin: z.string().trim().min(4).max(6).optional(),
       })
@@ -638,7 +678,11 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       return sendError(reply, 400, 'VALIDATION_ERROR', 'Nazwa rodziny jest niepoprawna.');
     }
 
-    database.db.update(schema.families).set({ name: parsed.data.name }).where(eq(schema.families.id, request.familyId)).run();
+    database.db
+      .update(schema.families)
+      .set({ name: parsed.data.name })
+      .where(eq(schema.families.id, request.familyId))
+      .run();
     const updated = database.db.select().from(schema.families).where(eq(schema.families.id, request.familyId)).get();
     if (!updated) {
       return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odczytać zaktualizowanej rodziny.');
@@ -669,7 +713,11 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       nextJoinCode = generateJoinCode();
     }
 
-    database.db.update(schema.families).set({ joinCode: nextJoinCode }).where(eq(schema.families.id, request.familyId)).run();
+    database.db
+      .update(schema.families)
+      .set({ joinCode: nextJoinCode })
+      .where(eq(schema.families.id, request.familyId))
+      .run();
 
     return {
       ok: true,

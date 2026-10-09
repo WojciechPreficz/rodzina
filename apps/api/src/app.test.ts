@@ -122,7 +122,12 @@ describe('auth API', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/auth/login',
-        headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000', 'x-forwarded-for': '127.0.0.1' },
+        headers: {
+          'content-type': 'application/json',
+          origin: 'http://localhost:3000',
+          host: 'localhost:3000',
+          'x-forwarded-for': '127.0.0.1',
+        },
         payload: { email: 'tester@example.com', password: 'wrong-password' },
       });
       if (i < 9) {
@@ -161,7 +166,11 @@ describe('auth API', () => {
 
     const sessionValue = getSessionHeader(registerResponse).replace(/^sid=/, '');
     const sessionHash = crypto.createHash('sha256').update(sessionValue, 'utf8').digest('hex');
-    database!.db.update(schema.sessions).set({ expiresAt: Date.now() - 1000 }).where(eq(schema.sessions.id, sessionHash)).run();
+    database!.db
+      .update(schema.sessions)
+      .set({ expiresAt: Date.now() - 1000 })
+      .where(eq(schema.sessions.id, sessionHash))
+      .run();
 
     const expiredResponse = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
     expect(expiredResponse.statusCode).toBe(401);
@@ -234,7 +243,12 @@ describe('auth API', () => {
     const childResponse = await app.inject({
       method: 'POST',
       url: '/api/members/child',
-      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
       payload: {
         displayName: 'Kasia',
         pin: '1234',
@@ -261,7 +275,12 @@ describe('auth API', () => {
     const childPatchResponse = await app.inject({
       method: 'PATCH',
       url: `/api/members/${childMember.id}`,
-      headers: { 'content-type': 'application/json', cookie: `sid=${childSessionValue}`, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: `sid=${childSessionValue}`,
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
       payload: {
         displayName: 'Kasia Nowa',
         color: '#00FF00',
@@ -274,7 +293,12 @@ describe('auth API', () => {
     const childAllowedPatchResponse = await app.inject({
       method: 'PATCH',
       url: `/api/members/${childMember.id}`,
-      headers: { 'content-type': 'application/json', cookie: `sid=${childSessionValue}`, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: `sid=${childSessionValue}`,
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
       payload: {
         displayName: 'Kasia Nowa',
         color: '#00FF00',
@@ -287,7 +311,12 @@ describe('auth API', () => {
     const familyPatchResponse = await app.inject({
       method: 'PATCH',
       url: '/api/family',
-      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
       payload: { name: 'Nowa Nazwa Rodziny' },
     });
 
@@ -327,7 +356,12 @@ describe('auth API', () => {
     const crossFamilyPatchResponse = await app.inject({
       method: 'PATCH',
       url: `/api/members/${secondFamilyId}`,
-      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
       payload: { displayName: 'Marek Zmodyfikowany' },
     });
 

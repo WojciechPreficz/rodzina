@@ -17,7 +17,9 @@ export const users = sqliteTable('users', {
   email: text('email').unique(),
   passwordHash: text('password_hash'),
   pinHash: text('pin_hash'),
-  role: text('role', { enum: ['admin', 'member', 'child'] }).notNull().default('member'),
+  role: text('role', { enum: ['admin', 'member', 'child'] })
+    .notNull()
+    .default('member'),
   color: text('color').notNull().default('#5c7cfa'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
