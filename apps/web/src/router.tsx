@@ -15,7 +15,7 @@ export const router = createBrowserRouter([
       {
         element: <PublicOnlyRoute />,
         children: [
-          { index: true, element: <WelcomePage /> },
+          { path: 'witaj', element: <WelcomePage /> },
           { path: 'register', element: <RegisterPage /> },
           { path: 'login', element: <LoginPage /> },
         ],

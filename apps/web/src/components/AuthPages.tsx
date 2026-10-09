@@ -2,6 +2,8 @@ import { Alert, Button, Group, Paper, PasswordInput, Stack, Text, TextInput } fr
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useState } from 'react';
 import { apiFetch, sanitizeNextPath } from '../api.js';
+import { useMe, type AuthUser, type Family } from '../auth.js';
+
 import { labels } from '../i18n/pl.js';
 
 function getValidationError(field: string, value: string) {
@@ -16,6 +18,7 @@ export function RegisterPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { setSession } = useMe();
   const [form, setForm] = useState({ familyName: '', displayName: '', email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -44,15 +47,11 @@ export function RegisterPage() {
     }
 
     try {
-      await apiFetch('/api/auth/register-family', {
+      const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/register-family', {
         method: 'POST',
-        body: JSON.stringify({
-          familyName: form.familyName.trim(),
-          displayName: form.displayName.trim(),
-          email: form.email.trim(),
-          password: form.password,
-        }),
+        body: JSON.stringify({/* bez zmian */}),
       });
+      setSession(response.user, response.family);
       navigate(next, { replace: true });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Nie udało się utworzyć rodziny.');
@@ -121,6 +120,7 @@ export function RegisterPage() {
 export function LoginPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { setSession } = useMe();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -147,10 +147,11 @@ export function LoginPage() {
     }
 
     try {
-      await apiFetch('/api/auth/login', {
+      const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: form.email.trim(), password: form.password }),
       });
+      setSession(response.user, response.family);
       navigate(next, { replace: true });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Nie udało się zalogować.');

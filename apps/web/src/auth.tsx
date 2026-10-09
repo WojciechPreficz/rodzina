@@ -27,6 +27,7 @@ export type AuthState = {
   family: Family | null;
   isLoading: boolean;
   refresh: () => Promise<void>;
+  setSession: (user: AuthUser, family: Family) => void;
   logout: () => Promise<void>;
 };
 
@@ -63,12 +64,19 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     }
   };
 
+  const setSession = (nextUser: AuthUser, nextFamily: Family) => {
+    setUser(nextUser);
+    setFamily(nextFamily);
+    setIsLoading(false);
+  };
+
   const value = useMemo<AuthState>(
     () => ({
       user,
       family,
       isLoading,
       refresh,
+      setSession,
       logout,
     }),
     [family, isLoading, user],
@@ -109,6 +117,9 @@ export function ProtectedRoute({ children }: { children?: ReactNode }) {
   }
 
   if (!user) {
+    if (location.pathname === '/' && !location.search) {
+      return <Navigate to="/witaj" replace />;
+    }
     const next = encodeURIComponent(`${location.pathname}${location.search}`);
     return <Navigate to={`/login?next=${next}`} replace />;
   }

@@ -6,6 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { sanitizeNextPath } from '../api.js';
 import { LoginPage, RegisterPage } from './AuthPages.js';
 import { AppShell } from './AppShell.js';
+import { AuthProvider } from '../auth.js';
 
 describe('AppShell', () => {
   afterEach(() => {
@@ -55,10 +56,12 @@ describe('AppShell', () => {
     render(
       <MantineProvider>
         <MemoryRouter initialEntries={['/login?next=%2Fzakupy']}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/zakupy" element={<div>Zakupy</div>} />
-          </Routes>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/zakupy" element={<div>Zakupy</div>} />
+            </Routes>
+          </AuthProvider>
         </MemoryRouter>
       </MantineProvider>,
     );
@@ -83,9 +86,11 @@ describe('AppShell', () => {
     render(
       <MantineProvider>
         <MemoryRouter initialEntries={['/register']}>
-          <Routes>
-            <Route path="/register" element={<RegisterPage />} />
-          </Routes>
+          <AuthProvider>
+            <Routes>
+              <Route path="/register" element={<RegisterPage />} />
+            </Routes>
+          </AuthProvider>
         </MemoryRouter>
       </MantineProvider>,
     );
