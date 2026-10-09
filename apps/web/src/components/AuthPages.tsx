@@ -184,7 +184,11 @@ export function LoginPage() {
             />
             {error ? <Alert color="red">{error}</Alert> : null}
             <Group justify="space-between">
-              <Button type="button" variant="default" onClick={() => navigate(`/register?next=${encodeURIComponent(next)}`)}>
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => navigate(`/register?next=${encodeURIComponent(next)}`)}
+              >
                 {labels.registerFamily}
               </Button>
               <Button type="submit">{labels.login}</Button>

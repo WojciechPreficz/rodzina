@@ -784,17 +784,18 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       })
       .run();
 
-    database.db
-      .update(schema.invitations)
-      .set({ usedAt: now })
-      .where(eq(schema.invitations.id, invitation.id))
-      .run();
+    database.db.update(schema.invitations).set({ usedAt: now }).where(eq(schema.invitations.id, invitation.id)).run();
 
     await createSessionForUser(reply, request, database, userId, config);
 
     const created = database.db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
     if (!created) {
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odtworzyć nowego użytkownika po akceptacji zaproszenia.');
+      return sendError(
+        reply,
+        500,
+        'INTERNAL_ERROR',
+        'Nie można odtworzyć nowego użytkownika po akceptacji zaproszenia.',
+      );
     }
 
     return reply.code(201).send({

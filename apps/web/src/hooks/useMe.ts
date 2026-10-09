@@ -1,1 +1,1 @@
-export { useMe } from '../auth.js';\n
+export { useMe } from '../auth.js';

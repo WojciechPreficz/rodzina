@@ -392,7 +392,12 @@ describe('auth API', () => {
     const invitationResponse = await app.inject({
       method: 'POST',
       url: '/api/invitations',
-      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
       payload: { role: 'member' },
     });
 
@@ -420,14 +425,22 @@ describe('auth API', () => {
     const childResponse = await app.inject({
       method: 'POST',
       url: '/api/members/child',
-      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
       payload: { displayName: 'Ola', pin: '4321', color: '#FFB703' },
     });
 
     expect(childResponse.statusCode).toBe(201);
     const childMemberId = childResponse.json().member.id;
 
-    const familyMembersResponse = await app.inject({ method: 'GET', url: `/api/auth/family-members?joinCode=${joinCode}` });
+    const familyMembersResponse = await app.inject({
+      method: 'GET',
+      url: `/api/auth/family-members?joinCode=${joinCode}`,
+    });
     expect(familyMembersResponse.statusCode).toBe(200);
     expect(familyMembersResponse.json().members).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: childMemberId, displayName: 'Ola' })]),
