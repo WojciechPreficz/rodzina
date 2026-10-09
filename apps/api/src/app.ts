@@ -19,6 +19,7 @@ import {
   randomToken,
   SESSION_TTL_MS,
   verifyPassword,
+  verifyPin,
 } from './auth.js';
 import { canEditMemberProfile, canManageFamilyMembers, canSetChildPin, canUpdateMemberRole } from './permissions.js';
 import type { AppConfig } from './config.js';
@@ -102,7 +103,7 @@ function isPublicApiRequest(method: string, url: string): boolean {
     return true;
   }
 
-  if (method === 'GET' && url === '/api/auth/family-members') {
+  if (method === 'GET' && url.startsWith('/api/auth/family-members')) {
     return true;
   }
 
@@ -187,6 +188,40 @@ function checkRateLimit(key: string): boolean {
 
 function clearLoginRateLimit(key: string): void {
   loginAttempts.delete(key);
+}
+
+async function createSessionForUser(
+  reply: FastifyReply,
+  request: { headers: Record<string, string | string[] | undefined> },
+  database: Database,
+  userId: string,
+  config: AppConfig,
+): Promise<void> {
+  const sessionToken = randomToken();
+  const sessionHash = hashToken(sessionToken);
+  const now = Date.now();
+  const userAgent = Array.isArray(request.headers['user-agent'])
+    ? request.headers['user-agent'][0]
+    : request.headers['user-agent'];
+
+  database.db
+    .insert(schema.sessions)
+    .values({
+      id: sessionHash,
+      userId,
+      expiresAt: now + SESSION_TTL_MS,
+      createdAt: now,
+      userAgent: userAgent ?? null,
+    })
+    .run();
+
+  reply.setCookie('sid', sessionToken, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: config.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 60,
+  });
 }
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string) {
@@ -420,6 +455,81 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     };
   });
 
+  app.get('/api/auth/family-members', async (request, reply) => {
+    const joinCode = String((request.query as Record<string, unknown> | undefined)?.joinCode ?? '').trim();
+    if (!joinCode) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Kod rodziny jest wymagany.');
+    }
+
+    const family = database.db.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get();
+    if (!family) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
+    }
+
+    const children = database.db
+      .select({ id: schema.users.id, displayName: schema.users.displayName, color: schema.users.color })
+      .from(schema.users)
+      .where(and(eq(schema.users.familyId, family.id), eq(schema.users.role, 'child')))
+      .orderBy(asc(schema.users.createdAt))
+      .all();
+
+    return {
+      ok: true,
+      members: children,
+      children,
+    };
+  });
+
+  app.post('/api/auth/login-child', async (request, reply) => {
+    const parsed = z
+      .object({
+        joinCode: z.string().trim().min(1),
+        userId: z.string().trim().min(1),
+        pin: z.string().trim().min(4).max(6),
+      })
+      .safeParse(request.body ?? {});
+
+    if (!parsed.success) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane logowania dziecka są niepoprawne.');
+    }
+
+    const { joinCode, userId, pin } = parsed.data;
+    const family = database.db.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get();
+    if (!family) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
+    }
+
+    const user = database.db
+      .select()
+      .from(schema.users)
+      .where(and(eq(schema.users.id, userId), eq(schema.users.familyId, family.id), eq(schema.users.role, 'child')))
+      .get();
+
+    if (!user || !user.pinHash) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
+    }
+
+    const loginKey = getLoginRateLimitKey(request.ip ?? 'unknown', `${family.id}:${userId}`);
+    if (!checkRateLimit(loginKey)) {
+      return sendError(reply, 429, 'RATE_LIMITED', 'Za dużo prób logowania. Spróbuj ponownie później.');
+    }
+
+    const isValid = await verifyPin(user.pinHash, pin);
+    if (!isValid) {
+      clearLoginRateLimit(loginKey);
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
+    }
+
+    clearLoginRateLimit(loginKey);
+    await createSessionForUser(reply, request, database, user.id, config);
+
+    return {
+      ok: true,
+      user: serializeUser(user),
+      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
+    };
+  });
+
   app.post('/api/auth/logout', async (request, reply) => {
     const sessionToken = request.cookies?.sid;
     if (sessionToken) {
@@ -528,6 +638,269 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     }
 
     return reply.code(201).send({ ok: true, member: buildMemberPayload(created) });
+  });
+
+  app.post('/api/invitations', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    if (!canManageFamilyMembers(request.user.role)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może tworzyć zaproszenia.');
+    }
+
+    const parsed = z.object({ role: z.enum(['admin', 'member']) }).safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Rola zaproszenia jest nieprawidłowa.');
+    }
+
+    const token = randomToken();
+    const now = Date.now();
+    const invitationId = crypto.randomUUID();
+    database.db
+      .insert(schema.invitations)
+      .values({
+        id: invitationId,
+        familyId: request.familyId,
+        tokenHash: hashToken(token),
+        role: parsed.data.role,
+        createdBy: request.user.id,
+        expiresAt: now + 1000 * 60 * 60 * 24 * 7,
+        usedAt: null,
+      })
+      .run();
+
+    return {
+      ok: true,
+      invitation: {
+        id: invitationId,
+        role: parsed.data.role,
+        expiresAt: now + 1000 * 60 * 60 * 24 * 7,
+      },
+      link: `${config.RODZINA_PUBLIC_URL.replace(/\/$/, '')}/zaproszenie/${token}`,
+      token,
+    };
+  });
+
+  app.get('/api/invitations/:token', async (request, reply) => {
+    const token = (request.params as { token?: string } | undefined)?.token;
+    if (!token) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Brak tokenu zaproszenia.');
+    }
+
+    const invitation = database.db
+      .select()
+      .from(schema.invitations)
+      .where(eq(schema.invitations.tokenHash, hashToken(token)))
+      .get();
+
+    if (!invitation) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Zaproszenie nie istnieje.');
+    }
+
+    if (invitation.expiresAt <= Date.now()) {
+      return sendError(reply, 410, 'EXPIRED', 'Zaproszenie wygasło.');
+    }
+
+    if (invitation.usedAt) {
+      return sendError(reply, 410, 'USED', 'Zaproszenie zostało już wykorzystane.');
+    }
+
+    const family = database.db.select().from(schema.families).where(eq(schema.families.id, invitation.familyId)).get();
+    if (!family) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Rodzina z zaproszeniem nie istnieje.');
+    }
+
+    return {
+      ok: true,
+      family: { id: family.id, name: family.name },
+      invitation: { id: invitation.id, role: invitation.role, expiresAt: invitation.expiresAt },
+    };
+  });
+
+  app.post('/api/invitations/:token/accept', async (request, reply) => {
+    const token = (request.params as { token?: string } | undefined)?.token;
+    if (!token) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Brak tokenu zaproszenia.');
+    }
+
+    const parsed = z
+      .object({
+        displayName: z.string().trim().min(2),
+        email: z.string().trim().email(),
+        password: z.string().min(8),
+      })
+      .safeParse(request.body ?? {});
+
+    if (!parsed.success) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane akceptacji zaproszenia są niepoprawne.');
+    }
+
+    const invitation = database.db
+      .select()
+      .from(schema.invitations)
+      .where(eq(schema.invitations.tokenHash, hashToken(token)))
+      .get();
+
+    if (!invitation) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Zaproszenie nie istnieje.');
+    }
+
+    if (invitation.expiresAt <= Date.now()) {
+      return sendError(reply, 410, 'EXPIRED', 'Zaproszenie wygasło.');
+    }
+
+    if (invitation.usedAt) {
+      return sendError(reply, 410, 'USED', 'Zaproszenie zostało już wykorzystane.');
+    }
+
+    const family = database.db.select().from(schema.families).where(eq(schema.families.id, invitation.familyId)).get();
+    if (!family) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Rodzina z zaproszeniem nie istnieje.');
+    }
+
+    const normalizedEmail = normalizeEmail(parsed.data.email);
+    const existingUser = database.db.select().from(schema.users).where(eq(schema.users.email, normalizedEmail)).get();
+    if (existingUser) {
+      return sendError(reply, 409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
+    }
+
+    const userId = crypto.randomUUID();
+    const passwordHash = await hashPassword(parsed.data.password);
+    const now = Date.now();
+
+    database.db
+      .insert(schema.users)
+      .values({
+        id: userId,
+        familyId: family.id,
+        displayName: parsed.data.displayName,
+        email: normalizedEmail,
+        passwordHash,
+        role: invitation.role,
+        color: '#5C7CFA',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    database.db
+      .update(schema.invitations)
+      .set({ usedAt: now })
+      .where(eq(schema.invitations.id, invitation.id))
+      .run();
+
+    await createSessionForUser(reply, request, database, userId, config);
+
+    const created = database.db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    if (!created) {
+      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odtworzyć nowego użytkownika po akceptacji zaproszenia.');
+    }
+
+    return reply.code(201).send({
+      ok: true,
+      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
+      user: serializeUser(created),
+    });
+  });
+
+  app.post('/api/members/:id/password-reset-link', async (request, reply) => {
+    if (!request.user || !request.familyId) {
+      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
+    }
+
+    if (!canManageFamilyMembers(request.user.role)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Tylko administrator może tworzyć linki resetu hasła.');
+    }
+
+    const memberId = (request.params as { id?: string } | undefined)?.id;
+    if (!memberId) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Brak identyfikatora użytkownika.');
+    }
+
+    const targetUser = findFamilyMember(database, request.familyId, memberId);
+    if (!targetUser) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Użytkownik nie istnieje w tej rodzinie.');
+    }
+
+    if (!targetUser.email || !targetUser.passwordHash) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Użytkownik nie ma aktywnego hasła do zresetowania.');
+    }
+
+    const token = randomToken();
+    const resetId = crypto.randomUUID();
+    const expiresAt = Date.now() + 1000 * 60 * 60 * 24;
+
+    database.db
+      .insert(schema.passwordResets)
+      .values({
+        id: resetId,
+        userId: targetUser.id,
+        tokenHash: hashToken(token),
+        expiresAt,
+        usedAt: null,
+      })
+      .run();
+
+    return {
+      ok: true,
+      token,
+      link: `${config.RODZINA_PUBLIC_URL.replace(/\/$/, '')}/reset-hasla/${token}`,
+      expiresAt,
+    };
+  });
+
+  app.post('/api/auth/reset-password', async (request, reply) => {
+    const parsed = z
+      .object({
+        token: z.string().trim().min(1),
+        password: z.string().min(8),
+      })
+      .safeParse(request.body ?? {});
+
+    if (!parsed.success) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane resetu hasła są niepoprawne.');
+    }
+
+    const { token, password } = parsed.data;
+    const resetRequest = database.db
+      .select()
+      .from(schema.passwordResets)
+      .where(eq(schema.passwordResets.tokenHash, hashToken(token)))
+      .get();
+
+    if (!resetRequest) {
+      return sendError(reply, 404, 'NOT_FOUND', 'Token resetu hasła jest nieprawidłowy.');
+    }
+
+    if (resetRequest.expiresAt <= Date.now()) {
+      return sendError(reply, 410, 'EXPIRED', 'Token resetu hasła wygasł.');
+    }
+
+    if (resetRequest.usedAt) {
+      return sendError(reply, 410, 'USED', 'Token resetu hasła został już wykorzystany.');
+    }
+
+    if (!isValidPassword(password)) {
+      return sendError(reply, 400, 'VALIDATION_ERROR', 'Hasło musi mieć co najmniej 8 znaków.');
+    }
+
+    const passwordHash = await hashPassword(password);
+    const now = Date.now();
+
+    database.db
+      .update(schema.users)
+      .set({ passwordHash, updatedAt: now })
+      .where(eq(schema.users.id, resetRequest.userId))
+      .run();
+
+    database.db
+      .update(schema.passwordResets)
+      .set({ usedAt: now })
+      .where(eq(schema.passwordResets.id, resetRequest.id))
+      .run();
+
+    return { ok: true };
   });
 
   app.patch('/api/members/:id', async (request, reply) => {

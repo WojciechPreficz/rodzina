@@ -33,6 +33,10 @@ export async function verifyPassword(hash: string, password: string): Promise<bo
   return verifyArgon2(hash, password);
 }
 
+export async function verifyPin(hash: string, pin: string): Promise<boolean> {
+  return verifyArgon2(hash, pin);
+}
+
 export function isValidPassword(value: string): boolean {
   return value.length >= 8;
 }

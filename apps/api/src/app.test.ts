@@ -367,4 +367,107 @@ describe('auth API', () => {
 
     expect(crossFamilyPatchResponse.statusCode).toBe(404);
   });
+
+  it('supports invitations, child login, and password resets', async () => {
+    const testApp = await createTestApp();
+    app = testApp.app;
+    database = testApp.database;
+
+    const adminResponse = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register-family',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: {
+        familyName: 'Rodzina Zaproszeń',
+        displayName: 'Admin',
+        email: 'admin@example.com',
+        password: 'zahaszowane1',
+      },
+    });
+
+    expect(adminResponse.statusCode).toBe(201);
+    const adminCookie = getSessionHeader(adminResponse);
+    const joinCode = adminResponse.json().family.joinCode;
+
+    const invitationResponse = await app.inject({
+      method: 'POST',
+      url: '/api/invitations',
+      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { role: 'member' },
+    });
+
+    expect(invitationResponse.statusCode).toBe(200);
+    const token = invitationResponse.json().token;
+
+    const invitationPreview = await app.inject({ method: 'GET', url: `/api/invitations/${token}` });
+    expect(invitationPreview.statusCode).toBe(200);
+    expect(invitationPreview.json().family.name).toBe('Rodzina Zaproszeń');
+
+    const acceptResponse = await app.inject({
+      method: 'POST',
+      url: `/api/invitations/${token}/accept`,
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: {
+        displayName: 'Kamil',
+        email: 'kamil@example.com',
+        password: 'noweHaslo123',
+      },
+    });
+
+    expect(acceptResponse.statusCode).toBe(201);
+    const invitedUserId = acceptResponse.json().user.id;
+
+    const childResponse = await app.inject({
+      method: 'POST',
+      url: '/api/members/child',
+      headers: { 'content-type': 'application/json', cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { displayName: 'Ola', pin: '4321', color: '#FFB703' },
+    });
+
+    expect(childResponse.statusCode).toBe(201);
+    const childMemberId = childResponse.json().member.id;
+
+    const familyMembersResponse = await app.inject({ method: 'GET', url: `/api/auth/family-members?joinCode=${joinCode}` });
+    expect(familyMembersResponse.statusCode).toBe(200);
+    expect(familyMembersResponse.json().members).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: childMemberId, displayName: 'Ola' })]),
+    );
+
+    const childLoginResponse = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login-child',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { joinCode, userId: childMemberId, pin: '4321' },
+    });
+
+    expect(childLoginResponse.statusCode).toBe(200);
+    expect(childLoginResponse.json().user.displayName).toBe('Ola');
+
+    const resetLinkResponse = await app.inject({
+      method: 'POST',
+      url: `/api/members/${invitedUserId}/password-reset-link`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
+    });
+
+    expect(resetLinkResponse.statusCode).toBe(200);
+    const resetToken = resetLinkResponse.json().token;
+
+    const resetPasswordResponse = await app.inject({
+      method: 'POST',
+      url: '/api/auth/reset-password',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { token: resetToken, password: 'noweHaslo456' },
+    });
+
+    expect(resetPasswordResponse.statusCode).toBe(200);
+
+    const loginWithNewPasswordResponse = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { email: 'kamil@example.com', password: 'noweHaslo456' },
+    });
+
+    expect(loginWithNewPasswordResponse.statusCode).toBe(200);
+  });
 });
