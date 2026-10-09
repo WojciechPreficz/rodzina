@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { and, asc, eq, gt } from 'drizzle-orm';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
@@ -164,7 +164,7 @@ function clearLoginRateLimit(key: string): void {
   loginAttempts.delete(key);
 }
 
-function sendError(reply: any, status: number, code: string, message: string) {
+function sendError(reply: FastifyReply, status: number, code: string, message: string) {
   return reply.code(status).send({ error: { code, message } });
 }
 
