@@ -1,11 +1,18 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { sanitizeNextPath } from '../api.js';
+import { LoginPage, RegisterPage } from './AuthPages.js';
 import { AppShell } from './AppShell.js';
 
 describe('AppShell', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
   it('shows all four primary navigation destinations', () => {
     vi.stubGlobal(
       'matchMedia',
@@ -38,5 +45,52 @@ describe('AppShell', () => {
     expect(navigation).toHaveTextContent('Zakupy');
     expect(navigation).toHaveTextContent('Obiady');
     expect(navigation).toHaveTextContent('Więcej');
+  });
+
+  it('rejects invalid next values and validates login and registration forms', async () => {
+    expect(sanitizeNextPath('/zakupy')).toBe('/zakupy');
+    expect(sanitizeNextPath('https://evil.example/path')).toBe('/');
+    expect(sanitizeNextPath('//evil.example')).toBe('/');
+
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={['/login?next=%2Fzakupy']}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/zakupy" element={<div>Zakupy</div>} />
+          </Routes>
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zaloguj się' }));
+    await waitFor(() => expect(screen.getByText('E-mail jest wymagany.')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'anna@example.com' } });
+    fireEvent.change(screen.getByLabelText('Hasło'), { target: { value: '12345678' } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, user: { displayName: 'Anna' }, family: { name: 'Test' } }),
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Zaloguj się' }));
+    await waitFor(() => expect(screen.getByText('Zakupy')).toBeInTheDocument());
+
+    cleanup();
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={['/register']}>
+          <Routes>
+            <Route path="/register" element={<RegisterPage />} />
+          </Routes>
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Utwórz rodzinę' }));
+    await waitFor(() => expect(screen.getByText('Nazwa rodziny jest wymagane.')).toBeInTheDocument());
   });
 });
