@@ -100,7 +100,9 @@ export function FamilyPage() {
         </Button>
       </Group>
 
-      {membersQuery.error ? <Alert color="red">{errorMessage(membersQuery.error, labels.membersLoadError)}</Alert> : null}
+      {membersQuery.error ? (
+        <Alert color="red">{errorMessage(membersQuery.error, labels.membersLoadError)}</Alert>
+      ) : null}
 
       <Card withBorder radius="lg" p="lg">
         <Stack gap="sm">
@@ -155,7 +157,12 @@ export function FamilyPage() {
       {isAddChildOpen ? <AddChildModal onClose={() => setIsAddChildOpen(false)} /> : null}
 
       {editedMember ? (
-        <EditMemberModal key={editedMember.id} member={editedMember} actor={user} onClose={() => setEditedMember(null)} />
+        <EditMemberModal
+          key={editedMember.id}
+          member={editedMember}
+          actor={user}
+          onClose={() => setEditedMember(null)}
+        />
       ) : null}
     </Stack>
   );
