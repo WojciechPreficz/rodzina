@@ -1,8 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider, createTheme } from '@mantine/core';
+import { QueryClientProvider } from '@tanstack/react-query';
 import '@mantine/core/styles.css';
 import { RouterProvider } from 'react-router/dom';
+import { createQueryClient } from './queryClient.js';
 import { router } from './router.js';
 
 const theme = createTheme({
@@ -10,11 +12,15 @@ const theme = createTheme({
   fontFamily: 'system-ui, sans-serif',
 });
 
+const queryClient = createQueryClient();
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <MantineProvider theme={theme}>
-      <RouterProvider router={router} />
-    </MantineProvider>
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider theme={theme}>
+        <RouterProvider router={router} />
+      </MantineProvider>
+    </QueryClientProvider>
   </React.StrictMode>,
 );
 

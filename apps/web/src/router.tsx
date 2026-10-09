@@ -6,6 +6,7 @@ import { EmptyPage } from './components/EmptyPage.js';
 import { MorePage } from './components/MorePage.js';
 import { WelcomePage } from './components/WelcomePage.js';
 import { labels } from './i18n/pl.js';
+import { FamilyPage } from './features/family/FamilyPage.js';
 
 export const router = createBrowserRouter([
   {
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
               { path: 'zakupy', element: <EmptyPage title={labels.shopping} /> },
               { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
               { path: 'wiecej', element: <MorePage /> },
+              { path: 'wiecej/rodzina', element: <FamilyPage /> },
             ],
           },
         ],
