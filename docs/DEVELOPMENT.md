@@ -70,6 +70,49 @@ Playwright uruchamia wyłącznie Chromium headless, w szerokościach 390 i 1280 
 
 Lokalny heartbeat można wykonać poleceniem `npm run job:heartbeat`. Symulacja crona co minutę: `npm run dev:cron`. Oba polecenia wymagają konfiguracji `.env` i używają tej samej bazy co API.
 
+## Kalendarz — API kroku 2.2
+
+Ten krok dodaje API całych wydarzeń. Ekrany kalendarza powstaną w krokach 2.5–2.7, przypomnienia w 2.3, a edycja wystąpień i wyjątki w 2.4. Wszystkie poniższe endpointy wymagają aktywnej sesji. Mutacje wysyłaj jako JSON z tego samego hosta co aplikacja; przy `DELETE` można wysłać `{}`.
+
+| Endpoint                                                         | Działanie                                                                                                                                                                               |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/events`                                               | Tworzy wydarzenie; odpowiedź 201 z `{ ok, event }`.                                                                                                                                     |
+| `GET /api/events/:id`                                            | Pobiera wydarzenie z uczestnikami (id, imię i kolor).                                                                                                                                   |
+| `PATCH /api/events/:id?scope=all`                                | Zmienia podane pola całego wydarzenia. Pominięty `scope` również oznacza `all`.                                                                                                         |
+| `DELETE /api/events/:id?scope=all`                               | Usuwa całe wydarzenie oraz uczestników i wyjątki.                                                                                                                                       |
+| `GET /api/occurrences?from=YYYY-MM-DD&to=YYYY-MM-DD&userId=UUID` | Zwraca `{ ok, occurrences }` z datą pierwotną, momentami UTC, tytułem i uczestnikami. Zakres obejmuje obie daty, najwyżej 62 dni. Filtr `userId` jest opcjonalny i dotyczy uczestników. |
+| `GET /api/events/upcoming-distant`                               | Zwraca `{ ok, events }`, nadchodzące odległe terminy posortowane po dacie; termin miesięczny pozostaje na liście przez cały miesiąc.                                                    |
+
+Przykładowe body utworzenia wydarzenia (identyfikatory domowników pobierz z `/api/members`):
+
+```json
+{
+  "kind": "single",
+  "title": "Basen",
+  "description": "Zabrać ręcznik",
+  "location": "Pływalnia",
+  "startDate": "2026-10-13",
+  "startTime": "17:00",
+  "durationMinutes": 60,
+  "participantIds": []
+}
+```
+
+Wymagane są `kind`, `title` i `startDate`. Domyślnie `datePrecision=day`, uczestnicy są pustą listą, a opis, miejsce, godzina, czas trwania i RRULE mają null. Dla wydarzenia z godziną wymagany jest dodatni `durationMinutes`; całodniowe nie ma godziny ani czasu trwania. Cykliczne (`kind=recurring`) wymaga `rrule`, np. `FREQ=WEEKLY;BYDAY=TU,TH;COUNT=8`. Dla jednorazowego i odległego RRULE jest null. Termin `kind=distant` z `datePrecision=month` zapisuje pierwszy dzień miesiąca, np. `2028-05-01`, bez godziny i czasu trwania; widać go wyłącznie na liście odległych terminów. Identyfikatory rodziny i autora pochodzą z sesji i nie są przyjmowane w body.
+
+Ręczna weryfikacja przez właściciela:
+
+1. Utwórz, odczytaj, zmień i usuń wydarzenie każdego rodzaju przez API. Po zmianie jednego pola pozostałe powinny zachować wartości.
+2. Sprawdź serię w `/api/occurrences`, także po zmianie czasu. Termin dzienny powinien być widoczny w wystąpieniach, a miesięczny tylko w `/api/events/upcoming-distant`.
+3. Z sesji dziecka sprawdź zapis własnego wydarzenia oraz odpowiedź 403 przy zmianie i usunięciu wydarzenia rodzica. Z innej rodziny sprawdź odpowiedź 404.
+4. Usuń domownika, który utworzył wydarzenie: wydarzenie pozostaje z `createdBy=null`, a usunięta osoba znika z uczestników.
+
+Migracje uruchamiają się przy starcie API. Migracja `0010_events.sql` dodaje `events`, `event_participants` i `event_exceptions`; uzupełniono metadane wcześniejszych migracji auth. Nie dochodzą zmienne środowiskowe, crony ani biblioteki wymagające kompilacji runtime na serwerze. Weryfikację ręczną wykona właściciel. E2e i `release:smoke` pominięto na jego prośbę.
+
+`npm run dev:api` buduje shared przed uruchomieniem API, więc po świeżym `npm ci` nie trzeba budować go osobno. Po zmianach kodu shared uruchom ponownie dev, aby odświeżyć jego build. Build API dołącza kod shared i biblioteki czasu; paczka release nie instaluje wewnętrznego pakietu `@rodzina/shared` z rejestru npm.
+
+Weryfikacja automatyczna kroku 2.2 (2026-10-11): wszystkie 198 testów Vitest przechodzą, w tym CRUD, walidacja trzech rodzajów wydarzeń, cykle i terminy odległe, uprawnienia dziecka, izolacja rodzin, zachowanie wydarzeń po usunięciu autora oraz aktualizacja istniejącej bazy auth bez utraty danych. Przechodzą lint, formatowanie, typecheck i build. Lint zgłasza dwa wcześniejsze ostrzeżenia Fast Refresh w `auth.tsx`, a build ostrzega o rozmiarze głównego pliku JS weba. Ponowne `db:generate` nie wykazuje zmian schematu.
+
 ## PWA na Androidzie przez USB
 
 Service worker, instalację PWA i push (w późniejszej fazie) weryfikuj na buildzie produkcyjnym. Podłącz telefon przez USB, włącz debugowanie USB i w Chrome na komputerze otwórz `chrome://inspect`. W sekcji Port forwarding dodaj `5173 -> localhost:5173` dla pracy nad UI albo `3000 -> localhost:3000` dla builda produkcyjnego. Następnie na telefonie otwórz odpowiednio `http://localhost:5173` albo `http://localhost:3000`.

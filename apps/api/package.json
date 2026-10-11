@@ -7,6 +7,7 @@
     "build": "tsup src/server.ts src/jobs/heartbeat.ts --format esm --platform node --target node22 --out-dir dist --external fastify --external @fastify/static --external better-sqlite3 --external drizzle-orm --external zod --sourcemap"
   },
   "dependencies": {
+    "@rodzina/shared": "*",
     "@fastify/cookie": "^11.1.3",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "^10.1.5",

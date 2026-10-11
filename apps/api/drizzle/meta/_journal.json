@@ -71,6 +71,13 @@
       "when": 1791483051478,
       "tag": "0009_create_password_resets_token_hash_unique",
       "breakpoints": false
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1791741158206,
+      "tag": "0010_events",
+      "breakpoints": true
     }
   ]
 }

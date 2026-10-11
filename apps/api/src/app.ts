@@ -25,6 +25,7 @@ import { canEditMemberProfile, canManageFamilyMembers, canSetChildPin, canUpdate
 import type { AppConfig } from './config.js';
 import type { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
+import { registerEventRoutes } from './modules/events/routes.js';
 
 type Database = ReturnType<typeof createDatabase>;
 
@@ -1153,6 +1154,8 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       joinCode: nextJoinCode,
     };
   });
+
+  registerEventRoutes(app, database);
 
   if (config.NODE_ENV === 'production') {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', config.RODZINA_WEB_DIR);

@@ -21,7 +21,10 @@ try {
     private: true,
     type: 'module',
     engines: { node: '>=22' },
-    dependencies: apiPackage.dependencies,
+    // Workspace code and its time libraries are bundled into the API output.
+    dependencies: Object.fromEntries(
+      Object.entries(apiPackage.dependencies).filter(([name]) => name !== '@rodzina/shared'),
+    ),
   };
   await import('node:fs/promises').then(({ writeFile }) =>
     writeFile(path.join(stage, 'package.json'), `${JSON.stringify(productionPackage, null, 2)}\n`),

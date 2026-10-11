@@ -33,3 +33,7 @@ export function canUpdateMemberRole(actorRole: FamilyRole): boolean {
 export function canSetChildPin(actorRole: FamilyRole): boolean {
   return actorRole === 'admin';
 }
+
+export function canEditEvent(actorRole: FamilyRole, actorId: string, createdBy: string | null): boolean {
+  return actorRole !== 'child' || actorId === createdBy;
+}
