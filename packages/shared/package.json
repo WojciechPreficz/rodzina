@@ -13,6 +13,9 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@date-fns/tz": "^1.5.0",
+    "date-fns": "^4.4.0",
+    "rrule": "^2.8.1",
     "zod": "^3.25.76"
   }
 }
