@@ -122,6 +122,13 @@ export function hasEventOccurrence(event: TimeEvent, date: string): boolean {
   return originalOnDate(event, eventRule(event), date) !== null;
 }
 
+export function firstEventOccurrenceDate(event: TimeEvent): string | null {
+  const rule = eventRule(event);
+  if (!rule) return event.startDate;
+  const first = rule.after(floatingDate(event.startDate, event.startTime ?? '00:00'), true);
+  return first ? dateString(first) : null;
+}
+
 /** Split floating recurrence bounds, retaining the remaining COUNT in the new series. */
 export function splitEventRule(event: TimeEvent, date: string): { previous: string; following: string } {
   const rule = eventRule(event);

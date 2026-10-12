@@ -1,4 +1,10 @@
-import { calendarDateSchema, expandOccurrences, localDateTimeToUtc, type CalendarEvent } from '@rodzina/shared';
+import {
+  calendarDateSchema,
+  expandOccurrences,
+  firstEventOccurrenceDate,
+  localDateTimeToUtc,
+  type CalendarEvent,
+} from '@rodzina/shared';
 import type { AuthUser } from '../../auth.js';
 
 export function canEditEvent(user: AuthUser, event: CalendarEvent): boolean {
@@ -6,7 +12,8 @@ export function canEditEvent(user: AuthUser, event: CalendarEvent): boolean {
 }
 
 export function getEventOccurrence(event: CalendarEvent, date: string | null, timezone: string) {
-  const occurrenceDate = date ?? event.startDate;
+  const occurrenceDate = date ?? firstEventOccurrenceDate(event);
+  if (!occurrenceDate) return undefined;
   if (!calendarDateSchema.safeParse(occurrenceDate).success) return undefined;
   if (event.datePrecision === 'month') {
     if (occurrenceDate !== event.startDate) return undefined;

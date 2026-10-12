@@ -1,9 +1,9 @@
 import { MantineProvider } from '@mantine/core';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import type { CalendarEvent } from '@rodzina/shared';
+import type { CalendarEvent, EventPatch, EventScope } from '@rodzina/shared';
 import { EventDetailsPage } from './EventDetailsPage.js';
 import { ApiRequestError } from '../../api.js';
 
@@ -12,6 +12,11 @@ const state = vi.hoisted(() => ({
   userId: 'child',
   event: undefined as CalendarEvent | undefined,
   error: null as Error | null,
+  update: vi.fn(async (input: { id: string; data: EventPatch; scope?: EventScope }): Promise<CalendarEvent> => {
+    void input;
+    return { ...state.event!, id: 'new-series', startDate: '2026-10-13' };
+  }),
+  remove: vi.fn(async () => {}),
 }));
 vi.mock('../../auth.js', () => ({
   useMe: () => ({ user: { id: state.userId, role: state.role }, family: { timezone: 'Europe/Warsaw' } }),
@@ -19,7 +24,10 @@ vi.mock('../../auth.js', () => ({
 vi.mock('../family/familyQueries.js', () => ({ useMembersQuery: () => ({ data: [], error: null }) }));
 vi.mock('./calendarQueries.js', () => ({
   useEvent: () => ({ data: state.event, isPending: false, error: state.error }),
-  useCalendarMutations: () => ({ update: { isPending: false }, remove: { isPending: false, error: null } }),
+  useCalendarMutations: () => ({
+    update: { isPending: false, mutateAsync: state.update },
+    remove: { isPending: false, error: null, mutateAsync: state.remove },
+  }),
 }));
 
 const event: CalendarEvent = {
@@ -48,6 +56,7 @@ function show(date = '2026-10-12') {
       <MemoryRouter initialEntries={[`/kalendarz/wydarzenie/event?data=${date}`]}>
         <Routes>
           <Route path="/kalendarz/wydarzenie/:eventId" element={<EventDetailsPage />} />
+          <Route path="/kalendarz" element={<div>Kalendarz</div>} />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -55,13 +64,83 @@ function show(date = '2026-10-12') {
 }
 
 beforeEach(() => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+  );
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  state.update.mockClear();
+  state.remove.mockClear();
   state.event = event;
   state.role = 'child';
   state.error = null;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('event details', () => {
+  it('edits only occurrence fields while retaining the original date in the request', async () => {
+    state.role = 'member';
+    state.event = { ...event, kind: 'recurring', rrule: 'FREQ=DAILY;COUNT=3' };
+    show('2026-10-13');
+    fireEvent.click(screen.getByRole('button', { name: 'Edytuj' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tylko to' }));
+    expect(screen.getByLabelText('Opis')).toBeDisabled();
+    expect(screen.queryByLabelText('Zakończenie')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Data/), { target: { value: '2026-10-14' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(state.update).toHaveBeenCalledWith({
+        id: 'event',
+        scope: { scope: 'this', occurrenceDate: '2026-10-13' },
+        data: { title: 'Basen', startDate: '2026-10-14', startTime: '17:00', durationMinutes: 60 },
+      }),
+    );
+  });
+  it('shows the remaining count and lets the API retain the unchanged future pattern', async () => {
+    state.role = 'member';
+    state.event = { ...event, kind: 'recurring', rrule: 'FREQ=DAILY;COUNT=3' };
+    show('2026-10-13');
+    fireEvent.click(screen.getByRole('button', { name: 'Edytuj' }));
+    fireEvent.click(screen.getByRole('button', { name: 'To i następne' }));
+    expect(screen.getByLabelText(/Liczba wystąpień/)).toHaveValue('2');
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Nowe zajęcia' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(state.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'event',
+          scope: { scope: 'following', occurrenceDate: '2026-10-13' },
+          data: expect.objectContaining({ title: 'Nowe zajęcia', startDate: '2026-10-13' }),
+        }),
+      ),
+    );
+    expect(state.update.mock.calls[0]?.[0].data).not.toHaveProperty('rrule');
+  });
+  it('passes the selected occurrence scope to deletion', async () => {
+    state.role = 'member';
+    state.event = { ...event, kind: 'recurring', rrule: 'FREQ=DAILY;COUNT=3' };
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    show('2026-10-13');
+    fireEvent.click(screen.getByRole('button', { name: 'Usuń wydarzenie' }));
+    fireEvent.click(screen.getByRole('button', { name: 'To i następne' }));
+    await waitFor(() =>
+      expect(state.remove).toHaveBeenCalledWith({
+        id: 'event',
+        scope: { scope: 'following', occurrenceDate: '2026-10-13' },
+      }),
+    );
+  });
   it('hides edit and delete from a child viewing an adult event', () => {
     show();
     expect(screen.getByRole('heading', { name: 'Basen' })).toBeInTheDocument();

@@ -4,7 +4,7 @@ import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react';
 import { createViewDay, createViewMonthAgenda, createViewWeek } from '@schedule-x/calendar';
 import { createEventsServicePlugin } from '@schedule-x/events-service';
 import { Temporal } from 'temporal-polyfill';
-import { eventUrl } from '@rodzina/shared';
+import { eventUrl, type EventData } from '@rodzina/shared';
 import { useNavigate } from 'react-router';
 import '@schedule-x/theme-default/dist/index.css';
 import './calendar.css';
@@ -15,6 +15,7 @@ import type { Member } from '../family/familyApi.js';
 import { useCalendarMutations, useOccurrences } from './calendarQueries.js';
 import { memberCalendars, monthRange, todayInTimezone, toScheduleX } from './toScheduleX.js';
 import { EventForm } from './EventForm.js';
+import { DistantEvents } from './DistantEvents.js';
 
 const text = labels.calendarUi;
 
@@ -24,6 +25,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
   const [date, setDate] = useState(() => todayInTimezone(timezone));
   const [range, setRange] = useState(() => monthRange(date));
   const [opened, setOpened] = useState(false);
+  const [kind, setKind] = useState<EventData['kind'] | null>(null);
   const [ready, setReady] = useState(false);
   const [eventsService] = useState(() => createEventsServicePlugin());
   const occurrences = useOccurrences(range);
@@ -90,18 +92,38 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
       <Button className="calendar-add" aria-label={text.add} onClick={() => setOpened(true)}>
         +
       </Button>
-      <Modal opened={opened} onClose={() => setOpened(false)} title={text.newEvent}>
-        <EventForm
-          members={members}
-          initialDate={date}
-          pending={create.isPending}
-          onCancel={() => setOpened(false)}
-          onSave={async (data) => {
-            const saved = await create.mutateAsync(data);
-            setOpened(false);
-            navigate(eventUrl(saved.id));
-          }}
-        />
+      <DistantEvents timezone={timezone} selected={selected} />
+      <Modal
+        opened={opened}
+        onClose={() => {
+          setOpened(false);
+          setKind(null);
+        }}
+        title={kind ? text.modeNames[kind] : text.chooseMode}
+      >
+        {kind === null ? (
+          <Stack>
+            {(['single', 'recurring', 'distant'] as const).map((mode) => (
+              <Button key={mode} variant="light" onClick={() => setKind(mode)}>
+                {text.modeNames[mode]}
+              </Button>
+            ))}
+          </Stack>
+        ) : (
+          <EventForm
+            kind={kind}
+            members={members}
+            initialDate={date}
+            pending={create.isPending}
+            onCancel={() => setKind(null)}
+            onSave={async (data) => {
+              const saved = await create.mutateAsync(data);
+              setOpened(false);
+              setKind(null);
+              navigate(eventUrl(saved.id));
+            }}
+          />
+        )}
       </Modal>
     </Stack>
   );

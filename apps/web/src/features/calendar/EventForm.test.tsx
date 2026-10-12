@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventForm } from './EventForm.js';
+import { wizardFromRrule } from '@rodzina/shared';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -24,6 +25,68 @@ afterEach(() => {
 });
 
 describe('EventForm', () => {
+  it('creates a weekly Tuesday/Thursday series through the wizard', async () => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider>
+        <EventForm
+          kind="recurring"
+          members={[]}
+          initialDate="2026-10-12"
+          pending={false}
+          onSave={save}
+          onCancel={() => {}}
+        />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Zajęcia' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Poniedziałek' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Wtorek' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Czwartek' }));
+    expect(screen.getByRole('status')).toHaveTextContent('co tydzień we wtorek i czwartek');
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'recurring', rrule: 'FREQ=WEEKLY;INTERVAL=1;WKST=MO;BYDAY=TU,TH' }),
+      ),
+    );
+    expect(wizardFromRrule('FREQ=WEEKLY;INTERVAL=1;WKST=MO;BYDAY=TU,TH', '2026-10-12')?.weekdays).toEqual(['TU', 'TH']);
+  });
+
+  it('saves a monthly distant deadline as the first day with no time', async () => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider>
+        <EventForm
+          kind="distant"
+          members={[]}
+          initialDate="2026-10-12"
+          pending={false}
+          onSave={save}
+          onCancel={() => {}}
+        />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Kontrola' } });
+    fireEvent.click(screen.getByLabelText('Dokładność terminu'));
+    fireEvent.click(screen.getByRole('option', { name: 'Tylko miesiąc' }));
+    fireEvent.change(screen.getByLabelText(/^Data/), { target: { value: '2028-05' } });
+    expect(screen.getByRole('switch', { name: 'Całodniowe' })).toBeDisabled();
+    expect(screen.queryByLabelText(/^Godzina/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'distant',
+          datePrecision: 'month',
+          startDate: '2028-05-01',
+          startTime: null,
+          durationMinutes: null,
+          rrule: null,
+        }),
+      ),
+    );
+  });
   it('creates a timed single event without sending reminder changes', async () => {
     const save = vi.fn(async () => {});
     render(

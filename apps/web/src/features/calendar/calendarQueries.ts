@@ -1,9 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { EventPatch } from '@rodzina/shared';
+import type { EventPatch, EventScope } from '@rodzina/shared';
 import { useMe } from '../../auth.js';
 import { ApiRequestError } from '../../api.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
-import { createEvent, deleteEvent, getEvent, listOccurrences, updateEvent, type CalendarRange } from './calendarApi.js';
+import {
+  createEvent,
+  deleteEvent,
+  getEvent,
+  listDistantEvents,
+  listOccurrences,
+  updateEvent,
+  type CalendarRange,
+} from './calendarApi.js';
+
+export function useDistantEvents() {
+  const { family } = useMe();
+  return useQuery({
+    queryKey: ['calendar', family?.id, 'distant'],
+    queryFn: listDistantEvents,
+    refetchInterval: SYNC_INTERVAL_MS,
+    refetchOnWindowFocus: 'always',
+  });
+}
 
 export function useOccurrences(range: CalendarRange) {
   const { family } = useMe();
@@ -33,7 +51,8 @@ export function useCalendarMutations() {
   };
   const create = useMutation({ mutationFn: createEvent, onSuccess: sync });
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: EventPatch }) => updateEvent(id, data),
+    mutationFn: ({ id, data, scope }: { id: string; data: EventPatch; scope?: EventScope }) =>
+      updateEvent(id, data, scope),
     onSuccess: sync,
   });
   const remove = useMutation({ mutationFn: deleteEvent, onSuccess: sync });

@@ -1,6 +1,27 @@
 import { useState, type FormEvent } from 'react';
-import { Alert, Button, Group, MultiSelect, NumberInput, Stack, Switch, Textarea, TextInput } from '@mantine/core';
-import { calendarDateSchema, type CalendarEvent, type EventData } from '@rodzina/shared';
+import {
+  Alert,
+  Button,
+  Group,
+  MultiSelect,
+  NumberInput,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core';
+import {
+  calendarDateSchema,
+  firstEventOccurrenceDate,
+  defaultRecurrenceWizard,
+  rruleFromWizard,
+  wizardFromRrule,
+  type CalendarEvent,
+  type EventData,
+} from '@rodzina/shared';
+import { RecurrenceFields } from './RecurrenceFields.js';
 import type { Member } from '../family/familyApi.js';
 import { labels } from '../../i18n/pl.js';
 
@@ -8,6 +29,8 @@ const text = labels.calendarUi;
 
 export function EventForm({
   event,
+  kind = 'single',
+  occurrenceOnly = false,
   members,
   initialDate,
   pending,
@@ -15,12 +38,21 @@ export function EventForm({
   onCancel,
 }: {
   event?: CalendarEvent;
+  kind?: EventData['kind'];
+  occurrenceOnly?: boolean;
   members: Member[];
   initialDate: string;
   pending: boolean;
   onSave: (data: EventData) => Promise<void>;
   onCancel: () => void;
 }) {
+  const eventKind = event?.kind ?? kind;
+  const [precision, setPrecision] = useState<'day' | 'month'>(event?.datePrecision ?? 'day');
+  const monthly = eventKind === 'distant' && precision === 'month';
+  const initialWizard = event?.rrule
+    ? wizardFromRrule(event.rrule, event.startDate)
+    : defaultRecurrenceWizard(initialDate);
+  const [wizard, setWizard] = useState(initialWizard);
   const [title, setTitle] = useState(event?.title ?? '');
   const [description, setDescription] = useState(event?.description ?? '');
   const [location, setLocation] = useState(event?.location ?? '');
@@ -43,6 +75,7 @@ export function EventForm({
       date: calendarDateSchema.safeParse(date).success ? undefined : text.dateInvalid,
       time:
         !allDay &&
+        !monthly &&
         (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time) ||
           typeof duration !== 'number' ||
           !Number.isInteger(duration) ||
@@ -55,20 +88,43 @@ export function EventForm({
     if (Object.values(next).some(Boolean)) return;
     setError(null);
     try {
-      await onSave({
+      let rule = event?.rrule ?? null;
+      if (eventKind === 'recurring' && !occurrenceOnly && wizard) {
+        if (wizard.ending.type === 'until' && wizard.ending.date < date) {
+          setError(text.recurrenceInvalid);
+          return;
+        }
+        // Preserve existing rules exactly unless the user changes wizard settings.
+        rule =
+          event?.rrule && JSON.stringify(wizard) === JSON.stringify(initialWizard)
+            ? event.rrule
+            : rruleFromWizard(wizard);
+      }
+      const data: EventData = {
         title: title.trim(),
         description: description.trim() || null,
         location: location.trim() || null,
         participantIds: participants,
         startDate: date,
-        startTime: allDay ? null : time,
-        durationMinutes: allDay ? null : Number(duration),
-        kind: event?.kind ?? 'single',
-        datePrecision: event?.datePrecision ?? 'day',
-        rrule: event?.rrule ?? null,
-      });
+        startTime: allDay || monthly ? null : time,
+        durationMinutes: allDay || monthly ? null : Number(duration),
+        kind: eventKind,
+        datePrecision: precision,
+        rrule: rule,
+      };
+      if (eventKind === 'recurring' && !occurrenceOnly && !firstEventOccurrenceDate({ ...data, id: event?.id ?? '' })) {
+        setError(text.recurrenceInvalid);
+        return;
+      }
+      await onSave(data);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : labels.saveError);
+      setError(
+        cause instanceof RangeError || (cause instanceof Error && cause.name === 'ZodError')
+          ? text.recurrenceInvalid
+          : cause instanceof Error
+            ? cause.message
+            : labels.saveError,
+      );
     }
   }
 
@@ -93,6 +149,7 @@ export function EventForm({
           error={errors.title}
         />
         <Textarea
+          disabled={occurrenceOnly}
           label={text.description}
           maxLength={10000}
           value={description}
@@ -100,34 +157,56 @@ export function EventForm({
         />
         <TextInput
           label={text.location}
+          disabled={occurrenceOnly}
           maxLength={500}
           value={location}
           onChange={(e) => setLocation(e.currentTarget.value)}
         />
         <MultiSelect
+          disabled={occurrenceOnly}
           label={text.participants}
           data={members.map((m) => ({ value: m.id, label: m.displayName }))}
           value={participants}
           onChange={setParticipants}
           searchable
         />
+        {occurrenceOnly && (
+          <Text size="sm" c="dimmed">
+            {text.occurrenceFieldsNotice}
+          </Text>
+        )}
+        {eventKind === 'distant' && (
+          <Select
+            label={text.precision}
+            value={precision}
+            allowDeselect={false}
+            data={[
+              { value: 'day', label: text.precisionDay },
+              { value: 'month', label: text.precisionMonth },
+            ]}
+            onChange={(value) => {
+              if (value === 'day' || value === 'month') {
+                setPrecision(value);
+                if (value === 'month') setDate(`${date.slice(0, 7)}-01`);
+              }
+            }}
+          />
+        )}
         <Switch
           label={text.allDay}
-          checked={allDay}
-          disabled={event?.datePrecision === 'month'}
+          checked={allDay || monthly}
+          disabled={monthly}
           onChange={(e) => setAllDay(e.currentTarget.checked)}
         />
         <TextInput
-          type={event?.datePrecision === 'month' ? 'month' : 'date'}
+          type={monthly ? 'month' : 'date'}
           label={text.date}
           required
-          value={event?.datePrecision === 'month' ? date.slice(0, 7) : date}
-          onChange={(e) =>
-            setDate(event?.datePrecision === 'month' ? `${e.currentTarget.value}-01` : e.currentTarget.value)
-          }
+          value={monthly ? date.slice(0, 7) : date}
+          onChange={(e) => setDate(monthly ? `${e.currentTarget.value}-01` : e.currentTarget.value)}
           error={errors.date}
         />
-        {!allDay && (
+        {!allDay && !monthly && (
           <Group grow align="start">
             <TextInput
               type="time"
@@ -148,6 +227,9 @@ export function EventForm({
             />
           </Group>
         )}
+        {eventKind === 'recurring' &&
+          !occurrenceOnly &&
+          (wizard ? <RecurrenceFields value={wizard} onChange={setWizard} /> : <Alert>{text.unsupportedRule}</Alert>)}
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={pending}>
             {labels.cancel}

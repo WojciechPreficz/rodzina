@@ -183,3 +183,23 @@ Weryfikacja ręczna przez właściciela:
 4. Sprawdź `DELETE following`, także od pierwszego wystąpienia, oraz serię kończącą się przez `UNTIL`. Sprawdź odpowiedzi 400 bez daty lub dla daty spoza cyklu, 403 dla dziecka na cudzym wydarzeniu i 404 z innej rodziny.
 
 Nie dodano migracji, zależności, zmiennych środowiskowych ani cronów. Na prośbę właściciela nie uruchomiono testów automatycznych ani `release:smoke`; dopisano przypadki API do późniejszego uruchomienia. Przechodzą typecheck, lint i build; pozostają wcześniejsze ostrzeżenia Fast Refresh i rozmiaru głównego pliku JS. Krok nie dodaje UI ani wysyłki powiadomień.
+
+## Kalendarz — UI kroku 2.6
+
+Przycisk „+” otwiera wybór „Jednorazowe”, „Powtarzające się” albo „Odległy termin”. Kreator serii pozwala wybrać odstęp i jednostkę (dzień, tydzień, miesiąc, rok), dni tygodnia oraz zakończenie: nigdy, w dniu lub po określonej liczbie wystąpień. Podgląd opisuje powtarzanie po polsku. Edycja odczytuje ustawienia zapisanej reguły. Niestandardowe reguły spoza możliwości kreatora pozostają bez zmian przy zapisie innych pól.
+
+Odległy termin ma precyzję dnia lub miesiąca. Miesięczny zapisuje pierwszy dzień miesiąca bez godziny; widoczny jest wyłącznie w sekcji „Odległe terminy”, jako np. „maj 2028”, z odliczaniem liczonym do miesiąca. Termin dzienny pojawia się także w kalendarzu. Sekcja respektuje filtr uczestników oraz odświeżanie co 20 sekund i po powrocie do karty.
+
+Przy edycji i usuwaniu serii najpierw wybierz „Tylko to”, „To i następne” albo „Wszystkie”. „Tylko to” udostępnia tytuł, datę, godzinę i czas trwania, uwzględniając dotychczasowy wyjątek; pozostałe pola są wyłączone. Żądanie wskazuje pierwotną datę wystąpienia, nawet gdy je przesunięto. „To i następne” rozpoczyna formularz w dniu podziału i pokazuje pozostałą liczbę wystąpień dla COUNT. Po zapisie otwierają się szczegóły nowej serii. Zapis nie wysyła zmian przypomnień; ich UI powstaje w kroku 2.7.
+
+Ręczna weryfikacja przez właściciela (Chrome na desktopie oraz przy szerokości ok. 390 px):
+
+1. Kliknij „+” i sprawdź wszystkie trzy tryby oraz powrót do wyboru przyciskiem „Anuluj”. Utwórz serię „co tydzień we wtorek i czwartek”, zapisz, a następnie otwórz edycję „Wszystkie”: dni, odstęp i zakończenie powinny być zachowane. Sprawdź również dzień, miesiąc i rok oraz zakończenie datą i liczbą wystąpień.
+2. Otwórz późniejsze wystąpienie serii i wybierz „To i następne”. Zmień tytuł lub godzinę. Wcześniejsze wystąpienia powinny zostać bez zmian, a późniejsze należeć do nowej serii. Dla serii z limitem sprawdź, że formularz pokazuje pozostałą liczbę i zapis nie wydłuża serii.
+3. Wybierz „Tylko to”, zmień datę, godzinę i tytuł. Odśwież pierwotny adres szczegółów: powinien pokazać przesunięte wystąpienie. Powtórz edycję; formularz powinien odczytać wyjątek. Anuluj tylko jedno wystąpienie, potem w osobnej serii usuń „To i następne”, a na końcu sprawdź usunięcie wszystkich.
+4. Dodaj odległy termin „maj 2028” z precyzją miesiąca. Sprawdź jego nazwę i odliczanie w sekcji odległych, edycję i brak w siatce kalendarza po przejściu do maja 2028. Dodaj też termin z dokładnym dniem: powinien być w obu miejscach. Sprawdź filtr uczestników.
+5. W drugim kontekście przeglądarki sprawdź odświeżanie listy odległych po maksymalnie 20 s lub po powrocie do karty. Z konta dziecka sprawdź brak akcji edycji i usunięcia cudzych wydarzeń.
+
+Dodano testy round-trip RRULE, opisów po polsku, granicy UNTIL, pierwszego wystąpienia, wyboru trybów, formularza serii i terminu miesięcznego, listy z odliczaniem oraz zakresów edycji i usuwania. Na prośbę właściciela nie uruchomiono testów automatycznych, e2e ani `release:smoke`; sprawdzenie ręczne pozostaje do wykonania. Krok nie dodaje migracji, konfiguracji środowiska, cronów ani zależności runtime. Działa wyłącznie lokalnie.
+
+Kontrole statyczne i build kroku 2.6 (2026-10-12): przechodzą `npm run typecheck`, `npm run lint`, `npm run format:check` i `npm run build`. Pozostają wcześniejsze ostrzeżenia Fast Refresh w `auth.tsx` i rozmiaru głównego pliku JS. Nie uruchomiono testów ani ręcznej weryfikacji UI.
