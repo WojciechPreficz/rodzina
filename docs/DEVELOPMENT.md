@@ -203,3 +203,34 @@ Ręczna weryfikacja przez właściciela (Chrome na desktopie oraz przy szerokoś
 Dodano testy round-trip RRULE, opisów po polsku, granicy UNTIL, pierwszego wystąpienia, wyboru trybów, formularza serii i terminu miesięcznego, listy z odliczaniem oraz zakresów edycji i usuwania. Na prośbę właściciela nie uruchomiono testów automatycznych, e2e ani `release:smoke`; sprawdzenie ręczne pozostaje do wykonania. Krok nie dodaje migracji, konfiguracji środowiska, cronów ani zależności runtime. Działa wyłącznie lokalnie.
 
 Kontrole statyczne i build kroku 2.6 (2026-10-12): przechodzą `npm run typecheck`, `npm run lint`, `npm run format:check` i `npm run build`. Pozostają wcześniejsze ostrzeżenia Fast Refresh w `auth.tsx` i rozmiaru głównego pliku JS. Nie uruchomiono testów ani ręcznej weryfikacji UI.
+
+## Ręczna weryfikacja kroku 2.7 i fazy 2
+
+Testy oraz `release:smoke` nie zostały uruchomione podczas implementacji kroku 2.7 na prośbę
+właściciela. Poniższą checklistę wykonaj lokalnie w Chrome przy szerokości około 390 px
+i na desktopie; druga sesja wymaga incognito lub osobnego profilu przeglądarki.
+
+- Dodaj wydarzenie ze wspólnym przypomnieniem: sprawdź wszystkie sześć presetów, własne
+  wyprzedzenie w dniach, tygodniach i miesiącach oraz konkretną datę i godzinę. Wybierz
+  uczestników, dorosłych i całą rodzinę. Zapisz i ponownie otwórz formularz.
+- W szczegółach dodaj „Tylko ja”. W narzędziach sieciowych sprawdź POST `/api/reminders/mine`;
+  wspólne powinny trafiać wyłącznie do body POST/PATCH `/api/events`.
+- Zaloguj dziecko i otwórz wydarzenie rodzica: brak edycji/usuwania wydarzenia, ale działają
+  dodawanie i usuwanie „Moich przypomnień”. Zapis wydarzenia przez rodzica zachowuje je.
+- Dodaj absolutne przypomnienie z przeszłą datą: zobacz „nieaktualne”, usuń i odśwież.
+  Usuń ostatnie wspólne przypomnienie w formularzu i sprawdź, że zapis wysyła `reminders: []`.
+- Przesuń termin wydarzenia: offset podąża za nim, a absolutna data pozostaje stała.
+  Dla całodniowych bazą jest 09:00, dla miesięcznych — 09:00 pierwszego dnia miesiąca.
+- Sprawdź synchronizację między sesjami po maksymalnie 20 s i po powrocie do karty.
+- Utwórz serię we wtorki i czwartki, odczytaj ją w kreatorze i edytuj „To i następne”:
+  przeszłość bez zmian, przypomnienia osobiste drugiej osoby przy nowej serii.
+  „Tylko to” zmienia termin wystąpienia i przelicza przypomnienia bez edycji ich konfiguracji.
+- Otwórz deep link `/kalendarz/wydarzenie/:eventId?data=...` po odświeżeniu i przez logowanie;
+  usunięte wydarzenie powinno pokazać komunikat. Termin „maj 2028” tylko w odległych.
+- Usuń autora wydarzenia: wydarzenie zostaje z podpisem „były domownik”.
+
+Istniejące testy czasu obejmują zmianę czasu, końce miesięcy i RRULE; testy API obejmują
+uprawnienia, zachowanie/przeniesienie przypomnień osobistych oraz usunięcie autora.
+Dodane testy komponentów obejmują zapis wspólnych, osobisty endpoint, własne wyprzedzenie,
+datę absolutną i usuwanie nieaktualnych przypomnień. Wyniki testów i `release:smoke` pozostają
+niepotwierdzone do ich osobnego uruchomienia. Lista powyżej nie potwierdza spełnienia kryteriów.

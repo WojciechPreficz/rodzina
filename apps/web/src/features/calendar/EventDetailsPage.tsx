@@ -17,6 +17,9 @@ import { useMembersQuery } from '../family/familyQueries.js';
 import { EventForm } from './EventForm.js';
 import { useCalendarMutations, useEvent } from './calendarQueries.js';
 import { canEditEvent, getEventOccurrence } from './calendarRules.js';
+import { ReminderList } from '../../components/ReminderPicker.js';
+import { reminderInput } from '../../components/reminderFields.js';
+import { MyReminders } from './MyReminders.js';
 
 const text = labels.calendarUi;
 
@@ -155,6 +158,12 @@ export function EventDetailsPage() {
           <Text c="dimmed">{text.noParticipants}</Text>
         )}
       </Group>
+      <Title order={3}>{text.reminders}</Title>
+      <ReminderList
+        value={event.reminders.map((r) => ({ ...reminderInput(r), nextFireAt: r.nextFireAt }))}
+        timezone={family.timezone}
+      />
+      <MyReminders key={event.id} event={event} />
       {editable && (
         <>
           {remove.error && (

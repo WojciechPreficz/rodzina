@@ -20,7 +20,10 @@ import {
   wizardFromRrule,
   type CalendarEvent,
   type EventData,
+  type SharedEventReminder,
 } from '@rodzina/shared';
+import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
+import { reminderInput, type ReminderItem } from '../../components/reminderFields.js';
 import { RecurrenceFields } from './RecurrenceFields.js';
 import type { Member } from '../family/familyApi.js';
 import { labels } from '../../i18n/pl.js';
@@ -62,6 +65,10 @@ export function EventForm({
   const [time, setTime] = useState(event?.startTime ?? '09:00');
   const [duration, setDuration] = useState<number | string>(event?.durationMinutes ?? 60);
   const [error, setError] = useState<string | null>(null);
+  const [reminders, setReminders] = useState<ReminderItem[]>(() =>
+    (event?.reminders ?? []).map((reminder) => ({ ...reminderInput(reminder), nextFireAt: reminder.nextFireAt })),
+  );
+  const [remindersChanged, setRemindersChanged] = useState(false);
   const [errors, setErrors] = useState<{
     title?: string | undefined;
     date?: string | undefined;
@@ -112,6 +119,19 @@ export function EventForm({
         datePrecision: precision,
         rrule: rule,
       };
+      if (!occurrenceOnly && remindersChanged) {
+        data.reminders = reminders.map((reminder) => {
+          if (reminder.audience === 'user') throw new Error(text.reminderInvalid);
+          return reminder.type === 'absolute'
+            ? { type: 'absolute', remindAt: reminder.remindAt, audience: reminder.audience }
+            : {
+                type: 'offset',
+                offsetValue: reminder.offsetValue,
+                offsetUnit: reminder.offsetUnit,
+                audience: reminder.audience,
+              };
+        }) satisfies SharedEventReminder[];
+      }
       if (eventKind === 'recurring' && !occurrenceOnly && !firstEventOccurrenceDate({ ...data, id: event?.id ?? '' })) {
         setError(text.recurrenceInvalid);
         return;
@@ -230,6 +250,37 @@ export function EventForm({
         {eventKind === 'recurring' &&
           !occurrenceOnly &&
           (wizard ? <RecurrenceFields value={wizard} onChange={setWizard} /> : <Alert>{text.unsupportedRule}</Alert>)}
+        {occurrenceOnly ? (
+          <Text size="sm" c="dimmed">
+            {text.reminderScope}
+          </Text>
+        ) : (
+          <Stack>
+            <Text fw={600}>{text.reminders}</Text>
+            <Text size="sm" c="dimmed">
+              {text.reminderAllDay}
+            </Text>
+            <ReminderList
+              value={reminders}
+              timezone="Europe/Warsaw"
+              pending={pending}
+              onRemove={(index) => {
+                setReminders((current) => current.filter((_, i) => i !== index));
+                setRemindersChanged(true);
+              }}
+            />
+            <ReminderPicker
+              pending={pending || reminders.length >= 100}
+              onAdd={(reminder) => {
+                setReminders((current) => [...current, reminder]);
+                setRemindersChanged(true);
+              }}
+            />
+            <Text size="sm" c="dimmed">
+              {text.reminderHint}
+            </Text>
+          </Stack>
+        )}
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={pending}>
             {labels.cancel}

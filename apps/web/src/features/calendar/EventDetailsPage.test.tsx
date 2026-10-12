@@ -22,6 +22,7 @@ vi.mock('../../auth.js', () => ({
   useMe: () => ({ user: { id: state.userId, role: state.role }, family: { timezone: 'Europe/Warsaw' } }),
 }));
 vi.mock('../family/familyQueries.js', () => ({ useMembersQuery: () => ({ data: [], error: null }) }));
+vi.mock('./MyReminders.js', () => ({ MyReminders: () => <div>Moje przypomnienia</div> }));
 vi.mock('./calendarQueries.js', () => ({
   useEvent: () => ({ data: state.event, isPending: false, error: state.error }),
   useCalendarMutations: () => ({

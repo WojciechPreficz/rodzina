@@ -1,5 +1,21 @@
 # Decyzje
 
+## Krok 2.7 (2026-10-12)
+
+- Wspólny `ReminderPicker` przyjmuje listę dozwolonych odbiorców i domyślnego odbiorcę.
+  Formularz wydarzenia obsługuje wspólne, a „Tylko ja” jest w sekcji „Moje przypomnienia”
+  szczegółów dla każdego domownika. Przy tworzeniu wydarzenia formularz wskazuje tę ścieżkę:
+  osobiste przypomnienie wymaga już istniejącego ID. Osobny zapis unika częściowego sukcesu
+  tworzenia wydarzenia i duplikacji przy ponowieniu po błędzie przypomnienia.
+- Formularz wysyła `reminders` tylko po zmianie ich konfiguracji; usunięcie wszystkich wysyła
+  `[]`. „Tylko to” nie edytuje konfiguracji przypomnień serii. Osobiste zapisują się natychmiast
+  przez `/api/reminders/mine`, z odświeżaniem co 20 s i po powrocie do karty.
+- Daty absolutne są przeliczane wyłącznie przez `localDateTimeToUtc` w `shared` dla strefy rodziny.
+  Oznaczenie „nieaktualne” dotyczy absolutnego przypomnienia z `nextFireAt = null` lub datą
+  w przeszłości; wygasły offset nie jest mylony z nieaktualną datą absolutną.
+- Na prośbę właściciela testy i `release:smoke` pominięto. Weryfikację ręczną i pozostałe
+  kryteria fazy 2 opisano w `DEVELOPMENT.md`; nie uznajemy ich za potwierdzone samą implementacją.
+
 ## Krok 2.5 (2026-10-12)
 
 - Kalendarz działa pod `/kalendarz` oraz pod dotychczasowym `/`. Schedule-X używa Temporal z polyfillem, a adapter otrzymuje gotowe momenty UTC z API i wyświetla je w strefie rodziny. Zależności są przeglądarkowe i nie wymagają kompilacji nowych modułów runtime na serwerze.

@@ -65,3 +65,17 @@ Job heartbeat nie jest funkcją docelową i zostanie usunięty w Fazie 3. Docelo
 Procedura aktualizacji aplikacji zostanie uzupełniona i zweryfikowana w Fazie 8. Przed aktualizacją bazy należy wykonać kopię zapasową; w Fazie 0 backup nie jest jeszcze implementowany.
 
 Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy przypomnień są zapisywane i przeliczane przy zapisie wydarzeń; wysyłka będzie realizowana w fazie 3.
+
+### Kalendarz i przypomnienia — stan po kroku 2.7
+
+Formularz wydarzenia zapisuje przypomnienia wspólne (uczestnicy, dorośli, cała rodzina lub twórca).
+„Moje przypomnienia” w szczegółach zapisują „Tylko ja” przez `/api/reminders/mine`, również dla
+dziecka oglądającego cudze wydarzenie. Zapis wydarzenia nie zmienia cudzych przypomnień osobistych.
+Przypomnienia absolutne bez przyszłego terminu są oznaczone jako „nieaktualne” i można je usunąć.
+W tej fazie aplikacja definiuje terminy; wysyłka push i jej cron powstaną w fazie 3.
+
+Krok 2.7 nie dodaje zmiennych środowiskowych, cronów, migracji ani zależności runtime.
+Paczka nadal korzysta z dotychczasowych migracji i sposobu uruchamiania; nie wymaga nowego
+procesu w tle, WebSocketów, Dockera ani Redisa. Na prośbę właściciela podczas realizacji tego
+kroku nie uruchomiono testów ani `release:smoke`; pełne zamknięcie kryteriów fazy 2 wymaga
+jeszcze weryfikacji opisanej w `DEVELOPMENT.md`.

@@ -25,6 +25,34 @@ afterEach(() => {
 });
 
 describe('EventForm', () => {
+  it('sends shared reminders in the event body and sends an empty array after removal', async () => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider>
+        <EventForm members={[]} initialDate="2026-10-12" pending={false} onSave={save} onCancel={() => {}} />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Basen' } });
+    fireEvent.click(screen.getByLabelText('Kiedy przypomnieć'));
+    fireEvent.click(screen.getByRole('option', { name: '15 minut przed' }));
+    fireEvent.click(screen.getByLabelText('Odbiorcy'));
+    fireEvent.click(screen.getByRole('option', { name: 'Cała rodzina' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj przypomnienie' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Dodaj przypomnienie' })).not.toHaveAttribute('data-loading'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reminders: [{ type: 'offset', offsetValue: 15, offsetUnit: 'minute', audience: 'family' }],
+        }),
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Usuń przypomnienie' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ reminders: [] })));
+  });
   it('creates a weekly Tuesday/Thursday series through the wizard', async () => {
     const save = vi.fn(async () => {});
     render(
