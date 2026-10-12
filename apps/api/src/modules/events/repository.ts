@@ -3,9 +3,11 @@ import { and, asc, eq, gte, inArray } from 'drizzle-orm';
 import type { CalendarEvent, EventData } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { events, eventParticipants, families, users } from '../../db/schema.js';
+import { createReminderRepository } from '../reminders/repository.js';
 
 export function createEventRepository(database: DatabaseConnection) {
   const db = database.db;
+  const reminderRepository = createReminderRepository(database);
   function participants(familyId: string, eventId: string) {
     return db
       .select({ id: users.id, displayName: users.displayName, color: users.color })
@@ -21,7 +23,9 @@ export function createEventRepository(database: DatabaseConnection) {
       .from(events)
       .where(and(eq(events.familyId, familyId), eq(events.id, id)))
       .get();
-    return event ? { ...event, participants: participants(familyId, id) } : undefined;
+    return event
+      ? { ...event, participants: participants(familyId, id), reminders: reminderRepository.list(familyId, id) }
+      : undefined;
   }
   function validParticipants(familyId: string, ids: string[]): boolean {
     return (
@@ -36,7 +40,7 @@ export function createEventRepository(database: DatabaseConnection) {
   function create(familyId: string, createdBy: string, data: EventData): CalendarEvent {
     const id = crypto.randomUUID();
     const now = Date.now();
-    const { participantIds, ...fields } = data;
+    const { participantIds, reminders: sharedReminders, ...fields } = data;
     db.transaction((tx) => {
       tx.insert(events)
         .values({ ...fields, id, familyId, createdBy, createdAt: now, updatedAt: now })
@@ -45,14 +49,16 @@ export function createEventRepository(database: DatabaseConnection) {
         tx.insert(eventParticipants)
           .values(participantIds.map((userId) => ({ eventId: id, userId })))
           .run();
+      reminderRepository.saveEvent(familyId, { ...fields, id }, createdBy, sharedReminders, timezone(familyId), now);
     });
     return find(familyId, id)!;
   }
-  function update(familyId: string, id: string, data: EventData): CalendarEvent {
-    const { participantIds, ...fields } = data;
+  function update(familyId: string, id: string, data: EventData, actorId: string): CalendarEvent {
+    const { participantIds, reminders: sharedReminders, ...fields } = data;
+    const now = Date.now();
     db.transaction((tx) => {
       tx.update(events)
-        .set({ ...fields, updatedAt: Date.now() })
+        .set({ ...fields, updatedAt: now })
         .where(and(eq(events.familyId, familyId), eq(events.id, id)))
         .run();
       tx.delete(eventParticipants).where(eq(eventParticipants.eventId, id)).run();
@@ -60,6 +66,7 @@ export function createEventRepository(database: DatabaseConnection) {
         tx.insert(eventParticipants)
           .values(participantIds.map((userId) => ({ eventId: id, userId })))
           .run();
+      reminderRepository.saveEvent(familyId, { ...fields, id }, actorId, sharedReminders, timezone(familyId), now);
     });
     return find(familyId, id)!;
   }
@@ -78,7 +85,11 @@ export function createEventRepository(database: DatabaseConnection) {
           .all()
           .map(({ event }) => event)
       : db.select().from(events).where(eq(events.familyId, familyId)).all();
-    return rows.map((event) => ({ ...event, participants: participants(familyId, event.id) }));
+    return rows.map((event) => ({
+      ...event,
+      participants: participants(familyId, event.id),
+      reminders: reminderRepository.list(familyId, event.id),
+    }));
   }
   function upcomingDistant(familyId: string, today: string): CalendarEvent[] {
     // A month-precision deadline remains upcoming throughout that month.
@@ -95,7 +106,11 @@ export function createEventRepository(database: DatabaseConnection) {
       .orderBy(asc(events.startDate), asc(events.id))
       .all()
       .filter((event) => event.datePrecision === 'month' || event.startDate >= today)
-      .map((event) => ({ ...event, participants: participants(familyId, event.id) }));
+      .map((event) => ({
+        ...event,
+        participants: participants(familyId, event.id),
+        reminders: reminderRepository.list(familyId, event.id),
+      }));
   }
   function timezone(familyId: string): string {
     return db.select({ timezone: families.timezone }).from(families).where(eq(families.id, familyId)).get()!.timezone;

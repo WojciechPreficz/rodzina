@@ -1,0 +1,106 @@
+import crypto from 'node:crypto';
+import { and, asc, eq, ne } from 'drizzle-orm';
+import {
+  computeNextFireAt,
+  type Reminder,
+  type SharedEventReminder,
+  type TimeEvent,
+  type TimeReminder,
+} from '@rodzina/shared';
+import type { DatabaseConnection } from '../../db/client.js';
+import { reminders } from '../../db/schema.js';
+
+export function createReminderRepository(database: DatabaseConnection) {
+  const db = database.db;
+  function list(familyId: string, eventId: string, userId?: string): Reminder[] {
+    return db
+      .select()
+      .from(reminders)
+      .where(
+        and(
+          eq(reminders.familyId, familyId),
+          eq(reminders.eventId, eventId),
+          userId === undefined
+            ? ne(reminders.audience, 'user')
+            : and(eq(reminders.audience, 'user'), eq(reminders.userId, userId)),
+        ),
+      )
+      .orderBy(asc(reminders.id))
+      .all();
+  }
+  function insert(
+    familyId: string,
+    event: TimeEvent,
+    actorId: string,
+    data: TimeReminder,
+    audience: Reminder['audience'],
+    tz: string,
+    now: number,
+    userId: string | null = null,
+  ) {
+    const row: Reminder = {
+      id: crypto.randomUUID(),
+      familyId,
+      eventId: event.id,
+      taskId: null,
+      documentId: null,
+      type: data.type,
+      offsetValue: data.type === 'offset' ? data.offsetValue : null,
+      offsetUnit: data.type === 'offset' ? data.offsetUnit : null,
+      remindAt: data.type === 'absolute' ? data.remindAt : null,
+      audience,
+      userId,
+      createdBy: actorId,
+      nextFireAt: computeNextFireAt(data, event, now, tz),
+      lastSentAt: null,
+    };
+    db.insert(reminders).values(row).run();
+    return row;
+  }
+  function saveEvent(
+    familyId: string,
+    event: TimeEvent,
+    actorId: string,
+    shared: SharedEventReminder[] | undefined,
+    tz: string,
+    now: number,
+  ) {
+    if (shared !== undefined) {
+      db.delete(reminders)
+        .where(and(eq(reminders.familyId, familyId), eq(reminders.eventId, event.id), ne(reminders.audience, 'user')))
+        .run();
+      for (const data of shared) insert(familyId, event, actorId, data, data.audience, tz, now);
+    }
+    const rows = db
+      .select()
+      .from(reminders)
+      .where(and(eq(reminders.familyId, familyId), eq(reminders.eventId, event.id)))
+      .all();
+    for (const row of rows) {
+      const data: TimeReminder =
+        row.type === 'offset'
+          ? { type: 'offset', offsetValue: row.offsetValue!, offsetUnit: row.offsetUnit! }
+          : { type: 'absolute', remindAt: row.remindAt! };
+      db.update(reminders)
+        .set({ nextFireAt: computeNextFireAt(data, event, now, tz) })
+        .where(eq(reminders.id, row.id))
+        .run();
+    }
+  }
+  function removeMine(familyId: string, userId: string, id: string) {
+    return (
+      db
+        .delete(reminders)
+        .where(
+          and(
+            eq(reminders.familyId, familyId),
+            eq(reminders.userId, userId),
+            eq(reminders.audience, 'user'),
+            eq(reminders.id, id),
+          ),
+        )
+        .run().changes > 0
+    );
+  }
+  return { list, insert, saveEvent, removeMine };
+}

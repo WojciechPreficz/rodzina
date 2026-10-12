@@ -118,3 +118,32 @@ Weryfikacja automatyczna kroku 2.2 (2026-10-11): wszystkie 198 testów Vitest pr
 Service worker, instalację PWA i push (w późniejszej fazie) weryfikuj na buildzie produkcyjnym. Podłącz telefon przez USB, włącz debugowanie USB i w Chrome na komputerze otwórz `chrome://inspect`. W sekcji Port forwarding dodaj `5173 -> localhost:5173` dla pracy nad UI albo `3000 -> localhost:3000` dla builda produkcyjnego. Następnie na telefonie otwórz odpowiednio `http://localhost:5173` albo `http://localhost:3000`.
 
 Tryb dev służy do pracy nad UI; instalację PWA i service worker sprawdzaj po `npm run build && npm start` na porcie 3000. Aplikacja jest wtedy dostępna dla Chrome Androida jako `localhost` i działa w bezpiecznym kontekście.
+
+## Przypomnienia wydarzeń — API kroku 2.3
+
+`POST /api/events` i `PATCH /api/events/:id` obsługują opcjonalną tablicę `reminders`. Jej podanie zastępuje wyłącznie wspólne przypomnienia; pominięcie zachowuje dotychczasowe, a `[]` usuwa wspólne. Osobiste przypomnienia innych osób pozostają. Przy każdym zapisie wszystkie terminy są przeliczane przez `computeNextFireAt` w strefie rodziny, w tej samej transakcji co wydarzenie.
+
+Przykładowe wspólne przypomnienia w body wydarzenia:
+
+```json
+{
+  "reminders": [
+    { "type": "offset", "offsetValue": 1, "offsetUnit": "day", "audience": "participants" },
+    { "type": "absolute", "remindAt": 1830240000000, "audience": "adults" }
+  ]
+}
+```
+
+Odbiorca wspólny to `participants` (domyślnie), `family`, `adults` albo `owner`. `user` jest zarezerwowane dla endpointów osobistych. Offset jest nieujemną liczbą całkowitą (maksymalnie 10000), jednostką jest `minute`, `hour`, `day`, `week` albo `month`; w jednym zapisie można podać do 100 przypomnień wspólnych. `absolute` przyjmuje wyłącznie `remindAt` w milisekundach UTC. Przypomnienie z przeszłości pozostaje zapisane z `nextFireAt=null`.
+
+| Endpoint                               | Działanie                                                                                                                                       |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/reminders/mine?eventId=UUID` | Lista wyłącznie własnych przypomnień osobistych dla widocznego wydarzenia.                                                                      |
+| `POST /api/reminders/mine`             | Body: `eventId` i pola `offset` albo `absolute`. Serwer ustawia `audience=user`, odbiorcę i autora z sesji. Odpowiedź 200 z `{ ok, reminder }`. |
+| `DELETE /api/reminders/mine/:id`       | Usuwa tylko własne osobiste przypomnienie; cudze, nieistniejące i z innej rodziny daje 404.                                                     |
+
+Dziecko może dodać i usunąć własne przypomnienie do wydarzenia rodzica, ale zapis wydarzenia rodzica nadal daje 403. Odczyt wydarzenia zwraca tylko przypomnienia wspólne; osobiste pobieraj osobnym endpointem. API nie obsługuje jeszcze źródeł `taskId` ani `documentId`. Usunięcie wydarzenia usuwa wszystkie jego przypomnienia; usunięcie odbiorcy kasuje jego osobiste przypomnienia, a wspólne przypomnienia utworzone przez usuniętą osobę pozostają z `createdBy=null`.
+
+Krok nie dodaje UI ani wysyłki push. Migracja `0011_chubby_gateway.sql` jest wykonywana przy starcie. Brak nowych zmiennych środowiskowych, cronów i zależności runtime.
+
+Weryfikacja automatyczna kroku 2.3 (2026-10-12): przechodzą wszystkie 207 testów Vitest, lint, formatowanie, typecheck i build. Testy pokrywają zachowanie osobistych przypomnień przy edycji przez inną osobę, dziecko dodające przypomnienie do wydarzenia rodzica (200) przy zakazie edycji wydarzenia (403), podążanie offsetów za datą, wygaszenie przeszłych absolute, walidację źródeł i odbiorców, izolację rodzin oraz kaskady. Test migracji potwierdza zachowanie istniejących wydarzeń; ponowne `db:generate` nie wykazuje zmian. Pozostają wcześniejsze ostrzeżenia Fast Refresh i rozmiaru głównego pliku JS. `release:smoke` przerwano i pominięto na prośbę właściciela; weryfikację ręczną wykona właściciel.

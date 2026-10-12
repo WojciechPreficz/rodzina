@@ -51,7 +51,7 @@ export function createEventService(database: DatabaseConnection) {
     });
     if (!parsed.success) throw new EventError(400, 'VALIDATION_ERROR', 'Dane wydarzenia są niepoprawne.');
     checkParticipants(familyId, parsed.data.participantIds);
-    return repository.update(familyId, id, parsed.data);
+    return repository.update(familyId, id, parsed.data, actorId);
   }
   function remove(familyId: string, id: string, actorId: string, role: FamilyRole) {
     checkEdit(get(familyId, id), actorId, role);

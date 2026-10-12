@@ -63,3 +63,5 @@ Job heartbeat nie jest funkcją docelową i zostanie usunięty w Fazie 3. Docelo
 ## 6. Aktualizacja
 
 Procedura aktualizacji aplikacji zostanie uzupełniona i zweryfikowana w Fazie 8. Przed aktualizacją bazy należy wykonać kopię zapasową; w Fazie 0 backup nie jest jeszcze implementowany.
+
+Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy przypomnień są zapisywane i przeliczane przy zapisie wydarzeń; wysyłka będzie realizowana w fazie 3.

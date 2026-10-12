@@ -34,7 +34,7 @@ describe('event schemas', () => {
     { durationMinutes: 60 },
     { startTime: '17:00', durationMinutes: 0 },
     { title: '  ' },
-    { reminders: [] },
+    { reminders: [{ type: 'offset', offsetValue: 1, offsetUnit: 'day', audience: 'user' }] },
     { familyId: 'untrusted' },
   ])('rejects invalid combinations %j', (patch) => {
     expect(createEventSchema.safeParse({ ...single, ...patch }).success).toBe(false);

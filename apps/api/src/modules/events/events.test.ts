@@ -133,7 +133,7 @@ describe('events API', () => {
       { kind: 'distant', datePrecision: 'month', startDate: '2028-05-02', startTime: null, durationMinutes: null },
       { createdBy: child.id },
       { familyId: crypto.randomUUID() },
-      { reminders: [] },
+      { reminders: [{ type: 'offset', offsetValue: 1, offsetUnit: 'day', audience: 'user' }] },
     ]) {
       const response = await request('POST', '/api/events', { ...single, ...patch });
       expect(response.statusCode, response.body).toBe(400);

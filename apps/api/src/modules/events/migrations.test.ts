@@ -58,3 +58,58 @@ it('upgrades the existing auth database without recreating tables or losing data
     rmSync(oldMigrations, { recursive: true, force: true });
   }
 });
+
+it('adds reminders to an existing calendar without changing its events', () => {
+  const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
+  const oldMigrations = mkdtempSync(path.join(tmpdir(), 'rodzina-calendar-migrations-'));
+  const database = createDatabase(loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' }));
+  try {
+    const journal = JSON.parse(readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'));
+    journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= 10);
+    mkdirSync(path.join(oldMigrations, 'meta'));
+    writeFileSync(path.join(oldMigrations, 'meta/_journal.json'), JSON.stringify(journal));
+    for (const entry of journal.entries)
+      copyFileSync(path.join(migrationsFolder, `${entry.tag}.sql`), path.join(oldMigrations, `${entry.tag}.sql`));
+    migrate(database.db, { migrationsFolder: oldMigrations });
+    const familyId = crypto.randomUUID();
+    const eventId = crypto.randomUUID();
+    database.db
+      .insert(schema.families)
+      .values({ id: familyId, name: 'Rodzina', joinCode: 'ABC123', createdAt: 1 })
+      .run();
+    database.db
+      .insert(schema.events)
+      .values({
+        id: eventId,
+        familyId,
+        title: 'Termin',
+        startDate: '2028-05-01',
+        datePrecision: 'day',
+        kind: 'single',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      .run();
+    const before = database.db.select().from(schema.events).all();
+    migrate(database.db, { migrationsFolder });
+    expect(database.db.select().from(schema.events).all()).toEqual(before);
+    database.db
+      .insert(schema.reminders)
+      .values({
+        id: crypto.randomUUID(),
+        familyId,
+        eventId,
+        type: 'offset',
+        offsetValue: 1,
+        offsetUnit: 'day',
+        audience: 'family',
+      })
+      .run();
+    migrate(database.db, { migrationsFolder });
+    expect(database.db.select().from(schema.reminders).all()).toHaveLength(1);
+    expect(database.sqlite.pragma('foreign_key_check')).toEqual([]);
+  } finally {
+    database.sqlite.close();
+    rmSync(oldMigrations, { recursive: true, force: true });
+  }
+});

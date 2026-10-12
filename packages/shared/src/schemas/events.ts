@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as rrule from 'rrule';
+import { reminderSchema, sharedEventReminderSchema } from './reminders.js';
 
 const { RRule } = (Reflect.get(rrule, 'default') as typeof rrule | undefined) ?? rrule;
 
@@ -119,6 +120,7 @@ const eventFields = z
       .array(z.string().uuid())
       .max(100)
       .refine((ids) => new Set(ids).size === ids.length, 'Uczestnicy nie mogą się powtarzać.'),
+    reminders: z.array(sharedEventReminderSchema).max(100).optional(),
   })
   .strict();
 
@@ -192,6 +194,7 @@ export const eventSchema = eventFields.omit({ participantIds: true }).extend({
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   participants: z.array(eventParticipantSchema),
+  reminders: z.array(reminderSchema),
 });
 export const eventResponseSchema = z.object({ ok: z.literal(true), event: eventSchema });
 export const distantEventsResponseSchema = z.object({ ok: z.literal(true), events: z.array(eventSchema) });

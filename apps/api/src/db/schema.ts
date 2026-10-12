@@ -1,4 +1,6 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import { check } from 'drizzle-orm/sqlite-core';
 
 export const families = sqliteTable('families', {
   id: text('id').primaryKey(),
@@ -116,4 +118,38 @@ export const eventExceptions = sqliteTable(
     overrideTitle: text('override_title'),
   },
   (table) => [uniqueIndex('event_exceptions_event_date_idx').on(table.eventId, table.originalDate)],
+);
+
+export const reminders = sqliteTable(
+  'reminders',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    eventId: text('event_id').references(() => events.id, { onDelete: 'cascade' }),
+    taskId: text('task_id'),
+    documentId: text('document_id'),
+    type: text('type', { enum: ['offset', 'absolute'] }).notNull(),
+    offsetValue: integer('offset_value'),
+    offsetUnit: text('offset_unit', { enum: ['minute', 'hour', 'day', 'week', 'month'] }),
+    remindAt: integer('remind_at'),
+    audience: text('audience', { enum: ['participants', 'family', 'adults', 'owner', 'user'] }).notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    nextFireAt: integer('next_fire_at'),
+    lastSentAt: integer('last_sent_at'),
+  },
+  (table) => [
+    index('reminders_event_idx').on(table.familyId, table.eventId),
+    index('reminders_next_fire_idx').on(table.nextFireAt),
+    check(
+      'reminders_one_source',
+      sql`(${table.eventId} IS NOT NULL) + (${table.taskId} IS NOT NULL) + (${table.documentId} IS NOT NULL) = 1`,
+    ),
+    check(
+      'reminders_personal_user',
+      sql`(${table.audience} = 'user' AND ${table.userId} IS NOT NULL) OR (${table.audience} <> 'user' AND ${table.userId} IS NULL)`,
+    ),
+  ],
 );
