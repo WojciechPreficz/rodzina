@@ -2,12 +2,22 @@ import crypto from 'node:crypto';
 import { and, asc, eq, gte, inArray } from 'drizzle-orm';
 import type { CalendarEvent, EventData } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { events, eventParticipants, families, users } from '../../db/schema.js';
+import { events, eventParticipants, eventExceptions, families, users, reminders } from '../../db/schema.js';
 import { createReminderRepository } from '../reminders/repository.js';
 
 export function createEventRepository(database: DatabaseConnection) {
   const db = database.db;
   const reminderRepository = createReminderRepository(database);
+  function exceptions(familyId: string, eventId: string) {
+    return db
+      .select({ exception: eventExceptions })
+      .from(eventExceptions)
+      .innerJoin(events, eq(events.id, eventExceptions.eventId))
+      .where(and(eq(events.familyId, familyId), eq(events.id, eventId)))
+      .orderBy(asc(eventExceptions.originalDate))
+      .all()
+      .map(({ exception }) => exception);
+  }
   function participants(familyId: string, eventId: string) {
     return db
       .select({ id: users.id, displayName: users.displayName, color: users.color })
@@ -24,7 +34,12 @@ export function createEventRepository(database: DatabaseConnection) {
       .where(and(eq(events.familyId, familyId), eq(events.id, id)))
       .get();
     return event
-      ? { ...event, participants: participants(familyId, id), reminders: reminderRepository.list(familyId, id) }
+      ? {
+          ...event,
+          participants: participants(familyId, id),
+          reminders: reminderRepository.list(familyId, id),
+          exceptions: exceptions(familyId, id),
+        }
       : undefined;
   }
   function validParticipants(familyId: string, ids: string[]): boolean {
@@ -66,7 +81,7 @@ export function createEventRepository(database: DatabaseConnection) {
         tx.insert(eventParticipants)
           .values(participantIds.map((userId) => ({ eventId: id, userId })))
           .run();
-      reminderRepository.saveEvent(familyId, { ...fields, id }, actorId, sharedReminders, timezone(familyId), now);
+      reminderRepository.saveEvent(familyId, find(familyId, id)!, actorId, sharedReminders, timezone(familyId), now);
     });
     return find(familyId, id)!;
   }
@@ -89,6 +104,7 @@ export function createEventRepository(database: DatabaseConnection) {
       ...event,
       participants: participants(familyId, event.id),
       reminders: reminderRepository.list(familyId, event.id),
+      exceptions: exceptions(familyId, event.id),
     }));
   }
   function upcomingDistant(familyId: string, today: string): CalendarEvent[] {
@@ -110,10 +126,96 @@ export function createEventRepository(database: DatabaseConnection) {
         ...event,
         participants: participants(familyId, event.id),
         reminders: reminderRepository.list(familyId, event.id),
+        exceptions: exceptions(familyId, event.id),
       }));
   }
   function timezone(familyId: string): string {
     return db.select({ timezone: families.timezone }).from(families).where(eq(families.id, familyId)).get()!.timezone;
   }
-  return { find, validParticipants, create, update, remove, list, upcomingDistant, timezone };
+  function saveException(familyId: string, event: CalendarEvent, originalDate: string, data?: EventData) {
+    db.transaction(() => {
+      const row = {
+        eventId: event.id,
+        originalDate,
+        isCancelled: data === undefined,
+        overrideStartDate: data?.startDate ?? null,
+        overrideStartTime: data?.startTime ?? null,
+        overrideDurationMinutes: data?.durationMinutes ?? null,
+        overrideTitle: data?.title ?? null,
+      };
+      db.insert(eventExceptions)
+        .values({ id: crypto.randomUUID(), ...row })
+        .onConflictDoUpdate({ target: [eventExceptions.eventId, eventExceptions.originalDate], set: row })
+        .run();
+      db.update(events).set({ updatedAt: Date.now() }).where(eq(events.id, event.id)).run();
+      reminderRepository.saveEvent(familyId, find(familyId, event.id)!, '', undefined, timezone(familyId), Date.now());
+    });
+    return find(familyId, event.id)!;
+  }
+  function split(
+    familyId: string,
+    event: CalendarEvent,
+    date: string,
+    previousRule: string,
+    data?: EventData,
+    actorId = '',
+  ) {
+    return db.transaction(() => {
+      const now = Date.now();
+      const futureExceptions = event.exceptions.filter((exception) => exception.originalDate >= date);
+      db.update(events)
+        .set({ rrule: previousRule, updatedAt: now })
+        .where(and(eq(events.familyId, familyId), eq(events.id, event.id)))
+        .run();
+      db.delete(eventExceptions)
+        .where(and(eq(eventExceptions.eventId, event.id), gte(eventExceptions.originalDate, date)))
+        .run();
+      let next: CalendarEvent | undefined;
+      if (data) {
+        // Create without new reminders, then copy shared rows and transfer personal rows.
+        next = create(familyId, actorId, { ...data, reminders: undefined });
+        db.update(events).set({ createdBy: event.createdBy }).where(eq(events.id, next.id)).run();
+        const rows = db
+          .select()
+          .from(reminders)
+          .where(and(eq(reminders.familyId, familyId), eq(reminders.eventId, event.id)))
+          .all();
+        for (const row of rows) {
+          if (row.audience === 'user') {
+            db.update(reminders).set({ eventId: next.id }).where(eq(reminders.id, row.id)).run();
+          } else {
+            db.insert(reminders)
+              .values({ ...row, id: crypto.randomUUID(), eventId: next.id })
+              .run();
+          }
+        }
+        // Existing exceptions retain their original-date identity if the future schedule is unchanged.
+        const schedule = (rule: string | null) =>
+          rule
+            ?.replace(/^RRULE:/, '')
+            .split(';')
+            .filter((part) => !/^(COUNT|UNTIL)=/.test(part))
+            .join(';');
+        if (data.startDate === date && schedule(data.rrule) === schedule(event.rrule)) {
+          for (const exception of futureExceptions) {
+            db.insert(eventExceptions)
+              .values({ ...exception, eventId: next.id })
+              .run();
+          }
+        }
+        reminderRepository.saveEvent(
+          familyId,
+          find(familyId, next.id)!,
+          actorId,
+          data.reminders,
+          timezone(familyId),
+          now,
+        );
+        next = find(familyId, next.id)!;
+      }
+      reminderRepository.saveEvent(familyId, find(familyId, event.id)!, actorId, undefined, timezone(familyId), now);
+      return next;
+    });
+  }
+  return { find, validParticipants, create, update, remove, list, upcomingDistant, timezone, saveException, split };
 }

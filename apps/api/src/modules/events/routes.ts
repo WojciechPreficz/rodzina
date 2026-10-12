@@ -50,17 +50,17 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
     });
     routes.patch('/api/events/:id', async (request) => {
       const { id } = parse(idSchema, request.params);
-      parse(eventScopeSchema, request.query);
+      const query = parse(eventScopeSchema, request.query);
       const data = parse(patchEventSchema, request.body);
       return eventResponseSchema.parse({
         ok: true,
-        event: service.update(request.familyId!, id, request.user!.id, request.user!.role, data),
+        event: service.update(request.familyId!, id, request.user!.id, request.user!.role, data, query),
       });
     });
     routes.delete('/api/events/:id', async (request) => {
       const { id } = parse(idSchema, request.params);
-      parse(eventScopeSchema, request.query);
-      service.remove(request.familyId!, id, request.user!.id, request.user!.role);
+      const query = parse(eventScopeSchema, request.query);
+      service.remove(request.familyId!, id, request.user!.id, request.user!.role, query);
       return deleteEventResponseSchema.parse({ ok: true, deleted: true });
     });
     routes.get('/api/occurrences', async (request) => {

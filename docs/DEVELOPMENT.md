@@ -147,3 +147,23 @@ Dziecko może dodać i usunąć własne przypomnienie do wydarzenia rodzica, ale
 Krok nie dodaje UI ani wysyłki push. Migracja `0011_chubby_gateway.sql` jest wykonywana przy starcie. Brak nowych zmiennych środowiskowych, cronów i zależności runtime.
 
 Weryfikacja automatyczna kroku 2.3 (2026-10-12): przechodzą wszystkie 207 testów Vitest, lint, formatowanie, typecheck i build. Testy pokrywają zachowanie osobistych przypomnień przy edycji przez inną osobę, dziecko dodające przypomnienie do wydarzenia rodzica (200) przy zakazie edycji wydarzenia (403), podążanie offsetów za datą, wygaszenie przeszłych absolute, walidację źródeł i odbiorców, izolację rodzin oraz kaskady. Test migracji potwierdza zachowanie istniejących wydarzeń; ponowne `db:generate` nie wykazuje zmian. Pozostają wcześniejsze ostrzeżenia Fast Refresh i rozmiaru głównego pliku JS. `release:smoke` przerwano i pominięto na prośbę właściciela; weryfikację ręczną wykona właściciel.
+
+## Serie i wyjątki — API kroku 2.4
+
+`PATCH` i `DELETE /api/events/:id` przyjmują `scope=all|this|following` (domyślnie `all`). Dla `this` i `following` wymagany jest parametr `occurrenceDate=YYYY-MM-DD`, wskazujący pierwotną datę istniejącego wystąpienia serii, także po jego przesunięciu lub anulowaniu. Brak daty, data poza regułą oraz zastosowanie tych zakresów do wydarzenia jednorazowego lub odległego dają 400. Uprawnienia i izolacja rodzin pozostają takie same jak przy edycji całego wydarzenia.
+
+- `PATCH ...?scope=this&occurrenceDate=2026-10-20` z body `{ "startDate": "2026-10-21", "startTime": "18:00", "title": "Przeniesiony basen" }` tworzy lub aktualizuje wyjątek. Dozwolone pola to tytuł, data, godzina i czas trwania; pozostałe pola należą do serii. Dla zmiany na całodniowe podaj jednocześnie `startTime=null` i `durationMinutes=null`. Ponowna edycja zachowuje pominięte pola wyjątku. Edycja anulowanego wystąpienia przywraca je.
+- `DELETE ...?scope=this&occurrenceDate=2026-10-20` anuluje tylko wskazane wystąpienie.
+- `PATCH ...?scope=following&occurrenceDate=2026-10-27` kończy starą serię dzień wcześniej przez `UNTIL` i zwraca nową serię w `event`, z nowym `id`. Nowa seria zaczyna się w `occurrenceDate`, chyba że podano inne `startDate`. Domyślnie zachowuje regułę powtarzania, a przy `COUNT` tylko pozostałą liczbę wystąpień. Uczestnicy są kopiowani; wspólne przypomnienia kopiowane, a osobiste przenoszone z zachowaniem identyfikatora, autora i odbiorcy. Podanie `reminders` zastępuje wyłącznie wspólne przypomnienia nowej serii. Przypomnienia obu serii są przeliczane w jednej transakcji. Autor nowej serii pozostaje autorem pierwotnego wydarzenia.
+- `DELETE ...?scope=following&occurrenceDate=2026-10-27` kończy serię dzień wcześniej i usuwa wyjątki od wskazanej pierwotnej daty. Nie tworzy nowego wydarzenia. Podział od pierwszego wystąpienia pozostawia starą serię bez wystąpień.
+
+`GET /api/events/:id` zwraca tablicę `exceptions`. `/api/occurrences` stosuje anulowania, przesunięcia oraz tytuły wyjątków. Przesunięte wystąpienie zachowuje pierwotne `occurrenceDate` i pojawia się w zakresie swojej nowej daty. Wyjątek zapisuje kompletną datę, godzinę, czas trwania i tytuł wystąpienia. Przy podziale bez zmiany daty i wzorca powtarzania przyszłe wyjątki przechodzą do nowej serii; zmiana daty lub wzorca usuwa je z przyszłej części. Przeszłe wyjątki pozostają w starej serii.
+
+Weryfikacja ręczna przez właściciela:
+
+1. Utwórz serię wtorkową z `COUNT=4`, uczestnikiem oraz przypomnieniem wspólnym. Z konta drugiej osoby dodaj przypomnienie osobiste.
+2. Przesuń drugie wystąpienie przez `this`, następnie zmień tylko jego tytuł. Sprawdź jeden wyjątek w odczycie wydarzenia i właściwą datę, godzinę oraz tytuł w `occurrences`. Anuluj je i sprawdź, że znika z listy.
+3. Edytuj trzecie wystąpienie przez `following`. W starej serii sprawdź zachowanie wcześniejszych wystąpień, a w nowej dwa pozostałe, skopiowanych uczestników i wspólne przypomnienia. Z konta drugiej osoby odczytaj przypomnienia osobiste nowej serii: autor i odbiorca muszą pozostać bez zmian. Sprawdź przeliczone `nextFireAt`.
+4. Sprawdź `DELETE following`, także od pierwszego wystąpienia, oraz serię kończącą się przez `UNTIL`. Sprawdź odpowiedzi 400 bez daty lub dla daty spoza cyklu, 403 dla dziecka na cudzym wydarzeniu i 404 z innej rodziny.
+
+Nie dodano migracji, zależności, zmiennych środowiskowych ani cronów. Na prośbę właściciela nie uruchomiono testów automatycznych ani `release:smoke`; dopisano przypadki API do późniejszego uruchomienia. Przechodzą typecheck, lint i build; pozostają wcześniejsze ostrzeżenia Fast Refresh i rozmiaru głównego pliku JS. Krok nie dodaje UI ani wysyłki powiadomień.

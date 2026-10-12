@@ -173,7 +173,11 @@ export const createEventSchema = eventFields
 export const patchEventSchema = eventFields
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Podaj zmiany wydarzenia.');
-export const eventScopeSchema = z.object({ scope: z.literal('all').default('all') }).strict();
+export const eventScopeSchema = z
+  .object({ scope: z.enum(['all', 'this', 'following']).default('all'), occurrenceDate: calendarDateSchema.optional() })
+  .strict()
+  .refine((value) => value.scope === 'all' || value.occurrenceDate !== undefined, 'Podaj datę wystąpienia.');
+export type EventScope = z.infer<typeof eventScopeSchema>;
 export const occurrencesQuerySchema = z
   .object({
     from: calendarDateSchema,
@@ -187,6 +191,16 @@ export const occurrencesQuerySchema = z
   }, 'Zakres musi obejmować od 1 do 62 dni.');
 
 export const eventParticipantSchema = z.object({ id: z.string().uuid(), displayName: z.string(), color: z.string() });
+export const eventExceptionSchema = z.object({
+  id: z.string().uuid(),
+  eventId: z.string().uuid(),
+  originalDate: calendarDateSchema,
+  isCancelled: z.boolean(),
+  overrideStartDate: calendarDateSchema.nullable(),
+  overrideStartTime: timeSchema.nullable(),
+  overrideDurationMinutes: z.number().int().positive().nullable(),
+  overrideTitle: z.string().nullable(),
+});
 export const eventSchema = eventFields.omit({ participantIds: true }).extend({
   id: z.string().uuid(),
   familyId: z.string().uuid(),
@@ -195,6 +209,7 @@ export const eventSchema = eventFields.omit({ participantIds: true }).extend({
   updatedAt: z.number().int(),
   participants: z.array(eventParticipantSchema),
   reminders: z.array(reminderSchema),
+  exceptions: z.array(eventExceptionSchema),
 });
 export const eventResponseSchema = z.object({ ok: z.literal(true), event: eventSchema });
 export const distantEventsResponseSchema = z.object({ ok: z.literal(true), events: z.array(eventSchema) });

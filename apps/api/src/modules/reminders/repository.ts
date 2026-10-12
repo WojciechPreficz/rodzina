@@ -6,6 +6,7 @@ import {
   type SharedEventReminder,
   type TimeEvent,
   type TimeReminder,
+  type TimeException,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { reminders } from '../../db/schema.js';
@@ -30,7 +31,7 @@ export function createReminderRepository(database: DatabaseConnection) {
   }
   function insert(
     familyId: string,
-    event: TimeEvent,
+    event: TimeEvent & { exceptions?: readonly TimeException[] },
     actorId: string,
     data: TimeReminder,
     audience: Reminder['audience'],
@@ -59,7 +60,7 @@ export function createReminderRepository(database: DatabaseConnection) {
   }
   function saveEvent(
     familyId: string,
-    event: TimeEvent,
+    event: TimeEvent & { exceptions?: readonly TimeException[] },
     actorId: string,
     shared: SharedEventReminder[] | undefined,
     tz: string,

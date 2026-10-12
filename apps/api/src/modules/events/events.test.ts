@@ -316,4 +316,213 @@ describe('events API', () => {
       ).statusCode,
     ).toBe(403);
   });
+
+  it('upserts moved exceptions, applies their title and cancels individual occurrences', async () => {
+    const event = await create({ ...single, kind: 'recurring', rrule: 'FREQ=WEEKLY;BYDAY=TU;COUNT=4' });
+    const url = `/api/events/${event.id}?scope=this&occurrenceDate=2026-10-20`;
+    const moved = await request('PATCH', url, { startDate: '2026-11-02', title: 'Przeniesiony basen' });
+    expect(moved.statusCode, moved.body).toBe(200);
+    const exceptionId = moved.json().event.exceptions[0].id;
+    const changed = await request('PATCH', url, { startTime: '18:00' });
+    expect(changed.json().event.exceptions).toMatchObject([{ id: exceptionId, overrideStartDate: '2026-11-02' }]);
+    expect(changed.json().event.exceptions).toHaveLength(1);
+    expect((await request('GET', '/api/occurrences?from=2026-10-20&to=2026-10-20')).json().occurrences).toEqual([]);
+    const occurrences = (await request('GET', '/api/occurrences?from=2026-11-02&to=2026-11-02')).json().occurrences;
+    expect(occurrences).toMatchObject([
+      {
+        eventId: event.id,
+        occurrenceDate: '2026-10-20',
+        isException: true,
+        title: 'Przeniesiony basen',
+        startUtc: localDateTimeToUtc('2026-11-02', '18:00', 'Europe/Warsaw'),
+      },
+    ]);
+    expect((await request('DELETE', url)).statusCode).toBe(200);
+    expect((await request('GET', '/api/occurrences?from=2026-11-02&to=2026-11-02')).json().occurrences).toEqual([]);
+    const restored = await request('PATCH', url, { title: 'Przywrócone' });
+    expect(restored.json().event.exceptions[0].isCancelled).toBe(false);
+  });
+
+  it('splits a counted series without altering earlier occurrences and transfers personal reminders', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(localDateTimeToUtc('2026-10-12', '12:00', 'Europe/Warsaw'));
+    const event = await create({
+      ...single,
+      kind: 'recurring',
+      rrule: 'FREQ=WEEKLY;BYDAY=TU;COUNT=4',
+      participantIds: [child.id],
+      reminders: [{ type: 'offset', offsetValue: 1, offsetUnit: 'day', audience: 'family' }],
+    });
+    const personal = (
+      await request(
+        'POST',
+        '/api/reminders/mine',
+        {
+          eventId: event.id,
+          type: 'offset',
+          offsetValue: 1,
+          offsetUnit: 'hour',
+        },
+        child,
+      )
+    ).json().reminder;
+    const past = (await request('GET', '/api/occurrences?from=2026-10-13&to=2026-10-20')).json().occurrences;
+    const response = await request(
+      'PATCH',
+      `/api/events/${event.id}?scope=following&occurrenceDate=2026-10-27`,
+      {
+        title: 'Nowa seria',
+        startTime: '18:00',
+      },
+      member,
+    );
+    expect(response.statusCode, response.body).toBe(200);
+    const next = response.json().event;
+    expect(next.id).not.toBe(event.id);
+    expect(next.rrule).toContain('COUNT=2');
+    expect(next.participants).toEqual(event.participants);
+    expect(next.reminders[0].createdBy).toBe(admin.id);
+    expect((await request('GET', '/api/occurrences?from=2026-10-13&to=2026-10-20')).json().occurrences).toEqual(past);
+    const transferred = (await request('GET', `/api/reminders/mine?eventId=${next.id}`, undefined, child)).json()
+      .reminders;
+    expect(transferred).toMatchObject([
+      {
+        id: personal.id,
+        eventId: next.id,
+        userId: child.id,
+        createdBy: child.id,
+        nextFireAt: localDateTimeToUtc('2026-10-27', '17:00', 'Europe/Warsaw'),
+      },
+    ]);
+    expect(
+      (await request('GET', `/api/reminders/mine?eventId=${event.id}`, undefined, child)).json().reminders,
+    ).toEqual([]);
+    const future = (await request('GET', '/api/occurrences?from=2026-10-27&to=2026-11-30')).json().occurrences;
+    expect(future.map((item: { occurrenceDate: string }) => item.occurrenceDate)).toEqual(['2026-10-27', '2026-11-03']);
+    expect((await request('GET', `/api/events/${event.id}`)).json().event.rrule).toContain('UNTIL=20261026T235959');
+  });
+
+  it('deletes following occurrences including future exceptions and recalculates reminders', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(localDateTimeToUtc('2026-10-12', '12:00', 'Europe/Warsaw'));
+    const event = await create({
+      ...single,
+      kind: 'recurring',
+      rrule: 'FREQ=WEEKLY;BYDAY=TU;COUNT=4',
+      reminders: [{ type: 'offset', offsetValue: 0, offsetUnit: 'minute' }],
+    });
+    await request('PATCH', `/api/events/${event.id}?scope=this&occurrenceDate=2026-10-27`, { startDate: '2026-10-14' });
+    expect(
+      (await request('DELETE', `/api/events/${event.id}?scope=following&occurrenceDate=2026-10-20`)).statusCode,
+    ).toBe(200);
+    const remaining = (await request('GET', `/api/events/${event.id}`)).json().event;
+    expect(remaining.exceptions).toEqual([]);
+    expect(remaining.reminders[0].nextFireAt).toBe(localDateTimeToUtc('2026-10-13', '17:00', 'Europe/Warsaw'));
+    expect((await request('GET', '/api/occurrences?from=2026-10-13&to=2026-11-10')).json().occurrences).toHaveLength(1);
+    await request('DELETE', `/api/events/${event.id}?scope=this&occurrenceDate=2026-10-13`);
+    expect((await request('GET', `/api/events/${event.id}`)).json().event.reminders[0].nextFireAt).toBeNull();
+  });
+
+  it('retains UNTIL and future exceptions when splitting the same schedule', async () => {
+    const event = await create({
+      ...single,
+      kind: 'recurring',
+      rrule: 'FREQ=WEEKLY;BYDAY=TU;UNTIL=20261103T235959',
+    });
+    await request('PATCH', `/api/events/${event.id}?scope=this&occurrenceDate=2026-10-27`, {
+      startDate: '2026-10-28',
+      startTime: null,
+      durationMinutes: null,
+    });
+    await request('DELETE', `/api/events/${event.id}?scope=this&occurrenceDate=2026-11-03`);
+    const response = await request('PATCH', `/api/events/${event.id}?scope=following&occurrenceDate=2026-10-20`, {
+      title: 'Nowy tytuł serii',
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const next = response.json().event;
+    expect(next.rrule).toBe(event.rrule);
+    expect(next.exceptions).toHaveLength(2);
+    expect((await request('GET', `/api/events/${event.id}`)).json().event.exceptions).toEqual([]);
+    const occurrences = (await request('GET', '/api/occurrences?from=2026-10-20&to=2026-11-30')).json().occurrences;
+    expect(occurrences.map((item: { occurrenceDate: string }) => item.occurrenceDate)).toEqual([
+      '2026-10-20',
+      '2026-10-27',
+    ]);
+    expect(occurrences[1]).toMatchObject({ eventId: next.id, allDay: true, isException: true });
+    expect(occurrences[1].startUtc).toBe(localDateTimeToUtc('2026-10-28', '00:00', 'Europe/Warsaw'));
+  });
+
+  it('splits at the first occurrence and replaces only shared reminders in the new series', async () => {
+    const event = await create({
+      ...single,
+      kind: 'recurring',
+      rrule: 'FREQ=WEEKLY;COUNT=2',
+      reminders: [{ type: 'offset', offsetValue: 1, offsetUnit: 'day' }],
+    });
+    const personal = (
+      await request(
+        'POST',
+        '/api/reminders/mine',
+        {
+          eventId: event.id,
+          type: 'offset',
+          offsetValue: 1,
+          offsetUnit: 'hour',
+        },
+        child,
+      )
+    ).json().reminder;
+    const response = await request('PATCH', `/api/events/${event.id}?scope=following&occurrenceDate=2026-10-13`, {
+      title: 'Nowa',
+      reminders: [],
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const next = response.json().event;
+    expect(next.reminders).toEqual([]);
+    expect(
+      (await request('GET', `/api/reminders/mine?eventId=${next.id}`, undefined, child)).json().reminders[0].id,
+    ).toBe(personal.id);
+    const occurrences = (await request('GET', '/api/occurrences?from=2026-10-13&to=2026-11-03')).json().occurrences;
+    expect(occurrences).toHaveLength(2);
+    expect(occurrences.every((item: { eventId: string }) => item.eventId === next.id)).toBe(true);
+    expect(
+      (await request('DELETE', `/api/events/${next.id}?scope=following&occurrenceDate=2026-10-13`)).statusCode,
+    ).toBe(200);
+    expect((await request('GET', '/api/occurrences?from=2026-10-13&to=2026-11-03')).json().occurrences).toEqual([]);
+  });
+
+  it('validates occurrence scopes and keeps family and child permissions', async () => {
+    const event = await create({ ...single, kind: 'recurring', rrule: 'FREQ=WEEKLY;BYDAY=TU;COUNT=4' });
+    for (const scope of ['this', 'following']) {
+      for (const date of ['', '&occurrenceDate=2026-10-14', '&occurrenceDate=invalid']) {
+        expect(
+          (await request('PATCH', `/api/events/${event.id}?scope=${scope}${date}`, { title: 'Zmiana' })).statusCode,
+        ).toBe(400);
+        expect((await request('DELETE', `/api/events/${event.id}?scope=${scope}${date}`)).statusCode).toBe(400);
+      }
+      const url = `/api/events/${event.id}?scope=${scope}&occurrenceDate=2026-10-20`;
+      expect((await request('PATCH', url, { title: 'Zmiana' }, child)).statusCode).toBe(403);
+      expect((await request('DELETE', url, undefined, child)).statusCode).toBe(403);
+      expect((await request('PATCH', url, { title: 'Zmiana' }, outsider)).statusCode).toBe(404);
+      expect((await request('DELETE', url, undefined, outsider)).statusCode).toBe(404);
+    }
+    const eventSingle = await create();
+    expect(
+      (
+        await request('PATCH', `/api/events/${eventSingle.id}?scope=this&occurrenceDate=2026-10-13`, {
+          title: 'Zmiana',
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (await request('PATCH', `/api/events/${event.id}?scope=this&occurrenceDate=2026-10-20`, { participantIds: [] }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await request('PATCH', `/api/events/${event.id}?scope=following&occurrenceDate=2026-10-20`, {
+          kind: 'single',
+          rrule: null,
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
 });

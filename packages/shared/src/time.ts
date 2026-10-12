@@ -118,6 +118,26 @@ function originalOnDate(event: TimeEvent, rule: RecurrenceRule | null, date: str
   return candidate && dateString(candidate) === date ? candidate : null;
 }
 
+export function hasEventOccurrence(event: TimeEvent, date: string): boolean {
+  return originalOnDate(event, eventRule(event), date) !== null;
+}
+
+/** Split floating recurrence bounds, retaining the remaining COUNT in the new series. */
+export function splitEventRule(event: TimeEvent, date: string): { previous: string; following: string } {
+  const rule = eventRule(event);
+  if (!rule || !originalOnDate(event, rule, date)) throw new RangeError('Expected a recurring occurrence');
+  const before = new Date(floatingDate(date).getTime() - 1);
+  const parts = event.rrule!.replace(/^RRULE:/, '').split(';');
+  const unbounded = parts.filter((part) => !/^(COUNT|UNTIL)=/.test(part));
+  const previous = [...unbounded, `UNTIL=${dateString(before).replaceAll('-', '')}T235959`].join(';');
+  const count = rule.origOptions.count;
+  const following =
+    count == null
+      ? parts.join(';')
+      : [...unbounded, `COUNT=${count - rule.between(floatingDate(event.startDate), before, true).length}`].join(';');
+  return { previous, following };
+}
+
 function effectiveStart(
   event: TimeEvent,
   original: Date,
