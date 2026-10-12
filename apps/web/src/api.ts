@@ -1,5 +1,15 @@
 export type ApiError = { error?: { code?: string; message?: string }; message?: string };
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 export function sanitizeNextPath(rawPath: string | null | undefined): string {
   if (!rawPath) {
     return '/';
@@ -46,7 +56,7 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
       (payload as { error?: { message?: string } } | undefined)?.error?.message ??
       (payload as { message?: string } | undefined)?.message ??
       'Wystąpił błąd żądania.';
-    throw new Error(message);
+    throw new ApiRequestError(message, response.status);
   }
 
   return (payload ?? {}) as T;

@@ -9,6 +9,8 @@ import { labels } from './i18n/pl.js';
 import { FamilyPage } from './features/family/FamilyPage.js';
 import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/JoinPages.js';
 import { AuthLayout } from './components/AuthLayout.js';
+import { CalendarPage } from './features/calendar/CalendarPage.js';
+import { EventDetailsPage } from './features/calendar/EventDetailsPage.js';
 
 export const router = createBrowserRouter([
   {
@@ -37,7 +39,9 @@ export const router = createBrowserRouter([
           {
             element: <AppShell />,
             children: [
-              { index: true, element: <EmptyPage title={labels.calendar} /> },
+              { index: true, element: <CalendarPage /> },
+              { path: 'kalendarz', element: <CalendarPage /> },
+              { path: 'kalendarz/wydarzenie/:eventId', element: <EventDetailsPage /> },
               { path: 'zakupy', element: <EmptyPage title={labels.shopping} /> },
               { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
               { path: 'wiecej', element: <MorePage /> },

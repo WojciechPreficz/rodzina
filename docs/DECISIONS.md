@@ -1,5 +1,12 @@
 # Decyzje
 
+## Krok 2.5 (2026-10-12)
+
+- Kalendarz działa pod `/kalendarz` oraz pod dotychczasowym `/`. Schedule-X używa Temporal z polyfillem, a adapter otrzymuje gotowe momenty UTC z API i wyświetla je w strefie rodziny. Zależności są przeglądarkowe i nie wymagają kompilacji nowych modułów runtime na serwerze.
+- Wydarzenie z kilkoma uczestnikami pojawia się raz. Jego kolor pochodzi od pierwszego uczestnika pasującego do filtra (bez filtra: pierwszego uczestnika); szczegóły i legenda pokazują wszystkich domowników oraz ich kolory. Wydarzenie bez uczestników ma neutralny kalendarz rodzinny i jest widoczne przy pustym filtrze.
+- Krok 2.5 tworzy wyłącznie wydarzenia jednorazowe. Edycja istniejącego wydarzenia zachowuje rodzaj, regułę powtarzania i precyzję; dla serii dotyczy całości i pokazuje stosowną informację. Formularz nie wysyła pola `reminders`, więc zapis zachowuje obecne przypomnienia. Kreator i wybór zakresu pozostają w kroku 2.6.
+- Zgodnie z poleceniem właściciela testy automatyczne, weryfikacja w przeglądarce i `release:smoke` nie są uruchamiane w tym czacie. Dodano testy do późniejszego uruchomienia; wykonujemy jedynie sprawdzenie typów, lint, formatowanie i build.
+
 Decyzje projektowe, których `docs/PLAN.md` nie rozstrzyga:
 
 | Data       | Decyzja                                                                                                                                                                                                                                                                                                                                                                                                                               | Powód                                                                                                                                                                                          |

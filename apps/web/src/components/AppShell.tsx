@@ -13,7 +13,7 @@ export function AppShell() {
   return (
     <MantineAppShell padding="md" footer={{ height: 68 }}>
       <MantineAppShell.Main>
-        <Stack maw={760} mx="auto" py="md">
+        <Stack maw={1200} mx="auto" py="md" style={{ minWidth: 0 }}>
           <Text component="h1" size="xl" fw={700} c="teal.8">
             {labels.appName}
           </Text>
@@ -23,7 +23,7 @@ export function AppShell() {
       <MantineAppShell.Footer>
         <Group component="nav" aria-label="Nawigacja główna" grow gap={0} h="100%">
           {navigation.map(({ label, to }) => (
-            <NavLink key={to} component={RouterNavLink} to={to} label={label} end={to === '/'} h="100%" />
+            <NavLink key={to} component={RouterNavLink} to={to === '/' ? '/kalendarz' : to} label={label} h="100%" />
           ))}
         </Group>
       </MantineAppShell.Footer>

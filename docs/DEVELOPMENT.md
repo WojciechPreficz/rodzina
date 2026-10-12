@@ -1,5 +1,21 @@
 # Praca lokalna
 
+## Krok 2.5 — kalendarz, wydarzenia jednorazowe i szczegóły
+
+`/kalendarz` (oraz `/`) pokazuje Schedule-X: domyślnie agendę miesiąca, dodatkowo tydzień i dzień. Język to polski, tydzień zaczyna się w poniedziałek, a godziny odpowiadają strefie rodziny. Filtr „Pokaż tylko” wybiera uczestników; pusty filtr pokazuje wszystkie wydarzenia, także bez uczestników. Dane odświeżają się co 20 sekund i przy powrocie do karty.
+
+Przycisk „+” otwiera formularz wydarzenia jednorazowego. Szczegóły są dostępne pod `/kalendarz/wydarzenie/:eventId?data=YYYY-MM-DD`; parametr `data` oznacza pierwotną datę wystąpienia, również po przesunięciu wyjątkiem. Dla wydarzeń jednorazowych i odległych można go pominąć. Usunięte wydarzenie, anulowane wystąpienie lub niepoprawna data pokazują „Tego wydarzenia już nie ma”. Niezalogowany użytkownik wraca na ten sam adres po logowaniu. Edycja i usunięcie korzystają z `scope=all`; dziecko widzi te akcje tylko przy swoich wydarzeniach.
+
+Weryfikacja ręczna przez właściciela (Chrome desktop i szerokość około 390 px):
+
+1. Dodaj wydarzenie z godziną, opisem, miejscem i kilkoma uczestnikami, a potem wydarzenie całodniowe. Sprawdź daty, godziny, legendę kolorów oraz filtr każdego uczestnika w widoku miesiąca, tygodnia i dnia. Wybierz inny miesiąc i sprawdź, że pobierany zakres zmienia się wraz z widokiem.
+2. Otwórz szczegóły, zmień tytuł i datę, następnie usuń wydarzenie. Sprawdź potwierdzenie i powrót do kalendarza. Na koncie dziecka sprawdź brak akcji przy cudzym wydarzeniu oraz obecność przy własnym.
+3. Skopiuj adres szczegółów z `data`, odśwież stronę, a potem otwórz adres po wylogowaniu i zaloguj się ponownie. Sprawdź powrót do właściwego wystąpienia. Sprawdź komunikat dla usuniętego wydarzenia i anulowanego wystąpienia serii utworzonej przez API w poprzednim kroku.
+4. Otwórz kalendarz drugiego domownika w incognito lub osobnym profilu. Dodaj lub zmień wydarzenie w pierwszym oknie. W drugim powinno pojawić się po maksymalnie 20 sekundach albo od razu po powrocie do karty.
+5. Sprawdź brak poziomego przewijania na telefonie i desktopie, czytelność pól w dialogu i przycisk „+” nad dolną nawigacją.
+
+Dodano testy komponentów i adaptera w `apps/web/src/features/calendar/`, test `eventUrl` w `packages/shared/src/urls.test.ts` oraz e2e linku przez logowanie w `e2e/calendar.spec.ts` (istniejące projekty Playwright: desktop i telefon, wyłącznie headless). Na prośbę właściciela testy oraz `release:smoke` pozostają nieuruchomione. Nie dodano migracji, zmiennych środowiskowych ani cronów. Przypomnienia i kreatory wydarzeń z kroku 2.6–2.7 nie są częścią tej implementacji.
+
 ## Wymagania
 
 - Node.js 22 lub 24 oraz npm.
