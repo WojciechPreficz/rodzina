@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import {
   pushSubscriptionSchema,
@@ -7,10 +7,14 @@ import {
   pushPublicKeyResponseSchema,
   pushMutationResponseSchema,
   pushTestResponseSchema,
+  pushStatusQuerySchema,
+  pushStatusResponseSchema,
 } from '@rodzina/shared';
 import type { AppConfig } from '../../config.js';
 import type { DatabaseConnection } from '../../db/client.js';
-import { pushSubscriptions } from '../../db/schema.js';
+import { pushSubscriptions, reminders, users } from '../../db/schema.js';
+import { createEventRepository } from '../events/repository.js';
+import { resolveRecipients } from '../reminders/delivery.js';
 import type { PushSender } from './sender.js';
 
 export function registerPushRoutes(
@@ -37,6 +41,40 @@ export function registerPushRoutes(
     routes.get('/api/push/public-key', async () =>
       pushPublicKeyResponseSchema.parse({ ok: true, publicKey: config.RODZINA_VAPID_PUBLIC_KEY }),
     );
+    routes.post('/api/push/status', async (request, reply) => {
+      const parsed = pushStatusQuerySchema.safeParse(request.body);
+      if (!parsed.success)
+        return reply
+          .code(400)
+          .send({ error: { code: 'VALIDATION_ERROR', message: 'Adres subskrypcji jest niepoprawny.' } });
+      const familyId = request.familyId!;
+      const userId = request.user!.id;
+      const subscribed =
+        parsed.data.endpoint !== undefined &&
+        Boolean(
+          database.db
+            .select({ id: pushSubscriptions.id })
+            .from(pushSubscriptions)
+            .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, parsed.data.endpoint)))
+            .get(),
+        );
+      const members = database.db.select().from(users).where(eq(users.familyId, familyId)).all();
+      const repository = createEventRepository(database);
+      const sources = new Map<string, ReturnType<typeof repository.find>>();
+      const hasReminders = database.db
+        .select()
+        .from(reminders)
+        .where(and(eq(reminders.familyId, familyId), isNotNull(reminders.nextFireAt)))
+        .all()
+        .some((reminder) => {
+          if (!reminder.eventId) return false;
+          if (!sources.has(reminder.eventId))
+            sources.set(reminder.eventId, repository.find(familyId, reminder.eventId));
+          const event = sources.get(reminder.eventId);
+          return event !== undefined && resolveRecipients(reminder, { event, members }).includes(userId);
+        });
+      return pushStatusResponseSchema.parse({ ok: true, subscribed, hasReminders });
+    });
 
     routes.post('/api/push/subscriptions', async (request, reply) => {
       const parsed = pushSubscriptionSchema.safeParse(request.body);

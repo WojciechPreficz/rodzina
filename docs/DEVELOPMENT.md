@@ -293,3 +293,54 @@ Ręczny test bez ekranu UI (Chrome, lokalny build produkcyjny):
 Testy automatyczne kroku obejmują upsert, usunięcie, własność w tej samej i innej rodzinie, dziecko, 401 wszystkich endpointów, walidację, CSRF, mock PushSender, wiele urządzeń, sukcesy i błędy dostawcy. Testy service workera obejmują payload, ikony, tag, zachowanie deep linku, fokus/nawigację, otwarcie okna i niepoprawne dane.
 
 Weryfikacja 2026-10-16: 28 nowych testów przechodzi; lint (dwa wcześniejsze ostrzeżenia Fast Refresh), typecheck, build i release:smoke przechodzą. Pełne npm test: 344 testy przeszły, 15 nie przeszło (testy istniejących komponentów kalendarza/ReminderPicker i limity czasu logowania). Testy ReminderPicker na kopii HEAD sprzed zmian potwierdzają wcześniejszą niejednoznaczność selektora „Kiedy przypomnieć”. Osobne uruchomienie wszystkich testów API z jednym workerem poza sandboxem: 116/116 przechodzi (przed dodaniem ostatniego testu niepoprawnego URL). Próba testu powiadomień w headless Chromium nie potwierdziła wyświetlenia powiadomienia; ręczny test systemowego powiadomienia z checklisty pozostaje do wykonania. Nie dodano migracji, zależności runtime, konfiguracji ani cronów.
+
+## Powiadomienia — krok 3.4
+
+Ekran **Więcej > Powiadomienia** (`/wiecej/powiadomienia`) pokazuje brak wsparcia,
+blokadę, wyłączenie lub włączenie na bieżącym urządzeniu. Zgoda pojawia się wyłącznie
+po kliknięciu „Włącz powiadomienia”. „Wyślij testowe” raportuje przekazanie do usługi
+push, błędy i wygasłe subskrypcje; nie potwierdza wyświetlenia powiadomienia w systemie.
+Test trafia na wszystkie urządzenia zalogowanej osoby. W kalendarzu pojawia się baner,
+gdy są oczekujące przypomnienia dla tej osoby, a bieżące urządzenie nie jest włączone.
+Status odświeża się co 20 s i po powrocie do karty. Po odmowie zgody trzeba odblokować
+powiadomienia w ustawieniach witryny Chrome. Instrukcja instalacji PWA jest na ekranie.
+
+Dodatkowy endpoint wymagający sesji: `POST /api/push/status` z `{}` albo `{ endpoint }`.
+Zwraca `{ ok: true, subscribed, hasReminders }`, sprawdzając własność urządzenia oraz
+odbiorców przez ten sam `resolveRecipients` co job. Nie zapisuje subskrypcji ani nie
+zwraca jej adresu lub kluczy. `next_fire_at = null` nie powoduje baneru.
+
+Ręczna weryfikacja lokalna na desktopie i fizycznym Androidzie:
+
+1. Wykonaj `npm run build`, uruchom `npm start` (port 3000), a w drugim terminalu
+   `npm run dev:cron`. Na Androidzie skonfiguruj przekierowanie USB portu 3000
+   według instrukcji powyżej i otwórz `http://localhost:3000` w Chrome.
+2. Zapisz przyszłe wydarzenie z przypomnieniem dla siebie. Kalendarz powinien pokazać
+   baner prowadzący do powiadomień. Samo wejście na stronę nie prosi o zgodę.
+3. Otwórz „Więcej > Powiadomienia”, kliknij „Włącz powiadomienia” i zaakceptuj zgodę.
+   Status zmienia się na włączone, baner znika. Odśwież stronę i potwierdź ten status.
+4. Kliknij „Wyślij testowe”. Potwierdź odbiór systemowego powiadomienia; zezwól Chrome
+   na powiadomienia w systemie i wyłącz „Nie przeszkadzać”. Kliknięcie prowadzi do kalendarza.
+5. Utwórz wydarzenie za 10 minut z przypomnieniem „w chwili rozpoczęcia” dla siebie.
+   Pozostaw `dev:cron`, zamknij kartę/PWA i sprawdź odbiór z dokładnością do cyklu joba.
+   Kliknięcie ma otworzyć właściwe szczegóły z datą wystąpienia. Powtórz dla serii,
+   a także po wylogowaniu: logowanie ma przywrócić ten sam deep link.
+6. Na osobnym profilu odmów zgody: pokaże się status zablokowania i instrukcja ustawień.
+   Sprawdź ekran przy około 390 px oraz na desktopie. Po instalacji na Androidzie
+   otwórz aplikację z ikony i powtórz test odbioru.
+
+Krok nie dodaje migracji, zależności, zmiennych środowiska ani cronów. Backup i porządki
+pozostają w kroku 3.5. Rzeczywisty odbiór push i punkt 5 wymagają ręcznego potwierdzenia;
+testy z mockami i headless nie potwierdzają systemowego wyświetlenia na Androidzie.
+
+Weryfikacja 2026-10-16: testy modułu powiadomień (komponenty, klient przeglądarki i API)
+39/39 przechodzą. Playwright headless na buildzie produkcyjnym: 2/2 przechodzą dla
+1280 × 800 i 390 × 844; sprawdzono nawigację, baner, status i brak poziomego przepełnienia,
+a zrzuty obu szerokości obejrzano. `lint`, `typecheck`, `build` i `release:smoke` przechodzą;
+lint zachowuje dwa wcześniejsze ostrzeżenia Fast Refresh w auth.tsx. Pełne `npm test --
+--maxWorkers=1`: 369 zaliczonych, 12 błędów w starszych testach kalendarza i ReminderPicker
+(m.in. niejednoznaczne selektory Mantine), 6 plików nieprzechodzących. Pełny zestaw nie
+jest zielony. Pierwszą próbę testów w sandboxie przerwały błędy odczytu tymczasowych
+plików Vitest, a smoke testu — brak dostępu do registry npm; powtórzenia poza sandboxem
+potwierdziły powyższe wyniki. Odbiór systemowego push na desktopie i Androidzie oraz
+próba za 10 minut pozostają do ręcznego wykonania.

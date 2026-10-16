@@ -8,7 +8,8 @@ import { buildApp } from '../../app.js';
 import { hashToken } from '../../auth.js';
 import { loadTestConfig } from '../../config.test-utils.js';
 import { createDatabase } from '../../db/client.js';
-import { families, users, sessions, pushSubscriptions } from '../../db/schema.js';
+import { families, users, sessions, pushSubscriptions, reminders } from '../../db/schema.js';
+import { createEventRepository } from '../events/repository.js';
 import type { PushSender } from './sender.js';
 
 const config = loadTestConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' });
@@ -73,6 +74,66 @@ describe('push API', () => {
     expect(response.json()).toEqual({ ok: true, publicKey: config.RODZINA_VAPID_PUBLIC_KEY });
     expect(response.body).not.toContain(config.RODZINA_VAPID_PRIVATE_KEY);
   });
+  it('checks only the current user subscription without exposing endpoints or keys', async () => {
+    await subscribe();
+    expect((await request('POST', '/api/push/status', { endpoint: subscription.endpoint })).json()).toEqual({
+      ok: true,
+      subscribed: true,
+      hasReminders: false,
+    });
+    for (const actor of ['member', 'child', 'outsider'])
+      expect((await request('POST', '/api/push/status', { endpoint: subscription.endpoint }, actor)).json()).toEqual({
+        ok: true,
+        subscribed: false,
+        hasReminders: false,
+      });
+    expect((await request('POST', '/api/push/status', {})).json().subscribed).toBe(false);
+    expect((await request('POST', '/api/push/status', { endpoint: 'invalid' })).statusCode).toBe(400);
+  });
+  it('reports pending reminders only to resolved recipients in the same family', async () => {
+    const event = createEventRepository(database).create('family', 'admin', {
+      title: 'Future event',
+      kind: 'single',
+      datePrecision: 'day',
+      startDate: '2099-01-01',
+      startTime: null,
+      durationMinutes: null,
+      rrule: null,
+      description: null,
+      location: null,
+      participantIds: ['child'],
+      reminders: [{ type: 'offset', offsetValue: 1, offsetUnit: 'day', audience: 'participants' }],
+    });
+    for (const actor of ['admin', 'member', 'outsider'])
+      expect((await request('POST', '/api/push/status', {}, actor)).json().hasReminders).toBe(false);
+    expect((await request('POST', '/api/push/status', {}, 'child')).json().hasReminders).toBe(true);
+    database.db.update(reminders).set({ nextFireAt: null }).run();
+    expect((await request('POST', '/api/push/status', {}, 'child')).json().hasReminders).toBe(false);
+    createEventRepository(database).remove('family', event.id);
+  });
+  it('includes personal reminders and the adult fallback in the banner status', async () => {
+    const repository = createEventRepository(database);
+    repository.create('family', 'admin', {
+      title: 'Fallback event',
+      kind: 'single',
+      datePrecision: 'day',
+      startDate: '2099-01-01',
+      startTime: null,
+      durationMinutes: null,
+      rrule: null,
+      description: null,
+      location: null,
+      participantIds: [],
+      reminders: [{ type: 'offset', offsetValue: 1, offsetUnit: 'day', audience: 'owner' }],
+    });
+    database.db.update(reminders).set({ audience: 'user', userId: 'child' }).run();
+    expect((await request('POST', '/api/push/status', {}, 'child')).json().hasReminders).toBe(true);
+    expect((await request('POST', '/api/push/status', {}, 'admin')).json().hasReminders).toBe(false);
+    database.db.update(reminders).set({ audience: 'owner', userId: null }).run();
+    database.sqlite.prepare('UPDATE events SET created_by = NULL').run();
+    expect((await request('POST', '/api/push/status', {}, 'member')).json().hasReminders).toBe(true);
+    expect((await request('POST', '/api/push/status', {}, 'child')).json().hasReminders).toBe(false);
+  });
   it('upserts a browser subscription without changing its identity or creation time', async () => {
     expect((await subscribe()).statusCode).toBe(200);
     const original = rows()[0]!;
@@ -136,6 +197,7 @@ describe('push API', () => {
     ['POST', '/api/push/subscriptions', subscription],
     ['DELETE', '/api/push/subscriptions', { endpoint: subscription.endpoint }],
     ['POST', '/api/push/test', undefined],
+    ['POST', '/api/push/status', {}],
   ] as const)('requires a session for %s %s', async (method, url, payload) => {
     const response = await app.inject({ method, url, ...(payload === undefined ? {} : { payload }) });
     expect(response.statusCode).toBe(401);

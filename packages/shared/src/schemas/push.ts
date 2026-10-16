@@ -26,6 +26,10 @@ export const pushSubscriptionSchema = z
   })
   .strict();
 export const deletePushSubscriptionSchema = z.object({ endpoint: endpointSchema }).strict();
+export const pushStatusQuerySchema = z.object({ endpoint: endpointSchema.optional() }).strict();
+export const pushStatusResponseSchema = z
+  .object({ ok: z.literal(true), subscribed: z.boolean(), hasReminders: z.boolean() })
+  .strict();
 export const pushPublicKeyResponseSchema = z.object({ ok: z.literal(true), publicKey: z.string() }).strict();
 export const pushMutationResponseSchema = z.object({ ok: z.literal(true) }).strict();
 export const pushTestResponseSchema = z

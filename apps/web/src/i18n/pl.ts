@@ -5,6 +5,29 @@ export const labels = {
   meals: 'Obiady',
   more: 'Więcej',
   family: 'Rodzina',
+  notificationsUi: {
+    title: 'Powiadomienia',
+    loading: 'Sprawdzanie powiadomień…',
+    unsupported:
+      'Powiadomienia nie są obsługiwane w tej przeglądarce. Otwórz aplikację w Chrome przez HTTPS lub localhost.',
+    blocked:
+      'Powiadomienia są zablokowane. Zezwól na nie w ustawieniach witryny w Chrome, a następnie wróć do aplikacji.',
+    enabled: 'Powiadomienia są włączone na tym urządzeniu.',
+    disabled: 'Powiadomienia są wyłączone na tym urządzeniu.',
+    enable: 'Włącz powiadomienia',
+    test: 'Wyślij testowe',
+    dismissed: 'Zgoda nie została udzielona. Możesz spróbować ponownie.',
+    workerUnavailable:
+      'Aplikacja przygotowuje powiadomienia. Odśwież stronę i spróbuj ponownie. Lokalnie użyj builda produkcyjnego na porcie 3000.',
+    banner: 'Włącz powiadomienia, aby dostawać przypomnienia',
+    installTitle: 'Instalacja na Androidzie',
+    install:
+      'Otwórz aplikację w Chrome, rozwiń menu ⋮ i wybierz „Zainstaluj aplikację” lub „Dodaj do ekranu głównego”. Potem otwórz Rodzinę z ikony i włącz powiadomienia.',
+    systemHint:
+      'Zezwól Chrome na powiadomienia także w ustawieniach systemu. Tryb „Nie przeszkadzać” może je ukrywać. Test jest wysyłany na wszystkie Twoje zapisane urządzenia.',
+    testResult: (sent: number, failed: number, removed: number) =>
+      `Przekazano do usługi push: ${sent}. Błędy: ${failed}. Wygasłe subskrypcje: ${removed}. Sprawdź powiadomienia systemowe.`,
+  },
   welcomeTitle: 'Witamy w Rodzinie',
   welcomeSubtitle: 'Zarządzaj domem, wydarzeniami i zadaniami w jednym miejscu.',
   registerFamily: 'Załóż rodzinę',

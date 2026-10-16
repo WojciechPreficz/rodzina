@@ -11,6 +11,7 @@ import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/
 import { AuthLayout } from './components/AuthLayout.js';
 import { CalendarPage } from './features/calendar/CalendarPage.js';
 import { EventDetailsPage } from './features/calendar/EventDetailsPage.js';
+import { NotificationsPage } from './features/notifications/NotificationsPage.js';
 
 export const router = createBrowserRouter([
   {
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
               { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
               { path: 'wiecej', element: <MorePage /> },
               { path: 'wiecej/rodzina', element: <FamilyPage /> },
+              { path: 'wiecej/powiadomienia', element: <NotificationsPage /> },
             ],
           },
         ],

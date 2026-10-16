@@ -25,6 +25,9 @@ export function MorePage() {
         <Button component={Link} to="/wiecej/rodzina" variant="light">
           {labels.family}
         </Button>
+        <Button component={Link} to="/wiecej/powiadomienia" variant="light">
+          {labels.notificationsUi.title}
+        </Button>
         <Group justify="flex-end">
           <Button
             color="red"
