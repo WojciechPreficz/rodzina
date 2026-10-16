@@ -270,3 +270,26 @@ uprawnienia, zachowanie/przeniesienie przypomnień osobistych oraz usunięcie au
 Dodane testy komponentów obejmują zapis wspólnych, osobisty endpoint, własne wyprzedzenie,
 datę absolutną i usuwanie nieaktualnych przypomnień. Wyniki testów i `release:smoke` pozostają
 niepotwierdzone do ich osobnego uruchomienia. Lista powyżej nie potwierdza spełnienia kryteriów.
+
+## Push API i service worker — krok 3.3
+
+Wszystkie cztery endpointy wymagają sesji (również dla dziecka):
+
+- `GET /api/push/public-key` → `{ ok: true, publicKey }` (wyłącznie publiczny klucz).
+- `POST /api/push/subscriptions` przyjmuje wynik `subscription.toJSON()`: `{ endpoint, keys: { p256dh, auth }, expirationTime? }`. Endpoint musi używać HTTPS, klucze mają format base64url. Upsert własnej subskrypcji zwraca `{ ok: true }`; próba nadpisania cudzej daje 409.
+- `DELETE /api/push/subscriptions` z `{ endpoint }` usuwa wyłącznie własną subskrypcję. Brak wpisu również daje `{ ok: true }`.
+- `POST /api/push/test` wysyła na wszystkie własne urządzenia i zwraca `{ ok: true, sent, failed, removed }`. Brak urządzeń daje zera. Odpowiedzi dostawcy 404/410 usuwają wygasłe subskrypcje; inne błędy zwiększają `failed`.
+
+Przy zmianie konta w tej samej przeglądarce usuń poprzednią subskrypcję API z sesją jej właściciela i wykonaj `unsubscribe()` w przeglądarce przed zapisaniem nowej. Ekran obsługi powiadomień powstaje w kroku 3.4.
+
+Ręczny test bez ekranu UI (Chrome, lokalny build produkcyjny):
+
+1. Uruchom `npm run build`, następnie `npm start`; otwórz `http://localhost:3000`. W DevTools > Application > Service Workers poczekaj na aktywny `/sw.js`. Dla nowego builda użyj „Update” i przeładuj stronę.
+2. Wyłącznie po świadomej akcji w konsoli wykonaj `await Notification.requestPermission()` i zaakceptuj zgodę. System musi zezwalać Chrome na wyświetlanie powiadomień.
+3. W polu Push w Application > Service Workers wklej JSON z istniejącym adresem wydarzenia: `{"title":"Test Rodzina","body":"Kliknij, aby otworzyć wydarzenie","tag":"rodzina-manual-test","url":"/kalendarz/wydarzenie/ID?data=2026-10-20"}`. Naciśnij Push. Sprawdź tytuł, treść i ikonę; ponowienie z tym samym tagiem zastępuje powiadomienie.
+4. Kliknij powiadomienie: istniejąca karta aplikacji ma dostać fokus i otworzyć wskazane wystąpienie. Powtórz po zamknięciu karty i po wylogowaniu; istniejący mechanizm logowania zachowuje adres powrotu.
+5. Wyślij zwykły tekst lub pusty push: pojawia się ogólne powiadomienie Rodzina, prowadzące do kalendarza. Zewnętrzne adresy są zastępowane kalendarzem.
+
+Testy automatyczne kroku obejmują upsert, usunięcie, własność w tej samej i innej rodzinie, dziecko, 401 wszystkich endpointów, walidację, CSRF, mock PushSender, wiele urządzeń, sukcesy i błędy dostawcy. Testy service workera obejmują payload, ikony, tag, zachowanie deep linku, fokus/nawigację, otwarcie okna i niepoprawne dane.
+
+Weryfikacja 2026-10-16: 28 nowych testów przechodzi; lint (dwa wcześniejsze ostrzeżenia Fast Refresh), typecheck, build i release:smoke przechodzą. Pełne npm test: 344 testy przeszły, 15 nie przeszło (testy istniejących komponentów kalendarza/ReminderPicker i limity czasu logowania). Testy ReminderPicker na kopii HEAD sprzed zmian potwierdzają wcześniejszą niejednoznaczność selektora „Kiedy przypomnieć”. Osobne uruchomienie wszystkich testów API z jednym workerem poza sandboxem: 116/116 przechodzi (przed dodaniem ostatniego testu niepoprawnego URL). Próba testu powiadomień w headless Chromium nie potwierdziła wyświetlenia powiadomienia; ręczny test systemowego powiadomienia z checklisty pozostaje do wykonania. Nie dodano migracji, zależności runtime, konfiguracji ani cronów.

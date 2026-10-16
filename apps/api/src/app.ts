@@ -27,6 +27,8 @@ import type { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
 import { registerEventRoutes } from './modules/events/routes.js';
 import { registerReminderRoutes } from './modules/reminders/routes.js';
+import { registerPushRoutes } from './modules/push/routes.js';
+import { createPushSender, type PushSender } from './modules/push/sender.js';
 
 type Database = ReturnType<typeof createDatabase>;
 
@@ -230,7 +232,11 @@ function sendError(reply: FastifyReply, status: number, code: string, message: s
   return reply.code(status).send({ error: { code, message } });
 }
 
-export async function buildApp(config: AppConfig, database: Database): Promise<FastifyInstance> {
+export async function buildApp(
+  config: AppConfig,
+  database: Database,
+  options: { pushSender?: PushSender } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({ trustProxy: true, logger: config.NODE_ENV !== 'test' });
   const version = process.env.npm_package_version ?? '0.1.0';
 
@@ -1158,6 +1164,7 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
 
   registerEventRoutes(app, database);
   registerReminderRoutes(app, database);
+  registerPushRoutes(app, database, config, options.pushSender ?? createPushSender(config));
 
   if (config.NODE_ENV === 'production') {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', config.RODZINA_WEB_DIR);
