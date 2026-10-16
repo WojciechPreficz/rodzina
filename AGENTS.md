@@ -4,7 +4,8 @@
 
 - Zanim zaczniesz pracę, przeczytaj `docs/PLAN.md` w całości.
 - Realizuj dokładnie jedną wskazaną fazę naraz. Nie implementuj elementów z sekcji „Poza zakresem” ani z kolejnych faz.
-- Fazy 0-7 uruchamiamy i testujemy wyłącznie lokalnie. Nie wdrażaj na serwer przed fazą 8.
+- Kolejność prac: fazy 0-3, pierwszy deploy (wykonany: https://rodzina.preficze.pl), faza 4 (Android i przypomnienia offline), faza 5 (zakupy), faza 6 (obiady), faza 7 (zadania), faza 8 (dokumenty). Nie planujemy wydania open source. Pierwszy deploy ma osobne historyczne kroki D.1-D.4; nie powtarzaj go.
+- Funkcje rozwijamy i testujemy lokalnie. Istniejący serwer aktualizujemy sprawdzoną paczką release według `docs/DEPLOY.md`; APK budujemy, podpisujemy i aktualizujemy osobno.
 - Interfejs użytkownika oraz dokumentacja w `docs/` są po polsku. Kod, nazwy, komentarze i commity są po angielsku.
 
 ## Stack

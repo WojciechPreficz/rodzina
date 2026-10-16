@@ -1,6 +1,11 @@
-# Wdrożenie na cPanel vh.pl (instrukcja dla Fazy 8)
+# Wdrożenie i aktualizacje na cPanel vh.pl
 
-**Ta instrukcja opisuje przyszłe wdrożenie. W Fazach 0-7 wszystko uruchamiamy i testujemy lokalnie; nie wykonuj poniższych kroków na serwerze.**
+**Pierwsze wdrożenie wykonano po fazie 3; aplikacja działa pod https://rodzina.preficze.pl (potwierdzenie właściciela z 16.10.2026).** W planie jest to zapis historyczny z krokami D.1-D.4, bez numeru fazy. Dalsza kolejność to: faza 4 Android, 5 zakupy, 6 obiady, 7 zadania i 8 dokumenty. Funkcje rozwijamy i testujemy lokalnie, a serwer aktualizujemy sprawdzoną paczką release. Nie powtarzamy pierwszego wdrożenia ani zakładania istniejącej rodziny.
+
+Historyczny stan lokalnej weryfikacji z 16.10.2026, zapisany przed potwierdzeniem wdrożenia: `npm ci`, lint, typecheck, release (z buildem)
+i `release:smoke` zakończyły się powodzeniem. `npm test`: 375 testów przeszło, 12 nie przeszło
+w 6 plikach testów UI kalendarza i przypomnień. Przed kolejną aktualizacją trzeba wyjaśnić te błędy, jeśli nadal występują;
+gotowy ZIP i poprawny smoke nie oznaczają zaliczenia pełnej weryfikacji. Później właściciel potwierdził działanie strony; testy push na Androidzie i obserwacja cronów wymagają osobnego potwierdzenia.
 
 ## 1. Domena i certyfikat
 
@@ -9,7 +14,38 @@
 
 ## 2. Zbudowanie i wgranie paczki
 
-Lokalnie uruchom `npm ci` i `npm run release`. Wgraj `release.zip` do katalogu `~/rodzina/` i rozpakuj go. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`.
+Przed instalacją zatrzymaj lokalną aplikację (`npm run dev`, `npm run dev:api`, `npm start`), `npm run dev:cron` i testy w trybie watch. W każdym terminalu, w którym działają, użyj `Ctrl+C` i poczekaj na zakończenie procesu.
+
+Lokalnie, w katalogu repozytorium, uruchom kolejno:
+
+```powershell
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run release
+npm run release:smoke
+```
+
+`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, start serwera i oba joby na tymczasowej bazie. Wgraj `release.zip` do katalogu `~/rodzina/` i rozpakuj go. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
+
+### Windows: `npm ci` kończy się `EPERM ... unlink ... argon2.win32-x64-msvc.node`
+
+`npm ci` usuwa dotychczasowe zależności przed instalacją. Windows nie pozwala usunąć natywnego modułu Argon2, gdy jest załadowany przez działające API lub testy. `Ctrl+C` w terminalu, w którym instalacja już się zakończyła błędem, nie zatrzymuje API z innego terminala.
+
+1. Zatrzymaj aplikację i testy w ich terminalach, jak opisano wyżej, po czym ponów `npm ci`.
+2. Jeśli terminal został zamknięty, sprawdź procesy w PowerShell:
+
+   ```powershell
+   Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+     Select-Object ProcessId, ParentProcessId, CommandLine | Format-List
+   ```
+
+   Zidentyfikuj proces API lub watchera tej aplikacji po ścieżce repozytorium i poleceniu. Zatrzymaj tylko ustalony proces przez `Stop-Process -Id <PID>`, a następnie ponów instalację. Nie zatrzymuj wszystkich procesów Node: mogą należeć do innych aplikacji, w tym Codex.
+
+3. Jeżeli blokada pozostaje, uruchom ponownie Windows i wykonaj `npm ci` przed ponownym startem aplikacji. Jeśli błąd występuje także wtedy, sprawdź uprawnienia pliku i historię ochrony antywirusa.
+
+Nie usuwaj `package-lock.json` ani lokalnej bazy w celu naprawy tego błędu.
 
 ## 3. Konfiguracja aplikacji Node
 
@@ -40,7 +76,7 @@ W aplikacji Node wykonaj **Run NPM Install**. Zależności runtime w paczce są 
 - Cookie `sid` jest HttpOnly, SameSite=Lax i Secure w produkcji. Sesja i cookie są ważne 60 dni i odnawiane przy aktywności. Token sesji jest przechowywany w bazie jako SHA-256; hasła i PIN-y jako Argon2id.
 - Zaproszenie jest jednorazowe i ważne 7 dni. Link resetu hasła tworzy administrator, jest jednorazowy i ważny 24 godziny. Aplikacja nie wysyła e-maili: link należy skopiować lub udostępnić z ekranu Rodzina.
 - Role dorosłych można zmieniać między administratorem i dorosłym. Kont dzieci nie zamieniamy w dorosłych ani odwrotnie. Ostatni administrator nie może zostać usunięty ani zdegradowany.
-- Faza 1 nie dodaje nowych zmiennych, zadań crona ani zależności runtime. Paczka zawiera istniejące migracje auth oraz natywne pakiety `better-sqlite3` i `@node-rs/argon2`; instalacja musi użyć gotowych binariów. Nie wdrażamy jej przed fazą 8.
+- Faza 1 nie dodaje nowych zmiennych, zadań crona ani zależności runtime. Paczka zawiera istniejące migracje auth oraz natywne pakiety `better-sqlite3` i `@node-rs/argon2`; instalacja musi użyć gotowych binariów. Pierwszy deploy obejmował stan po fazie 3.
 
 ## 4. Migracje, restart i weryfikacja
 
@@ -50,7 +86,7 @@ Migracje Drizzle są dołączone w `drizzle/` i wykonywane przy starcie API. Zre
 https://rodzina.<domena>/api/health
 ```
 
-Oczekiwana odpowiedź zawiera `ok: true` oraz `dbOk: true`. Zweryfikuj także stronę główną. W fazie 8 załóż rodzinę, utwórz zaproszenie i otwórz je w drugim profilu przeglądarki. Obie osoby powinny być widoczne w Więcej > Rodzina. Sprawdź też dodanie dziecka, logowanie kodem rodziny i PIN-em oraz reset hasła przez wygenerowany link.
+Oczekiwana odpowiedź zawiera `ok: true` oraz `dbOk: true`. Zweryfikuj także stronę główną. Przy pierwszym uruchomieniu załóż rodzinę, utwórz zaproszenie i otwórz je w drugim profilu przeglądarki. Obie osoby powinny być widoczne w Więcej > Rodzina. Sprawdź też dodanie dziecka, logowanie kodem rodziny i PIN-em oraz reset hasła przez wygenerowany link.
 
 ## 5. Cron cPanel
 
@@ -72,7 +108,7 @@ i usuwaniem kaskadowym po usunięciu użytkownika. Serwer uruchamia migracje prz
 Job zakłada już zmigrowaną bazę. `web-push` oraz jego zależności są pakietami JavaScript;
 nie wymagają nowych kompilacji natywnych na serwerze i trafiają do zależności paczki release.
 
-Docelowy wpis crona przypomnień (do ustawienia dopiero w fazie 8):
+Docelowy wpis crona przypomnień (konfiguracja pierwszego wdrożenia; przy aktualizacji sprawdź istniejący wpis, nie dodawaj duplikatu):
 
 ```cron
 */5 * * * * cd /home/<user>/rodzina && /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/send-reminders.js >> /home/<user>/rodzina-data/logs/reminders.log 2>&1
@@ -101,7 +137,7 @@ względem katalogu roboczego; na hostingu ustaw bezwzględne
 `/home/<user>/rodzina-data/backups`. Job tworzy katalog, jeśli go brakuje.
 Katalog powinien być dostępny wyłącznie dla konta aplikacji i leżeć poza katalogiem publicznym.
 
-Wpis dzienny o 03:15 czasu serwera (do ustawienia dopiero w fazie 8):
+Wpis dzienny o 03:15 czasu serwera (konfiguracja pierwszego wdrożenia; przy aktualizacji sprawdź istniejący wpis, nie dodawaj duplikatu):
 
 ```cron
 15 3 * * * cd /home/<user>/rodzina && /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/backup-db.js >> /home/<user>/rodzina-data/logs/backup.log 2>&1
@@ -128,7 +164,7 @@ i sprawdza integralność kopii oraz obecność tabel przypomnień i subskrypcji
 
 ## 6. Aktualizacja
 
-Procedura aktualizacji aplikacji zostanie uzupełniona i zweryfikowana w Fazie 8. Przed aktualizacją bazy wykonaj kopię jobem `backup-db.js` opisanym powyżej.
+Procedurę aktualizacji opisuje krok D.4 historycznego etapu pierwszego wdrożenia w `PLAN.md`; jej przećwiczenie wymaga osobnego potwierdzenia. Przed aktualizacją bazy wykonaj kopię jobem `backup-db.js` opisanym powyżej.
 
 Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy przypomnień są zapisywane i przeliczane przy zapisie wydarzeń; wysyłka będzie realizowana w fazie 3.
 

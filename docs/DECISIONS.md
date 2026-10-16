@@ -1,5 +1,46 @@
 # Decyzje
 
+## Numeracja zgodna z kolejnością prac (2026-10-16)
+
+- Na prośbę właściciela fazy i ich kroki otrzymują numery zgodne z kolejnością realizacji:
+  Android 4 (dawniej 9), zakupy 5 (dawniej 4), obiady 6 (dawniej 5), zadania 7 (dawniej 6),
+  dokumenty 8 (dawniej 7). Fazy 0-3 zachowują numery.
+- Wykonany pierwszy deploy jest osobnym zapisem historycznym po fazie 3, z krokami D.1-D.4
+  zamiast dawnej numeracji 8.1-8.4. Aktualna faza 8 dotyczy wyłącznie dokumentów.
+- Zaktualizowano kolejność sekcji, listę zadań i odwołania w planie, `AGENTS.md` i `DEPLOY.md`.
+  Starsze wpisy poniżej zachowują historyczną numerację; obowiązuje nowsza decyzja i aktualny plan.
+  Zmiana numerów nie zmienia zakresu kroków ani statusu ich testów.
+
+## Android i działające wdrożenie (2026-10-16)
+
+- Właściciel potwierdził wykonanie deployu na https://rodzina.preficze.pl. Faza 8 pozostaje
+  zapisem wykonanej procedury; samo potwierdzenie działania strony nie zalicza testów push,
+  odtwarzania kopii ani obserwacji cronów po dobie. Kolejne wdrożenia to aktualizacje według `DEPLOY.md`.
+- Rezygnujemy z planowanej fazy wydania open source. Numer 9 przejmuje etap Android przez
+  Capacitor, wykonywany po wdrożeniu i przed fazami 4-7. Pozostałe numery nie zmieniają się.
+  Historyczne odnośniki do kroków 9.x wydania OSS nie są aktualnymi zadaniami.
+- APK wykorzysta wspólny interfejs React, lokalne pliki aplikacji i systemowe alarmy;
+  API, baza rodziny i backupy pozostają na vh.pl. PWA pozostaje dostępna z Web Push.
+  Rezygnacja z publikacji nie zmienia automatycznie istniejących deklaracji licencji MIT.
+- Przypomnienia offline opierają się na harmonogramie wcześniej pobranym przez konkretny
+  telefon. Zmiany i cofnięcie uprawnień na innym urządzeniu wymagają synchronizacji.
+  Dla prywatnych zadań lokalne powiadomienia mają ogólną treść bez danych zadania;
+  szczegóły wymagają aktualnego sprawdzenia dostępu online. Nie obiecujemy natychmiastowego
+  unieważnienia alarmu na telefonie bez internetu. Własne wylogowanie usuwa lokalne alarmy i cache.
+- Faza 9 obejmuje tylko kalendarz i jego przypomnienia. Fazy 6 i 7 rozbudują ten sam
+  mechanizm o zadania i dokumenty; nie implementujemy tych modułów wcześniej.
+
+## Wcześniejsze wdrożenie (2026-10-16)
+
+- Na prośbę właściciela zmieniono kolejność na: fazy 0-3, faza 8, fazy 4-7,
+  opcjonalnie faza 9. Numeracja pozostaje bez zmian, aby zachować odnośniki do kroków.
+  Pierwszy deploy obejmuje konta rodziny, kalendarz i push; pozostałe moduły nie blokują
+  wdrożenia. Testy i kryteria akceptacji nadal obowiązują.
+- Instalacja `npm ci` na Windows wymaga zatrzymania API i watcherów tego projektu.
+  Potwierdzono blokadę modułu `argon2.win32-x64-msvc.node` przez lokalny proces API;
+  po zatrzymaniu procesów instalacja zakończyła się poprawnie. Instrukcja rozwiązania
+  błędu `EPERM` znajduje się w `DEPLOY.md`.
+
 ## Krok 2.7 (2026-10-12)
 
 - Wspólny `ReminderPicker` przyjmuje listę dozwolonych odbiorców i domyślnego odbiorcę.
