@@ -296,6 +296,13 @@ Weryfikacja 2026-10-16: 28 nowych testów przechodzi; lint (dwa wcześniejsze os
 
 ## Powiadomienia — krok 3.4
 
+Powtórne kliknięcie „Wyślij testowe” zastępuje poprzednie powiadomienie testowe
+i ponownie sygnalizuje je przez `renotify: true`. Bez tej opcji Chrome może odebrać
+push i zaktualizować powiadomienie bez pokazania kolejnego banera. Ręczny test:
+kliknij „Wyślij testowe” dwukrotnie w odstępie kilku sekund, pozostawiając pierwsze
+powiadomienie w centrum powiadomień; oba wysłania powinny zostać zasygnalizowane,
+jeżeli ustawienia systemu zezwalają na banery.
+
 Ekran **Więcej > Powiadomienia** (`/wiecej/powiadomienia`) pokazuje brak wsparcia,
 blokadę, wyłączenie lub włączenie na bieżącym urządzeniu. Zgoda pojawia się wyłącznie
 po kliknięciu „Włącz powiadomienia”. „Wyślij testowe” raportuje przekazanie do usługi

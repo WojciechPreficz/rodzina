@@ -33,6 +33,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(typeof payload.title === 'string' ? payload.title : 'Rodzina', {
       body: typeof payload.body === 'string' ? payload.body : 'Masz nowe powiadomienie.',
       tag: typeof payload.tag === 'string' ? payload.tag : 'rodzina',
+      // Each manual test should alert again while replacing the previous test.
+      ...(payload.tag === 'rodzina-push-test' ? { renotify: true } : {}),
       data: { url: notificationUrl(payload.url) },
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',

@@ -54,6 +54,17 @@ describe('push service worker', () => {
       badge: '/icons/icon-192.png',
     });
   });
+  it('alerts again for repeated manual tests with the same tag', async () => {
+    for (let i = 0; i < 2; i++) {
+      await dispatch('push', {
+        data: { json: () => ({ title: 'Test', tag: 'rodzina-push-test' }) },
+      });
+    }
+    expect(showNotification).toHaveBeenCalledTimes(2);
+    for (const [, options] of showNotification.mock.calls) {
+      expect(options).toMatchObject({ tag: 'rodzina-push-test', renotify: true });
+    }
+  });
   it.each([
     undefined,
     {
