@@ -53,7 +53,7 @@ const event: CalendarEvent = {
 
 function show(date = '2026-10-12') {
   render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter initialEntries={[`/kalendarz/wydarzenie/event?data=${date}`]}>
         <Routes>
           <Route path="/kalendarz/wydarzenie/:eventId" element={<EventDetailsPage />} />

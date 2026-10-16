@@ -37,7 +37,7 @@ afterEach(() => {
 describe('calendar creation modes', () => {
   it.each(['Jednorazowe', 'Powtarzające się', 'Odległy termin'])('opens the %s form from the FAB', (mode) => {
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <MemoryRouter>
           <CalendarPage />
         </MemoryRouter>
@@ -48,8 +48,10 @@ describe('calendar creation modes', () => {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: mode }));
     expect(screen.getByLabelText(/^Tytuł/)).toBeInTheDocument();
-    if (mode === 'Powtarzające się') expect(screen.getByLabelText('Zakończenie')).toBeInTheDocument();
-    if (mode === 'Odległy termin') expect(screen.getByLabelText('Dokładność terminu')).toBeInTheDocument();
+    if (mode === 'Powtarzające się')
+      expect(screen.getByLabelText('Zakończenie', { selector: 'input' })).toBeInTheDocument();
+    if (mode === 'Odległy termin')
+      expect(screen.getByLabelText('Dokładność terminu', { selector: 'input' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Anuluj' }));
     expect(screen.getByRole('button', { name: 'Powtarzające się' })).toBeInTheDocument();
   });

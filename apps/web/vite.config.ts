@@ -46,7 +46,15 @@ export default defineConfig(({ mode }) => ({
     },
   },
   test: {
-    exclude: [...configDefaults.exclude, 'e2e/**', '**/dist-android/**', 'android/**', '.android-tools/**'],
+    exclude: [
+      ...configDefaults.exclude,
+      '**/dist/**',
+      'e2e/**',
+      '**/dist-android/**',
+      'android/**',
+      '.android-tools/**',
+    ],
+    maxWorkers: 4,
     environment: 'jsdom',
     setupFiles: [],
   },

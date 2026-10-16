@@ -36,13 +36,13 @@ it('lets a child add only their own reminder through the personal endpoint', asy
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <MantineProvider>
+      <MantineProvider env="test">
         <MyReminders event={{ id: 'adult-event' } as CalendarEvent} />
       </MantineProvider>
     </QueryClientProvider>,
   );
   await screen.findByText('Brak przypomnień.');
-  expect(screen.getByLabelText('Odbiorcy')).toHaveValue('Tylko ja');
+  expect(screen.getByLabelText('Odbiorcy', { selector: 'input' })).toHaveValue('Tylko ja');
   fireEvent.click(screen.getByRole('button', { name: 'Dodaj przypomnienie' }));
   await waitFor(() =>
     expect(apiFetch).toHaveBeenCalledWith('/api/reminders/mine', {
@@ -61,7 +61,7 @@ it('shows a stale absolute reminder and deletes it through the personal endpoint
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <MantineProvider>
+      <MantineProvider env="test">
         <MyReminders event={{ id: 'adult-event' } as CalendarEvent} />
       </MantineProvider>
     </QueryClientProvider>,

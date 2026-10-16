@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { DistantEvents } from './DistantEvents.js';
 
@@ -21,7 +21,16 @@ vi.mock('./calendarQueries.js', () => ({
   }),
 }));
 vi.mock('./toScheduleX.js', () => ({ todayInTimezone: () => '2026-10-12' }));
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+  );
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('distant deadlines', () => {
   it('shows the month, countdown and a details link, and respects participant filters', () => {

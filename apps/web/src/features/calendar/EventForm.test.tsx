@@ -6,6 +6,7 @@ import { EventForm } from './EventForm.js';
 import { wizardFromRrule } from '@rodzina/shared';
 
 beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
@@ -21,6 +22,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
   vi.unstubAllGlobals();
 });
 
@@ -28,14 +30,14 @@ describe('EventForm', () => {
   it('sends shared reminders in the event body and sends an empty array after removal', async () => {
     const save = vi.fn(async () => {});
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <EventForm members={[]} initialDate="2026-10-12" pending={false} onSave={save} onCancel={() => {}} />
       </MantineProvider>,
     );
     fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Basen' } });
-    fireEvent.click(screen.getByLabelText('Kiedy przypomnieć'));
+    fireEvent.click(screen.getByLabelText('Kiedy przypomnieć', { selector: 'input' }));
     fireEvent.click(screen.getByRole('option', { name: '15 minut przed' }));
-    fireEvent.click(screen.getByLabelText('Odbiorcy'));
+    fireEvent.click(screen.getByLabelText('Odbiorcy', { selector: 'input' }));
     fireEvent.click(screen.getByRole('option', { name: 'Cała rodzina' }));
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj przypomnienie' }));
     await waitFor(() =>
@@ -56,7 +58,7 @@ describe('EventForm', () => {
   it('creates a weekly Tuesday/Thursday series through the wizard', async () => {
     const save = vi.fn(async () => {});
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <EventForm
           kind="recurring"
           members={[]}
@@ -84,7 +86,7 @@ describe('EventForm', () => {
   it('saves a monthly distant deadline as the first day with no time', async () => {
     const save = vi.fn(async () => {});
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <EventForm
           kind="distant"
           members={[]}
@@ -96,7 +98,7 @@ describe('EventForm', () => {
       </MantineProvider>,
     );
     fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Kontrola' } });
-    fireEvent.click(screen.getByLabelText('Dokładność terminu'));
+    fireEvent.click(screen.getByLabelText('Dokładność terminu', { selector: 'input' }));
     fireEvent.click(screen.getByRole('option', { name: 'Tylko miesiąc' }));
     fireEvent.change(screen.getByLabelText(/^Data/), { target: { value: '2028-05' } });
     expect(screen.getByRole('switch', { name: 'Całodniowe' })).toBeDisabled();
@@ -118,7 +120,7 @@ describe('EventForm', () => {
   it('creates a timed single event without sending reminder changes', async () => {
     const save = vi.fn(async () => {});
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <EventForm members={[]} initialDate="2026-10-12" pending={false} onSave={save} onCancel={() => {}} />
       </MantineProvider>,
     );
@@ -143,7 +145,7 @@ describe('EventForm', () => {
   it.each(['', '14:30'])('saves a distant deadline with optional time "%s"', async (time) => {
     const save = vi.fn(async () => {});
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <EventForm
           kind="distant"
           members={[]}
@@ -175,7 +177,7 @@ describe('EventForm', () => {
   it('clears time and duration for all-day events', async () => {
     const save = vi.fn(async () => {});
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <EventForm members={[]} initialDate="2026-10-12" pending={false} onSave={save} onCancel={() => {}} />
       </MantineProvider>,
     );
@@ -193,7 +195,7 @@ describe('EventForm', () => {
       throw new Error('Nie udało się zapisać.');
     });
     render(
-      <MantineProvider>
+      <MantineProvider env="test">
         <EventForm members={[]} initialDate="2026-10-12" pending={false} onSave={save} onCancel={() => {}} />
       </MantineProvider>,
     );
