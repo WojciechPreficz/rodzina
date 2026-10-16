@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createECDH } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -52,6 +53,8 @@ try {
 
   const port = 3000 + Math.floor(Math.random() * 10000);
   const envFile = path.join(temporaryDirectory, 'smoke.env');
+  const vapid = createECDH('prime256v1');
+  vapid.generateKeys();
   await writeFile(
     envFile,
     [
@@ -61,6 +64,9 @@ try {
       `RODZINA_WEB_DIR=${path.join(temporaryDirectory, 'public')}`,
       'RODZINA_PUBLIC_URL=http://localhost',
       'RODZINA_ALLOW_REGISTRATION=false',
+      `RODZINA_VAPID_PUBLIC_KEY=${vapid.getPublicKey().toString('base64url')}`,
+      `RODZINA_VAPID_PRIVATE_KEY=${vapid.getPrivateKey().toString('base64url')}`,
+      'RODZINA_VAPID_SUBJECT=mailto:smoke@example.com',
       '',
     ].join('\n'),
   );
@@ -111,6 +117,9 @@ try {
   }
 
   await run(process.execPath, ['--env-file', envFile, 'dist/jobs/heartbeat.js'], { cwd: temporaryDirectory });
+  await run(process.execPath, ['--env-file', envFile, 'dist/jobs/send-reminders.js', '--now=2026-10-16T10:00:00Z'], {
+    cwd: temporaryDirectory,
+  });
   const { default: Database } = await import('better-sqlite3');
   const sqlite = new Database(path.join(temporaryDirectory, 'smoke.db'));
   try {

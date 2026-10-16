@@ -6,7 +6,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { hashToken, randomToken } from './auth.js';
-import { loadConfig } from './config.js';
+import { loadTestConfig as loadConfig } from './config.test-utils.js';
 import { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
 

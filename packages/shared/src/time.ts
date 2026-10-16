@@ -282,16 +282,32 @@ export function computeNextFireAt(
     return fire > nowUtc ? fire : null;
   }
 
-  const event = source;
+  return computeNextEventReminder(reminder, source, nowUtc, tz)?.fireAt ?? null;
+}
+
+/** Includes the original occurrence identity for delivery, including moved exceptions. */
+export function computeNextEventReminder(
+  reminder: Extract<TimeReminder, { type: 'offset' }>,
+  event: TimeEvent & { exceptions?: readonly TimeException[] },
+  nowUtc: number,
+  tz: string,
+): { fireAt: number; occurrenceDate: string; allDay: boolean } | null {
+  if (!Number.isSafeInteger(reminder.offsetValue) || reminder.offsetValue < 0) {
+    throw new RangeError('Reminder offset must be a non-negative integer');
+  }
   const rule = eventRule(event);
   const exceptions = event.exceptions ?? [];
   const overrides = new Map(exceptions.map((value) => [value.originalDate, value]));
   let next: number | null = null;
+  let match: { fireAt: number; occurrenceDate: string; allDay: boolean } | null = null;
   const consider = (original: Date, exception?: TimeException) => {
     if (exception?.isCancelled) return false;
     const start = effectiveStart(event, original, exception);
     const fire = offsetFireAt(reminder, start.date, start.time, tz);
-    if (fire > nowUtc && (next === null || fire < next)) next = fire;
+    if (fire > nowUtc && (next === null || fire < next)) {
+      next = fire;
+      match = { fireAt: fire, occurrenceDate: dateString(original), allDay: start.time === null };
+    }
     return fire > nowUtc;
   };
 
@@ -303,7 +319,7 @@ export function computeNextFireAt(
   }
   if (!rule) {
     if (!overrides.has(event.startDate)) consider(floatingDate(event.startDate, event.startTime ?? '00:00'));
-    return next;
+    return match;
   }
 
   let candidate = rule.after(searchStart(reminder, nowUtc, tz), true);
@@ -313,5 +329,5 @@ export function computeNextFireAt(
     }
     candidate = rule.after(candidate);
   }
-  return next;
+  return match;
 }

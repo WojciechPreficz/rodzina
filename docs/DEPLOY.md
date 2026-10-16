@@ -23,6 +23,9 @@ RODZINA_DATABASE_PATH=/home/<user>/rodzina-data/rodzina.db
 RODZINA_WEB_DIR=./public
 RODZINA_PUBLIC_URL=https://rodzina.<domena>
 RODZINA_ALLOW_REGISTRATION=true
+RODZINA_VAPID_PUBLIC_KEY=<klucz publiczny z generatora>
+RODZINA_VAPID_PRIVATE_KEY=<klucz prywatny z tej samej pary>
+RODZINA_VAPID_SUBJECT=mailto:admin@twoja-domena.pl
 ```
 
 Konfigurację odczytuje `server.cjs` przez `RODZINA_ENV_FILE` albo domyślnie `/home/<user>/rodzina-data/.env`. Nie umieszczaj `.env` w paczce ani repozytorium. Sesje są losowymi tokenami przechowywanymi w bazie jako hash; nie potrzeba sekretu podpisującego cookie.
@@ -58,7 +61,42 @@ Na etapie Fazy 0 heartbeat służy wyłącznie do sprawdzenia dostępu crona do 
 */5 * * * * /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/heartbeat.js >> /home/<user>/rodzina-data/logs/heartbeat.log 2>&1
 ```
 
-Job heartbeat nie jest funkcją docelową i zostanie usunięty w Fazie 3. Docelowe zadania okresowe dla przypomnień i backupu zostaną opisane w swoich fazach.
+Job heartbeat nie jest funkcją docelową i zostanie usunięty w kroku 3.5. Cron przypomnień jest opisany poniżej; backup powstanie w kroku 3.5.
+
+### Wysyłka przypomnień — krok 3.2
+
+Przed uruchomieniem serwera i jobów wygeneruj `npm run vapid:generate`. Wklej obydwa klucze
+do `.env` i ustaw `RODZINA_VAPID_SUBJECT` na kontakt administratora (`mailto:` albo HTTPS).
+Trzy zmienne są wymagane; walidacja sprawdza długości, format i zgodność pary P-256.
+Klucz prywatny pozostaje wyłącznie w `.env`; zachowaj tę samą parę przy aktualizacjach.
+Zmiana pary wymaga ponownej subskrypcji urządzeń. Generator używa kryptografii Node.
+
+Nowa migracja `0012_gigantic_maelstrom.sql` dodaje `push_subscriptions` z unikalnym endpointem
+i usuwaniem kaskadowym po usunięciu użytkownika. Serwer uruchamia migracje przed startem.
+Job zakłada już zmigrowaną bazę. `web-push` oraz jego zależności są pakietami JavaScript;
+nie wymagają nowych kompilacji natywnych na serwerze i trafiają do zależności paczki release.
+
+Docelowy wpis crona przypomnień (do ustawienia dopiero w fazie 8):
+
+```cron
+*/5 * * * * cd /home/<user>/rodzina && /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/send-reminders.js >> /home/<user>/rodzina-data/logs/reminders.log 2>&1
+```
+
+Zastąp `<user>` loginem hostingu i zweryfikuj ścieżkę Node w nodevenv. Wpis nie wymaga
+aktywnego procesu Passengera. Rezerwacja wszystkich należnych przypomnień i zapis kolejnych
+terminów odbywają się w jednej transakcji SQLite `BEGIN IMMEDIATE`, przed wysyłką HTTP.
+Job pomija spóźnienia ponad 2 godziny; dla offsetów od dat bez godziny (baza 09:00) ponad
+12 godzin. Graniczne 2 i 12 godzin są jeszcze wysyłane. Spóźnione są również rezerwowane,
+a kolejne terminy cyklu obliczane względem czasu joba, bez nadrabiania wszystkich zaległych.
+Odpowiedzi 404/410 usuwają nieważną subskrypcję. Sukces zapisuje `last_success_at`.
+Inne błędy pozostawiają subskrypcję, nie cofają rezerwacji i dają niezerowy kod zakończenia.
+Logi JSON trafiają do stdout bez kluczy, endpointów ani treści powiadomień.
+
+Rezerwacja oznacza jedną próbę wysyłki. Awaria po jej zatwierdzeniu lub błąd dostawcy może
+spowodować pominięcie powiadomienia; job nie ponawia go automatycznie. Ten kompromis chroni
+przed podwójnymi próbami przy równoległym cronie. Nie gwarantuje dostarczenia przez dostawcę.
+Krok 3.2 nie dodaje jeszcze API subskrypcji ani obsługi push w service workerze (krok 3.3).
+Smoke generuje tymczasową parę VAPID i uruchamia z paczki job na pustej bazie, bez wysyłki.
 
 ## 6. Aktualizacja
 

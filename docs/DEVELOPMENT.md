@@ -27,7 +27,43 @@ Dodano testy komponentów i adaptera w `apps/web/src/features/calendar/`, test `
 npm ci
 ```
 
-Skopiuj `apps/api/.env.example` do `apps/api/.env`. `npm run dev` uruchamia Fastify na porcie 3000 i Vite na 5173. Otwórz `http://localhost:5173`; wywołanie `/api/health` przechodzi przez proxy Vite do API.
+Skopiuj `apps/api/.env.example` do `apps/api/.env`. Uruchom `npm run vapid:generate` i wklej
+wygenerowaną parę do `RODZINA_VAPID_PUBLIC_KEY` i `RODZINA_VAPID_PRIVATE_KEY`; ustaw też kontakt
+`RODZINA_VAPID_SUBJECT` (mailto lub HTTPS). Od kroku 3.2 są wymagane także lokalnie.
+`npm run dev` uruchamia Fastify na porcie 3000 i Vite na 5173. Otwórz `http://localhost:5173`;
+wywołanie `/api/health` przechodzi przez proxy Vite do API.
+
+### Job przypomnień — krok 3.2
+
+Uruchom najpierw serwer, aby wykonał migracje bazy. Po buildzie `npm run job:reminders`
+jednorazowo rezerwuje i wysyła należne przypomnienia. Możesz nadpisać czas bez przestawiania
+zegara systemowego:
+
+```sh
+npm run job:reminders -- --now=2026-10-20T14:45:00Z
+```
+
+Flaga wymaga daty ISO z godziną i strefą (`Z` lub np. `+02:00`). Domyślnie job używa bieżącego
+czasu. `npm run dev:cron` uruchamia wersję źródłową przez `tsx`, od razu i ponownie po minucie
+od zakończenia poprzedniego uruchomienia. Każdy przebieg jest osobnym procesem i ponownie
+wczytuje `.env`; Ctrl+C kończy pętlę. Ta pętla służy tylko do lokalnej symulacji crona.
+Techniczny heartbeat pozostaje dostępny przez `job:heartbeat` do porządków w kroku 3.5.
+
+Testy joba używają tymczasowej bazy i wstrzykniętego `PushSender`, bez połączeń z dostawcą push.
+Sprawdzają rezerwację przy dwóch połączeniach, rollback transakcji, kolejne terminy cyklu,
+zmianę czasu, przesunięte wystąpienia i ich adresy, odbiorcę awaryjnego, spóźnienia (2/12 h),
+404/410, błędy przejściowe i izolację rodzin. Testy oraz e2e generują własne tymczasowe klucze.
+Endpointy subskrypcji i obsługa powiadomień w przeglądarce powstaną w kroku 3.3, więc na tym
+etapie nie wykonujemy jeszcze ręcznego testu dostarczenia push na telefon.
+
+Weryfikacja kroku 3.2 (2026-10-16): przechodzą lint (dwa wcześniejsze ostrzeżenia Fast Refresh),
+format:check, typecheck, build i release:smoke z jobem uruchomionym z paczki. Testy joba obejmują
+też dwa niezależne procesy Node startujące na tym samym pliku SQLite; wysyłka następuje raz.
+Przechodzą testy API i logiki shared. Pełne `npm test` wykazuje 12 błędów wcześniejszych testów UI
+w sześciu plikach: ReminderPicker, MyReminders, EventForm, CalendarPage, EventDetailsPage
+i DistantEvents. Te same 12 błędów odtworzono na czystym archiwum HEAD sprzed zmian kroku 3.2:
+niejednoznaczne selektory etykiet Mantine, nieaktualne oczekiwania przycisków i brak mocka
+`window.matchMedia`. Nie zmieniano UI ani tych testów w tym kroku; pełny zestaw nie jest zielony.
 
 Ustaw `RODZINA_PUBLIC_URL=http://localhost:5173` w trybie dev. Przed `npm start` zmień tę wartość na `http://localhost:3000`, aby zaproszenia i linki resetu prowadziły do uruchomionej aplikacji. `RODZINA_ALLOW_REGISTRATION=false` wyłącza tworzenie nowych rodzin, ale pozwala korzystać z zaproszeń i logowania.
 

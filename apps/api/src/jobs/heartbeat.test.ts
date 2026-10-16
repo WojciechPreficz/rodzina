@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../db/client.js';
-import { loadConfig } from '../config.js';
+import { loadTestConfig as loadConfig } from '../config.test-utils.js';
 
 describe('heartbeat job storage', () => {
   let sqlite: ReturnType<typeof createDatabase>['sqlite'] | undefined;

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { localDateTimeToUtc } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
 import { hashToken } from '../../auth.js';
-import { loadConfig } from '../../config.js';
+import { loadTestConfig as loadConfig } from '../../config.test-utils.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 
