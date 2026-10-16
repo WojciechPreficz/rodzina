@@ -2,10 +2,12 @@ import { Alert, Button, Stack, Text } from '@mantine/core';
 import { Link } from 'react-router';
 import { labels } from '../../i18n/pl.js';
 import { usePushStatus } from './pushQueries.js';
+import { isAndroid } from '../../platform.js';
 
 export function NotificationBanner() {
   const { data } = usePushStatus();
-  if (!data?.hasReminders || (data.supported && data.permission === 'granted' && data.subscribed)) return null;
+  if (isAndroid() || !data?.hasReminders || (data.supported && data.permission === 'granted' && data.subscribed))
+    return null;
   return (
     <Alert color="yellow">
       <Stack gap="xs">

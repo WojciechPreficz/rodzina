@@ -113,3 +113,23 @@ Decyzje projektowe, których `docs/PLAN.md` nie rozstrzyga:
 | 2026-10-16 | Krok 3.4: zgoda jest żądana bezpośrednio po kliknięciu; odczyt statusu co 20 s i po powrocie do okna nigdy nie subskrybuje. Subskrypcja przeglądarki jest ponownie zapisywana po kliknięciu, jeżeli API jej nie zna; nieudany zapis nowej subskrypcji wycofuje ją przez unsubscribe. Istniejąca cudza subskrypcja zachowuje ochronę 409 z kroku 3.3.                                                                                  | Zapewnia świadomą zgodę, wykrywa wygasłe wpisy po teście i pozwala ponowić zapis po awarii sieci bez przejmowania urządzenia innego konta.                                                                                  |
 | 2026-10-16 | Krok 3.5: kopia dzienna używa daty Europe/Warsaw; ponowienie zastępuje ją przez rename po VACUUM INTO do unikalnego pliku tymczasowego. Rotacja po sukcesie zachowuje 14 najnowszych nazw rodzina-YYYY-MM-DD.db i pomija katalogi oraz inne pliki. Domyślny katalog to ./apps/api/data/backups; produkcja używa ścieżki bezwzględnej.                                                                                                 | Zapewnia samodzielny snapshot WAL, zachowanie poprzedniej kopii przy błędzie i przewidywalną retencję bez nowych zależności.                                                                                                |
 | 2026-10-16 | Krok 3.5: usunięto job i skrypt heartbeat, pozostawiając historyczną tabelę job_runs i migracje. Build API czyści dist, aby stary job nie trafiał do release.zip.                                                                                                                                                                                                                                                                     | Usunięcie joba nie wymaga zmiany istniejących baz; czysty build usuwa nieaktualne pliki wynikowe.                                                                                                                           |
+
+## Krok 4.1 — sesja Androida (2026-10-16, przed implementacją)
+
+- APK korzysta z lokalnych plików React oraz dedykowanego pluginu natywnego `RodzinaApi`. Plugin przyjmuje wyłącznie wewnętrzne ścieżki `/api/`, łączy się z jednym skonfigurowanym originem i nie śledzi przekierowań. Produkcja dopuszcza wyłącznie `https://rodzina.preficze.pl`; debug może korzystać z `http://localhost:3000` przez `adb reverse`.
+- Transport natywny wysyła istniejące cookie `sid` i dla mutacji nagłówek Origin równy originowi API. Nie dodajemy CORS ani wyjątku od serwerowej ochrony CSRF. Natywny klient nie podlega polityce cookies WebView; przeglądarka nadal używa fetch i cookie HttpOnly/SameSite=Lax.
+- `sid` nigdy nie trafia do JavaScript ani localStorage. Android przechowuje go z terminem ważności w prywatnych SharedPreferences zaszyfrowanych AES-GCM kluczem Android Keystore; backup aplikacji jest wyłączony. Każde Set-Cookie odnawia zapis zgodnie z istniejącymi 60 dniami serwera. Błąd odczytu magazynu zamyka sesję zamiast udostępniać niesprawdzone dane.
+- Żądania natywne są szeregowane. Wylogowanie najpierw próbuje unieważnić sesję na serwerze, a zawsze usuwa lokalne poświadczenia, także offline. Logowanie na inne konto najpierw usuwa poprzednią sesję i cache; 401 usuwa lokalną sesję, błąd sieci jej nie usuwa. Cache danych pozostaje wyłącznie w pamięci, bez zapisu kalendarza offline.
+- Capacitor 8 (Node >=22), Android SDK 36 i JDK 21; wersje Gradle/AGP pochodzą z szablonu zainstalowanego Capacitor. Build Androida ma osobny katalog `dist-android`, bez manifestu PWA, service workera i Web Push. Alarmy i ich magazyn należą do kolejnych kroków.
+
+Uzupełnienie po kontroli kodu Capacitor: jego plugin cookies rejestruje globalny
+CookieHandler współdzielący magazyn WebView. Dlatego transport używa OkHttp 4.12.0
+z jawnym `CookieJar.NO_COOKIES`, bez przekierowań i automatycznych ponowień mutacji.
+Ta zależność jest wyłącznie w Gradle Androida; nie trafia do runtime serwera.
+Odpowiedź 403 przy edycji oznacza brak prawa do tej operacji i nie usuwa całej sesji.
+Potwierdzone 401 usuwa sesję natywną i cache React Query. Odrzucenie sesji na
+starcie nie blokuje załadowania lokalnego interfejsu logowania.
+
+Identyfikator aplikacji to `pl.preficze.rodzina` (domena właściciela), nazwa Rodzina.
+Pozostaje stały przy aktualizacjach; zarządzanie wersjami i podpisem release należy
+do kroku 4.6.

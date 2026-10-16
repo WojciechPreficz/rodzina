@@ -387,3 +387,108 @@ build ostrzeżenie o rozmiarze głównego pliku JS. Testy uruchomiono ponownie p
 po błędzie odczytu tymczasowych plików Vitest. Pełny zestaw nie jest zielony;
 naprawa wcześniejszych testów i ręczna weryfikacja Androida pozostają warunkami
 pełnego domknięcia fazy 3.
+
+# Android — krok 4.1
+
+APK zawiera lokalne pliki tego samego interfejsu React. Kalendarz wymaga połączenia
+z API; harmonogram i alarmy offline nie należą do kroku 4.1. APK nie rejestruje
+service workera ani Web Push. Ekran powiadomień pokazuje informację o niedostępności
+alarmów na tym etapie. PWA zachowuje dotychczasowy build, service worker i push.
+
+Narzędzia: Node >=22 (sprawdzono 24.15.0), Capacitor 8.5.3, JDK 21, Android SDK 36,
+build-tools 35.0.0 (dobierane przez AGP; zainstalowano też 36.0.0), Gradle 8.14.3
+z wrappera oraz Android Gradle Plugin 8.13.0.
+Minimalny Android to 7.0 (API 24). Można użyć Android Studio 2025.2.1 lub nowszego
+albo samych narzędzi wiersza poleceń. Ustaw `JAVA_HOME` na JDK 21 oraz
+`ANDROID_HOME` na katalog SDK. Do testów telefonu potrzebne są platform-tools/ADB
+i debugowanie USB. Narzędzia nie są instalowane na vh.pl.
+
+```text
+npm ci
+npm run android:sync
+npm run android:debug
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+`android:sync` buduje shared i web w trybie `android` do `apps/web/dist-android`,
+a następnie wykonuje Capacitor sync. `android:debug` wykonuje to samo oraz
+`assembleDebug`. Frontend PWA powstaje nadal przez `npm run build` w `apps/web/dist`;
+sync Androida go nie nadpisuje. W konfiguracji nie ma zdalnego `server.url`.
+Plik `.env.android.example` opisuje konfigurację komputera budującego; nie jest
+automatycznie wczytywany ani kopiowany do APK. Ustaw zmienną w terminalu przed sync.
+
+Domyślny adres API to `https://rodzina.preficze.pl`. Lokalne testy wykonuj na
+osobnej lokalnej bazie, bez zakładania testowych kont na serwerze. PowerShell:
+
+```powershell
+$env:RODZINA_ANDROID_API_ORIGIN = 'http://localhost:3000'
+npm run android:debug
+adb reverse tcp:3000 tcp:3000
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Uruchom lokalne API przez `npm run dev:api` albo `npm start` po buildzie PWA.
+`localhost:3000` w APK trafia do API na komputerze dzięki `adb reverse`.
+Debug dopuszcza HTTP wyłącznie dla localhost; release blokuje je także w pluginie
+i konfiguracji sieciowej. Przed budową przeciwko produkcji usuń zmienną:
+`Remove-Item Env:RODZINA_ANDROID_API_ORIGIN`, następnie ponów sync/build.
+Nie zmieniaj hosta WebView ani ochrony Origin na serwerze.
+
+Sesja APK: natywny `RodzinaApi` wysyła cookie i Origin API. OkHttp ma wyłączony
+magazyn cookies i przekierowania, dzięki czemu cookie nie trafia do WebView.
+Plugin przechowuje `sid` i termin ważności zaszyfrowane AES-GCM kluczem Android
+Keystore, odnawia zapis z Set-Cookie serwera i usuwa go po 401. Dane sesji nie są
+zwracane do JS. Zmiana originu, uszkodzony zapis lub wygaśnięcie wymagają logowania.
+Backup Androida i logowanie mostka Capacitor są wyłączone. Wylogowanie próbuje
+unieważnić sesję serwera i usuwa zapis lokalny także przy błędzie sieci; offline
+nie można potwierdzić unieważnienia sesji serwerowej, która ostatecznie wygasa.
+Cache zapytań jest czyszczony przy wylogowaniu, utracie sesji i zmianie konta;
+spóźnione odpowiedzi poprzedniej sesji są odrzucane. Nie zapisujemy kalendarza
+do localStorage ani do trwałego cache. 403 przy edycji cudzej treści nie wylogowuje.
+
+Weryfikacja na urządzeniu (pozostaje wymagana przed uznaniem kroku za w pełni gotowy):
+
+1. Zainstaluj debug APK i uruchom bez sieci — lokalny interfejs musi się otworzyć.
+2. Połącz z lokalnym API, załóż rodzinę, zaloguj dorosłego, dodaj i edytuj wydarzenie.
+3. Zamknij proces przez `adb shell am force-stop pl.preficze.rodzina`, uruchom ponownie
+   i sprawdź zalogowane konto oraz odczyt kalendarza. Nie używaj `pm clear` ani reinstalacji.
+4. Dodaj dziecko, wyloguj dorosłego, zaloguj dziecko kodem rodziny i PIN-em.
+   Utwórz i edytuj własne wydarzenie. Powtórz zamknięcie procesu i uruchomienie.
+5. Wyłącz sieć, wyloguj, uruchom ponownie — poprzednie konto i dane nie mogą wrócić.
+   Zaloguj inną rodzinę i sprawdź, że nie ma danych poprzedniej.
+6. Usuń sesję w lokalnej bazie testowej; po żądaniu 401 APK wraca do logowania.
+   Błąd połączenia nie usuwa cookie; po odzyskaniu sieci ponów logowanie/odczyt.
+7. W Chrome przy szerokości 390 i 1280 px sprawdź logowanie dorosłego/dziecka,
+   zapis kalendarza i wylogowanie PWA. Playwright uruchamiaj wyłącznie headless.
+
+Test magazynu na podłączonym Androidzie: po `npm run android:sync` uruchom
+`./gradlew connectedDebugAndroidTest` z katalogu `android` (Windows:
+`./gradlew.bat connectedDebugAndroidTest`). Sprawdza szyfrowany zapis, ponowne
+utworzenie magazynu, wygaśnięcie, zmianę originu i usunięcie. Sam ten test nie
+zastępuje zamknięcia i ponownego uruchomienia całego APK z punktów 3–4.
+
+Źródła wersji i integracji: [wymagania Capacitor 8](https://capacitorjs.com/docs/updating/8-0),
+[plugin Androida](https://capacitorjs.com/docs/plugins/android),
+[Android Keystore](https://developer.android.com/privacy-and-security/keystore).
+
+Wyniki kroku 4.1 (2026-10-16):
+
+| Warunek „Gotowe, gdy”                                    | Wynik                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Debug APK z lokalnym frontendem                          | `npm run android:debug`: BUILD SUCCESSFUL; plik `android/app/build/outputs/apk/debug/app-debug.apk` (ok. 5,1 MB). W assets jest index.html i zasoby React, bez sw.js i manifestu PWA. Uruchomienie na telefonie pozostaje niepotwierdzone.                                                               |
+| Logowanie dorosłego i dziecka, odczyt i zapis kalendarza | Testy `android-session.test.ts` sprawdzają istniejący kontrakt sesji i kalendarza dla obu ról; `platform.test.ts` transport przez mostek. End-to-end APK wymaga telefonu.                                                                                                                                |
+| Trwałość po zamknięciu procesu                           | Zaimplementowano szyfrowany magazyn; dodano `SessionStoreTest`. Test procesu i wykonanie testu na Androidzie nie były przeprowadzone.                                                                                                                                                                    |
+| Wylogowanie i zmiana konta                               | Dwa testy `auth-native.test.tsx`: wylogowanie offline usuwa sesję i cache, zmiana konta odrzuca starą odpowiedź. Testy mostka obejmują 401, 403 oraz awarię sieci.                                                                                                                                       |
+| CSRF, izolacja rodzin, brak sesji                        | Dwa nowe testy API przechodzą: obcy origin/WebView odrzucony, inna rodzina dostaje 404, brak i unieważniona sesja 401, aktywność odnawia cookie. Kod ochrony API nie został zmieniony.                                                                                                                   |
+| Regresja PWA                                             | Build z manifestem i SW przechodzi; Playwright headless: rejestracja, zaproszenie, logowanie dziecka, reset hasła i utrzymanie sesji — 2/2 przy 390 i 1280 px.                                                                                                                                           |
+| Konfiguracja i paczka serwera                            | `.env.android.example`, komentarz w API `.env.example`, opis w DEPLOY.md; `release:smoke` zakończony pomyślnie. Brak nowych migracji lub cronów.                                                                                                                                                         |
+| Kontrole jakości                                         | Lint (dwa wcześniejsze ostrzeżenia Fast Refresh), typecheck, format:check i build przechodzą. Pełny Vitest: 382 zaliczone, 12 wcześniejszych błędów w sześciu plikach kalendarza/ReminderPicker opisanych przy fazie 3; dodatkowe dwa testy cyklu sesji zaliczone osobno. Łącznie nowe testy kroku: 9/9. |
+
+Nie uznajemy kroku za w pełni zweryfikowany: pozostają testy fizycznego Androida
+oraz wcześniejsze błędy pełnego zestawu Vitest. W tym czacie właściciel pominął
+sprawdzanie podłączonego telefonu przez ADB. Nie wykonywano zmian na produkcji.
+
+Końcowa kontrola natywna: `:app:lintDebug`, `:app:assembleDebug` oraz
+`:app:assembleDebugAndroidTest` zakończyły się BUILD SUCCESSFUL. Lint nie zgłasza
+błędów; ostrzeżenia o nowszych wersjach zależności szablonu pozostają informacyjne.
+Testowe APK zostało skompilowane, ale nie uruchomione na urządzeniu.

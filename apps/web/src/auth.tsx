@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { apiFetch, sanitizeNextPath } from './api.js';
+import { clearNativeSession, invalidateSessionRequests, isAndroid } from './platform.js';
 
 export type AuthRole = 'admin' | 'member' | 'child';
 
@@ -37,13 +39,18 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [family, setFamily] = useState<Family | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useContext(QueryClientContext);
+  const generation = useRef(0);
 
   const refresh = async () => {
+    const requestGeneration = generation.current;
     try {
       const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/me');
+      if (requestGeneration !== generation.current) return;
       setUser(response.user);
       setFamily(response.family);
     } catch {
+      if (requestGeneration !== generation.current) return;
       setUser(null);
       setFamily(null);
     } finally {
@@ -55,32 +62,51 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     void refresh();
   }, []);
 
+  useEffect(() => {
+    const onSessionLost = () => {
+      generation.current += 1;
+      queryClient?.clear();
+      setUser(null);
+      setFamily(null);
+      setIsLoading(false);
+    };
+    window.addEventListener('rodzina:session-lost', onSessionLost);
+    return () => window.removeEventListener('rodzina:session-lost', onSessionLost);
+  }, [queryClient]);
+
   const logout = async () => {
+    generation.current += 1;
+    invalidateSessionRequests();
+    await queryClient?.cancelQueries();
+    queryClient?.clear();
     try {
       await apiFetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' });
+    } catch (error) {
+      if (!isAndroid()) throw error;
     } finally {
+      await clearNativeSession();
       setUser(null);
       setFamily(null);
     }
   };
 
   const setSession = (nextUser: AuthUser, nextFamily: Family) => {
+    generation.current += 1;
+    invalidateSessionRequests();
+    queryClient?.clear();
     setUser(nextUser);
     setFamily(nextFamily);
     setIsLoading(false);
   };
 
-  const value = useMemo<AuthState>(
-    () => ({
-      user,
-      family,
-      isLoading,
-      refresh,
-      setSession,
-      logout,
-    }),
-    [family, isLoading, user],
-  );
+  const value: AuthState = {
+    user,
+    family,
+    isLoading,
+    refresh,
+    setSession,
+    logout,
+  };
 
   return <AuthContext.Provider value={value}>{children ?? <Outlet />}</AuthContext.Provider>;
 }

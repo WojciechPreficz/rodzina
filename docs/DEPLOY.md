@@ -181,3 +181,25 @@ Paczka nadal korzysta z dotychczasowych migracji i sposobu uruchamiania; nie wym
 procesu w tle, WebSocketów, Dockera ani Redisa. Na prośbę właściciela podczas realizacji tego
 kroku nie uruchomiono testów ani `release:smoke`; pełne zamknięcie kryteriów fazy 2 wymaga
 jeszcze weryfikacji opisanej w `DEVELOPMENT.md`.
+
+# Android — konfiguracja i aktualizacje od kroku 4.1
+
+API nie wymaga nowych zmiennych środowiskowych, migracji, CORS ani nowych cronów.
+Przeglądarka nadal używa cookie HttpOnly/SameSite=Lax i dotychczasowej kontroli
+Origin. APK korzysta z natywnego klienta i tego samego kontraktu sesji oraz API.
+Nie dodawaj originu `https://localhost` jako wyjątku od ochrony CSRF.
+
+Na komputerze budującym APK `RODZINA_ANDROID_API_ORIGIN` wybiera
+`https://rodzina.preficze.pl` (domyślnie) albo `http://localhost:3000` (tylko debug,
+przez `adb reverse`). Konfigurację opisuje główny `.env.android.example`.
+Zmienna jest odczytywana podczas Capacitor sync; jej zmiana wymaga ponownej
+kompilacji APK. Żadne VAPID, plik API `.env`, baza ani sekrety serwera nie są
+kopiowane do aplikacji. JDK/SDK/Gradle i OkHttp dotyczą wyłącznie lokalnego Androida;
+nie wymagają nowych zależności runtime ani kompilacji na vh.pl.
+
+`release.zip` nadal zawiera serwer i PWA z `apps/web/dist`, bez projektu Androida,
+SDK, zaszyfrowanych sesji czy APK. `release:smoke` sprawdza wyłącznie paczkę serwera.
+Wgranie ZIP nie aktualizuje frontendu zainstalowanego APK. Build debug służy do
+lokalnego sprawdzenia kroku 4.1; podpisywanie i dystrybucja release APK należą do
+kroku 4.6. Instrukcja narzędzi i testów: `docs/DEVELOPMENT.md`, sekcja Android.
+Istniejący kontrakt cookie sesji i endpointów kalendarza pozostaje zgodny z PWA.

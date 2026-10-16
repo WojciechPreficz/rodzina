@@ -1,4 +1,6 @@
 export const labels = {
+  androidNotificationsPending:
+    'Powiadomienia lokalne Androida będą dostępne po wdrożeniu kolejnych kroków fazy 4. Kalendarz wymaga połączenia z API.',
   appName: 'Rodzina',
   calendar: 'Kalendarz',
   shopping: 'Zakupy',

@@ -5,7 +5,16 @@ import refresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'release.zip'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/dist-android/**',
+      '**/node_modules/**',
+      'android/**',
+      '.android-tools/**',
+      'release.zip',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {

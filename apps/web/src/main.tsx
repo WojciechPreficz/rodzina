@@ -6,6 +6,7 @@ import '@mantine/core/styles.css';
 import { RouterProvider } from 'react-router/dom';
 import { createQueryClient } from './queryClient.js';
 import { router } from './router.js';
+import { isAndroid } from './platform.js';
 
 const theme = createTheme({
   primaryColor: 'teal',
@@ -24,6 +25,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if (!isAndroid() && import.meta.env.MODE !== 'android' && 'serviceWorker' in navigator && import.meta.env.PROD) {
   void navigator.serviceWorker.register('/sw.js');
 }

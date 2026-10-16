@@ -1,9 +1,16 @@
 import { pushPublicKeyResponseSchema, pushStatusResponseSchema, pushTestResponseSchema } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { labels } from '../../i18n/pl.js';
+import { isAndroid } from '../../platform.js';
 
 export function supportsPush() {
-  return window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
+  return (
+    !isAndroid() &&
+    window.isSecureContext &&
+    'Notification' in window &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window
+  );
 }
 
 export async function readPushStatus() {

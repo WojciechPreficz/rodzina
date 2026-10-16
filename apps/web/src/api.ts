@@ -1,3 +1,5 @@
+import { invalidateSessionRequests, isAndroid, nativeRequest } from './platform.js';
+
 export type ApiError = { error?: { code?: string; message?: string }; message?: string };
 
 export class ApiRequestError extends Error {
@@ -34,11 +36,13 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(input, {
-    credentials: 'include',
-    ...init,
-    headers,
-  });
+  const response = isAndroid()
+    ? await nativeRequest(input, init)
+    : await fetch(input, {
+        credentials: 'include',
+        ...init,
+        headers,
+      });
 
   const text = await response.text();
   let payload: ApiError | Record<string, unknown> | null = null;
@@ -52,6 +56,10 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
   }
 
   if (!response.ok) {
+    if (isAndroid() && response.status === 401) {
+      invalidateSessionRequests();
+      window.dispatchEvent(new Event('rodzina:session-lost'));
+    }
     const message =
       (payload as { error?: { message?: string } } | undefined)?.error?.message ??
       (payload as { message?: string } | undefined)?.message ??

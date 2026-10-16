@@ -8,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.3",
     "@mantine/core": "^8.2.7",
     "@mantine/hooks": "^8.2.7",
     "@schedule-x/calendar": "^4.9.1",
