@@ -90,7 +90,9 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
         <Text c="dimmed">{text.noEvents}</Text>
       )}
       <Button className="calendar-add" aria-label={text.add} onClick={() => setOpened(true)}>
-        +
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 4v16M4 12h16" stroke="currentColor" strokeWidth="3" />
+        </svg>
       </Button>
       <DistantEvents timezone={timezone} selected={selected} />
       <Modal
@@ -117,10 +119,9 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
             pending={create.isPending}
             onCancel={() => setKind(null)}
             onSave={async (data) => {
-              const saved = await create.mutateAsync(data);
+              await create.mutateAsync(data);
               setOpened(false);
               setKind(null);
-              navigate(eventUrl(saved.id));
             }}
           />
         )}

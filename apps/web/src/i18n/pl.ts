@@ -170,6 +170,7 @@ export const labels = {
     allDay: 'Całodniowe',
     date: 'Data',
     time: 'Godzina',
+    optionalTime: 'Godzina (opcjonalnie)',
     duration: 'Czas trwania (minuty)',
     titleRequired: 'Podaj tytuł.',
     dateInvalid: 'Podaj poprawną datę.',

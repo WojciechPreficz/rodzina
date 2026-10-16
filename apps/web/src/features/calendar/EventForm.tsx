@@ -62,7 +62,8 @@ export function EventForm({
   const [participants, setParticipants] = useState(event?.participants.map((p) => p.id) ?? []);
   const [allDay, setAllDay] = useState(event ? event.startTime === null : false);
   const [date, setDate] = useState(event?.startDate ?? initialDate);
-  const [time, setTime] = useState(event?.startTime ?? '09:00');
+  const [time, setTime] = useState(event?.startTime ?? (eventKind === 'distant' ? '' : '09:00'));
+  const hasTime = !allDay && !monthly && (eventKind !== 'distant' || time !== '');
   const [duration, setDuration] = useState<number | string>(event?.durationMinutes ?? 60);
   const [error, setError] = useState<string | null>(null);
   const [reminders, setReminders] = useState<ReminderItem[]>(() =>
@@ -81,8 +82,7 @@ export function EventForm({
       title: title.trim() ? undefined : text.titleRequired,
       date: calendarDateSchema.safeParse(date).success ? undefined : text.dateInvalid,
       time:
-        !allDay &&
-        !monthly &&
+        hasTime &&
         (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time) ||
           typeof duration !== 'number' ||
           !Number.isInteger(duration) ||
@@ -113,8 +113,8 @@ export function EventForm({
         location: location.trim() || null,
         participantIds: participants,
         startDate: date,
-        startTime: allDay || monthly ? null : time,
-        durationMinutes: allDay || monthly ? null : Number(duration),
+        startTime: hasTime ? time : null,
+        durationMinutes: hasTime ? Number(duration) : null,
         kind: eventKind,
         datePrecision: precision,
         rrule: rule,
@@ -230,21 +230,23 @@ export function EventForm({
           <Group grow align="start">
             <TextInput
               type="time"
-              label={text.time}
-              required
+              label={eventKind === 'distant' ? text.optionalTime : text.time}
+              required={eventKind !== 'distant'}
               value={time}
               onChange={(e) => setTime(e.currentTarget.value)}
               error={errors.time}
             />
-            <NumberInput
-              label={text.duration}
-              required
-              min={1}
-              max={525600}
-              allowDecimal={false}
-              value={duration}
-              onChange={setDuration}
-            />
+            {hasTime && (
+              <NumberInput
+                label={text.duration}
+                required
+                min={1}
+                max={525600}
+                allowDecimal={false}
+                value={duration}
+                onChange={setDuration}
+              />
+            )}
           </Group>
         )}
         {eventKind === 'recurring' &&

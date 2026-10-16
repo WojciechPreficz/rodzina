@@ -140,6 +140,38 @@ describe('EventForm', () => {
     );
   });
 
+  it.each(['', '14:30'])('saves a distant deadline with optional time "%s"', async (time) => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider>
+        <EventForm
+          kind="distant"
+          members={[]}
+          initialDate="2028-05-12"
+          pending={false}
+          onSave={save}
+          onCancel={() => {}}
+        />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Kontrola' } });
+    const input = screen.getByLabelText('Godzina (opcjonalnie)');
+    expect(input).toHaveValue('');
+    expect(input).not.toBeRequired();
+    if (time) fireEvent.change(input, { target: { value: time } });
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'distant',
+          startDate: '2028-05-12',
+          startTime: time || null,
+          durationMinutes: time ? 60 : null,
+        }),
+      ),
+    );
+  });
+
   it('clears time and duration for all-day events', async () => {
     const save = vi.fn(async () => {});
     render(
