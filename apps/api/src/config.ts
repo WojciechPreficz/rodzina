@@ -17,6 +17,7 @@ const environmentSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().positive().default(3000),
     RODZINA_DATABASE_PATH: z.string().min(1).default('./apps/api/data/rodzina.db'),
+    RODZINA_BACKUP_DIR: z.string().trim().min(1).default('./apps/api/data/backups'),
     RODZINA_WEB_DIR: z.string().min(1).default('./public'),
     RODZINA_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
     RODZINA_ALLOW_REGISTRATION: z

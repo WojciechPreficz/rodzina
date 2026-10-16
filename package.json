@@ -16,7 +16,7 @@
     "dev:web": "npm run dev --workspace @rodzina/web",
     "dev:cron": "node scripts/dev-cron.mjs",
     "start": "node --env-file=apps/api/.env --input-type=module -e \"process.env.NODE_ENV = 'production'; process.env.RODZINA_ENV_FILE = 'apps/api/.env'; await import('./apps/api/server.cjs')\"",
-    "job:heartbeat": "node --env-file=apps/api/.env apps/api/dist/jobs/heartbeat.js",
+    "job:backup": "node --env-file=apps/api/.env apps/api/dist/jobs/backup-db.js",
     "build": "npm run build --workspace @rodzina/shared && npm run build --workspace @rodzina/web && npm run build --workspace @rodzina/api",
     "lint": "eslint .",
     "format": "prettier --write --ignore-path .gitignore \"AGENTS.md\" \"README.md\" \".prettierrc.json\" \"package*.json\" \"tsconfig*.json\" \"eslint.config.mjs\" \".github/workflows/ci.yml\" \"docs/DECISIONS.md\" \"docs/DEVELOPMENT.md\" \"docs/DEPLOY.md\" \"scripts/*.mjs\" \"packages/**/*.json\" \"packages/**/*.ts\" \"apps/**/*.json\" \"apps/**/*.cjs\" \"apps/**/*.ts\" \"apps/**/*.tsx\" \"apps/**/*.html\" \"playwright.config.ts\" \"e2e/**/*.ts\"",

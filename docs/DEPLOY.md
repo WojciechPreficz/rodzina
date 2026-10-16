@@ -20,6 +20,7 @@ Utwórz `~/rodzina-data/.env` na podstawie `apps/api/.env.example` (plik dostarc
 ```dotenv
 NODE_ENV=production
 RODZINA_DATABASE_PATH=/home/<user>/rodzina-data/rodzina.db
+RODZINA_BACKUP_DIR=/home/<user>/rodzina-data/backups
 RODZINA_WEB_DIR=./public
 RODZINA_PUBLIC_URL=https://rodzina.<domena>
 RODZINA_ALLOW_REGISTRATION=true
@@ -55,13 +56,8 @@ Oczekiwana odpowiedź zawiera `ok: true` oraz `dbOk: true`. Zweryfikuj także st
 
 Passenger może usypiać proces; nie uruchamiaj schedulera w pamięci. Cała konfiguracja crona jest niezależna od zmiennych środowiskowych aplikacji, dlatego każde polecenie joba jawnie wczytuje `~/rodzina-data/.env`.
 
-Na etapie Fazy 0 heartbeat służy wyłącznie do sprawdzenia dostępu crona do bazy. Przykładowy wpis tymczasowy co 5 minut (zastąp `<user>` rzeczywistą ścieżką do Node z nodevenv):
-
-```cron
-*/5 * * * * /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/heartbeat.js >> /home/<user>/rodzina-data/logs/heartbeat.log 2>&1
-```
-
-Job heartbeat nie jest funkcją docelową i zostanie usunięty w kroku 3.5. Cron przypomnień jest opisany poniżej; backup powstanie w kroku 3.5.
+Po kroku 3.5 dostępne są dwa docelowe joby: przypomnienia co 5 minut i backup raz dziennie.
+Techniczny job heartbeat został usunięty; nie dodawaj jego wpisu do crona.
 
 ### Wysyłka przypomnień — krok 3.2
 
@@ -98,9 +94,41 @@ przed podwójnymi próbami przy równoległym cronie. Nie gwarantuje dostarczeni
 Krok 3.2 nie dodaje jeszcze API subskrypcji ani obsługi push w service workerze (krok 3.3).
 Smoke generuje tymczasową parę VAPID i uruchamia z paczki job na pustej bazie, bez wysyłki.
 
+### Backup SQLite — krok 3.5
+
+`RODZINA_BACKUP_DIR` wskazuje katalog kopii. Domyślnie jest to `./apps/api/data/backups`
+względem katalogu roboczego; na hostingu ustaw bezwzględne
+`/home/<user>/rodzina-data/backups`. Job tworzy katalog, jeśli go brakuje.
+Katalog powinien być dostępny wyłącznie dla konta aplikacji i leżeć poza katalogiem publicznym.
+
+Wpis dzienny o 03:15 czasu serwera (do ustawienia dopiero w fazie 8):
+
+```cron
+15 3 * * * cd /home/<user>/rodzina && /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/backup-db.js >> /home/<user>/rodzina-data/logs/backup.log 2>&1
+```
+
+Zastąp `<user>` loginem hostingu i sprawdź ścieżkę Node oraz strefę czasową crona.
+Backup wykonuje `VACUUM INTO` na działającej bazie SQLite (również w trybie WAL).
+Nazwa `rodzina-YYYY-MM-DD.db` używa daty w `Europe/Warsaw`. Ponowne uruchomienie
+tego samego dnia zastępuje kopię dopiero po zakończeniu nowego snapshotu.
+Po sukcesie pozostaje 14 ostatnich kopii według dat w nazwach; inne pliki i katalogi
+nie podlegają rotacji. Błąd tworzenia kopii nie uruchamia rotacji. Job loguje wynik
+do stdout, a błąd do stderr i kończy się kodem 1. Monitoruj `backup.log` i wolne miejsce.
+
+Lokalnie po buildzie uruchom `npm run job:backup` z katalogu repozytorium.
+Na serwerze przed aktualizacją uruchom ręcznie polecenie z wpisu crona (bez harmonogramu
+i przekierowania logów). Kopię można otworzyć jako samodzielną bazę SQLite; nie wymaga
+plików WAL ani SHM. Przy odtwarzaniu zatrzymaj API i joby, zachowaj dotychczasową bazę,
+usuń jej stare pliki `-wal` i `-shm`, a wybraną kopię umieść pod `RODZINA_DATABASE_PATH`.
+Po restarcie sprawdź `/api/health` i dane rodziny.
+
+Krok nie dodaje migracji ani zależności runtime. Istniejące migracje, w tym historyczna
+tabela `job_runs`, pozostają bez zmian. `release:smoke` uruchamia oba joby z paczki
+i sprawdza integralność kopii oraz obecność tabel przypomnień i subskrypcji.
+
 ## 6. Aktualizacja
 
-Procedura aktualizacji aplikacji zostanie uzupełniona i zweryfikowana w Fazie 8. Przed aktualizacją bazy należy wykonać kopię zapasową; w Fazie 0 backup nie jest jeszcze implementowany.
+Procedura aktualizacji aplikacji zostanie uzupełniona i zweryfikowana w Fazie 8. Przed aktualizacją bazy wykonaj kopię jobem `backup-db.js` opisanym powyżej.
 
 Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy przypomnień są zapisywane i przeliczane przy zapisie wydarzeń; wysyłka będzie realizowana w fazie 3.
 

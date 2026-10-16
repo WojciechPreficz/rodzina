@@ -25,3 +25,15 @@ describe('VAPID configuration', () => {
     expect(() => loadConfig({ ...testVapidEnvironment, ...override })).toThrow();
   });
 });
+
+describe('backup configuration', () => {
+  it('defaults to the local data directory and accepts a custom destination', () => {
+    expect(loadConfig(testVapidEnvironment).RODZINA_BACKUP_DIR).toBe('./apps/api/data/backups');
+    expect(loadConfig({ ...testVapidEnvironment, RODZINA_BACKUP_DIR: '/data/backups' }).RODZINA_BACKUP_DIR).toBe(
+      '/data/backups',
+    );
+  });
+  it('rejects an empty destination', () => {
+    expect(() => loadConfig({ ...testVapidEnvironment, RODZINA_BACKUP_DIR: '  ' })).toThrow();
+  });
+});

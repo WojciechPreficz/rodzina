@@ -47,7 +47,7 @@ Flaga wymaga daty ISO z godziną i strefą (`Z` lub np. `+02:00`). Domyślnie jo
 czasu. `npm run dev:cron` uruchamia wersję źródłową przez `tsx`, od razu i ponownie po minucie
 od zakończenia poprzedniego uruchomienia. Każdy przebieg jest osobnym procesem i ponownie
 wczytuje `.env`; Ctrl+C kończy pętlę. Ta pętla służy tylko do lokalnej symulacji crona.
-Techniczny heartbeat pozostaje dostępny przez `job:heartbeat` do porządków w kroku 3.5.
+Backup wykonuje się osobno przez `npm run job:backup` po buildzie; `dev:cron` symuluje wysyłkę przypomnień.
 
 Testy joba używają tymczasowej bazy i wstrzykniętego `PushSender`, bez połączeń z dostawcą push.
 Sprawdzają rezerwację przy dwóch połączeniach, rollback transakcji, kolejne terminy cyklu,
@@ -120,7 +120,7 @@ Playwright uruchamia wyłącznie Chromium headless, w szerokościach 390 i 1280 
 | Gotowość do deployu                                                                       | Konfiguracja opisana w `.env.example` i `DEPLOY.md`; brak nowych zmiennych, migracji, zależności runtime i cronów. Istniejące migracje auth są w repo, a paczka poprawnie uruchamia serwer, bazę, SPA, manifest, SW i heartbeat. Nie dodano WebSocketów, Dockera, Redisa ani schedulera serwera. |
 | Zamknięcie i ponowne otwarcie PWA na prawdziwym Androidzie                                | Do sprawdzenia przez właściciela według punktu 6. Odświeżenie strony jest objęte e2e, ale nie potwierdza zachowania zainstalowanej PWA na telefonie.                                                                                                                                             |
 
-Lokalny heartbeat można wykonać poleceniem `npm run job:heartbeat`. Symulacja crona co minutę: `npm run dev:cron`. Oba polecenia wymagają konfiguracji `.env` i używają tej samej bazy co API.
+Lokalny backup można wykonać poleceniem `npm run job:backup` po buildzie. Symulacja crona przypomnień co minutę: `npm run dev:cron`. Oba polecenia wymagają konfiguracji `.env` i używają tej samej bazy co API.
 
 ## Kalendarz — API kroku 2.2
 
@@ -344,3 +344,39 @@ jest zielony. Pierwszą próbę testów w sandboxie przerwały błędy odczytu t
 plików Vitest, a smoke testu — brak dostępu do registry npm; powtórzenia poza sandboxem
 potwierdziły powyższe wyniki. Odbiór systemowego push na desktopie i Androidzie oraz
 próba za 10 minut pozostają do ręcznego wykonania.
+
+## Krok 3.5 — backup i stan domknięcia fazy 3
+
+Po `npm run build` wykonaj `npm run job:backup` z katalogu repozytorium. Job korzysta
+z `apps/api/.env` i `RODZINA_BACKUP_DIR` (domyślnie `./apps/api/data/backups`, katalog
+ignorowany przez Git). Kopia `rodzina-YYYY-MM-DD.db` ma datę w strefie Europe/Warsaw.
+Ponowienie tego samego dnia zastępuje kopię po ukończeniu nowego snapshotu.
+Rotacja zachowuje 14 ostatnich kopii dziennych. Nie dodajemy backupu do minutowej
+pętli `dev:cron`; docelowy cron dzienny i procedurę odtworzenia opisuje `DEPLOY.md`.
+
+Usunięto job heartbeat i `job:heartbeat`. Historyczna tabela `job_runs` pozostaje
+w migracjach; krok nie wymaga nowej migracji. Build czyści `apps/api/dist`, aby stare
+pliki joba nie trafiły do release. Smoke uruchamia przypomnienia i backup z ZIP,
+sprawdza integralność kopii i obecność tabel przypomnień oraz subskrypcji.
+
+| Kryterium kroku / fazy 3                                                             | Dowód lub pozostała weryfikacja                                                                                                                                                         |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Powstaje samodzielna kopia SQLite i działa rotacja do 14 kopii                       | Cztery testy `backup-db.test.ts`: snapshot otwartej bazy WAL, data Warszawy, ponowienie tego samego dnia, rotacja, pomijanie innych plików i zachowanie poprzedniej kopii przy błędzie. |
+| Jedna wysyłka także przy równoległych uruchomieniach                                 | Testy `send-reminders.test.ts`: dwie konekcje i dwa niezależne procesy Node.                                                                                                            |
+| Kolejny termin przypomnienia cyklicznego                                             | Testy joba obejmują cykle, DST i COUNT.                                                                                                                                                 |
+| Usunięcie subskrypcji przy 410                                                       | Testy joba obejmują 404 i 410.                                                                                                                                                          |
+| Awaryjna wysyłka do dorosłych przy usuniętym twórcy                                  | Test joba oraz testy `resolveRecipients` w `delivery.test.ts`.                                                                                                                          |
+| Android: testowy push, termin za 10 minut, kliknięcie po zamknięciu i po wylogowaniu | Nadal wymaga fizycznego Androida i ręcznego przejścia checklisty kroku 3.4 powyżej. Testy z mockami tego nie potwierdzają.                                                              |
+| Konfiguracja i cron (sekcja 1.1 planu)                                               | `RODZINA_BACKUP_DIR` opisane w `.env.example` i `DEPLOY.md`; dwa wpisy crona z logami, bez schedulera serwera.                                                                          |
+| Migracje i zależności (sekcja 1.1 planu)                                             | Brak nowych migracji i zależności runtime; dotychczasowe migracje pozostają w paczce. Bez nowych wymagań kompilacji na serwerze, WebSocketów, Dockera i Redisa.                         |
+| Paczka release (sekcja 1.1 planu)                                                    | `npm run release:smoke` przechodzi: serwer, health, SPA, manifest, SW oraz oba joby i kontrola kopii. Wszystko uruchomiono lokalnie.                                                    |
+
+Weryfikacja 2026-10-16: zestaw backupu, wysyłki, odbiorców i konfiguracji przed dodaniem
+dwóch testów konfiguracji backupu: 59/59. Pełne `npm test -- --maxWorkers=1`: 374 zaliczone
+(w tym oba nowe testy konfiguracji), 12 błędów w 6 wcześniejszych plikach testów kalendarza
+i ReminderPicker, zgodnych z wykazem z kroku 3.4. `lint`, `typecheck`, `build`, `format:check`
+i `release:smoke` przechodzą. Lint zachowuje dwa wcześniejsze ostrzeżenia Fast Refresh;
+build ostrzeżenie o rozmiarze głównego pliku JS. Testy uruchomiono ponownie poza sandboxem
+po błędzie odczytu tymczasowych plików Vitest. Pełny zestaw nie jest zielony;
+naprawa wcześniejszych testów i ręczna weryfikacja Androida pozostają warunkami
+pełnego domknięcia fazy 3.

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createECDH } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -43,6 +43,9 @@ async function run(command, args, options = {}) {
 try {
   const archive = new Uint8Array(await readFile(releaseFile));
   const entries = unzipSync(archive);
+  if (Object.keys(entries).some((name) => /^dist\/jobs\/heartbeat\./.test(name))) {
+    fail('paczka nadal zawiera usunięty job heartbeat.');
+  }
   for (const [name, contents] of Object.entries(entries)) {
     const destination = path.resolve(temporaryDirectory, name);
     if (!destination.startsWith(`${temporaryDirectory}${path.sep}`)) fail('Nieprawidłowa ścieżka w ZIP.');
@@ -61,6 +64,7 @@ try {
       'NODE_ENV=production',
       `PORT=${port}`,
       `RODZINA_DATABASE_PATH=${path.join(temporaryDirectory, 'smoke.db')}`,
+      `RODZINA_BACKUP_DIR=${path.join(temporaryDirectory, 'backups')}`,
       `RODZINA_WEB_DIR=${path.join(temporaryDirectory, 'public')}`,
       'RODZINA_PUBLIC_URL=http://localhost',
       'RODZINA_ALLOW_REGISTRATION=false',
@@ -116,15 +120,20 @@ try {
     fail('serwer nie dostarczył service workera.');
   }
 
-  await run(process.execPath, ['--env-file', envFile, 'dist/jobs/heartbeat.js'], { cwd: temporaryDirectory });
   await run(process.execPath, ['--env-file', envFile, 'dist/jobs/send-reminders.js', '--now=2026-10-16T10:00:00Z'], {
     cwd: temporaryDirectory,
   });
   const { default: Database } = await import('better-sqlite3');
-  const sqlite = new Database(path.join(temporaryDirectory, 'smoke.db'));
+  await run(process.execPath, ['--env-file', envFile, 'dist/jobs/backup-db.js'], { cwd: temporaryDirectory });
+  const copies = await readdir(path.join(temporaryDirectory, 'backups'));
+  if (copies.length !== 1 || !/^rodzina-\d{4}-\d{2}-\d{2}\.db$/.test(copies[0])) {
+    fail('job nie utworzył dziennej kopii bazy.');
+  }
+  const sqlite = new Database(path.join(temporaryDirectory, 'backups', copies[0]), { readonly: true });
   try {
-    const runRow = sqlite.prepare('SELECT job FROM job_runs ORDER BY ran_at DESC LIMIT 1').get();
-    if (runRow?.job !== 'heartbeat') fail('heartbeat nie zapisał wpisu do job_runs.');
+    if (sqlite.pragma('integrity_check', { simple: true }) !== 'ok') fail('kopia bazy jest uszkodzona.');
+    sqlite.prepare('SELECT id FROM reminders LIMIT 1').all();
+    sqlite.prepare('SELECT id FROM push_subscriptions LIMIT 1').all();
   } finally {
     sqlite.close();
   }
