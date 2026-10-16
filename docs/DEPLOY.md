@@ -166,6 +166,24 @@ i sprawdza integralność kopii oraz obecność tabel przypomnień i subskrypcji
 
 Procedurę aktualizacji opisuje krok D.4 historycznego etapu pierwszego wdrożenia w `PLAN.md`; jej przećwiczenie wymaga osobnego potwierdzenia. Przed aktualizacją bazy wykonaj kopię jobem `backup-db.js` opisanym powyżej.
 
+### Aktualizacja istniejącego serwera od fazy 4
+
+API/PWA i Android mają osobne artefakty i terminy publikacji:
+
+| Artefakt              | Zawartość i sposób aktualizacji                                                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `release.zip`         | API, migracje i PWA; wgrywany do istniejącej aplikacji Node w `~/rodzina/`.                                                                              |
+| Podpisane release APK | Lokalny frontend i kod Androida; budowane na komputerze, publikowane osobno i instalowane na telefonie. Dystrybucja i aktualizator powstaną w kroku 4.6. |
+| `latest.json`         | Informacja o najnowszym APK; publikowana po wgraniu i sprawdzeniu tego APK, od kroku 4.6.                                                                |
+
+1. Lokalnie wykonaj weryfikację i zbuduj ZIP według sekcji 2. Dla zmian wspólnego frontendu sprawdź także build Androida i właściwe scenariusze na telefonie. Sam `release:smoke` nie testuje APK.
+2. Zachowaj poprzedni ZIP i wykonaj backup produkcyjnej bazy jobem z sekcji 5. Zachowaj istniejącą konfigurację `.env`, klucze VAPID, bazę i crony.
+3. Wgraj i rozpakuj sprawdzony ZIP w istniejącym `~/rodzina/`, aktualizując `server.cjs`, `dist/`, `public/`, `drizzle/` i produkcyjny `package.json`. Nie zastępuj produkcyjnej bazy lokalną. Wykonaj **Run NPM Install** i restart przez `tmp/restart.txt`.
+4. Sprawdź `/api/health`, logowanie, odczyt i zapis kalendarza w przeglądarce oraz w poprzedniej wspieranej wersji APK. Nowy backend musi nadal obsługiwać telefony, które nie zainstalowały aktualizacji.
+5. Jeżeli wydanie wymaga nowego APK, opublikuj je dopiero po zgodnym API według sekcji 7. Nie uruchamiaj ponownie konfiguracji pierwszego wdrożenia ani rejestracji rodziny.
+
+Powrót do poprzedniego ZIP wymaga zgodności ze schematem bazy po migracjach. Nie cofaj bazy automatycznie: odtworzenie backupu może usunąć dane zapisane od chwili jego wykonania. Wycofanie publikacji APK opisuje sekcja 7.5.
+
 Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy przypomnień są zapisywane i przeliczane przy zapisie wydarzeń; wysyłka będzie realizowana w fazie 3.
 
 ### Kalendarz i przypomnienia — stan po kroku 2.7
@@ -182,7 +200,17 @@ procesu w tle, WebSocketów, Dockera ani Redisa. Na prośbę właściciela podcz
 kroku nie uruchomiono testów ani `release:smoke`; pełne zamknięcie kryteriów fazy 2 wymaga
 jeszcze weryfikacji opisanej w `DEVELOPMENT.md`.
 
-# Android — konfiguracja i aktualizacje od kroku 4.1
+## 7. Android — konfiguracja, publikacja APK i aktualizacje
+
+### 7.1 Stan obecny i konfiguracja od kroku 4.1
+
+Stan na 16.10.2026 według kodu repozytorium: dostępne są `android:sync` i
+`android:debug`, aplikacja ma identyfikator `pl.preficze.rodzina`, a Gradle ustawia
+`versionCode 1` i `versionName "1.0"`. Nie skonfigurowano podpisywania release.
+Przycisk pobierania, metadane wydania i aktualizator na telefonie są zakresem
+kroku 4.6 w `PLAN.md`; poniższe sekcje 7.3–7.5 opisują docelową procedurę,
+którą trzeba uzupełnić i potwierdzić przy implementacji. Nie oznaczają gotowości
+obecnego debug APK do dystrybucji produkcyjnej.
 
 API nie wymaga nowych zmiennych środowiskowych, migracji, CORS ani nowych cronów.
 Przeglądarka nadal używa cookie HttpOnly/SameSite=Lax i dotychczasowej kontroli
@@ -203,3 +231,89 @@ Wgranie ZIP nie aktualizuje frontendu zainstalowanego APK. Build debug służy d
 lokalnego sprawdzenia kroku 4.1; podpisywanie i dystrybucja release APK należą do
 kroku 4.6. Instrukcja narzędzi i testów: `docs/DEVELOPMENT.md`, sekcja Android.
 Istniejący kontrakt cookie sesji i endpointów kalendarza pozostaje zgodny z PWA.
+
+### 7.2 Obecne budowanie lokalne
+
+Na komputerze wymagane są Node 22 lub 24, JDK 21 i Android SDK 36; szczegóły
+narzędzi oraz testów lokalnych opisuje `DEVELOPMENT.md`. W PowerShell, po ustawieniu
+`JAVA_HOME` i `ANDROID_HOME`, można jawnie wskazać produkcyjny adres API:
+
+```powershell
+$env:RODZINA_ANDROID_API_ORIGIN = 'https://rodzina.preficze.pl'
+npm run android:debug
+```
+
+Polecenie buduje shared i frontend w `apps/web/dist-android`, synchronizuje
+Capacitor i uruchamia `assembleDebug`. Wynik to
+`android/app/build/outputs/apk/debug/app-debug.apk`. Służy do testów; nie publikuj go
+jako docelowego wydania dla rodziny. Nie dodajemy polecenia `android:release`
+do instrukcji jako działającego — obecnie taki skrypt nie istnieje.
+
+### 7.3 Podpisane wydanie i miejsce na pliki — do wdrożenia w kroku 4.6
+
+Przy implementacji kroku 4.6 dodaj sprawdzoną instrukcję budowania i podpisywania
+release APK oraz konkretne polecenia i nazwy zmiennych. Zachowaj identyfikator
+`pl.preficze.rodzina`, podpisuj wszystkie wydania tym samym kluczem i zwiększaj
+`versionCode` przy każdym nowym APK. `versionName` to numer pokazywany użytkownikowi;
+nie porównujemy go tekstowo przy wykrywaniu aktualizacji. Przed buildem sprawdź,
+że APK korzysta z `https://rodzina.preficze.pl`, zawiera lokalny frontend i nie ma
+konfiguracji lokalnego API.
+
+Keystore, jego hasła i bezpieczna kopia klucza pozostają poza repo, paczką ZIP
+i katalogiem publicznym serwera. Zapisz bezpiecznie odcisk certyfikatu wydania.
+Debug i release używają różnych kluczy: debug APK nie jest podstawą testu
+aktualizacji produkcyjnej. Testuj przejście między dwoma wydaniami podpisanymi
+kluczem release bez odinstalowywania aplikacji i czyszczenia jej danych.
+
+Docelowo pliki wydań przechowuj w osobnym trwałym katalogu, np.
+`/home/<user>/rodzina-downloads/android/`, poza `~/rodzina/public/` i poza prywatnym
+`rodzina-data`. W kroku 4.6 zaimplementuj i opisz serwowanie wyłącznie tego katalogu
+pod `/downloads/android/` na tej samej domenie. Jeżeli potrzebna będzie zmienna
+konfiguracji API, dodaj jej ostateczną nazwę i przykład do `apps/api/.env.example`
+oraz tej instrukcji. Obecny serwer nie ma takiego mapowania; samo utworzenie
+katalogu poza `public/` nie udostępni plików.
+
+Wymagania dla serwowania w kroku 4.6:
+
+- APK i metadane są dostępne przez HTTPS bez sesji, także z ekranu logowania.
+- APK ma typ `application/vnd.android.package-archive`, a JSON `application/json`.
+- `latest.json` ma `Cache-Control: no-store`; service worker nie zapisuje metadanych ani APK w precache lub cache runtime.
+- APK ma niezmienny adres z numerem wersji, np. `/downloads/android/rodzina-1.1.0-2.apk`; opublikowanego pliku nie zastępuj inną zawartością.
+- Brak pliku w `/downloads/android/` zwraca 404, a nie HTML aplikacji z fallbacku SPA. Brak wydania wyświetla na stronie informację o niedostępności pobierania.
+- Aktualizacja i sprzątanie plików serwera z `release.zip` zachowują katalog wydań. Nie dodajemy crona, SDK/JDK ani kompilacji APK na vh.pl.
+
+### 7.4 Publikowanie i aktualizacja na telefonie — do wdrożenia w kroku 4.6
+
+1. Zbuduj podpisane release APK i przetestuj je lokalnie na fizycznym telefonie. Zapisz `versionCode`, `versionName`, nazwę pliku i sumę SHA-256. W PowerShell sumę policz przez `Get-FileHash -LiteralPath '<ścieżka do podpisanego APK>' -Algorithm SHA256`.
+2. Wgraj APK do trwałego katalogu pod nową nazwą zawierającą wersję, początkowo jako plik tymczasowy. Po zakończeniu transferu nadaj docelową nazwę i sprawdź pobieranie przez HTTPS oraz zgodność sumy pobranego pliku. Dotychczasowe wydanie pozostaje dostępne.
+3. Przygotuj `latest.json` zgodny z rzeczywistym APK. Poniższy przykład przedstawia format; przed publikacją zastąp znacznik `sha256` pełną sumą 64 znaków szesnastkowych:
+
+   ```json
+   {
+     "versionCode": 2,
+     "versionName": "1.1.0",
+     "apkUrl": "https://rodzina.preficze.pl/downloads/android/rodzina-1.1.0-2.apk",
+     "sha256": "<suma SHA-256 podpisanego APK>"
+   }
+   ```
+
+4. Wgraj metadane jako plik tymczasowy w tym samym katalogu, a po sprawdzeniu zastąp nimi `latest.json` przez zmianę nazwy. Metadane publikuj jako ostatnie, żeby klienci nie otrzymali linku do niekompletnego APK. Sprawdź publiczny adres `/downloads/android/latest.json`, typ odpowiedzi i nagłówki cache.
+5. W przeglądarce sprawdź „Pobierz aplikację na Androida” na logowaniu i w „Więcej”, numer wydania oraz pierwszą instalację pobranego APK. Nie utożsamiaj tego przycisku z instalacją PWA.
+6. Na telefonie ze starszym podpisanym wydaniem sprawdź automatyczne wykrycie aktualizacji po uruchomieniu/wznowieniu lub powrocie sieci oraz ręczne „Więcej > Wersja aplikacji > Sprawdź aktualizacje”. Propozycja aktualizacji pojawia się wyłącznie dla wyższego `versionCode`.
+7. Po „Aktualizuj” aplikacja pobiera plik, pokazuje postęp, weryfikuje SHA-256 i otwiera instalator Androida. W razie potrzeby użytkownik zezwala na instalację z tego źródła, a następnie zatwierdza aktualizację w systemie. Nie jest to cicha instalacja ani aktualizacja przy zamkniętym APK.
+8. Po aktualizacji sprawdź nowy numer wersji, zachowanie sesji i harmonogramu oraz odebranie wcześniej zapisanego alarmu offline bez duplikatów. Sprawdź też anulowanie instalacji, odmowę zgody, brak miejsca, przerwanie transferu, niezgodną sumę i brak sieci; błędy aktualizatora nie mogą blokować używania aplikacji ani lokalnych alarmów.
+
+Przy każdym wydaniu zachowaj lokalny rejestr wersji, podpisane APK, jego sumę
+i metadane. Wyniki testów telefonu zapisuj w `DEVELOPMENT.md`, oddzielając
+wykonane scenariusze od niepotwierdzonych. W kroku 4.6 `release:smoke` ma również
+sprawdzać poprawne działanie strony bez opublikowanego APK; obecnie nie sprawdza
+publikacji ani instalatora Androida.
+
+### 7.5 Wycofanie publikacji APK — do wdrożenia w kroku 4.6
+
+Jeżeli nowe APK jest wadliwe, przywróć poprzednie sprawdzone `latest.json`, aby
+wstrzymać proponowanie wadliwej wersji. Zachowaj wcześniej opublikowane pliki,
+ponieważ część telefonów może być w trakcie pobierania. Przywrócenie metadanych
+nie obniża wersji już zainstalowanej na telefonie. Dla takich telefonów przygotuj
+poprawione APK z jeszcze wyższym `versionCode`, podpisane tym samym kluczem;
+nie wymagaj odinstalowania aplikacji ani usunięcia jej danych.

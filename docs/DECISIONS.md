@@ -1,5 +1,12 @@
 # Decyzje
 
+## Ręcznie uruchamiany deploy GitHub Actions — krok 4.7 (2026-10-16)
+
+- Na prośbę właściciela dodajemy krok 4.7 po dystrybucji APK z kroku 4.6 i przenosimy do niego domknięcie fazy 4.
+- Wzorzec stanowią `.github/workflows/deploy.yml` i `scripts/deploy.sh` lokalnego repozytorium `portfel`: transfer SSH, zachowanie plików serwera, restart Passengera i sprawdzenie działania po wdrożeniu. Implementację dostosujemy do paczki Node `release.zip` oraz skryptów `.mjs` projektu `rodzina`.
+- W odróżnieniu od `portfel` deploy ma wyłącznie wyzwalacz `workflow_dispatch` i działa dla `main`. Push nadal uruchamia CI; produkcja zmienia się dopiero po ręcznym „Run workflow”. Powód: właściciel chce sam wybierać moment wdrożenia sprawdzonych zmian.
+- Workflow wdraża API/PWA. Podpisywanie i publikacja APK pozostają osobną procedurą kroku 4.6; deploy zachowuje katalog wydań i metadane Androida. Nie powtarzamy pierwszego wdrożenia ani automatycznie nie cofamy bazy po migracjach.
+
 ## Numeracja zgodna z kolejnością prac (2026-10-16)
 
 - Na prośbę właściciela fazy i ich kroki otrzymują numery zgodne z kolejnością realizacji:
@@ -153,3 +160,39 @@ do kroku 4.6.
   wyjątków i offsetów. Uwzględnia wszystkie wystąpienia, także dwa przesunięte
   na jeden termin. Nie stosujemy limitu 62 dni widoku kalendarza ani cichego
   obcięcia snapshotu. Zadania i dokumenty pozostają poza zakresem.
+
+## Krok 4.3 — trwałe alarmy Androida (2026-10-16)
+
+- Używamy `@capacitor/local-notifications` 8.3.1. Plugin zapisuje konkretne alarmy
+  w prywatnych SharedPreferences i odtwarza je natywnie po BOOT_COMPLETED. Odbiornik
+  aplikacji wywołuje tę samą obsługę po odblokowaniu użytkownika, zmianie czasu/strefy
+  i aktualizacji APK. Po restarcie trzeba przynajmniej raz odblokować telefon;
+  nie udostępniamy danych kalendarza przed odblokowaniem. Alarm nie wymaga JS ani sieci.
+- Snapshot i mapowanie dodatnich 32-bitowych ID zapisujemy przez RodzinaAlarms,
+  osobno dla aktywnego konta `familyId:userId`, bez localStorage. Kolizje rozwiązuje
+  liniowe szukanie wolnego ID z zawijaniem. Zapis celu poprzedza planowanie, więc
+  przerwana operacja jest ponawialna. Porównujemy identyfikatory i treść z getPending;
+  samo powodzenie schedule nie wystarcza. Nie ma publicznego API Androida, które
+  niezależnie wylicza wszystkie zarejestrowane alarmy aplikacji; wynik opiera się
+  na magazynie pluginu i wyniku wywołań AlarmManager, a test telefonu jest obowiązkowy.
+- W Doze alarmy z allowWhileIdle podlegają ograniczeniu częstotliwości. Łączymy
+  terminy oddalone od pierwszego o mniej niż 9 minut w jeden alarm o najwcześniejszej
+  godzinie, z pełną listą treści i danych źródłowych. Pojedynczy alarm zachowuje swój
+  termin UTC; kolejne w grupie mogą pojawić się wcześniej o mniej niż 9 minut.
+- Limit aplikacji to 400 grup systemowych (zapas wobec limitów niektórych urządzeń).
+  Po obcięciu lub awarii pokazujemy liczbę potwierdzonych grup i zakres tylko do
+  pierwszej brakującej. Snapshot pozostaje pełny, aby ponowienie nie gubiło wpisów.
+  Zgody na powiadomienia, kanał i dokładne alarmy sprawdzamy przed i po zapisie.
+- SessionStore usuwa alarmy, widoczne powiadomienia i obydwa magazyny przy logowaniu
+  na inne konto, wylogowaniu oraz 401; 403 harmonogramu czyści tylko alarmy i snapshot.
+  Rewizja magazynu odrzuca spóźnione zapisy poprzedniej sesji. Błąd sieci nie usuwa danych.
+- Prosty ekran w Więcej > Powiadomienia ma ręczne zgody, pobranie i ponowienie z dysku.
+  Automatyczna synchronizacja to krok 4.4, nawigacja po kliknięciu i podgląd offline
+  to 4.5. Nie implementujemy ich tutaj. Brak nowych zmiennych, migracji lub cronów;
+  plugin Androida nie dodaje zależności runtime do serwera. Capacitor includePlugins
+  jawnie wskazuje plugin z workspace web, ponieważ CLI pracuje z katalogu głównego.
+
+Źródła sprawdzone podczas implementacji:
+[Capacitor Local Notifications](https://capacitorjs.com/docs/apis/local-notifications),
+[AlarmManager i ograniczenia Androida](https://developer.android.com/develop/background-work/services/alarms),
+oraz kod wersji 8.3.1 zainstalowanej w node_modules.

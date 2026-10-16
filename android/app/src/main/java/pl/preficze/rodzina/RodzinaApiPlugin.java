@@ -82,6 +82,9 @@ public class RodzinaApiPlugin extends Plugin {
             }
             try (Response response = http.newCall(request.build()).execute()) {
                 int status = response.code();
+                if (status == 403 && path.equals("/api/reminders/schedule")) {
+                    synchronized (AlarmStore.LOCK) { new AlarmStore(getContext()).clear(); }
+                }
                 if (status == 401) sessions.clear();
                 else if (!logout) {
                     for (String value : response.headers("Set-Cookie")) {

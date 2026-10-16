@@ -527,3 +527,75 @@ poza sandboxem pozwoliło wykonać wszystkie testy.
 
 `npm run release:smoke` przeszedł poza sandboxem: instalacja zależności produkcyjnych,
 start serwera, health, frontend i trasy SPA, job przypomnień oraz backup.
+
+## Alarmy systemowe offline — krok 4.3
+
+W APK otwórz **Więcej > Powiadomienia**. Osobno udziel zgody na powiadomienia
+i dokładne alarmy. Po powrocie z ustawień użyj „Sprawdź zgody po powrocie z ustawień”,
+następnie „Pobierz i zapisz harmonogram”. Pobierany jest pełny snapshot zalogowanej
+osoby z API kroku 4.2. Ekran pokazuje liczbę zapisanych grup oraz zakres zabezpieczenia
+w Europe/Warsaw; brak zgody, wyczerpany zakres, limit lub częściowa awaria nie daje
+komunikatu sukcesu. „Ponów zapis z urządzenia” uzgadnia zapisany snapshot bez sieci,
+np. po częściowej awarii. Zapisane wcześniej alarmy działają bez otwartego ekranu.
+
+Snapshot oraz mapowanie ID są w prywatnym magazynie Androida, przypisane do konta.
+Plugin ma drugi magazyn konkretnych alarmów odtwarzany natywnie po restarcie.
+Wylogowanie (także offline), nowe logowanie i 401 czyszczą oba magazyny i powiadomienia.
+Błąd transportu zachowuje dane. 403 samego harmonogramu czyści jego dane, a 403
+edycji cudzego wydarzenia nadal nie wylogowuje użytkownika. Backup Androida pozostaje wyłączony.
+
+Bliskie terminy (mniej niż 9 minut od pierwszego) łączymy w jeden alarm na początku
+grupy, z treścią wszystkich przypomnień. Limit wynosi 400 grup; brakujące pozostają
+w snapshotcie, a ekran pokazuje skrócony zakres. Po ponowieniu porównujemy wynik
+z magazynem getPending pluginu, zamiast przyjmować sukces całej paczki.
+
+Ograniczenia: po restarcie wymagane jest pierwsze odblokowanie telefonu. Wyłączenie
+telefonu, wymuszone zatrzymanie APK, brak zgód, prywatna przestrzeń Androida i ograniczenia
+producenta mogą uniemożliwić dostarczenie. Plugin po restarcie może wyświetlić zaległy
+alarm po włączeniu/odblokowaniu; nie oznacza to dostarczenia o czasie przy wyłączonym telefonie.
+Zmiany na innym urządzeniu wymagają ręcznego pobrania (automatyzacja dopiero 4.4).
+Kliknięcie właściwego wystąpienia i podgląd offline należą do 4.5.
+PWA ma niezależną subskrypcję: zalecamy wyłączyć jej powiadomienia na tym telefonie,
+jeśli używasz APK. Nie wyłączaj subskrypcji innych urządzeń.
+
+### Obowiązkowa próba na fizycznym Androidzie
+
+1. Zbuduj debug APK (`npm run android:debug`) i zainstaluj bez usuwania danych aplikacji.
+   Zaloguj się online, ustaw pojedyncze przypomnienie na kilka minut później,
+   udziel obu zgód i pobierz harmonogram. Zapisz widoczny wynik, wersję Androida,
+   model telefonu i planowany termin; nie używaj testowego czasu joba serwera.
+2. Włącz tryb samolotowy (wyłącz także Wi-Fi), zamknij interfejs APK przez listę
+   ostatnich aplikacji i zablokuj ekran. Nie stosuj „Wymuś zatrzymanie”. Zapisz
+   rzeczywisty moment odbioru i opóźnienie. Dla pojedynczego alarmu wymagamy ≤60 s.
+3. Powtórz z nowym przyszłym przypomnieniem: pobierz online, włącz tryb samolotowy,
+   uruchom telefon ponownie i przynajmniej raz odblokuj. Nie otwieraj APK i nie włączaj
+   sieci. Zablokuj ekran, odczekaj do terminu i zanotuj dostarczenie/opóźnienie.
+4. Sprawdź ponowne pobranie, edycję i usunięcie przypomnienia (ręczne pobranie po
+   każdej zmianie), brak duplikatów, dwie bliskie daty w jednej grupie oraz cofnięte
+   zgody. Wyloguj offline i sprawdź brak alarmów oraz powiadomień poprzedniego konta.
+5. Opcjonalnie uruchom `gradlew.bat connectedDebugAndroidTest` z katalogu android.
+   AlarmStoreTest sprawdza trwałość danych, zmianę konta, rewizję i wylogowanie;
+   nie zastępuje scenariuszy dostarczenia z punktów 2–3.
+
+Scenariusz fazy z datą 18.10.2026 15:00 pozostaje osobnym przyszłym testem.
+Na 16.10.2026 testy sprzętowe kroku 4.3 nie zostały wykonane — nie udzielono zgody
+na sprawdzenie urządzenia przez ADB. Mocki i test przeglądarkowy nie dowodzą alarmu
+przy zablokowanym ekranie ani po restarcie. Krok pozostaje niepotwierdzony sprzętowo.
+
+### Wyniki lokalne 16.10.2026
+
+- Vitest: 327/327, 35 plików; w tym 12 przypadków adaptera oraz 3 testy ekranu.
+  Adapter sprawdza kolizje i zawijanie ID, grupowanie, ponowienie po restarcie JS,
+  zmianę/usunięcie, częściową awarię, fałszywe powodzenie pluginu, błąd sieci,
+  niepełny/stary snapshot, brak zgód, limit i wylogowanie w trakcie pobrania.
+- Lint i typecheck przechodzą; lint ma dwa wcześniejsze ostrzeżenia Fast Refresh
+  w auth.tsx. Format:check i build API/PWA przechodzą.
+- Android: debug APK, Android Lint i kompilacja testowego APK przechodzą.
+  AlarmStoreTest jest skompilowany, ale nie wykonany na telefonie.
+- Playwright headless: 4/4 — nowy ekran z atrapą mostka Androida oraz regresja
+  ekranu PWA przy 390 i 1280 px, bez poziomego przepełnienia. Użyto tymczasowej
+  konfiguracji na porcie 3418, ponieważ standardowy port 3417 był zajęty.
+- Release:smoke przechodzi: zależności produkcyjne, start serwera, health, frontend,
+  trasy SPA, service worker, job przypomnień i backup. Nie zmieniano produkcji.
+- Pozostałe warunki „Gotowe, gdy”: odbiór przy zablokowanym ekranie offline
+  i drugi odbiór po restarcie telefonu nadal wymagają prób z procedury powyżej.

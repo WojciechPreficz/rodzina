@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@capacitor/core": "^8.5.3",
+    "@capacitor/local-notifications": "8.3.1",
     "@mantine/core": "^8.2.7",
     "@mantine/hooks": "^8.2.7",
     "@schedule-x/calendar": "^4.9.1",

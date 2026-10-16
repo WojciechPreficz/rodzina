@@ -8,6 +8,9 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => ({ request, clearSession }),
 }));
 import { AuthProvider, useMe, type AuthUser, type Family } from './auth.js';
+vi.mock('./features/notifications/localSchedule.js', () => ({
+  localScheduler: { clear: vi.fn(async () => undefined) },
+}));
 
 const session = { user: { id: 'adult', displayName: 'Anna' } as AuthUser, family: { id: 'family' } as Family };
 function Harness() {

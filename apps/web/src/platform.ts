@@ -13,7 +13,14 @@ export const nativeApi = registerPlugin<{
 }>('RodzinaApi');
 
 export async function clearNativeSession() {
-  if (isAndroid()) await nativeApi.clearSession();
+  if (isAndroid()) {
+    const { localScheduler } = await import('./features/notifications/localSchedule.js');
+    try {
+      await localScheduler.clear();
+    } finally {
+      await nativeApi.clearSession();
+    }
+  }
 }
 
 export async function nativeRequest(input: string, init: RequestInit) {
@@ -24,11 +31,23 @@ export async function nativeRequest(input: string, init: RequestInit) {
   }
   if (init.body != null && typeof init.body !== 'string') throw new Error('Native API requires JSON.');
   init.signal?.throwIfAborted();
+  if (
+    ['/api/auth/login', '/api/auth/login-child', '/api/auth/register-family'].includes(url.pathname) ||
+    /^\/api\/invitations\/[^/]+\/accept$/.test(url.pathname)
+  ) {
+    const { localScheduler } = await import('./features/notifications/localSchedule.js');
+    await localScheduler.clear();
+  }
   const result = await nativeApi.request({
     path: url.pathname + url.search,
     method: init.method ?? 'GET',
     ...(typeof init.body === 'string' ? { body: init.body } : {}),
   });
+  if (result.status === 401 || (result.status === 403 && url.pathname === '/api/reminders/schedule')) {
+    const { localScheduler } = await import('./features/notifications/localSchedule.js');
+    // Do not await: this request can itself be inside the scheduler queue.
+    void localScheduler.clear().catch(() => undefined);
+  }
   if (generation !== sessionGeneration) throw new DOMException('Session changed', 'AbortError');
   init.signal?.throwIfAborted();
   return { ok: result.status >= 200 && result.status < 300, status: result.status, text: async () => result.body };

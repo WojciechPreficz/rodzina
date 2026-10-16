@@ -2,18 +2,14 @@ import { Alert, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine
 import { labels } from '../../i18n/pl.js';
 import { usePushActions, usePushStatus } from './pushQueries.js';
 import { isAndroid } from '../../platform.js';
+import { LocalAlarmsPage } from './LocalAlarmsPage.js';
 
 const text = labels.notificationsUi;
 
 export function NotificationsPage() {
   const status = usePushStatus();
   const { enable, test } = usePushActions();
-  if (isAndroid())
-    return (
-      <Card withBorder radius="lg" p="lg">
-        <Text>{labels.androidNotificationsPending}</Text>
-      </Card>
-    );
+  if (isAndroid()) return <LocalAlarmsPage />;
   const data = status.data;
   const active = data?.supported && data.permission === 'granted' && data.subscribed;
   const description = !data

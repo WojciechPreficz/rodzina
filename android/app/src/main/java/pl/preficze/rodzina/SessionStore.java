@@ -15,8 +15,10 @@ import javax.crypto.spec.GCMParameterSpec;
 final class SessionStore {
     private static final String ALIAS = "rodzina.session.v1";
     private final SharedPreferences preferences;
+    private final Context context;
 
     SessionStore(Context context) {
+        this.context = context;
         preferences = context.getSharedPreferences("rodzina.session", Context.MODE_PRIVATE);
     }
 
@@ -35,7 +37,10 @@ final class SessionStore {
     }
 
     void clear() {
-        if (!preferences.edit().clear().commit()) throw new IllegalStateException("Session removal failed");
+        synchronized (AlarmStore.LOCK) {
+            new AlarmStore(context).clear();
+            if (!preferences.edit().clear().commit()) throw new IllegalStateException("Session removal failed");
+        }
     }
 
     String read(String origin) throws Exception {

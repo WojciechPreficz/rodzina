@@ -11,6 +11,9 @@ vi.mock('@capacitor/core', () => ({
 import { apiFetch, ApiRequestError } from './api.js';
 import { clearNativeSession, invalidateSessionRequests } from './platform.js';
 import { supportsPush } from './features/notifications/pushClient.js';
+vi.mock('./features/notifications/localSchedule.js', () => ({
+  localScheduler: { clear: vi.fn(async () => undefined) },
+}));
 
 afterEach(() => {
   vi.clearAllMocks();
