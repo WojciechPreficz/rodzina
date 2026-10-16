@@ -6,10 +6,12 @@ import {
   myRemindersResponseSchema,
   reminderResponseSchema,
   deleteReminderResponseSchema,
+  reminderScheduleSchema,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { EventError } from '../events/service.js';
 import { createReminderService } from './service.js';
+import { readReminderSchedule } from './schedule.js';
 
 export function registerReminderRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createReminderService(database);
@@ -33,6 +35,11 @@ export function registerReminderRoutes(app: FastifyInstance, database: DatabaseC
       return reply
         .code(500)
         .send({ error: { code: 'INTERNAL_ERROR', message: 'Nie udało się obsłużyć przypomnienia.' } });
+    });
+    routes.get('/api/reminders/schedule', async (request, reply) => {
+      parse(z.object({}).strict(), request.query);
+      reply.header('Cache-Control', 'no-store');
+      return reminderScheduleSchema.parse(readReminderSchedule(database, request.familyId!, request.user!.id));
     });
     routes.get('/api/reminders/mine', async (request) => {
       const { eventId } = parse(myRemindersQuerySchema, request.query);

@@ -133,3 +133,23 @@ starcie nie blokuje załadowania lokalnego interfejsu logowania.
 Identyfikator aplikacji to `pl.preficze.rodzina` (domena właściciela), nazwa Rodzina.
 Pozostaje stały przy aktualizacjach; zarządzanie wersjami i podpisem release należy
 do kroku 4.6.
+
+## Krok 4.2 — kontrakt harmonogramu (2026-10-16)
+
+- GET /api/reminders/schedule korzysta z istniejącej sesji i zwraca pełny snapshot
+  w przedziale (generatedAt, validUntil], gdzie validUntil = generatedAt + 90 × 24 h.
+  Okno dotyczy czasu alarmu, więc obejmuje też offsety wydarzeń poza tym oknem.
+  Odczyt jest transakcją SQLite, bez modyfikacji rezerwacji crona; odpowiedź ma Cache-Control: no-store.
+- Wpis ma key, reminderId, sourceType=event, sourceId, occurrenceDate, fireAt,
+  title, body i url. Klucz to event:<sourceId>:<reminderId>:<pierwotna data>.
+  Nie zawiera czasu alarmu ani treści, dzięki czemu przesunięcie wyjątku i edycja
+  godziny aktualizują ten sam alarm. Wymiana przypomnienia lub podział serii
+  tworzą nowe klucze; pełny snapshot pozwoli anulować poprzednie w kroku 4.3.
+- Treść lokalna podaje datę DD.MM.RRRR i opcjonalną godzinę rodziny, a przy
+  precyzji miesiąca MM.RRRR. Nie zawiera względnych określeń czasu.
+  Absolutne przypomnienie serii wskazuje wystąpienie według istniejącej reguły
+  joba (najbliższe od remindAt, awaryjnie pierwsze aktywne).
+- Rozwinięcie okna pozostaje w shared i korzysta z istniejących funkcji RRULE,
+  wyjątków i offsetów. Uwzględnia wszystkie wystąpienia, także dwa przesunięte
+  na jeden termin. Nie stosujemy limitu 62 dni widoku kalendarza ani cichego
+  obcięcia snapshotu. Zadania i dokumenty pozostają poza zakresem.

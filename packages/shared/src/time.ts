@@ -264,6 +264,41 @@ function searchStart(reminder: Extract<TimeReminder, { type: 'offset' }>, nowUtc
   return new Date(zonedToFloating(earliest).getTime() - 4 * DAY_MS);
 }
 
+/** Full read-only expansion in (fromUtc, toUtc], including simultaneous moved occurrences. */
+export function expandEventReminderSchedule(
+  reminder: TimeReminder,
+  event: TimeEvent & { exceptions?: readonly TimeException[] },
+  fromUtc: number,
+  toUtc: number,
+  tz: string,
+): { fireAt: number; occurrenceDate: string; allDay: boolean }[] {
+  if (reminder.type === 'absolute') {
+    if (reminder.remindAt <= fromUtc || reminder.remindAt > toUtc) return [];
+    // Match the server job's association of absolute reminders with a series occurrence.
+    const zero = { type: 'offset', offsetValue: 0, offsetUnit: 'minute' } as const;
+    const match =
+      computeNextEventReminder(zero, event, reminder.remindAt - 1, tz) ??
+      computeNextEventReminder(zero, event, localDateTimeToUtc(event.startDate, '00:00', tz) - 1, tz);
+    return match ? [{ ...match, fireAt: reminder.remindAt }] : [];
+  }
+  if (!Number.isSafeInteger(reminder.offsetValue) || reminder.offsetValue < 0)
+    throw new RangeError('Reminder offset must be a non-negative integer');
+  const fromDate = dateString(searchStart(reminder, fromUtc, tz));
+  // searchStart includes a four-day margin; add eight for a conservative upper bound.
+  const toDate = dateString(new Date(searchStart(reminder, toUtc, tz).getTime() + 8 * DAY_MS));
+  const temporalEvent = { ...event, datePrecision: 'day' as const };
+  return expandOccurrences(temporalEvent, event.exceptions ?? [], fromDate, toDate, tz)
+    .flatMap((item) => {
+      const exception = event.exceptions?.find((value) => value.originalDate === item.occurrenceDate);
+      const start = effectiveStart(event, floatingDate(item.occurrenceDate, event.startTime ?? '00:00'), exception);
+      const fireAt = offsetFireAt(reminder, start.date, start.time, tz);
+      return fireAt > fromUtc && fireAt <= toUtc
+        ? [{ fireAt, occurrenceDate: item.occurrenceDate, allDay: item.allDay }]
+        : [];
+    })
+    .sort((a, b) => a.fireAt - b.fireAt || a.occurrenceDate.localeCompare(b.occurrenceDate));
+}
+
 /** Returns a strictly future UTC timestamp, or null when no active reminder remains. */
 export function computeNextFireAt(
   reminder: TimeReminder,

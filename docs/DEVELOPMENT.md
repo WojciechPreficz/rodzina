@@ -492,3 +492,38 @@ Końcowa kontrola natywna: `:app:lintDebug`, `:app:assembleDebug` oraz
 `:app:assembleDebugAndroidTest` zakończyły się BUILD SUCCESSFUL. Lint nie zgłasza
 błędów; ostrzeżenia o nowszych wersjach zależności szablonu pozostają informacyjne.
 Testowe APK zostało skompilowane, ale nie uruchomione na urządzeniu.
+
+## API harmonogramu — krok 4.2
+
+Zalogowany klient pobiera `GET /api/reminders/schedule` bez parametrów.
+Odpowiedź zawiera `ok`, `generatedAt`, `validUntil` (ms UTC) i `reminders`.
+Jest to pełny snapshot przyszłych alarmów bieżącej osoby: wspólnych i osobistych,
+po rozstrzygnięciu odbiorców, cykli i wyjątków. Okno wynosi 90 × 24 h od odczytu,
+z wyłączeniem chwili odczytu i włączeniem końca okna. Każdy wpis zawiera
+`key`, `reminderId`, `sourceType`, `sourceId`, `occurrenceDate`, `fireAt`,
+`title`, `body`, `url`. Treść ma bezwzględną datę; URL wskazuje pierwotną datę
+wystąpienia także po jego przesunięciu. Alarmy bez godziny liczone są od 09:00
+Europe/Warsaw. Precyzja miesiąca oznacza pierwszy dzień miesiąca jako bazę obliczeń.
+
+Endpoint wymaga tej samej sesji co kalendarz (PWA i transport RodzinaApi).
+Nie przyjmuje identyfikatora użytkownika ani rodziny od klienta. Nie zmienia
+`next_fire_at` ani `last_sent_at`; rezerwacja crona nie jest potwierdzeniem
+lokalnego dostarczenia. Brak nowych zmiennych środowiskowych, migracji i cronów.
+
+Testy kontraktu: `npm test -- apps/api/src/modules/reminders/schedule.test.ts`.
+Obejmują odbiorców, izolację rodzin, brak sesji, stabilność kluczy i stanu joba,
+wyjątki, podział serii, obie zmiany czasu, terminy odległe i granice okna.
+Krok 4.2 udostępnia API; zapis harmonogramu i alarmy na telefonie należą do 4.3.
+
+Weryfikacja lokalna 16.10.2026 dla kroku 4.2: 11/11 testów harmonogramu
+przechodzi; lint (dwa istniejące ostrzeżenia Fast Refresh w auth.tsx), typecheck,
+format:check i build przechodzą. Pełny Vitest poza sandboxem: 395/407 testów
+przechodzi. Te same 12 błędów UI potwierdzono na kopii HEAD sprzed tego kroku
+(11/23 testów w sześciu sprawdzanych plikach UI przechodzi). Dotyczą
+ReminderPicker, CalendarPage, DistantEvents, EventDetailsPage, MyReminders
+oraz EventForm; nie zaliczamy pełnego zestawu jako zielonego. Pierwsze uruchomienie
+w sandboxie miało też błędy ENOENT katalogu tymczasowego Vitest; powtórzenie
+poza sandboxem pozwoliło wykonać wszystkie testy.
+
+`npm run release:smoke` przeszedł poza sandboxem: instalacja zależności produkcyjnych,
+start serwera, health, frontend i trasy SPA, job przypomnień oraz backup.
