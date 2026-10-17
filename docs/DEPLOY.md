@@ -393,7 +393,18 @@ niezależnym nośniku. Sprawdź odtworzenie kopii przez `keytool -list -v -keyst
 SHA-256 jest publiczny: wpisz go w `RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS`
 zgodnie z procedurą App Links z kroku 4.5.
 
-Do bieżącej sesji PowerShell wczytaj hasła bez zapisywania w historii:
+Podpisane APK można zbudować na dwa sposoby:
+
+Najprostsza metoda przy domyślnej ścieżce `~/rodzina-signing/rodzina-release.jks`
+i aliasie `rodzina`: uruchom `npm run android:release:interactive` bez przekierowania
+wyjścia, bezpośrednio w terminalu. JDK zapyta o hasło magazynu i klucza, tak jak
+`keytool`; Enter przy drugim pytaniu użyje pierwszego hasła. Hasła nie są zapisywane
+w historii ani pliku. Sprawdzamy otwarcie keystore i odzyskanie klucza przed buildem.
+To pozwala odróżnić błędne hasło magazynu, brak aliasu i błędne hasło klucza.
+Dla innej lokalizacji/aliasu ustaw `RODZINA_ANDROID_KEYSTORE` i
+`RODZINA_ANDROID_KEY_ALIAS`; pozostałe zmienne haseł nie są potrzebne w tej metodzie.
+
+Alternatywnie, dla środowiska bez interaktywnego terminala:
 
 ```powershell
 $env:RODZINA_ANDROID_KEYSTORE = 'C:\Users\<user>\rodzina-signing\rodzina-release.jks'
@@ -409,6 +420,14 @@ po budowie. Nie włączaj logowania środowiska ani diagnostyki Gradle `--debug`
 Na Linux/macOS ustaw analogiczne zmienne środowiskowe bez zapisywania haseł
 w historii. `JAVA_HOME`: JDK 21, `ANDROID_HOME`: SDK 36. Skrypt lokalnie wykrywa
 także narzędzia w `.android-tools`, jeśli zmienne nie zostały ustawione.
+
+`npm run android:check-signing` sprawdza wyłącznie poświadczenia ze zmiennych,
+bez budowania frontendu i APK. Release zawsze wykonuje tę kontrolę, następnie
+uruchamia Gradle z `--no-daemon --no-configuration-cache`, aby nie współdzielić
+procesu podpisującego między próbami. Sukces `keytool -list` z hasłem wpisanym
+interaktywnie nie potwierdza jeszcze wartości przekazanej przez PowerShell
+w zmiennej środowiskowej ani hasła samego klucza. Nie zmieniaj formatu ani nie
+generuj ponownie klucza tylko na podstawie ogólnego błędu podpisywania Gradle.
 
 ## Budowanie i publikacja
 

@@ -278,3 +278,15 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   sekretów w ZIP/APK, ograniczenie FileProvider, brak URL/tokenów w logu requestów,
   no-store dla API i metadanych, CSP, nosniff, Referrer-Policy i ochrona osadzania.
   Inline style pozostają dozwolone dla Mantine/Schedule-X; skrypty tylko z domeny.
+
+# 17.10.2026 — diagnostyka lokalnego podpisywania APK
+
+- Po zgłoszeniu błędu Gradle przy działającym `keytool -list` dodano kontrolę JDK
+  otwarcia magazynu, aliasu i odzyskania klucza przed budowaniem. Nie zakładamy,
+  że sukces interaktywnego odczytu potwierdza hasła ze zmiennych procesu.
+- Interaktywny launcher odczytuje hasła przez `Console.readPassword` tego samego
+  JDK co keytool i przekazuje je jedynie w środowisku procesu budowania. Nie
+  zapisuje plików haseł, nie podaje ich w argumentach polecenia ani logach.
+- Release używa procesu Gradle bez współdzielonego daemona i bez configuration
+  cache. To ograniczenie przechowywania sekretów, nie potwierdzona diagnoza
+  wcześniejszego błędu właściciela. Klucz właściciela nie został zmieniony.

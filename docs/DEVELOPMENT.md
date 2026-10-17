@@ -832,3 +832,16 @@ Pełne „Gotowe, gdy” 4.6 wymaga tych wyników; fazę 4 domyka osobno krok 4.
 - Nadal niepotwierdzone: pierwsza instalacja ze strony, systemowa zgoda i odmowa,
   aktualizacja ze starszej podpisanej wersji, zachowanie sesji i rzeczywistego
   alarmu offline na fizycznym urządzeniu. Nie wykonano deployu ani publikacji.
+
+# Diagnostyka podpisywania — 17.10.2026
+
+Po zgłoszeniu nieudanego podpisania przy poprawnym `keytool -list` dodano
+`npm run android:release:interactive` (odczyt haseł w konsoli JDK) oraz
+`npm run android:check-signing` (kontrola wartości ze zmiennych procesu).
+Test na jednorazowym JKS z różnymi hasłami magazynu i klucza, w tym znakami
+nie-ASCII, potwierdza rozróżnienie błędnego hasła magazynu, aliasu i hasła klucza
+bez ujawniania poświadczeń w wyjściu. Release nie współdzieli daemona Gradle.
+
+Weryfikacja: 378/378 testów Vitest w 46 plikach, lint (dwa wcześniejsze ostrzeżenia),
+format:check, typecheck i build przechodzą. Klucz właściciela nie został zmieniony;
+wynik podpisywania z jego hasłami pozostaje do sprawdzenia lokalnie przez właściciela.
