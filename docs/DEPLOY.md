@@ -333,3 +333,34 @@ pokazuje ostatnią udaną synchronizację oraz zakres zabezpieczenia offline;
 zmiany na innym urządzeniu mogą pozostawić stary alarm do kolejnej synchronizacji.
 PWA zachowuje dotychczasowy Web Push. Procedura i niepotwierdzone testy telefonu
 są w `DEVELOPMENT.md`, w sekcji kroku 4.4.
+
+## Android App Links — krok 4.5
+
+Nowa opcjonalna zmienna serwera: `RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS`.
+Wpisz publiczny odcisk SHA-256 certyfikatu podpisującego zainstalowane APK,
+w formacie 32 par hex oddzielonych dwukropkami. Kilka odcisków rozdziel przecinkiem.
+Nie wpisuj hasła ani zawartości keystore. Wartość pusta zwraca `[]` i pozostawia
+otwieranie linków w przeglądarce jako ścieżkę awaryjną; nie oznacza weryfikacji APK.
+
+Odcisk ustalisz przez `keytool -list -v -keystore <ścieżka-do-keystore>`
+(hasło podaj interaktywnie). Dla testowego debug APK użyj lokalnego debug.keystore;
+nie traktuj jego certyfikatu jako certyfikatu późniejszego wydania release z kroku 4.6.
+Nie generujemy nowego klucza produkcyjnego w kroku 4.5.
+
+Po lokalnych testach aktualizuj sprawdzoną paczkę według istniejącej procedury,
+ustaw zmienną w `.env` serwera i zrestartuj aplikację. Endpoint
+`https://rodzina.preficze.pl/.well-known/assetlinks.json` musi zwracać HTTP 200,
+`Content-Type: application/json`, bez logowania i bez przekierowania. Odpowiedź
+wskazuje `pl.preficze.rodzina`, relację `delegate_permission/common.handle_all_urls`
+oraz skonfigurowane odciski. Cache ma 5 minut. Sprawdź, czy konfiguracja hostingu
+nie przechwytuje `/.well-known/` przed Passengerem. Test instalacji musi potwierdzić
+faktyczną weryfikację domeny przez Androida; samo HTTP 200 jej nie dowodzi.
+
+Powiązanie obejmuje `/zaproszenie/` i `/reset-hasla/`. Bez APK pozostają dotychczasowe
+trasy SPA w przeglądarce. Do obsługi nowych intentów, Wstecz, insets i adaptera
+linków wymagane jest nowe APK (`npm run android:debug` do testów); ZIP serwera
+nie aktualizuje APK. Nie dodano migracji, cronów ani zależności runtime serwera.
+`release:smoke` sprawdza również publiczną odpowiedź JSON assetlinks.
+
+Na 17.10.2026 w ramach kroku 4.5 nie aktualizowano produkcji ani odcisków certyfikatów
+na domenie. Testy App Links na telefonie pozostają do wykonania według DEVELOPMENT.md.

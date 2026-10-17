@@ -7,6 +7,8 @@ import { RouterProvider } from 'react-router/dom';
 import { createQueryClient } from './queryClient.js';
 import { router } from './router.js';
 import { isAndroid } from './platform.js';
+import { allowNavigation } from './nativeNavigation.js';
+import './native.css';
 
 const theme = createTheme({
   primaryColor: 'teal',
@@ -14,6 +16,14 @@ const theme = createTheme({
 });
 
 const queryClient = createQueryClient();
+router.getBlocker('forms', () => !allowNavigation());
+router.subscribe((state) => {
+  const blocker = state.blockers.get('forms');
+  if (blocker?.state === 'blocked') blocker.reset();
+});
+if (isAndroid()) {
+  document.documentElement.classList.add('android-insets');
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router';
 import '@schedule-x/theme-default/dist/index.css';
 import './calendar.css';
 import { useMe } from '../../auth.js';
+import { allowNavigation } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import type { Member } from '../family/familyApi.js';
@@ -99,6 +100,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
       <Modal
         opened={opened}
         onClose={() => {
+          if (!allowNavigation()) return;
           setOpened(false);
           setKind(null);
         }}
@@ -118,7 +120,9 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
             members={members}
             initialDate={date}
             pending={create.isPending}
-            onCancel={() => setKind(null)}
+            onCancel={() => {
+              if (allowNavigation()) setKind(null);
+            }}
             onSave={async (data) => {
               await create.mutateAsync(data);
               setOpened(false);

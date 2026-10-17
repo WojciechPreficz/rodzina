@@ -20,6 +20,9 @@ import { canEditEvent, getEventOccurrence } from './calendarRules.js';
 import { ReminderList } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';
 import { MyReminders } from './MyReminders.js';
+import { allowNavigation } from '../../nativeNavigation.js';
+import { isAndroid } from '../../platform.js';
+import { OfflineReminder } from '../notifications/OfflineReminder.js';
 
 const text = labels.calendarUi;
 
@@ -39,12 +42,15 @@ export function EventDetailsPage() {
       {text.back}
     </Button>
   );
-  if (!user || !family || query.isPending) return <Loader aria-label={text.loading} />;
+  if (!user || !family) return <Loader aria-label={text.loading} />;
+  if (isAndroid() && (query.isPaused || (query.error && !(query.error instanceof ApiRequestError))))
+    return <OfflineReminder />;
+  if (query.isPending) return <Loader aria-label={text.loading} />;
   if (query.error)
     return (
       <Stack>
-        {query.error instanceof ApiRequestError && query.error.status === 404 ? (
-          <Text role="status">{text.missing}</Text>
+        {query.error instanceof ApiRequestError && [403, 404].includes(query.error.status) ? (
+          <Text role="status">{query.error.status === 403 ? labels.androidNavigation.denied : text.missing}</Text>
         ) : (
           <Alert color="red" role="alert">
             {query.error.message}
@@ -232,7 +238,13 @@ export function EventDetailsPage() {
               ))}
             </Stack>
           </Modal>
-          <Modal opened={editing} onClose={() => setEditing(false)} title={text.editEvent}>
+          <Modal
+            opened={editing}
+            onClose={() => {
+              if (allowNavigation()) setEditing(false);
+            }}
+            title={text.editEvent}
+          >
             <EventForm
               key={`${event.id}:${event.updatedAt}:${scope}:${occurrence.occurrenceDate}`}
               event={formEvent}
@@ -240,7 +252,9 @@ export function EventDetailsPage() {
               members={members.data ?? []}
               initialDate={event.startDate}
               pending={update.isPending}
-              onCancel={() => setEditing(false)}
+              onCancel={() => {
+                if (allowNavigation()) setEditing(false);
+              }}
               onSave={async (data) => {
                 const patch: EventPatch =
                   scope === 'this'

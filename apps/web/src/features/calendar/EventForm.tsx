@@ -27,6 +27,7 @@ import { reminderInput, type ReminderItem } from '../../components/reminderField
 import { RecurrenceFields } from './RecurrenceFields.js';
 import type { Member } from '../family/familyApi.js';
 import { labels } from '../../i18n/pl.js';
+import { useFormNavigation } from '../../useFormNavigation.js';
 
 const text = labels.calendarUi;
 
@@ -50,6 +51,7 @@ export function EventForm({
   onCancel: () => void;
 }) {
   const eventKind = event?.kind ?? kind;
+  const navigation = useFormNavigation();
   const [precision, setPrecision] = useState<'day' | 'month'>(event?.datePrecision ?? 'day');
   const monthly = eventKind === 'distant' && precision === 'month';
   const initialWizard = event?.rrule
@@ -136,7 +138,13 @@ export function EventForm({
         setError(text.recurrenceInvalid);
         return;
       }
-      await onSave(data);
+      navigation.saved();
+      try {
+        await onSave(data);
+      } catch (error) {
+        navigation.changed();
+        throw error;
+      }
     } catch (cause) {
       setError(
         cause instanceof RangeError || (cause instanceof Error && cause.name === 'ZodError')
@@ -150,6 +158,8 @@ export function EventForm({
 
   return (
     <form
+      data-navigation-guard="true"
+      onChangeCapture={navigation.changed}
       onSubmit={(e) => {
         void submit(e);
       }}
@@ -187,7 +197,10 @@ export function EventForm({
           label={text.participants}
           data={members.map((m) => ({ value: m.id, label: m.displayName }))}
           value={participants}
-          onChange={setParticipants}
+          onChange={(value) => {
+            navigation.changed();
+            setParticipants(value);
+          }}
           searchable
         />
         {occurrenceOnly && (
@@ -251,7 +264,17 @@ export function EventForm({
         )}
         {eventKind === 'recurring' &&
           !occurrenceOnly &&
-          (wizard ? <RecurrenceFields value={wizard} onChange={setWizard} /> : <Alert>{text.unsupportedRule}</Alert>)}
+          (wizard ? (
+            <RecurrenceFields
+              value={wizard}
+              onChange={(value) => {
+                navigation.changed();
+                setWizard(value);
+              }}
+            />
+          ) : (
+            <Alert>{text.unsupportedRule}</Alert>
+          ))}
         {occurrenceOnly ? (
           <Text size="sm" c="dimmed">
             {text.reminderScope}
@@ -269,12 +292,14 @@ export function EventForm({
               onRemove={(index) => {
                 setReminders((current) => current.filter((_, i) => i !== index));
                 setRemindersChanged(true);
+                navigation.changed();
               }}
             />
             <ReminderPicker
               pending={pending || reminders.length >= 100}
               onAdd={(reminder) => {
                 setReminders((current) => [...current, reminder]);
+                navigation.changed();
                 setRemindersChanged(true);
               }}
             />

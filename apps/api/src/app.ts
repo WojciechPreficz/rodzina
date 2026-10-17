@@ -1163,6 +1163,21 @@ export async function buildApp(
   });
 
   registerEventRoutes(app, database);
+  app.get('/.well-known/assetlinks.json', async (_request, reply) => {
+    reply.header('Cache-Control', 'public, max-age=300');
+    return config.RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS.length
+      ? [
+          {
+            relation: ['delegate_permission/common.handle_all_urls'],
+            target: {
+              namespace: 'android_app',
+              package_name: 'pl.preficze.rodzina',
+              sha256_cert_fingerprints: config.RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS,
+            },
+          },
+        ]
+      : [];
+  });
   registerReminderRoutes(app, database);
   registerPushRoutes(app, database, config, options.pushSender ?? createPushSender(config));
 

@@ -10,14 +10,21 @@ import { FamilyPage } from './features/family/FamilyPage.js';
 import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/JoinPages.js';
 import { AuthLayout } from './components/AuthLayout.js';
 import { CalendarPage } from './features/calendar/CalendarPage.js';
-import { EventDetailsPage } from './features/calendar/EventDetailsPage.js';
+import { EventRoute } from './features/calendar/EventRoute.js';
 import { NotificationsPage } from './features/notifications/NotificationsPage.js';
+import { NativeNavigation } from './nativeNavigation.js';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <AuthProvider />,
+    element: (
+      <>
+        <NativeNavigation />
+        <AuthProvider />
+      </>
+    ),
     children: [
+      { path: 'kalendarz/wydarzenie/:eventId', element: <EventRoute /> },
       {
         element: <AuthLayout />,
         children: [
@@ -42,7 +49,6 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <CalendarPage /> },
               { path: 'kalendarz', element: <CalendarPage /> },
-              { path: 'kalendarz/wydarzenie/:eventId', element: <EventDetailsPage /> },
               { path: 'zakupy', element: <EmptyPage title={labels.shopping} /> },
               { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
               { path: 'wiecej', element: <MorePage /> },

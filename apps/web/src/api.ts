@@ -18,15 +18,23 @@ export function sanitizeNextPath(rawPath: string | null | undefined): string {
   }
 
   const candidate = rawPath.trim();
+  const unsafe = (value: string) =>
+    [...value].some((char) => char === '\\' || char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
   if (!candidate.startsWith('/')) {
     return '/';
   }
 
-  if (candidate.startsWith('//') || candidate.startsWith('\\\\')) {
+  if (candidate.startsWith('//') || /\s/.test(candidate) || unsafe(candidate)) {
     return '/';
   }
-
-  return candidate;
+  try {
+    const decoded = decodeURIComponent(candidate);
+    if (decoded.startsWith('//') || unsafe(decoded)) return '/';
+    const url = new URL(candidate, 'https://localhost');
+    return url.origin === 'https://localhost' ? url.pathname + url.search + url.hash : '/';
+  } catch {
+    return '/';
+  }
 }
 
 export async function apiFetch<T>(input: string, init: RequestInit = {}): Promise<T> {

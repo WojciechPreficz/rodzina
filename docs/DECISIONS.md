@@ -227,3 +227,30 @@ oraz kod wersji 8.3.1 zainstalowanej w node_modules.
 API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
 [Capacitor App](https://capacitorjs.com/docs/apis/app),
 [Capacitor Network](https://capacitorjs.com/docs/apis/network).
+
+## Krok 4.5 — nawigacja Androida i podgląd alarmu (2026-10-17)
+
+- Android App Links obejmują wyłącznie HTTPS `rodzina.preficze.pl/zaproszenie/…`
+  oraz `/reset-hasla/…`. Nasłuch `appUrlOpen` i `getLaunchUrl` przekazują
+  zweryfikowaną ścieżkę do React Router. Zdarzenie otrzymane podczas startu
+  ma pierwszeństwo przed starszym wynikiem `getLaunchUrl`.
+- Lokalne alarmy otwierają istniejący adres wydarzenia z datą wystąpienia.
+  Nie ufamy treści przekazanej przez intent: podgląd pochodzi z magazynu
+  harmonogramu aplikacji, dostępnego dopiero po sprawdzeniu lokalnej sesji
+  przez Android Keystore. Wylogowanie, zmiana konta i potwierdzone 401 nadal
+  czyszczą magazyn. Nie wprowadzamy sesji ani pełnego kalendarza w localStorage.
+- Przy zimnym starcie offline nie odtwarzamy uprawnień użytkownika z cache.
+  Udostępniamy wyłącznie zapisany podgląd z ostrzeżeniem i możliwością ponowienia
+  odczytu online. Po odpowiedzi 403/404 pokazujemy błąd dostępu/brak wydarzenia,
+  bez zastępowania tej odpowiedzi starym podglądem.
+- `/.well-known/assetlinks.json` jest publicznym endpointem Fastify. Nowa zmienna
+  `RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS` przyjmuje odciski certyfikatów APK,
+  bez kluczy prywatnych. Pusta konfiguracja zwraca `[]`: nie deklarujemy
+  zweryfikowanego powiązania z nieznanym certyfikatem. Produkcyjne skojarzenie
+  wymaga osobnej aktualizacji serwera z faktycznym odciskiem podpisującego APK.
+- Systemowe Wstecz najpierw kończy edycję pola, potem zamyka modal przez Escape,
+  a następnie cofa historię React Router. Na ekranie głównym minimalizuje APK.
+  Formularz wydarzenia pyta o odrzucenie zmian także przy zamknięciu modala
+  i zmianie trasy. Android stosuje natywne insets pasków systemu/wycięcia/IME;
+  nie naliczamy ich ponownie w CSS. Kopiowanie i udostępnianie w APK korzystają
+  z własnego małego adaptera Androida, bez dodatkowych zależności serwera.

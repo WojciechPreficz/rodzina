@@ -1,6 +1,7 @@
 import { AppShell as MantineAppShell, Group, NavLink, Stack, Text } from '@mantine/core';
 import { NavLink as RouterNavLink, Outlet } from 'react-router';
 import { labels } from '../i18n/pl.js';
+import type { ReactNode } from 'react';
 
 const navigation = [
   { label: labels.calendar, to: '/' },
@@ -9,7 +10,7 @@ const navigation = [
   { label: labels.more, to: '/wiecej' },
 ];
 
-export function AppShell() {
+export function AppShell({ children }: { children?: ReactNode }) {
   return (
     <MantineAppShell padding="md" footer={{ height: 68 }}>
       <MantineAppShell.Main>
@@ -17,7 +18,7 @@ export function AppShell() {
           <Text component="h1" size="xl" fw={700} c="teal.8">
             {labels.appName}
           </Text>
-          <Outlet />
+          {children ?? <Outlet />}
         </Stack>
       </MantineAppShell.Main>
       <MantineAppShell.Footer>

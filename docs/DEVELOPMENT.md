@@ -675,3 +675,86 @@ niepotwierdzona sprzętowo; nie zmieniano serwera produkcyjnego.
 - `release:smoke` przechodzi. Brak zmian konfiguracji środowiska, migracji,
   cronów lub nowych zależności runtime serwera. Nie wykonano deployu ani
   instalacji APK na telefonie.
+
+## Nawigacja Androida, linki i użyteczność — krok 4.5
+
+APK nasłuchuje `localNotificationActionPerformed`, także zachowanego zdarzenia
+startowego pluginu, i otwiera `/kalendarz/wydarzenie/:id?data=YYYY-MM-DD`.
+Capacitor BridgeActivity przekazuje intent przy zimnym starcie; nie przekazujemy
+go ponownie, aby nie dublować nawigacji. W grupie alarmów otwierane jest pierwsze
+wystąpienie (adres zapisany w `extra.url`). Obce adresy są odrzucane.
+
+Bez połączenia ekran pokazuje wyłącznie zapisane tytuły i treści przypomnień dla
+tego adresu z ostrzeżeniem o możliwej nieaktualności. Dane odczytuje natywny plugin
+po sprawdzeniu ważnej lokalnej sesji. Pozwala to otworzyć podgląd również po
+zamknięciu procesu bez odtwarzania pełnego konta offline. Brak wpisu/sesji daje
+komunikat i link logowania z wewnętrznym `next`. „Sprawdź aktualne dane” ponawia
+sesję i dane wydarzenia. Potwierdzone 403/404 nie pokazuje starego podglądu.
+
+App Links przy uruchomionym APK obsługuje `appUrlOpen`, a zimny start również
+`getLaunchUrl`. Akceptujemy tylko HTTPS domeny produkcyjnej, zaproszenie lub reset.
+W przeglądarce pozostają istniejące trasy. Konfigurację certyfikatu/domeny opisuje
+DEPLOY.md; nie publikuj prywatnych kluczy. Źródła techniczne:
+[Capacitor App](https://capacitorjs.com/docs/apis/app),
+[Deep Links](https://capacitorjs.com/docs/guides/deep-links).
+
+Wstecz: aktywne pole traci fokus, następne cofnięcie zamyka górny modal przez Escape,
+potem cofa trasę; brak historii prowadzi do kalendarza, a ekran główny minimalizuje
+APK. Formularz wydarzenia pyta o odrzucenie niezapisanych zmian. Android obsługuje
+systemowe paski, wycięcie i klawiaturę przez insets; CSS przeglądarki stosuje safe-area.
+Linki w APK kopiujemy przez ClipboardManager i udostępniamy systemowym chooserem.
+
+### Próby na fizycznym telefonie — do wykonania
+
+1. Zbuduj debug APK z lokalnym frontendem, zainstaluj zgodnie z istniejącą procedurą.
+   Skonfiguruj faktyczny odcisk certyfikatu na domenie według DEPLOY.md. Zweryfikuj
+   domenę w ustawieniach Androida „Otwieranie obsługiwanych linków”. Opcjonalnie ADB:
+   `adb shell pm verify-app-links --re-verify pl.preficze.rodzina`, potem
+   `adb shell pm get-app-links pl.preficze.rodzina`. Stan domeny musi być `verified`.
+2. Z komunikatora otwórz prawdziwy link zaproszenia, potem resetu, przy zamkniętym
+   i uruchomionym APK. Sprawdź właściwy token/ekran i wykonanie formularza.
+   Bez APK sprawdź te same linki w Chrome. Nie uznawaj wymuszonego intentu do
+   pakietu przez ADB za dowód weryfikacji domeny.
+3. Zapisz alarm wydarzenia cyklicznego z przyszłym wystąpieniem. Kliknij otrzymane
+   powiadomienie przy działającym APK i po zamknięciu procesu. W obu przypadkach
+   sprawdź konkretną datę wystąpienia. Powtórz po wyłączeniu sieci i zamknięciu
+   procesu: ma być zapisany podgląd, ostrzeżenie, brak edycji. Włącz sieć i użyj
+   ponowienia. Wylogowanie lub zmiana konta nie może odsłonić poprzedniego podglądu.
+4. Usuń wydarzenie lub odbierz dostęp na serwerze. Po ponownej synchronizacji
+   i otwarciu adresu sprawdź komunikat o braku wydarzenia/dostępu; stary podgląd
+   nie może zastępować odpowiedzi 403/404. Offline przed synchronizacją pozostaje
+   ograniczenie znane z kroku 4.4.
+5. W formularzu wydarzenia wpisz tekst. Cofnij klawiaturę, potem użyj Wstecz:
+   odrzucenie potwierdzenia zachowuje treść, akceptacja zamyka formularz. Sprawdź
+   także Escape, przycisk Anuluj, zamknięcie modala, obrót telefonu i paski systemu.
+   Skopiuj i udostępnij link zaproszenia/resetu przez systemowe menu.
+
+Stan na 17.10.2026: testy fizycznego telefonu, prawdziwego intentu powiadomienia,
+weryfikacji domeny i natywnego menu udostępniania nie zostały wykonane. Testy
+headless z atrapą mostka sprawdzają React i układ, nie zastępują tych prób.
+
+### Wyniki lokalne i warunki „Gotowe, gdy” — 17.10.2026
+
+- Vitest: 349/349 testów w 41 plikach, w tym odrzucanie obcych URL w alarmie,
+  App Links i `next`, zachowanie daty wystąpienia, pierwszeństwo nowego intentu,
+  podgląd z magazynu i brak wpisu po utracie sesji, 403 bez starej treści,
+  ochrona formularzy oraz natywne kopiowanie/udostępnianie.
+- Playwright wyłącznie headless: 8/8 przy 390 i 1280 px. Test zimnego startu
+  z zachowanym kliknięciem alarmu otwiera właściwą datę i zapisany podgląd;
+  linki przekazane przez atrapę Androida otwierają reset i zaproszenie.
+  Regresja przeglądarki obejmuje zaproszenie, reset, logowanie dzieci i powrót
+  po logowaniu do szczegółów. Anulowanie modala, Escape i cofnięcie historii
+  zachowują wpisany formularz po odmowie odrzucenia zmian. Zrzuty podglądu
+  sprawdzono wizualnie; brak poziomego przepełnienia w obu szerokościach.
+- Test wykrył i zweryfikował poprawkę wyścigu: nasłuchy intentów rejestrujemy
+  po zamontowaniu RouterProvider, aby ekran powitalny nie nadpisał celu alarmu.
+- Lint i format:check przechodzą (dwa wcześniejsze ostrzeżenia Fast Refresh
+  w auth.tsx), typecheck i build API/PWA przechodzą. Build debug Androida
+  i Android Lint sprawdzono z JDK 21.0.12.1, SDK 36 i Gradle 8.14.3.
+- `release:smoke` potwierdza paczkę serwera, JSON assetlinks, trasy przeglądarki,
+  manifest, service worker, job przypomnień i backup. Nie dodano migracji ani crona.
+  Nowa konfiguracja certyfikatów jest opisana w `.env.example` i DEPLOY.md.
+- Pełne „Gotowe, gdy” pozostaje niepotwierdzone sprzętowo: otwarcie prawdziwych
+  linków po zweryfikowaniu domeny, kliknięcie alarmu w działającym/zamkniętym APK,
+  systemowe Wstecz, klawiatura/insets i menu udostępniania wymagają powyższych prób.
+  Nie wykonano deployu ani instalacji APK na telefonie.

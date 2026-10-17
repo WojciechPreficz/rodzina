@@ -13,7 +13,7 @@ const config: CapacitorConfig = {
   includePlugins: ['@capacitor/local-notifications', '@capacitor/app', '@capacitor/network'],
   server: { androidScheme: 'https' },
   plugins: {
-    App: { disableBackButtonHandler: true },
+    App: { disableBackButtonHandler: false },
     RodzinaApi: { apiOrigin },
     LocalNotifications: { smallIcon: 'ic_stat_reminder', iconColor: '#228be6' },
   },

@@ -167,6 +167,12 @@ describe('event details', () => {
     show('2026-10-13');
     expect(screen.getByRole('status')).toHaveTextContent('Tego wydarzenia już nie ma');
   });
+  it('shows revoked access instead of rendering stale event contents', () => {
+    state.error = new ApiRequestError('Brak dostępu.', 403);
+    show();
+    expect(screen.getByRole('status')).toHaveTextContent('Nie masz już dostępu');
+    expect(screen.queryByRole('heading', { name: 'Basen' })).not.toBeInTheDocument();
+  });
   it('resolves a moved exception by its original date and rejects cancelled occurrences', () => {
     state.event = {
       ...event,

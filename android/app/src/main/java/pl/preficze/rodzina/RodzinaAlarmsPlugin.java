@@ -10,6 +10,22 @@ import org.json.JSONObject;
 @CapacitorPlugin(name = "RodzinaAlarms")
 public class RodzinaAlarmsPlugin extends Plugin {
     @PluginMethod
+    public void preview(PluginCall call) {
+        synchronized (AlarmStore.LOCK) {
+            try {
+                String origin = getBridge().getConfig().getPluginConfiguration("RodzinaApi")
+                    .getString("apiOrigin", "https://rodzina.preficze.pl");
+                String session = new SessionStore(getContext()).read(origin);
+                String value = session == null ? null : new AlarmStore(getContext()).preview();
+                JSObject result = new JSObject();
+                result.put("value", value == null ? JSONObject.NULL : value);
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("Nie udało się odczytać zapisanego przypomnienia.");
+            }
+        }
+    }
+    @PluginMethod
     public void read(PluginCall call) {
         synchronized (AlarmStore.LOCK) {
             try {

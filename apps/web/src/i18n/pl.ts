@@ -1,4 +1,14 @@
 export const labels = {
+  androidNavigation: {
+    discard: 'Odrzucić niezapisane zmiany formularza?',
+    offline: 'Zapisany podgląd przypomnienia',
+    stale:
+      'Brak aktualnych danych. Podgląd pochodzi z zapisanego harmonogramu i może być nieaktualny. Edycja wymaga połączenia z serwerem.',
+    unavailable: 'Brak zapisanego przypomnienia dla tego konta. Połącz się z internetem i zaloguj ponownie.',
+    denied: 'Nie masz już dostępu do tego wydarzenia.',
+    refresh: 'Sprawdź aktualne dane',
+    login: 'Przejdź do logowania',
+  },
   localAlarms: {
     title: 'Przypomnienia offline',
     channelName: 'Przypomnienia kalendarza',

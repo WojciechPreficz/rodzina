@@ -103,6 +103,14 @@ try {
   }
   const protectedResponse = await fetch(`http://127.0.0.1:${port}/api/auth/me`);
   if (protectedResponse.status !== 401) fail('auth/me nie wymaga sesji.');
+  const appLinks = await fetch(`http://127.0.0.1:${port}/.well-known/assetlinks.json`);
+  if (
+    !appLinks.ok ||
+    !appLinks.headers.get('content-type')?.includes('application/json') ||
+    !Array.isArray(await appLinks.json())
+  ) {
+    fail('assetlinks.json nie jest publicznym dokumentem JSON.');
+  }
 
   const manifestResponse = await fetch(`http://127.0.0.1:${port}/manifest.webmanifest`);
   const manifest = await manifestResponse.json();

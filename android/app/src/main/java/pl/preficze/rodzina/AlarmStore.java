@@ -27,6 +27,10 @@ final class AlarmStore {
         return revision;
     }
 
+    String preview() {
+        return preferences.getString("value", null);
+    }
+
     String read(String account) {
         String owner = preferences.getString("account", null);
         if (owner != null && !owner.equals(account)) clear();

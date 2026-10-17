@@ -6,6 +6,7 @@ import { labels } from '../../i18n/pl.js';
 
 const text = labels.localAlarms;
 export const alarmStore = registerPlugin<{
+  preview(): Promise<{ value: string | null }>;
   read(options: { account: string }): Promise<{ value: string | null; revision: string }>;
   write(options: { account: string; value: string; revision: string }): Promise<void>;
 }>('RodzinaAlarms');
@@ -84,7 +85,7 @@ type Dependencies = {
     | 'schedule'
     | 'removeAllDeliveredNotifications'
   >;
-  store: typeof alarmStore;
+  store: Pick<typeof alarmStore, 'read' | 'write'>;
   fetch: () => Promise<unknown>;
   now: () => number;
 };
