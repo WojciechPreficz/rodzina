@@ -10,9 +10,13 @@ const config: CapacitorConfig = {
   appName: 'Rodzina',
   loggingBehavior: 'none',
   webDir: 'apps/web/dist-android',
-  includePlugins: ['@capacitor/local-notifications'],
+  includePlugins: ['@capacitor/local-notifications', '@capacitor/app', '@capacitor/network'],
   server: { androidScheme: 'https' },
-  plugins: { RodzinaApi: { apiOrigin }, LocalNotifications: { smallIcon: 'ic_stat_reminder', iconColor: '#228be6' } },
+  plugins: {
+    App: { disableBackButtonHandler: true },
+    RodzinaApi: { apiOrigin },
+    LocalNotifications: { smallIcon: 'ic_stat_reminder', iconColor: '#228be6' },
+  },
 };
 
 export default config;

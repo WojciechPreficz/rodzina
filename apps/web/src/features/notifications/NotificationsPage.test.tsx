@@ -7,6 +7,8 @@ import { NotificationsPage } from './NotificationsPage.js';
 import { NotificationBanner } from './NotificationBanner.js';
 
 const mocks = vi.hoisted(() => ({
+  android: false,
+  schedule: undefined as undefined | { result?: { complete: boolean }; error?: string },
   status: {
     data: undefined as
       | undefined
@@ -23,6 +25,9 @@ const mocks = vi.hoisted(() => ({
     data: undefined as undefined | { sent: number; failed: number; removed: number },
   },
 }));
+vi.mock('../../platform.js', () => ({ isAndroid: () => mocks.android }));
+vi.mock('../../auth.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
+vi.mock('./scheduleSync.js', () => ({ useLocalSchedule: () => ({ data: mocks.schedule }) }));
 vi.mock('./pushQueries.js', () => ({ usePushStatus: () => mocks.status, usePushActions: () => mocks }));
 beforeEach(() => {
   vi.stubGlobal(
@@ -31,7 +36,21 @@ beforeEach(() => {
   );
   mocks.status.data = { supported: true, permission: 'default', subscribed: false, hasReminders: false };
   mocks.test.data = undefined;
+  mocks.android = false;
+  mocks.schedule = undefined;
   vi.clearAllMocks();
+});
+
+it('uses local alarm coverage for the Android banner without a Web Push subscription', () => {
+  mocks.android = true;
+  mocks.status.data = { supported: false, hasReminders: true, permission: 'default', subscribed: false };
+  mocks.schedule = { result: { complete: true } };
+  show(<NotificationBanner />);
+  expect(screen.queryByRole('link', { name: 'Powiadomienia' })).not.toBeInTheDocument();
+  cleanup();
+  mocks.schedule = { result: { complete: false } };
+  show(<NotificationBanner />);
+  expect(screen.getByRole('link', { name: 'Powiadomienia' })).toBeInTheDocument();
 });
 afterEach(() => {
   cleanup();

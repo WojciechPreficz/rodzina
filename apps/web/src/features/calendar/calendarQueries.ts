@@ -3,6 +3,7 @@ import type { EventPatch, EventScope } from '@rodzina/shared';
 import { useMe } from '../../auth.js';
 import { ApiRequestError } from '../../api.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
+import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import {
   createEvent,
   deleteEvent,
@@ -47,6 +48,7 @@ export function useEvent(id: string) {
 export function useCalendarMutations() {
   const client = useQueryClient();
   const sync = async () => {
+    await refreshLocalSchedule(client);
     await client.invalidateQueries({ queryKey: ['calendar'] });
   };
   const create = useMutation({ mutationFn: createEvent, onSuccess: sync });

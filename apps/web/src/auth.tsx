@@ -3,6 +3,8 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { apiFetch, sanitizeNextPath } from './api.js';
 import { clearNativeSession, invalidateSessionRequests, isAndroid } from './platform.js';
+import { ScheduleSync } from './features/notifications/scheduleSync.js';
+import { localScheduler } from './features/notifications/localSchedule.js';
 
 export type AuthRole = 'admin' | 'member' | 'child';
 
@@ -64,6 +66,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
 
   useEffect(() => {
     const onSessionLost = () => {
+      if (isAndroid()) localScheduler.invalidate();
       generation.current += 1;
       queryClient?.clear();
       setUser(null);
@@ -75,6 +78,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   }, [queryClient]);
 
   const logout = async () => {
+    if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
     await queryClient?.cancelQueries();
@@ -91,6 +95,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   };
 
   const setSession = (nextUser: AuthUser, nextFamily: Family) => {
+    if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
     queryClient?.clear();
@@ -108,7 +113,12 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     logout,
   };
 
-  return <AuthContext.Provider value={value}>{children ?? <Outlet />}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {queryClient && <ScheduleSync account={user ? `${user.familyId}:${user.id}` : ''} />}
+      {children ?? <Outlet />}
+    </AuthContext.Provider>
+  );
 }
 
 export function AppRoot() {

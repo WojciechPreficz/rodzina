@@ -7,6 +7,7 @@ import { labels } from '../../i18n/pl.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';
+import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 
 const text = labels.calendarUi;
 export function MyReminders({ event }: { event: CalendarEvent }) {
@@ -22,6 +23,7 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
     refetchOnWindowFocus: 'always',
   });
   const sync = async () => {
+    await refreshLocalSchedule(client);
     await client.invalidateQueries({ queryKey: key });
   };
   const create = useMutation({

@@ -164,3 +164,33 @@ it('rejects a download interrupted by logout before planning', async () => {
   await clear;
   expect(f.notifications.schedule).not.toHaveBeenCalled();
 });
+
+it('persists the last successful download and reports saved coverage after a network failure', async () => {
+  const f = fixture();
+  expect(await f.scheduler.sync('family:user')).toMatchObject({ lastSuccessfulAt: now });
+  f.fetch.mockRejectedValueOnce(new Error('offline'));
+  await expect(f.scheduler.sync('family:user')).rejects.toThrow('offline');
+  expect(await f.scheduler.status('family:user')).toMatchObject({ complete: true, count: 1, lastSuccessfulAt: now });
+  f.notifications.checkPermissions.mockResolvedValue({ display: 'denied' } as never);
+  expect(await f.scheduler.status('family:user')).toMatchObject({ complete: false, lastSuccessfulAt: now });
+});
+
+it('discards an in-flight snapshot after a local edit and schedules only the new snapshot', async () => {
+  const f = fixture();
+  let finish!: (value: unknown) => void;
+  f.fetch.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const old = f.scheduler.sync('family:user');
+  const rejected = expect(old).rejects.toThrow('Konto');
+  await vi.waitFor(() => expect(f.fetch).toHaveBeenCalled());
+  f.scheduler.invalidate();
+  const next = f.scheduler.sync('family:user');
+  finish({ ...f.snapshot, reminders: [reminder('outdated')] });
+  await rejected;
+  await next;
+  expect([...f.pending.values()].map((item) => item.extra.key)).toEqual(['one']);
+});

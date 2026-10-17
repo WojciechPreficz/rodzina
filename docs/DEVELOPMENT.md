@@ -599,3 +599,79 @@ przy zablokowanym ekranie ani po restarcie. Krok pozostaje niepotwierdzony sprz�
   trasy SPA, service worker, job przypomnień i backup. Nie zmieniano produkcji.
 - Pozostałe warunki „Gotowe, gdy”: odbiór przy zablokowanym ekranie offline
   i drugi odbiór po restarcie telefonu nadal wymagają prób z procedury powyżej.
+
+## Synchronizacja harmonogramu i ekran powiadomień — krok 4.4
+
+APK pobiera i uzgadnia harmonogram po zalogowaniu/uruchomieniu, zapisie lub
+usunięciu wydarzenia albo własnego przypomnienia, wznowieniu, odzyskaniu sieci
+i co 20 sekund przy aktywnej aplikacji. Nasłuch App/Network jest usuwany po
+zmianie konta. Pobrania i operacje systemowych alarmów są serializowane;
+spóźniony wynik poprzedniego konta lub unieważnionej operacji jest odrzucany.
+Brak sieci nie kasuje poprzedniego harmonogramu. Wylogowanie offline nadal
+usuwa alarmy, powiadomienia i dane konta przez istniejący mechanizm natywny.
+
+**Więcej > Powiadomienia** pokazuje osobno zgody na powiadomienia i dokładne
+alarmy, liczbę zapisanych grup, datę snapshotu, ostatnią udaną synchronizację
+oraz rzeczywisty zakres zabezpieczenia offline (`validUntil`, Europe/Warsaw).
+Data sukcesu przetrwa ponowne uruchomienie. Brak zgody, błąd pobrania,
+częściowe planowanie i limit nie są sukcesem. „Synchronizuj teraz” ponawia
+pobranie; „Ponów zapis z urządzenia” uzgadnia zapisany snapshot bez sieci.
+Ten drugi przycisk nie zmienia daty ostatniego udanego pobrania.
+Po udzieleniu zgody ekran ponawia synchronizację; powrót z ustawień również
+wywołuje odświeżenie. Zgody są żądane wyłącznie po świadomym kliknięciu.
+Baner APK prowadzi do tego ekranu i nie zależy od subskrypcji Web Push.
+PWA zachowuje ekran i test powiadomień przeglądarkowych.
+
+### Procedura fizycznego telefonu — do wykonania
+
+1. Zbuduj i zainstaluj debug APK z aktualnymi pluginami. Zaloguj się, udziel
+   obu zgód i sprawdź automatyczny zapis przypomnienia na przyszły termin.
+   Zapisz model, wersję Androida, czas ostatniej synchronizacji, liczbę grup
+   i `validUntil`. Sprawdź ponownie po zamknięciu i uruchomieniu APK.
+2. Na drugim urządzeniu zmień termin/treść wydarzenia. W aktywnym APK w ciągu
+   20 s potwierdź nowy harmonogram i brak alarmu o starej godzinie. Powtórz
+   z usunięciem oraz zmianą osobistego przypomnienia. Ponów kilka razy:
+   liczba alarmów nie może wzrosnąć przez duplikaty.
+3. Zapisz kolejny alarm, zamknij interfejs przez listę ostatnich aplikacji
+   (bez „Wymuś zatrzymanie”). Zmień wydarzenie na drugim urządzeniu.
+   Przed wznowieniem nie oczekuj aktualizacji telefonu: poprzedni zapis
+   pozostaje obowiązujący. Wznów APK online i potwierdź aktualizację/anulowanie.
+   Zapisz wynik obu etapów: przed i po wznowieniu. To wymagany test granicy
+   zamkniętego APK; nie zastępuje go mock ani uruchomienie joba serwera.
+4. Włącz tryb samolotowy, użyj „Synchronizuj teraz”: czytelny błąd i zachowany
+   poprzedni zakres, bez nowego sukcesu. Włącz sieć przy aktywnym APK:
+   harmonogram ma się odświeżyć. Cofnij dokładne alarmy w ustawieniach i wróć:
+   ekran ma pokazać brak zgody/niepełne zabezpieczenie.
+5. Wyloguj offline: brak alarmów i widocznych powiadomień poprzedniej osoby.
+   Przywróć sieć i zaloguj inne konto; poprzednie dane nie mogą wrócić,
+   również po zakończeniu opóźnionego pobrania.
+
+Stan na 17.10.2026: testów fizycznego telefonu i zamkniętego APK nie wykonano;
+sprawdzenie urządzenia przez ADB nie zostało zatwierdzone. Powyższa procedura
+jest planem weryfikacji, a nie zaliczonym wynikiem. Implementacja kroku pozostaje
+niepotwierdzona sprzętowo; nie zmieniano serwera produkcyjnego.
+
+### Wyniki lokalne 17.10.2026 i warunki „Gotowe, gdy”
+
+| Warunek kroku 4.4                                                                  | Wynik                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Zmiana/usunięcie z drugiego urządzenia aktualizuje/anuluje alarm po synchronizacji | Headless z prawdziwym lokalnym API i atrapą mostka: utworzenie wydarzenia, edycja przez osobny request API, niezmienione ID z nową treścią i anulowanie po usunięciu. Próba dwóch fizycznych urządzeń pozostaje do wykonania. |
+| Ponowienie nie dubluje alarmów                                                     | Testy adaptera: ponowne pobranie, ponowienie po restarcie JS, zachowanie ID, częściowa awaria i ponowne planowanie brakujących alarmów.                                                                                       |
+| Przerwany request zachowuje poprzedni harmonogram                                  | Test adaptera oraz headless: odcięcie requestu harmonogramu pozostawia zapisany alarm; ekran pokazuje błąd i wcześniejszą datę sukcesu.                                                                                       |
+| Odpowiedź poprzedniego konta/snapshotu nie odtwarza jego danych                    | Testy generacji, starszego snapshotu, zmiany konta podczas pobrania i opóźnionego sprawdzania zgód; anulowanie Query unieważnia operację schedulera.                                                                          |
+| Wylogowanie offline usuwa alarmy                                                   | Testy czyszczenia schedulera i cyklu sesji offline. Natywny magazyn jest czyszczony istniejącym clearSession; próba sprzętowa pozostaje do wykonania.                                                                         |
+| Brak fałszywego sukcesu przy braku zgody/błędzie planowania                        | Testy zgód, faktycznie zapisanych alarmów, częściowej awarii oraz ekranu z poprzednim sukcesem i nowym błędem.                                                                                                                |
+| Zamknięte APK wymaga wznowienia/synchronizacji                                     | Zaimplementowane ograniczenie i procedura powyżej; test fizycznego telefonu niewykonany, warunek niezaliczony sprzętowo.                                                                                                      |
+
+- Vitest: pełny zestaw 336/336 w 36 plikach; po dopracowaniu anulowania
+  ponownie sprawdzono 43/43 testów powiadomień i sesji.
+- Lint: brak błędów, dwa wcześniejsze ostrzeżenia Fast Refresh w auth.tsx.
+  Typecheck, format:check i build API/PWA przechodzą.
+- Playwright wyłącznie headless: 4/4, ekran APK z atrapą mostka i regresja PWA
+  przy 390 i 1280 px; brak poziomego przepełnienia. Zrzuty ekranów sprawdzono
+  wizualnie. Użyto izolowanego serwera na porcie 3418.
+- Android: synchronizacja trzech pluginów, build debug APK i Android Lint
+  przechodzą. Artefakt: `android/app/build/outputs/apk/debug/app-debug.apk`.
+- `release:smoke` przechodzi. Brak zmian konfiguracji środowiska, migracji,
+  cronów lub nowych zależności runtime serwera. Nie wykonano deployu ani
+  instalacji APK na telefonie.

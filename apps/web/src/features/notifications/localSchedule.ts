@@ -13,13 +13,18 @@ export const channelId = 'calendar-reminders-v1';
 const spacing = 9 * 60_000;
 export const alarmLimit = 400;
 type Alarm = { key: string; id: number; fireAt: number; items: ReminderSchedule['reminders'] };
-export type SavedSchedule = { snapshot: ReminderSchedule; ids: Record<string, number> };
+export type SavedSchedule = {
+  snapshot: ReminderSchedule;
+  ids: Record<string, number>;
+  lastSuccessfulAt?: number | undefined;
+};
 export type ScheduleResult = {
   count: number;
   total: number;
   validUntil: number;
   generatedAt: number;
   complete: boolean;
+  lastSuccessfulAt?: number | undefined;
 };
 
 export function hashAlarmKey(key: string) {
@@ -99,11 +104,13 @@ export function createLocalScheduler(deps: Dependencies) {
     const snapshot = reminderScheduleSchema.parse(data.snapshot);
     if (
       !data.ids ||
+      (data.lastSuccessfulAt !== undefined &&
+        (!Number.isSafeInteger(data.lastSuccessfulAt) || data.lastSuccessfulAt < 0)) ||
       Object.values(data.ids).some((id) => !Number.isInteger(id) || id < 1 || id > 2147483647) ||
       new Set(Object.values(data.ids)).size !== Object.values(data.ids).length
     )
       throw new Error(text.corrupt);
-    return { data: { snapshot, ids: { ...data.ids } }, revision };
+    return { data: { snapshot, ids: { ...data.ids }, lastSuccessfulAt: data.lastSuccessfulAt }, revision };
   }
   async function permissions() {
     const permission = await deps.notifications.checkPermissions();
@@ -116,6 +123,7 @@ export function createLocalScheduler(deps: Dependencies) {
     data: SavedSchedule,
     requestGeneration: number,
     revision: string,
+    downloaded = false,
   ): Promise<ScheduleResult> {
     const access = await permissions();
     if (access.display !== 'granted' || access.exact !== 'granted') throw new Error(text.permissionRequired);
@@ -154,26 +162,66 @@ export function createLocalScheduler(deps: Dependencies) {
     const confirmed = desired.filter((item) => actual.get(item.id)?.extra?.fingerprint === item.extra?.fingerprint);
     const missing = all.find((alarm) => !confirmed.some((item) => item.id === alarm.id));
     const after = await permissions();
+    const complete =
+      !failed &&
+      !missing &&
+      actual.size === desired.length &&
+      after.display === 'granted' &&
+      after.exact === 'granted' &&
+      data.snapshot.validUntil > deps.now();
+    if (requestGeneration !== generation) throw new Error(text.sessionChanged);
+    if (complete && downloaded) {
+      data.lastSuccessfulAt = deps.now();
+      await deps.store.write({ account, value: JSON.stringify(data), revision });
+    }
     return {
       count: confirmed.length,
       total: all.length,
       generatedAt: data.snapshot.generatedAt,
       validUntil: missing ? Math.min(data.snapshot.validUntil, missing.fireAt - 1) : data.snapshot.validUntil,
-      complete:
-        !failed &&
-        !missing &&
-        actual.size === desired.length &&
-        after.display === 'granted' &&
-        after.exact === 'granted' &&
-        data.snapshot.validUntil > deps.now(),
+      complete,
+      lastSuccessfulAt: data.lastSuccessfulAt,
     };
   }
   return {
     permissions,
+    invalidate() {
+      generation += 1;
+    },
+    status(account: string) {
+      const requestGeneration = generation;
+      return serial(async (): Promise<ScheduleResult | undefined> => {
+        if (requestGeneration !== generation) throw new Error(text.sessionChanged);
+        const { data } = await saved(account);
+        if (!data) return undefined;
+        const access = await permissions();
+        const desired = buildAlarms(data.snapshot, data.ids, deps.now());
+        const actual = new Map((await deps.notifications.getPending()).notifications.map((item) => [item.id, item]));
+        const confirmed = desired.filter(
+          (alarm) => actual.get(alarm.id)?.extra?.fingerprint === notification(alarm).extra?.fingerprint,
+        );
+        const missing = desired.find((alarm) => !confirmed.includes(alarm));
+        return {
+          count: confirmed.length,
+          total: desired.length,
+          generatedAt: data.snapshot.generatedAt,
+          validUntil: missing ? Math.min(data.snapshot.validUntil, missing.fireAt - 1) : data.snapshot.validUntil,
+          lastSuccessfulAt: data.lastSuccessfulAt,
+          complete:
+            !missing &&
+            actual.size === desired.length &&
+            access.display === 'granted' &&
+            access.exact === 'granted' &&
+            data.snapshot.validUntil > deps.now(),
+        };
+      });
+    },
     sync(account: string) {
       const requestGeneration = generation;
       return serial(async () => {
+        if (requestGeneration !== generation) throw new Error(text.sessionChanged);
         const snapshot = reminderScheduleSchema.parse(await deps.fetch());
+        if (requestGeneration !== generation) throw new Error(text.sessionChanged);
         if (
           snapshot.validUntil <= deps.now() ||
           snapshot.generatedAt > snapshot.validUntil ||
@@ -183,12 +231,19 @@ export function createLocalScheduler(deps: Dependencies) {
           throw new Error(text.invalidSnapshot);
         const old = await saved(account);
         if (old.data && old.data.snapshot.generatedAt > snapshot.generatedAt) throw new Error(text.invalidSnapshot);
-        return reconcile(account, { snapshot, ids: old.data?.ids ?? {} }, requestGeneration, old.revision);
+        return reconcile(
+          account,
+          { snapshot, ids: old.data?.ids ?? {}, lastSuccessfulAt: old.data?.lastSuccessfulAt },
+          requestGeneration,
+          old.revision,
+          true,
+        );
       });
     },
     retry(account: string) {
       const requestGeneration = generation;
       return serial(async () => {
+        if (requestGeneration !== generation) throw new Error(text.sessionChanged);
         const data = await saved(account);
         if (!data.data) throw new Error(text.empty);
         return reconcile(account, data.data, requestGeneration, data.revision);

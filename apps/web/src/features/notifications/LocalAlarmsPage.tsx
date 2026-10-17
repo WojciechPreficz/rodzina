@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Button, Card, Stack, Text, Title } from '@mantine/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
-import { localScheduler, type ScheduleResult } from './localSchedule.js';
+import { localScheduler } from './localSchedule.js';
+import { useLocalSchedule } from './scheduleSync.js';
 
 const text = labels.localAlarms;
 const date = (value: number) =>
@@ -11,21 +12,18 @@ const date = (value: number) =>
 
 export function LocalAlarmsPage() {
   const { user } = useMe();
-  const [access, setAccess] = useState<Awaited<ReturnType<typeof localScheduler.permissions>>>();
-  const [result, setResult] = useState<ScheduleResult>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const account = user ? `${user.familyId}:${user.id}` : '';
-  async function check() {
-    setAccess(await localScheduler.permissions());
-  }
-  useEffect(() => {
-    void check().catch(() => setError(text.error));
-  }, []);
+  const query = useLocalSchedule(account);
+  const { access, result, error: syncError } = query.data ?? {};
+  const failure = error || syncError || query.error?.message;
+  const check = async () => {
+    await query.refetch();
+  };
   async function run(action: () => Promise<void>) {
     setBusy(true);
     setError('');
-    setResult(undefined);
     try {
       await action();
       await check();
@@ -73,39 +71,47 @@ export function LocalAlarmsPage() {
           disabled={!account}
           onClick={() =>
             void run(async () => {
-              setResult(await localScheduler.sync(account));
+              await check();
             })
           }
         >
-          {text.download}
+          {text.syncNow}
         </Button>
         <Button
           variant="light"
           disabled={busy || !account}
           onClick={() =>
             void run(async () => {
-              setResult(await localScheduler.retry(account));
+              await localScheduler.retry(account);
             })
           }
         >
           {text.retry}
         </Button>
-        {error && (
+        {failure && (
           <Alert color="red" role="alert">
-            {error}
+            {failure}
           </Alert>
         )}
         {result && (
-          <Alert color={result.complete ? 'teal' : 'orange'} role="status">
-            <Text>{result.complete ? text.complete : text.incomplete}</Text>
+          <Alert color={result.complete && !failure ? 'teal' : 'orange'} role="status">
+            <Text>{result.complete && !failure ? text.complete : text.incomplete}</Text>
             <Text>{text.saved(result.count, result.total)}</Text>
             <Text>
               {text.generated} {date(result.generatedAt)}
             </Text>
             <Text>
+              {text.lastSync} {result.lastSuccessfulAt ? date(result.lastSuccessfulAt) : text.never}
+            </Text>
+            <Text>
               {text.until} {date(result.validUntil)} (Europe/Warsaw)
             </Text>
           </Alert>
+        )}
+        {!result && (
+          <Text>
+            {text.lastSync} {text.never}
+          </Text>
         )}
         <Text size="sm">{text.hint}</Text>
         <Text size="sm" c="dimmed">

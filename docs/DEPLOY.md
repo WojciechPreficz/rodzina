@@ -317,3 +317,19 @@ ponieważ część telefonów może być w trakcie pobierania. Przywrócenie met
 nie obniża wersji już zainstalowanej na telefonie. Dla takich telefonów przygotuj
 poprawione APK z jeszcze wyższym `versionCode`, podpisane tym samym kluczem;
 nie wymagaj odinstalowania aplikacji ani usunięcia jej danych.
+
+### Synchronizacja harmonogramu — krok 4.4
+
+Zmiana wymaga nowego APK z pluginami Capacitor App 8.1.2 i Network 8.0.1
+(`npm run android:sync`, następnie build Androida). Zwykła aktualizacja paczki
+API/PWA nie aktualizuje lokalnych plików ani pluginów zainstalowanego APK.
+Brak nowych zmiennych środowiskowych, migracji i cronów; API harmonogramu
+pozostaje zgodne z krokiem 4.2. Zależności App/Network dotyczą Androida,
+nie wymagają kompilacji nowych zależności runtime na vh.pl.
+
+APK pobiera zmiany po wznowieniu, odzyskaniu sieci i co 20 s w aktywnym
+interfejsie. Zamknięte APK nie pobiera zmian z serwera. Ekran powiadomień
+pokazuje ostatnią udaną synchronizację oraz zakres zabezpieczenia offline;
+zmiany na innym urządzeniu mogą pozostawić stary alarm do kolejnej synchronizacji.
+PWA zachowuje dotychczasowy Web Push. Procedura i niepotwierdzone testy telefonu
+są w `DEVELOPMENT.md`, w sekcji kroku 4.4.

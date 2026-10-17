@@ -196,3 +196,34 @@ do kroku 4.6.
 [Capacitor Local Notifications](https://capacitorjs.com/docs/apis/local-notifications),
 [AlarmManager i ograniczenia Androida](https://developer.android.com/develop/background-work/services/alarms),
 oraz kod wersji 8.3.1 zainstalowanej w node_modules.
+
+## Krok 4.4 — synchronizacja harmonogramu (2026-10-17)
+
+- Dodajemy `@capacitor/app` 8.1.2 i `@capacitor/network` 8.0.1 do workspace web
+  oraz jawnej listy pluginów Androida. `appStateChange` i `networkStatusChange`
+  przekazujemy do focusManager/onlineManager TanStack Query. Jeden obserwator
+  przypisany do konta w AuthProvider pobiera harmonogram także poza ekranem
+  powiadomień; odpytywanie co 20 s działa tylko w aktywnej aplikacji.
+  Po wznowieniu odświeżamy również pozostałe aktywne zapytania.
+- Zapis/usunięcie wydarzenia i osobistego przypomnienia unieważnia generację
+  synchronizacji, anuluje poprzednie zapytanie Query i żąda nowego snapshotu.
+  Scheduler nadal serializuje operacje. Sprawdzamy AbortSignal także po
+  asynchronicznym odczycie zgód, przed rozpoczęciem pobrania dla konta.
+  Starszy snapshot oraz wynik poprzedniego konta nie zastępują bieżących danych.
+- Ostatnią udaną synchronizację zapisujemy w istniejącym prywatnym magazynie
+  dopiero po pobraniu i potwierdzeniu całego harmonogramu wraz ze zgodami.
+  Ponowienie samego planowania z dysku nie zmienia tej daty. Po błędzie sieci
+  ekran odczytuje poprzedni zapis oraz rzeczywistą liczbę alarmów z magazynu
+  pluginu; pokazuje błąd i datę wcześniejszego sukcesu, bez nowego komunikatu sukcesu.
+- Baner APK opiera się na stanie lokalnego harmonogramu i zgodach, bez Web Push.
+  PWA zachowuje dotychczasowy ekran, subskrypcje i test wysyłki.
+- Wyłączamy domyślną obsługę przycisku Wstecz nowego pluginu App, aby jego dodanie
+  nie zmieniało nawigacji przed krokiem 4.5. Nie dodajemy FCM ani pracy w tle.
+  Zamknięte APK nie pobiera zmian; istniejące alarmy pozostają aktywne do
+  synchronizacji, wylogowania lub utraty dostępu potwierdzonej przez API.
+- Brak nowych zmiennych środowiskowych, migracji, cronów i zależności runtime
+  serwera. Wydania APK i paczka API/PWA nadal są oddzielne.
+
+API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
+[Capacitor App](https://capacitorjs.com/docs/apis/app),
+[Capacitor Network](https://capacitorjs.com/docs/apis/network).
