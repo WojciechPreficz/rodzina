@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => ({
             srcDir: 'src',
             filename: 'sw.ts',
             injectRegister: false,
+            injectManifest: { globIgnores: ['**/downloads/**', '**/*.apk'] },
             manifest: {
               name: 'Rodzina',
               short_name: 'Rodzina',
@@ -39,6 +40,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     proxy: {
+      '/downloads': { target: 'http://localhost:3000', changeOrigin: false },
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: false,

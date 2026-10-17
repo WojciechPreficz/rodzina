@@ -13,6 +13,8 @@
   "scripts": {
     "android:sync": "node scripts/android.mjs sync",
     "android:debug": "node scripts/android.mjs debug",
+    "android:release": "node scripts/android.mjs release && node scripts/package-android.mjs",
+    "android:package": "node scripts/package-android.mjs",
     "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm run build --workspace @rodzina/shared && tsx watch --env-file=apps/api/.env apps/api/src/server.ts",
     "dev:web": "npm run dev --workspace @rodzina/web",

@@ -7,7 +7,12 @@ declare let self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<unknown> };
 self.skipWaiting();
 clientsClaim();
 cleanupOutdatedCaches();
-precacheAndRoute(self.__WB_MANIFEST);
+precacheAndRoute(
+  self.__WB_MANIFEST.filter((entry) => {
+    const url = typeof entry === 'string' ? entry : (entry as { url: string }).url;
+    return !url.includes('/downloads/') && !url.endsWith('.apk');
+  }),
+);
 
 function notificationUrl(value: unknown): string {
   if (typeof value === 'string') {

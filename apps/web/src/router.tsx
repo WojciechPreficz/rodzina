@@ -13,6 +13,7 @@ import { CalendarPage } from './features/calendar/CalendarPage.js';
 import { EventRoute } from './features/calendar/EventRoute.js';
 import { NotificationsPage } from './features/notifications/NotificationsPage.js';
 import { NativeNavigation } from './nativeNavigation.js';
+import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
 
 export const router = createBrowserRouter([
   {
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
     element: (
       <>
         <NativeNavigation />
+        <AndroidUpdateMonitor />
         <AuthProvider />
       </>
     ),

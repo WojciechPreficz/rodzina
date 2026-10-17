@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RodzinaApiPlugin.class);
         registerPlugin(RodzinaAlarmsPlugin.class);
         registerPlugin(RodzinaLinksPlugin.class);
+        registerPlugin(RodzinaUpdatesPlugin.class);
         super.onCreate(savedInstanceState);
         android.view.View content = findViewById(android.R.id.content);
         ViewCompat.setOnApplyWindowInsetsListener(content, (view, windowInsets) -> {

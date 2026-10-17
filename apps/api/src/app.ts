@@ -29,6 +29,7 @@ import { registerEventRoutes } from './modules/events/routes.js';
 import { registerReminderRoutes } from './modules/reminders/routes.js';
 import { registerPushRoutes } from './modules/push/routes.js';
 import { createPushSender, type PushSender } from './modules/push/sender.js';
+import { registerAndroidDownloads } from './android-downloads.js';
 
 type Database = ReturnType<typeof createDatabase>;
 
@@ -237,8 +238,32 @@ export async function buildApp(
   database: Database,
   options: { pushSender?: PushSender } = {},
 ): Promise<FastifyInstance> {
-  const app = Fastify({ trustProxy: true, logger: config.NODE_ENV !== 'test' });
+  const app = Fastify({
+    trustProxy: true,
+    logger:
+      config.NODE_ENV === 'test'
+        ? false
+        : {
+            redact: ['req.headers.cookie', 'req.headers.authorization', 'res.headers.set-cookie'],
+            serializers: { req: (request) => ({ method: request.method, hostname: request.hostname }) },
+          },
+  });
   const version = process.env.npm_package_version ?? '0.1.0';
+
+  app.addHook('onSend', async (request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Referrer-Policy', 'no-referrer');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    reply.header(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    );
+    if (request.url.startsWith('/api/') || request.url.startsWith('/downloads/android/latest.json'))
+      reply.header('Cache-Control', 'no-store');
+    if (config.NODE_ENV === 'production' && new URL(config.RODZINA_PUBLIC_URL).protocol === 'https:')
+      reply.header('Strict-Transport-Security', 'max-age=31536000');
+  });
 
   await app.register(fastifyCookie);
 
@@ -1163,6 +1188,7 @@ export async function buildApp(
   });
 
   registerEventRoutes(app, database);
+  registerAndroidDownloads(app, config);
   app.get('/.well-known/assetlinks.json', async (_request, reply) => {
     reply.header('Cache-Control', 'public, max-age=300');
     return config.RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS.length
@@ -1185,7 +1211,7 @@ export async function buildApp(
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', config.RODZINA_WEB_DIR);
     await app.register(fastifyStatic, { root, prefix: '/' });
     app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith('/api/')) {
+      if (request.url.startsWith('/api/') || request.url.startsWith('/downloads/')) {
         return reply.code(404).send({
           error: { code: 'NOT_FOUND', message: 'Nie znaleziono zasobu.' },
         });

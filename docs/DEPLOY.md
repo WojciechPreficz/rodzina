@@ -364,3 +364,107 @@ nie aktualizuje APK. Nie dodano migracji, cronów ani zależności runtime serwe
 
 Na 17.10.2026 w ramach kroku 4.5 nie aktualizowano produkcji ani odcisków certyfikatów
 na domenie. Testy App Links na telefonie pozostają do wykonania według DEVELOPMENT.md.
+
+# Krok 4.6 — osobne wydania API/PWA oraz Androida
+
+ZIP serwera aktualizuje API i PWA. Nie zmienia lokalnych plików frontendu w już
+zainstalowanym APK. APK budujemy, podpisujemy, testujemy i publikujemy osobno.
+Nie usuwaj produkcyjnej bazy ani sesji przy żadnym z tych wydań. Dotychczasowy
+kontrakt sesji i `/api/reminders/schedule` pozostaje zgodny ze starszym APK;
+przed kolejną zmianą API wykonaj regresję poprzedniej wspieranej wersji APK.
+
+## Klucz podpisujący — pierwsze przygotowanie
+
+Klucz potwierdza tożsamość wydawcy. Android instaluje aktualizację tej samej
+aplikacji wyłącznie przy zgodnym podpisie. Utrata klucza uniemożliwi aktualizowanie
+istniejącej instalacji. Nie używaj klucza debug do zwykłych wydań.
+
+Utwórz prywatny katalog poza repo, np. `C:\Users\<user>\rodzina-signing`. W terminalu
+z JDK 21 uruchom (zastąp ścieżkę własną):
+
+```powershell
+keytool -genkeypair -v -keystore C:\Users\<user>\rodzina-signing\rodzina-release.jks -storetype JKS -alias rodzina -keyalg RSA -keysize 3072 -validity 10000
+```
+
+Hasła podaj interaktywnie, bez wklejania ich do czatu, polecenia ani repo. Zachowaj
+keystore, alias i hasła w bezpiecznym miejscu oraz drugą zaszyfrowaną kopię na
+niezależnym nośniku. Sprawdź odtworzenie kopii przez `keytool -list -v -keystore
+<kopia.jks>`. Nie kopiuj klucza na hosting ani do GitHub Actions. Odcisk certyfikatu
+SHA-256 jest publiczny: wpisz go w `RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS`
+zgodnie z procedurą App Links z kroku 4.5.
+
+Do bieżącej sesji PowerShell wczytaj hasła bez zapisywania w historii:
+
+```powershell
+$env:RODZINA_ANDROID_KEYSTORE = 'C:\Users\<user>\rodzina-signing\rodzina-release.jks'
+$env:RODZINA_ANDROID_KEY_ALIAS = 'rodzina'
+$env:RODZINA_ANDROID_STORE_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'Hasło keystore' -AsSecureString)).Password
+$env:RODZINA_ANDROID_KEY_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'Hasło klucza' -AsSecureString)).Password
+npm run android:release
+Remove-Item Env:RODZINA_ANDROID_STORE_PASSWORD, Env:RODZINA_ANDROID_KEY_PASSWORD
+```
+
+Takie zmienne nie są szyfrowanym magazynem; ogranicz je do bieżącej sesji i usuń
+po budowie. Nie włączaj logowania środowiska ani diagnostyki Gradle `--debug`.
+Na Linux/macOS ustaw analogiczne zmienne środowiskowe bez zapisywania haseł
+w historii. `JAVA_HOME`: JDK 21, `ANDROID_HOME`: SDK 36. Skrypt lokalnie wykrywa
+także narzędzia w `.android-tools`, jeśli zmienne nie zostały ustawione.
+
+## Budowanie i publikacja
+
+1. Zwiększ `versionCode` w `android/version.properties` (maks. 2100000000), zmień
+   `versionName`, np. `1.0.1`. Zachowaj `pl.preficze.rodzina` i ten sam klucz.
+   Pierwsze wydanie ma kod 1; poprzednie debug APK wymaga osobnego usunięcia przed
+   instalacją release, jeśli podpisy są różne. Przetestuj to na koncie testowym.
+2. Przeprowadź lint, format:check, typecheck, testy, build, testy Playwright headless,
+   `release:smoke`, a następnie `npm run android:release`. Release odrzuca API HTTP
+   i klucz w repo. Skrypt sprawdza podpis przez apksigner i identyfikator/wersję
+   przez aapt; odrzuca debug APK. Wynik w `android-releases/<kod>-<wersja>/`:
+   `rodzina-<kod>-<wersja>.apk`, `latest.json`, publiczny odcisk certyfikatu.
+   Istniejący katalog wydania nie jest nadpisywany. `android:package` pozwala
+   przygotować metadane już zbudowanego APK bez ponownej kompilacji.
+3. Zainstaluj podpisane APK na fizycznym telefonie i wykonaj checklistę w
+   DEVELOPMENT.md, w tym aktualizację z wcześniejszego podpisanego wydania.
+4. Utwórz trwały katalog poza `~/rodzina`, `public/` i katalogiem danych rodziny,
+   np. `/home/<user>/rodzina-android`. Tylko APK i latest.json; żadnych keystore,
+   haseł, baz, `.env`, logów ani backupów. Ustaw w `.env` API:
+   `RODZINA_ANDROID_DOWNLOAD_DIR=/home/<user>/rodzina-android`. Puste oznacza brak
+   wydania. Katalog musi być czytelny dla aplikacji Node. Restartuj Passengera.
+5. Wgraj APK pod tymczasową nazwą, porównaj SHA-256 z `latest.json`, a po pełnym
+   transferze zmień nazwę na docelową. Nigdy nie zastępuj pliku już opublikowanej
+   wersji. Dopiero potem wgraj `latest.json.tmp` i atomowo zmień na `latest.json`.
+   Nie publikuj metadanych przed APK. Zachowaj wcześniejsze wersje na czas wsparcia;
+   cofnięcie metadanych nie proponuje downgrade'u w APK.
+6. Sprawdź HTTPS domeny: `/downloads/android/latest.json` publicznie zwraca JSON,
+   `Cache-Control: no-store`; APK ma MIME `application/vnd.android.package-archive`,
+   `Content-Disposition: attachment`, `nosniff` i cache immutable na rok. Ścieżka
+   APK zawiera wersję. Metadata dopuszcza tylko HTTPS tej samej domeny i katalogu
+   `/downloads/android/`; service worker nie przechowuje tych zasobów. Konfiguracja
+   hostingu/CDN nie może zastępować 404 APK plikiem SPA ani cache'ować latest.json.
+
+Aktualizując serwer dotychczasową paczką ZIP zachowaj katalog wydań. Nie dodano
+crona ani stałego procesu. Automatyzacja deployu GitHub Actions należy do kroku 4.7.
+CI w tym kroku sprawdza debug Androida, testy JVM i Android Lint, bez klucza release.
+
+## Instalacja i aktualizacja na telefonie
+
+Na stronie logowania lub w „Więcej” wybierz „Pobierz aplikację na Androida”, otwórz
+APK z pobranych plików, zezwól przeglądarce na instalowanie z tego źródła i zatwierdź
+instalację. To odrębne od instalowania PWA; przy wyborze APK wyłącz powiadomienia
+osobno zainstalowanej PWA na tym telefonie, by uniknąć podwójnych przypomnień.
+
+APK sprawdza wersję przy uruchomieniu/wznowieniu/powrocie sieci, maks. raz na 15 min.
+Ręcznie: „Więcej > Wersja aplikacji > Sprawdź aktualizacje”. „Aktualizuj” pobiera
+plik i weryfikuje SHA-256, potem otwiera instalator Androida. Jeśli wymagana jest
+zgoda dla Rodziny, użyj „Zezwól na instalację”, wróć i wybierz „Ponów instalację”.
+Użytkownik zatwierdza instalację systemowo. Odmowa lub anulowanie nie kasuje sesji
+ani alarmów; można ponowić. Brak sieci, miejsca, uszkodzony plik i błąd serwera
+nie blokują normalnej pracy. Po przerwaniu procesu pobierz plik ponownie.
+
+Aktualizacja zachowuje dane pakietu. Receiver `MY_PACKAGE_REPLACED` odtwarza alarmy,
+a uruchomiona aplikacja uzgadnia harmonogram. Nie odinstalowuj APK przy zwykłej
+aktualizacji. Nie ma cichej instalacji ani automatycznej aktualizacji zamkniętego APK.
+SHA-256 chroni integralność pliku, zaufanie do metadanych zapewnia HTTPS; to nie
+zastępuje weryfikacji podpisu przez Androida. Źródła:
+[podpisywanie](https://developer.android.com/studio/publish/app-signing),
+[FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider).

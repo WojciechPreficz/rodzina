@@ -67,6 +67,7 @@ try {
       `RODZINA_BACKUP_DIR=${path.join(temporaryDirectory, 'backups')}`,
       `RODZINA_WEB_DIR=${path.join(temporaryDirectory, 'public')}`,
       'RODZINA_PUBLIC_URL=http://localhost',
+      'RODZINA_ANDROID_DOWNLOAD_DIR=',
       'RODZINA_ALLOW_REGISTRATION=false',
       `RODZINA_VAPID_PUBLIC_KEY=${vapid.getPublicKey().toString('base64url')}`,
       `RODZINA_VAPID_PRIVATE_KEY=${vapid.getPrivateKey().toString('base64url')}`,
@@ -102,6 +103,20 @@ try {
     }
   }
   const protectedResponse = await fetch(`http://127.0.0.1:${port}/api/auth/me`);
+  const noRelease = await fetch(`http://127.0.0.1:${port}/downloads/android/latest.json`);
+  if (
+    noRelease.status !== 404 ||
+    noRelease.headers.get('cache-control') !== 'no-store' ||
+    !noRelease.headers.get('content-type')?.includes('application/json')
+  )
+    fail('brak APK nie jest jawnym 404 JSON bez cache.');
+  const absentApk = await fetch(`http://127.0.0.1:${port}/downloads/android/rodzina-1-1.0.0.apk`);
+  if (absentApk.status !== 404) fail('brak APK zwraca SPA zamiast 404.');
+  if (
+    !pageResponse.headers.get('content-security-policy')?.includes("object-src 'none'") ||
+    pageResponse.headers.get('x-content-type-options') !== 'nosniff'
+  )
+    fail('brak nagłówków ochrony strony.');
   if (protectedResponse.status !== 401) fail('auth/me nie wymaga sesji.');
   const appLinks = await fetch(`http://127.0.0.1:${port}/.well-known/assetlinks.json`);
   if (

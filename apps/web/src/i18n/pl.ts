@@ -1,4 +1,30 @@
 export const labels = {
+  androidUpdates: {
+    checkError: 'Nie udało się sprawdzić wersji. Sprawdź połączenie i spróbuj ponownie.',
+    updateError: 'Nie udało się zaktualizować aplikacji. Spróbuj ponownie.',
+    cancelError: 'Nie udało się anulować pobierania.',
+    settingsError: 'Otwórz ustawienia Androida i zezwól tej aplikacji na instalację.',
+    title: 'Wersja aplikacji',
+    installed: (version: string) => `Zainstalowana wersja: ${version}`,
+    version: (version: string) => `Wersja Androida: ${version}`,
+    download: 'Pobierz aplikację na Androida',
+    instructions:
+      'Otwórz pobrany plik APK i zezwól przeglądarce na instalację z tego źródła. Następnie zatwierdź instalację w Androidzie. To osobna aplikacja, niezależna od instalacji PWA.',
+    unavailable: 'Wydanie Androida jest obecnie niedostępne.',
+    checking: 'Sprawdzanie dostępności aplikacji Android…',
+    available: 'Dostępna nowa wersja',
+    current: 'Masz aktualną wersję aplikacji.',
+    check: 'Sprawdź aktualizacje',
+    update: 'Aktualizuj',
+    retry: 'Ponów instalację',
+    downloading: 'Pobieranie aktualizacji…',
+    cancel: 'Anuluj pobieranie',
+    permission:
+      'Zezwól aplikacji Rodzina na instalację z tego źródła w ustawieniach Androida. Po powrocie wybierz „Ponów instalację”.',
+    settings: 'Zezwól na instalację',
+    returned:
+      'Instalator został zamknięty. Jeśli instalacja została anulowana lub odrzucona, możesz spróbować ponownie. Obecny numer wersji podano powyżej.',
+  },
   androidNavigation: {
     discard: 'Odrzucić niezapisane zmiany formularza?',
     offline: 'Zapisany podgląd przypomnienia',

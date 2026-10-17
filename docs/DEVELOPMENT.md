@@ -758,3 +758,77 @@ headless z atrapą mostka sprawdzają React i układ, nie zastępują tych prób
   linków po zweryfikowaniu domeny, kliknięcie alarmu w działającym/zamkniętym APK,
   systemowe Wstecz, klawiatura/insets i menu udostępniania wymagają powyższych prób.
   Nie wykonano deployu ani instalacji APK na telefonie.
+
+# Krok 4.6 — weryfikacja podpisanych wydań i aktualizacji
+
+Budowa: `npm run android:debug` bez sekretów; release: `npm run android:release`
+według DEPLOY.md. Wersja jest w `android/version.properties`. Keystore i jego kopia
+pozostają poza repo. Testowy klucz nigdy nie powinien służyć do publikacji rodzinie.
+
+## Checklista telefonu (fizyczne urządzenie, podpisane APK)
+
+1. Zapisz model, wersję Androida, wersje starego/nowego APK, publiczny odcisk klucza,
+   wersje Node/JDK/SDK/Gradle, datę oraz wynik każdej próby. Bez zapisywania sekretów.
+2. W Chrome otwórz stronę logowania: sprawdź numer i pobierz podpisane APK. Udziel
+   zgody Chrome na instalację z tego źródła, zatwierdź instalator. Uruchom APK,
+   zaloguj dorosłego i dziecko na testowych kontach, odczytaj/zapisz kalendarz.
+3. Zapisz przyszły alarm online, zamknij i otwórz APK. Potwierdź zachowanie sesji.
+   Opublikuj wyższy versionCode podpisany tym samym kluczem. Sprawdź automatyczne
+   wykrycie po starcie/wznowieniu/sieci i ręczne „Sprawdź aktualizacje”.
+4. Wybierz „Aktualizuj”, obserwuj postęp. Odmów zgody dla Rodziny, następnie zezwól
+   w systemowych ustawieniach i wróć do ponowienia. Anuluj instalator; sesja i alarm
+   mają pozostać. Ponów i zatwierdź. Nowy numer musi pochodzić z zainstalowanego
+   pakietu, a nie z samego faktu uruchomienia instalatora.
+5. Sprawdź zachowanie sesji i zapisanych alarmów po aktualizacji. Wyłącz internet,
+   zamknij interfejs, zablokuj telefon i odbierz wcześniej zapisany alarm; nie może
+   być duplikatów. Powtórz po restarcie offline i regresję zgód/harmonogramu z 4.3–4.5.
+6. Przerwij pobieranie, odłącz sieć, sprawdź brak miejsca, uszkodzony SHA-256 i
+   anulowanie. Instalator nie może dostać uszkodzonego/niedokończonego pliku.
+   Równe/niższe versionCode nie proponuje aktualizacji; 404, błędny JSON i awaria
+   serwera nie blokują interfejsu ani lokalnego alarmu.
+7. W przeglądarce/PWA przy 390 i 1280 px sprawdź logowanie i „Więcej”: pobranie,
+   instrukcję, brak wydania bez martwego linku oraz regresję kalendarza, sesji,
+   linków i Web Push. Przycisk pobrania ma być ukryty w APK. Nie uznawaj atrap
+   Playwright ani testu joba serwera za dowód zachowania instalatora/alarmów Androida.
+
+Stan początkowy 17.10.2026: właściciel nie ma klucza produkcyjnego; przygotowano
+procedurę jego utworzenia i kopii zapasowej. Nie opublikowano APK ani metadanych,
+nie zmieniono produkcji. Testy fizycznego telefonu pozostają do wykonania.
+Pełne „Gotowe, gdy” 4.6 wymaga tych wyników; fazę 4 domyka osobno krok 4.7.
+
+## Wyniki lokalne kroku 4.6 — 17.10.2026
+
+- Node 24.15.0, npm 11.12.1, JDK Microsoft 21.0.12.1, Android SDK/build-tools 36.0.0,
+  Gradle 8.14.3, Capacitor Android 8.5.3. Polecenia: `npm run lint`,
+  `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`,
+  `npm run test:e2e`, `npm run release:smoke`, `npm run android:debug` oraz Gradle
+  `assembleDebug testDebugUnitTest lintDebug`.
+- Vitest: 377/377 testów w 45 plikach. Po końcowych poprawkach ponowiono 28/28
+  testów nowych modułów. Testy obejmują wersje równe/niższe/wyższe, walidację
+  metadanych i URL, błędy sieci, limit częstotliwości, ponawianie zgody,
+  odrzucenie uszkodzonego pobrania przed instalatorem i widoczność przycisków.
+- Testy JVM: 3/3, rzeczywiste strumienie z SHA-256, znaną/nieznaną długością,
+  uszkodzeniem, pustym/niedokończonym transferem, anulowaniem, limitem i brakiem
+  miejsca. Android Lint: 0 błędów, 18 wcześniejszych ostrzeżeń zasobów/uprawnień;
+  brak ostrzeżeń w nowych klasach aktualizacji.
+- Zbudowano debug i podpisany release. Ścieżkę podpisywania sprawdzono osobnym
+  jednorazowym JKS poza repo, o ważności dwóch dni; po próbie usunięto klucz.
+  `android:package` zweryfikował podpis, pakiet i wersję oraz przygotował APK,
+  SHA-256, latest.json i publiczny odcisk certyfikatu. Lokalny katalog
+  `.android-tools/step46-test-release` oznaczono `TEST-ONLY.txt`; nie publikować tej paczki
+  ani nie używać jej jako pierwszej instalacji rodzinnej. Wydanie produkcyjne
+  wymaga własnego trwałego klucza. Katalog `android-releases/1-1.0.0` pozostaje
+  wolny na pierwsze rzeczywiste wydanie.
+- Playwright headless: 16/16 przy 390 i 1280 px. Pobranie i brak wydania na
+  logowaniu i „Więcej”, walidacja originu, poprawny numer wersji i instrukcja.
+  Zrzuty obu szerokości sprawdzono wizualnie; brak poziomego przepełnienia.
+  Regresja obejmuje rejestrację, zaproszenie, reset, dziecko, kalendarz, deep linki,
+  formularze oraz ekrany lokalnych alarmów i Web Push z atrapami mostka.
+- Build, lint, format:check, typecheck i smoke przechodzą. ESLint ma dwa wcześniejsze
+  ostrzeżenia Fast Refresh w auth.tsx; build ostrzega o istniejącym dużym bundle.
+  Smoke potwierdza 404 JSON/no-store bez APK, brak fallbacku SPA dla APK, nagłówki,
+  manifest, service worker, job przypomnień i backup. Nową zmienną katalogu
+  wydań opisano w `.env.example` i DEPLOY.md; brak migracji, crona i nowych zależności.
+- Nadal niepotwierdzone: pierwsza instalacja ze strony, systemowa zgoda i odmowa,
+  aktualizacja ze starszej podpisanej wersji, zachowanie sesji i rzeczywistego
+  alarmu offline na fizycznym urządzeniu. Nie wykonano deployu ani publikacji.

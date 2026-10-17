@@ -254,3 +254,27 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   i zmianie trasy. Android stosuje natywne insets pasków systemu/wycięcia/IME;
   nie naliczamy ich ponownie w CSS. Kopiowanie i udostępnianie w APK korzystają
   z własnego małego adaptera Androida, bez dodatkowych zależności serwera.
+
+# 17.10.2026 — krok 4.6: podpisywanie i aktualizacje Androida
+
+- Wersja APK pochodzi z `android/version.properties`; `versionCode` rośnie przy każdym
+  wydaniu, `versionName` ma postać `major.minor.patch` z opcjonalnym sufiksem.
+- Release podpisujemy lokalnym JKS poza repo, z hasłami w zmiennych procesu. CI buduje
+  wyłącznie debug. Klucz produkcyjny tworzy właściciel i zachowuje zaszyfrowaną kopię;
+  testowy klucz nie staje się automatycznie kluczem produkcyjnym.
+- Publiczne pliki obsługuje Fastify z `RODZINA_ANDROID_DOWNLOAD_DIR`, oddzielnego
+  trwałego katalogu. Bez zmiennej/wydania zwracamy 404 JSON, nigdy SPA. Brak nowego
+  crona, migracji, zależności runtime ani zmian kontraktu sesji/harmonogramu.
+- APK i metadane odczytuje osobny plugin OkHttp bez cookies, przekierowań i cache;
+  HTTPS wyłącznie domeny produkcyjnej. Pobranie jest aktywną operacją, z limitem
+  200 MiB, kontrolą miejsca, SHA-256 i zgodności nazwy pakietu/wersji.
+  `FileProvider` udostępnia tylko katalog cache `updates/`. Instalator Androida
+  sprawdza podpis i wymaga potwierdzenia. Powrót z instalatora nie oznacza sukcesu.
+- Automatyczne sprawdzanie wersji ma limit jednej próby na 15 minut przy starcie,
+  wznowieniu lub odzyskaniu sieci. Ręczne ponowienie omija limit. Błąd nie ingeruje
+  w sesję ani alarmy. Po zabiciu procesu pobieranie trzeba ponowić; nie dodajemy
+  aktualizacji w tle ani cichej instalacji.
+- Przegląd ochrony: publiczne wydania bez danych rodziny, `allowBackup=false`, brak
+  sekretów w ZIP/APK, ograniczenie FileProvider, brak URL/tokenów w logu requestów,
+  no-store dla API i metadanych, CSP, nosniff, Referrer-Policy i ochrona osadzania.
+  Inline style pozostają dozwolone dla Mantine/Schedule-X; skrypty tylko z domeny.

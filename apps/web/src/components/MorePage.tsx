@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { useMe } from '../auth.js';
 import { labels } from '../i18n/pl.js';
+import { AppVersionCard } from '../features/updates/AndroidUpdates.js';
 
 export function MorePage() {
   const { user, family, logout } = useMe();
@@ -39,6 +40,7 @@ export function MorePage() {
             {labels.logout}
           </Button>
         </Group>
+        <AppVersionCard />
       </Stack>
     </Card>
   );

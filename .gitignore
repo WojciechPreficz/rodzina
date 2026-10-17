@@ -24,3 +24,14 @@ android/capacitor-cordova-android-plugins/
 android/key.properties
 .env.android
 .android-tools/
+android-releases/
+*.p12
+*.pfx
+*.pem
+*.key
+*.apk
+*.aab
+*.apks
+*.idsig
+*.keystore.*
+*.jks.*

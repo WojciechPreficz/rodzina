@@ -19,6 +19,7 @@ Object.assign(process.env, {
   RODZINA_WEB_DIR: path.join(root, 'apps/web/dist'),
   RODZINA_PUBLIC_URL: 'http://127.0.0.1:3417',
   RODZINA_ALLOW_REGISTRATION: 'true',
+  RODZINA_ANDROID_DOWNLOAD_DIR: '',
   RODZINA_VAPID_PUBLIC_KEY: vapid.getPublicKey().toString('base64url'),
   RODZINA_VAPID_PRIVATE_KEY: vapid.getPrivateKey().toString('base64url'),
   RODZINA_VAPID_SUBJECT: 'mailto:e2e@example.com',

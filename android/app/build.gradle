@@ -1,5 +1,27 @@
 apply plugin: 'com.android.application'
 
+def appVersion = new Properties()
+file('../version.properties').withInputStream { appVersion.load(it) }
+def versionCodeValue = appVersion.getProperty('versionCode').toInteger()
+def versionNameValue = appVersion.getProperty('versionName')
+if (versionCodeValue < 1 || versionCodeValue > 2100000000 || !versionNameValue.matches('\\d+\\.\\d+\\.\\d+(?:-[a-zA-Z0-9.-]+)?') || versionNameValue.length() > 80) {
+    throw new GradleException('Invalid version.properties.')
+}
+def signingStore = System.getenv('RODZINA_ANDROID_KEYSTORE')
+def signingPassword = System.getenv('RODZINA_ANDROID_STORE_PASSWORD')
+def signingAlias = System.getenv('RODZINA_ANDROID_KEY_ALIAS')
+def signingKeyPassword = System.getenv('RODZINA_ANDROID_KEY_PASSWORD')
+def releaseRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+if (releaseRequested && (!signingStore || !signingPassword || !signingAlias || !signingKeyPassword)) {
+    throw new GradleException('Release requires RODZINA_ANDROID_KEYSTORE, STORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD environment variables.')
+}
+if (releaseRequested) {
+    def repository = rootProject.projectDir.parentFile.canonicalPath + File.separator
+    if (!new File(signingStore).isAbsolute() || new File(signingStore).canonicalPath.startsWith(repository)) {
+        throw new GradleException('Release keystore must be outside the repository.')
+    }
+}
+
 android {
     namespace = "pl.preficze.rodzina"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +29,8 @@ android {
         applicationId "pl.preficze.rodzina"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode versionCodeValue
+        versionName versionNameValue
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +38,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (signingStore && signingPassword && signingAlias && signingKeyPassword) {
+            release {
+                storeFile file(signingStore)
+                storePassword signingPassword
+                keyAlias signingAlias
+                keyPassword signingKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signingStore && signingPassword && signingAlias && signingKeyPassword) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
