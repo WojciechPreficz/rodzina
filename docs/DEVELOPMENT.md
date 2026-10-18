@@ -845,3 +845,67 @@ bez ujawniania poświadczeń w wyjściu. Release nie współdzieli daemona Gradl
 Weryfikacja: 378/378 testów Vitest w 46 plikach, lint (dwa wcześniejsze ostrzeżenia),
 format:check, typecheck i build przechodzą. Klucz właściciela nie został zmieniony;
 wynik podpisywania z jego hasłami pozostaje do sprawdzenia lokalnie przez właściciela.
+
+## Krok 4.7 — ręczny deploy i stan domknięcia fazy 4
+
+Implementację rozpoczęto 17.10.2026; końcową weryfikację wykonano 18.10.2026.
+Workflow `.github/workflows/deploy.yml` ma wyłącznie `workflow_dispatch`, odrzuca
+inne gałęzie niż `main`, weryfikuje dokładny commit na Node 24 i przesyła sprawdzony
+ZIP. `scripts/deploy.mjs` obsługuje walidację, SSH/SCP i kontrole HTTPS;
+`scripts/deploy-remote.mjs` jest wykonywany przez stdin Node hostingu. Konfigurację,
+backup, historię paczek, etapy awarii i ręczne odzyskiwanie opisuje DEPLOY.md.
+
+Testy `npm test -- scripts/deploy.test.mjs` obejmują 14 scenariuszy:
+
+- Walidację gałęzi/SHA, hosta, portu, bezwzględnych ścieżek, nodevenv i sekretów,
+  zakres plików ZIP-a, brak wymaganych plików i wskazanie innej aplikacji.
+- Preflight na rzeczywistym katalogu testowym: identyfikację aplikacji, środowisko
+  produkcyjne, katalog publiczny, bazę, backupy, katalog APK, brak narzędzi i prywatne
+  pliki w zarządzanych drzewach. Kontrola poprawnego preflight jest uruchamiana na
+  Node 24; macierz CI z Node 22 pomija ten jeden scenariusz, zgodnie z wymogiem hostingu.
+- Lokalną próbę na katalogu z atrapą transportu SSH/SCP: przesłanie sprawdzonych
+  bajtów, przygotowanie zależności, backup przed podmianą, historię paczek, podmianę
+  API/PWA i restart. Prywatne pliki, baza/WAL/SHM, logi, backupy, konfiguracja,
+  crony, metadane i APK zachowują zawartość. Stare assety pozostają dostępne.
+- Błędy sumy, rozpakowania, instalacji zależności, backupu, zachowania poprzedniej
+  paczki i transferu przerywają pracę przed podmianą. Nie ma restartu przy takim błędzie.
+- Ograniczone ponowienia health JSON, strony i 401 bez sesji, kontrolę sumy APK,
+  odrzucenie obcego URL, błąd po restarcie i brak automatycznego cofania bazy.
+- Statyczną kontrolę wyzwalacza ręcznego, odrzucenia innych gałęzi przed checkoutem,
+  kolejności wszystkich sprawdzeń przed deployem, SHA, uprawnień i blokady Actions.
+
+Transport SSH/SCP, rozpakowanie, npm, job backupu i archiwizacja są w próbie lokalnej
+zastępowane atrapami; test wykonuje prawdziwe operacje kopiowania i zachowania plików.
+Ta próba nie dowodzi dostępu SSH ani działania Node/prebuildów na vh.pl. Wymaga to
+kontrolowanego uruchomienia na serwerze; nie wykonano go w tym czacie. Nie zmieniono
+produkcji ani konfiguracji GitHub, nie opublikowano nowego APK.
+
+Wyniki lokalne: lint (dwa wcześniejsze ostrzeżenia Fast Refresh), format:check,
+typecheck, build, Playwright headless 16/16 (390 i 1280 px), `release:smoke` oraz
+`android:debug` przechodzą. Końcowy pełny Vitest: 392/392 w 47 plikach,
+w tym 14/14 testów deployu. Pierwsze uruchomienie pełnego Vitest w sandboxie
+miało błędy odczytu plików tymczasowych; ponowienie poza sandboxem przeszło.
+Playwright, smoke i Gradle także potwierdzono poza sandboxem po zatrzymaniu/błędzie
+prób w ograniczonym środowisku. Build zgłasza dotychczasowy duży bundle webowy.
+
+### Kryteria fazy 4 — potwierdzenia i brakujące próby
+
+| Kryterium z PLAN.md                                                             | Stan i dowód                                                                                                                                                        |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lokalny frontend APK, współpraca API, trwała sesja, regresja PWA                | Implementacja 4.1–4.6, build Androida, testy API/web/e2e; trwałość sesji na fizycznym urządzeniu nadal wymaga potwierdzenia. Produkcyjna baza nie była podmieniana. |
+| Alarm 18.10.2026 o 15:00, zapis przed 10:00, offline od 10:00, opóźnienie ≤60 s | Brak potwierdzenia sprzętowego. Nie zaliczamy tego kryterium na podstawie testów automatycznych ani samego upływu daty.                                             |
+| Restart offline oraz brak starych/podwójnych alarmów po zmianach                | Testy adaptera i synchronizacji istnieją; odbiór po restarcie fizycznego telefonu nadal niepotwierdzony.                                                            |
+| Europe/Warsaw, zmiana czasu, strefa telefonu, bliskie terminy, limity i zgody   | Testy czasu, harmonogramu i adaptera; zachowanie systemu na docelowym telefonie wymaga prób z checklist 4.3–4.6.                                                    |
+| Wylogowanie/zmiana konta, izolacja odbiorców, status synchronizacji w UI        | Pokryte testami API, adaptera i komponentów; próba na fizycznym urządzeniu pozostaje do wykonania.                                                                  |
+| Brak Web Push w APK i niezależne zgody PWA                                      | Rozdzielenie platform w kodzie i regresji, instrukcja wyłączenia push PWA na tym samym telefonie; ręczna próba do potwierdzenia.                                    |
+| Pobranie, wykrycie i instalacja podpisanego APK, zachowanie sesji/alarmów       | Testy metadanych, aktualizatora i przeglądarki przechodzą; instalator i aktualizacja między rzeczywistymi wydaniami na fizycznym telefonie nadal niepotwierdzone.   |
+| Smoke serwera i osobne publikowanie API/PWA oraz APK                            | Smoke przechodzi; DEPLOY.md opisuje obie procedury i ograniczenia. Nie wykonano publikacji produkcyjnej.                                                            |
+| Ręczny Actions z main, backup, restart, HTTP, zachowanie danych/APK             | Workflow i 14 testów lokalnych; kontrolowane wykonanie GitHub Actions na vh.pl pozostaje do wykonania po konfiguracji przez właściciela.                            |
+
+Gotowość do deployu (sekcja 1.1): brak nowych zmiennych API, cronów i migracji;
+dotychczasowa konfiguracja i cron pozostają zachowane. Brak nowych zależności runtime
+ani wymogu ich kompilacji na serwerze; prebuild-only przerywa deploy, jeśli nie ma
+gotowej binarki. Brak nowego procesu w tle, WebSocketów, Dockera i Redisa. Sprawdzono
+smoke paczki serwera oraz build Androida, APK publikuje się nadal osobno. Krok 4.7
+jest zaimplementowany lokalnie; pełna akceptacja fazy 4 pozostaje otwarta do czasu
+zapisania wyników powyższych prób sprzętowych i kontrolowanego deployu.

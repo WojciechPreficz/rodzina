@@ -487,3 +487,135 @@ SHA-256 chroni integralność pliku, zaufanie do metadanych zapewnia HTTPS; to n
 zastępuje weryfikacji podpisu przez Androida. Źródła:
 [podpisywanie](https://developer.android.com/studio/publish/app-signing),
 [FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider).
+
+## Krok 4.7 — ręczna aktualizacja przez GitHub Actions
+
+Workflow **Deploy** aktualizuje istniejącą instalację API/PWA. Uruchamia się tylko
+przez **Actions → Deploy → Run workflow**, z wyborem `main`. Push i pull request
+uruchamiają CI, bez zmiany serwera. Inna gałąź kończy Deploy błędem przed checkoutem.
+Wdrażany jest dokładny `github.sha` wybranego uruchomienia; podsumowanie zawiera
+commit, SHA-256 ZIP-a, wynik i etap. Równoległe uruchomienia czekają w grupie
+`rodzina-production`; nie anulujemy trwającej podmiany. Dodatkowa blokada na serwerze
+chroni także przed równoczesnym uruchomieniem skryptu z komputera.
+
+### Jednorazowa konfiguracja repozytorium
+
+W **Settings → Secrets and variables → Actions → Variables** ustaw:
+
+| Zmienna           | Wartość                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| `DEPLOY_HOST`     | Nazwa hosta SSH podana przez vh.pl, bez protokołu                                             |
+| `DEPLOY_PORT`     | Port SSH; domyślnie `22`                                                                      |
+| `DEPLOY_USER`     | Użytkownik SSH/cPanel                                                                         |
+| `DEPLOY_PATH`     | Kanoniczna ścieżka istniejącej aplikacji, np. `/home/USER/rodzina`                            |
+| `DEPLOY_NODE`     | Pełna ścieżka Node 24 z nodevenv tej aplikacji, np. `/home/USER/nodevenv/rodzina/24/bin/node` |
+| `DEPLOY_ENV_FILE` | Istniejący plik konfiguracji, np. `/home/USER/rodzina-data/.env`                              |
+
+Ścieżki są bezwzględne, bez końcowego ukośnika, spacji, `..` i znaków powłoki.
+Nie wybieraj katalogu domowego, subdomeny innej aplikacji ani systemowego Node.
+Skrypt sprawdza `package.json` z nazwą `rodzina-release`, istniejące pliki, wersję
+Node, npm z sąsiedniego `bin/npm`, `unzip` i `tar`. Runner potrzebuje OpenSSH
+(`ssh` i `scp`, dostępne na Ubuntu). Konto SSH musi mieć prawo zapisu do aplikacji,
+docelowego katalogu `node_modules` i katalogu nadrzędnego aplikacji.
+
+W **Secrets** dodaj:
+
+- `DEPLOY_SSH_KEY`: prywatny klucz konta wdrożeniowego bez interaktywnego hasła;
+  publiczną część dodaj do uprawnionych kluczy SSH w cPanel. Ogranicz uprawnienia
+  konta do potrzeb tej instalacji; nie używaj klucza podpisującego APK.
+- `DEPLOY_KNOWN_HOSTS`: wpis hosta SSH uzyskany i zweryfikowany niezależnie,
+  np. z administratorem hostingu lub porównany z potwierdzonym odciskiem.
+  Dla niestandardowego portu wpis musi wskazywać `[HOST]:PORT`. Sam wynik
+  `ssh-keyscan` bez porównania odcisku nie wystarcza. Nie wyłączaj sprawdzania hosta.
+
+Klucze są zapisywane wyłącznie w prywatnym katalogu tymczasowym runnera, usuwanym
+w `finally`. Nie są artefaktami Actions. Skrypt nie wypisuje środowiska, zawartości
+`.env` ani diagnostyki npm/SSH mogącej zawierać dane prywatne. Nie włączaj `set -x`.
+W razie awarii log pokazuje bezpieczną nazwę etapu; szczegółową diagnostykę wykonuj
+w prywatnej sesji SSH, bez kopiowania sekretów do issue lub logów Actions.
+
+Konfiguracja serwera pozostaje dotychczasowa: `NODE_ENV=production`,
+`RODZINA_PUBLIC_URL=https://rodzina.preficze.pl`, `RODZINA_WEB_DIR=./public`
+(lub bezwzględne `DEPLOY_PATH/public`). Baza i katalog backupu muszą już istnieć,
+mieć bezwzględne ścieżki i leżeć poza zarządzanymi plikami aplikacji. Jeśli włączono
+pobieranie Androida, jego katalog musi istnieć i być poza całym katalogiem aplikacji,
+zgodnie z 4.6. Zarządzane drzewa `dist`, `public`, `drizzle` nie mogą zawierać
+prywatnych plików, APK ani dowiązań. Dowiązanie cPanel `node_modules` jest zachowane.
+Nie dodajemy zmiennych do `.env` API, migracji, cronów ani zależności runtime.
+
+### Przebieg aktualizacji
+
+1. Na Linux/Node 24: `npm ci`, lint, format:check, typecheck, testy, build,
+   Playwright headless i `release:smoke`. Błąd kończy workflow przed SSH.
+   Smoke tworzy i testuje `release.zip`; deploy nie buduje go ponownie.
+2. Skrypt sprawdza zawartość ZIP-a, commit checkoutu i SHA-256. Przed zmianami
+   pobiera aktualne metadane Androida oraz sprawdza SHA-256 opublikowanego APK,
+   jeśli istnieje. Nieprawidłowe lub niedostępne wydanie przerywa deploy.
+3. Preflight przez SSH sprawdza istniejącą instalację i konfigurację. Powstaje
+   prywatny staging obok aplikacji oraz `.rodzina-deploy-lock` (dla katalogu
+   aplikacji `rodzina`). ZIP trafia przez SCP do stagingu; serwer porównuje SHA-256
+   i rozpakowuje paczkę. Błąd transferu nie zmienia plików aplikacji.
+4. npm z nodevenv instaluje zależności produkcyjne w stagingu z `--ignore-scripts`.
+   Dla `better-sqlite3` uruchamiamy wyłącznie pobranie gotowego modułu przez
+   `prebuild-install`, bez awaryjnego `node-gyp`. Sprawdzamy otwarcie bazy w pamięci
+   oraz dostępność Argon2. Brak gotowej binarki przerywa wdrożenie przed podmianą.
+   Hosting potrzebuje dostępu do npm i serwera gotowych binariów. Nie buduje API,
+   frontendu ani nowych bibliotek runtime ze źródeł.
+5. Z dotychczasowego katalogu aplikacji uruchamiany jest istniejący job:
+   `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/backup-db.js`. Używa produkcyjnej
+   konfiguracji i rotacji 14 kopii. Błąd backupu przerywa deploy przed podmianą.
+   Nie nadpisujemy bazy paczką ani nie cofamy jej automatycznie.
+6. W prywatnym katalogu obok aplikacji, np. `rodzina-deploy-history`, zachowujemy
+   `<UUID>-previous.tar.gz` (poprzednie `server.cjs`, `package.json`, `dist`, `public`,
+   `drizzle`), `<UUID>-release.zip` oraz `<UUID>.json` z commitem i sumą. Historia
+   nie zawiera `.env`, bazy ani kluczy. Nie jest dostępna przez HTTP; administrator
+   okresowo usuwa starsze paczki po ocenie okresu potrzebnego do odzyskiwania.
+7. Kopiowane są przygotowane zależności do docelowego `node_modules`, następnie
+   wyłącznie pięć zarządzanych ścieżek. Nie usuwamy szeroko zawartości aplikacji;
+   stare assety pozostają dla otwartych kart PWA. Zachowane są `.env`, baza/WAL/SHM,
+   logi, backupy, `.htaccess`, konfiguracja cPanel, crony i trwałe pliki Androida.
+   Zapis `tmp/restart.txt` restartuje Passengera. Migracje wykonuje aplikacja.
+8. Maksymalnie sześć prób (odstęp 5 s, limit żądania 20 s) sprawdza HTTPS:
+   health JSON z `ok=true`, `dbOk=true`, HTML strony, 401 `/api/auth/me` bez sesji
+   oraz niezmienione metadane i sumę APK. Błąd kończy workflow na czerwono.
+   Staging i blokada są sprzątane także po błędzie; historia i backup pozostają.
+
+Podmiana jest sekwencyjna, bez gwarancji zerowej przerwy. Wybieraj czas małego
+ruchu. Nie przerywaj joba w trakcie kopiowania. Zwykły cron nadal używa istniejącego
+`.env` i harmonogramu; workflow go nie edytuje. APK publikujemy osobno i nadal
+wymaga ono zgody instalatora na telefonie.
+
+### Awaria i bezpieczne odzyskiwanie
+
+- Etapy walidacji, transferu, rozpakowania, zależności, backupu i archiwizacji
+  kończą się przed podmianą aplikacji. Popraw przyczynę i uruchom ponownie.
+- Błąd w etapie `promotion`, `restart` albo kontroli HTTP może oznaczać częściową
+  aktualizację. Sprawdź podsumowanie Actions i prywatne logi Passengera/cPanel,
+  porównaj health oraz logi cronów. Nie uznawaj samego restartu za udany deploy.
+- Ustal UUID ostatniego wdrożenia z historii. Zachowaj dodatkową kopię obecnej
+  bazy istniejącym jobem przed odzyskiwaniem. Poprzednia paczka nie zawiera
+  `node_modules`; zależności trzeba przygotować ponownie dla jej `package.json`
+  w prywatnym stagingu, tym samym npm z nodevenv, bez kompilacji ze źródeł.
+- Przed cofnięciem kodu porównaj `drizzle/meta/_journal.json` obu paczek i oceń
+  zgodność starszego API z obecną bazą. Przy niezgodnej migracji preferuj poprawkę
+  do przodu. Nie uruchamiaj starego kodu bez tej oceny. Cofnięcie produkcyjnej bazy
+  wymaga osobnej decyzji właściciela, zatrzymania zapisów i cronów oraz uwzględnienia
+  utraty danych powstałych po backupie; workflow tego nie robi.
+- Rozpakuj `previous.tar.gz` do nowego prywatnego katalogu, sprawdź jego zawartość,
+  przygotuj zależności, a następnie podmień zarządzane ścieżki (każdą osobno).
+  Nie usuwaj katalogu aplikacji, `.env`, bazy, APK, konfiguracji ani symlinku cPanel.
+  Przy cofnięciu migracji sam overlay może zostawić nowsze pliki: po ocenie
+  zgodności odtwórz `drizzle` dokładnie z właściwej paczki, zachowując kopię obecnego.
+  Wykonaj restart i wszystkie kontrole HTTP, łącznie z APK i 401 bez sesji.
+- Po awarii runnera/zerwaniu SSH może pozostać `.rodzina-deploy-lock`. Najpierw
+  upewnij się w Actions i na serwerze, że żaden deploy nie działa. Odczytaj prywatny
+  `transaction.json`, sprawdź pełną ścieżkę stagingu i dopiero wtedy usuń wyłącznie
+  wskazany staging i blokadę. Nie usuwaj historii ani bazy, aby odblokować deploy.
+
+Stan 17.10.2026: implementacja i próby lokalne; nie wykonano kontrolowanego
+uruchomienia GitHub Actions na vh.pl. Przed oznaczeniem wdrożenia jako sprawdzonego
+właściciel musi skonfigurować powyższe wartości i ręcznie uruchomić Deploy dla
+`main`, zanotować SHA/URL uruchomienia i potwierdzić backup, restart, HTTP,
+istniejące dane rodziny oraz pliki Androida. Nie powtarzamy tworzenia aplikacji,
+rodziny ani pierwszego wdrożenia. Pełna lista brakujących prób fazy 4 jest
+w `DEVELOPMENT.md`.

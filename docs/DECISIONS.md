@@ -290,3 +290,29 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
 - Release używa procesu Gradle bez współdzielonego daemona i bez configuration
   cache. To ograniczenie przechowywania sekretów, nie potwierdzona diagnoza
   wcześniejszego błędu właściciela. Klucz właściciela nie został zmieniony.
+
+# 17.10.2026 — krok 4.7: ręczny deploy istniejącego serwera
+
+- Wzorzec przeczytano z lokalnego repozytorium `../portfel`: workflow deploy.yml
+  i scripts/deploy.sh. Zachowujemy SSH z weryfikacją hosta, ochronę plików serwera,
+  restart Passengera i sprawdzenia HTTP. Rodzina używa wyłącznie workflow_dispatch,
+  Node 24 i wieloplatformowego launchera `.mjs`, bez automatycznego deployu po pushu.
+- Zdalny helper `.mjs` trafia przez stdin SSH do Node hostingu; nie staje się
+  endpointem ani częścią publicznej paczki. ZIP jest walidowany lokalnie,
+  zamrożony przed transferem i porównywany SHA-256 na serwerze. Workflow zapisuje
+  SHA checkoutu i sumę ZIP-a w podsumowaniu; nie odbudowuje sprawdzonej paczki.
+- Zależności przygotowujemy w stagingu z wyłączonymi skryptami npm. Istniejący
+  better-sqlite3 pobiera wyłącznie gotową binarkę przez prebuild-install;
+  brak binarki jest błędem, bez kompilacji node-gyp na hostingu. Nie dodajemy
+  zależności runtime, migracji ani cronów.
+- Kopiujemy wyłącznie zarządzane drzewa i przygotowane zależności, zachowując
+  symlink node_modules cPanel oraz stare assety. Podmiana nie jest atomowa;
+  dokumentujemy możliwą przerwę i ręczne odzyskiwanie. Osobna blokada serwera
+  chroni przed równoczesnym lokalnym uruchomieniem poza Actions.
+- Dotychczasowy job robi backup przed podmianą. Poprzednie pliki aplikacji oraz
+  nowy ZIP są zachowane w prywatnej historii obok aplikacji. Nie cofamy bazy
+  automatycznie. Przywrócenie kodu wymaga oceny migracji i odtworzenia zależności.
+- Opublikowany Android jest kontrolowany przed i po aktualizacji (metadane i SHA-256
+  pobranego APK). Workflow nie publikuje APK, nie zmienia klucza i nie aktualizuje
+  telefonu. Brak kontrolowanej próby na vh.pl i testów sprzętowych nie jest
+  traktowany jako pełne zaliczenie kryteriów fazy.
