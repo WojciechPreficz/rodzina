@@ -368,7 +368,9 @@ na domenie. Testy App Links na telefonie pozostają do wykonania według DEVELOP
 # Krok 4.6 — osobne wydania API/PWA oraz Androida
 
 ZIP serwera aktualizuje API i PWA. Nie zmienia lokalnych plików frontendu w już
-zainstalowanym APK. APK budujemy, podpisujemy, testujemy i publikujemy osobno.
+zainstalowanym APK. APK stanowi odrębny plik wydania. Poniżej opisano procedurę
+lokalną; workflow Deploy z kroku 4.7 buduje i publikuje APK automatycznie przy każdej
+aktualizacji serwera.
 Nie usuwaj produkcyjnej bazy ani sesji przy żadnym z tych wydań. Dotychczasowy
 kontrakt sesji i `/api/reminders/schedule` pozostaje zgodny ze starszym APK;
 przed kolejną zmianą API wykonaj regresję poprzedniej wspieranej wersji APK.
@@ -490,7 +492,9 @@ zastępuje weryfikacji podpisu przez Androida. Źródła:
 
 ## Krok 4.7 — ręczna aktualizacja przez GitHub Actions
 
-Workflow **Deploy** aktualizuje istniejącą instalację API/PWA. Uruchamia się tylko
+Workflow **Deploy** aktualizuje istniejącą instalację API/PWA oraz przy każdym
+uruchomieniu buduje, podpisuje i publikuje nową wersję APK. Nie trzeba ręcznie
+wgrywać pierwszego ani następnych APK. Uruchamia się tylko
 przez **Actions → Deploy → Run workflow**, z wyborem `main`. Push i pull request
 uruchamiają CI, bez zmiany serwera. Inna gałąź kończy Deploy błędem przed checkoutem.
 Wdrażany jest dokładny `github.sha` wybranego uruchomienia; podsumowanie zawiera
@@ -549,6 +553,60 @@ w `finally`. Nie są artefaktami Actions. Skrypt nie wypisuje środowiska, zawar
 W razie awarii log pokazuje bezpieczną nazwę etapu; szczegółową diagnostykę wykonuj
 w prywatnej sesji SSH, bez kopiowania sekretów do issue lub logów Actions.
 
+### Jednorazowe włączenie podpisywania Androida
+
+W tym samym repozytorium dodaj trzy **Secrets**:
+
+| Sekret                    | Wartość                                                          |
+| ------------------------- | ---------------------------------------------------------------- |
+| `ANDROID_KEYSTORE_BASE64` | Zawartość **istniejącego** pliku keystore zakodowana jako Base64 |
+| `ANDROID_STORE_PASSWORD`  | Hasło tego magazynu                                              |
+| `ANDROID_KEY_PASSWORD`    | Hasło klucza prywatnego (może być takie samo jak hasło magazynu) |
+
+Dodaj dwie **Variables**:
+
+| Zmienna                      | Wartość                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------- |
+| `ANDROID_KEY_ALIAS`          | Alias istniejącego klucza, np. `rodzina`                                              |
+| `ANDROID_CERTIFICATE_SHA256` | Publiczny odcisk SHA-256 certyfikatu tego klucza, 64 cyfry hex, z dwukropkami lub bez |
+
+Użyj tego samego klucza co do już zainstalowanego release APK. Nie generuj nowego
+klucza. Odcisk znajdziesz w `certificate-sha256.txt` przygotowanego lokalnie wydania
+lub w `keytool -list -v -keystore <plik> -alias <alias>`. Nie wklejaj haseł ani
+Base64 do czatu, commita lub logu. Dla domyślnej lokalizacji istniejącego klucza
+możesz ustawić sekret przez PowerShell i GitHub CLI bez wypisywania jego zawartości:
+
+```powershell
+$apkKeyPath = Join-Path $env:USERPROFILE 'rodzina-signing/rodzina-release.jks'
+[Convert]::ToBase64String([IO.File]::ReadAllBytes($apkKeyPath)) | gh secret set ANDROID_KEYSTORE_BASE64 --repo WojciechPreficz/rodzina
+gh secret set ANDROID_STORE_PASSWORD --repo WojciechPreficz/rodzina
+gh secret set ANDROID_KEY_PASSWORD --repo WojciechPreficz/rodzina
+```
+
+Dwa ostatnie polecenia pytają o wartość interaktywnie. Alias i publiczny odcisk
+ustaw w panelu GitHuba. Zachowaj niezależną kopię klucza i haseł według 4.6.
+Brak sekretów, niewłaściwe hasło lub niezgodny odcisk zatrzymuje workflow przed SSH
+i zmianami serwera. Klucz jest dekodowany poza checkoutem do prywatnego katalogu
+tymczasowego runnera i usuwany w `finally`, także po błędzie. Nie trafia na hosting
+ani do artefaktów. Hasła istnieją tylko w środowisku kroku budowania; Gradle działa
+bez współdzielonego daemona i configuration cache. Zwykłe CI nadal nie używa sekretów.
+
+Runner odczytuje dostępne wydanie i weryfikuje jego APK. Nowy `versionCode` wynosi
+`max(kod z repo + 1, opublikowany kod + 1)`, więc rośnie także przy kolejnym deployu
+tego samego commita. Nazwa ma postać `1.0.0-deploy.2`, zgodnie z bazową wersją
+z `android/version.properties`. Zmiana numeru dotyczy tylko budowania na runnerze;
+skrypt odtwarza plik repozytorium i nie tworzy commitów z numerami wersji.
+
+Po pierwszym deployu katalog APK jest tworzony automatycznie obok katalogu aplikacji,
+np. `/home/USER/rodzina-android` dla `DEPLOY_PATH=/home/USER/rodzina`. Po backupie
+i podmianie kodu skrypt atomowo dodaje do istniejącego `DEPLOY_ENV_FILE` wyłącznie
+`RODZINA_ANDROID_DOWNLOAD_DIR`, jeśli wpisu nie było lub był pusty. Pozostałe
+ustawienia pozostają zachowane. Jeśli katalog był już skonfigurowany, używamy go
+bez zmiany ścieżki. Musi leżeć poza aplikacją, bazą, backupami i zależnościami,
+bez dowiązań. Konto SSH musi móc zapisać katalog nadrzędny aplikacji i `.env`.
+Nie ustawiaj innej wartości tej zmiennej w panelu cPanel — konflikt jest błędem
+preflightu. Nowe crony, migracje i zależności runtime nie są potrzebne.
+
 Preflight nie zapisuje osobnego logu na serwerze. Błąd przed uruchomieniem backupu
 i restartem nie musi pojawić się w logach Passengera ani cronów. W Actions skrypt
 raportuje ostatnią rozpoczętą kontrolę: `node-startup` oznacza próbę uruchomienia
@@ -577,17 +635,21 @@ wdrożenia ani braku częściowej podmiany; wymagane są wszystkie kontrole work
 Konfiguracja serwera pozostaje dotychczasowa: `NODE_ENV=production`,
 `RODZINA_PUBLIC_URL=https://rodzina.preficze.pl`, `RODZINA_WEB_DIR=./public`
 (lub bezwzględne `DEPLOY_PATH/public`). Baza i katalog backupu muszą już istnieć,
-mieć bezwzględne ścieżki i leżeć poza zarządzanymi plikami aplikacji. Jeśli włączono
-pobieranie Androida, jego katalog musi istnieć i być poza całym katalogiem aplikacji,
-zgodnie z 4.6. Zarządzane drzewa `dist`, `public`, `drizzle` nie mogą zawierać
+mieć bezwzględne ścieżki i leżeć poza zarządzanymi plikami aplikacji. Jeśli wcześniej
+włączono pobieranie Androida, jego katalog musi istnieć i być poza całym katalogiem
+aplikacji, zgodnie z 4.6. Pierwszy katalog tworzy workflow. Zarządzane drzewa `dist`, `public`, `drizzle` nie mogą zawierać
 prywatnych plików, APK ani dowiązań. Dowiązanie cPanel `node_modules` jest zachowane.
-Nie dodajemy zmiennych do `.env` API, migracji, cronów ani zależności runtime.
+Poza pierwszym ustawieniem istniejącej zmiennej `RODZINA_ANDROID_DOWNLOAD_DIR`
+nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
 
 ### Przebieg aktualizacji
 
 1. Na Linux/Node 24: `npm ci`, lint, format:check, typecheck, testy, build,
    Playwright headless i `release:smoke`. Błąd kończy workflow przed SSH.
    Smoke tworzy i testuje `release.zip`; deploy nie buduje go ponownie.
+   Następnie JDK 21/SDK 36 buduje podpisane APK z automatycznym numerem wersji.
+   Sprawdzamy tożsamość, podpis i odcisk, wykonujemy testy JVM i Android Lint.
+   Frontend Androida trafia do `dist-android`, więc sprawdzony ZIP PWA się nie zmienia.
 2. Skrypt sprawdza zawartość ZIP-a, commit checkoutu i SHA-256. Przed zmianami
    pobiera aktualne metadane Androida oraz sprawdza SHA-256 opublikowanego APK,
    jeśli istnieje. Nieprawidłowe lub niedostępne wydanie przerywa deploy.
@@ -601,6 +663,8 @@ Nie dodajemy zmiennych do `.env` API, migracji, cronów ani zależności runtime
    prywatny staging obok aplikacji oraz `.rodzina-deploy-lock` (dla katalogu
    aplikacji `rodzina`). ZIP trafia przez SCP do stagingu; serwer porównuje SHA-256
    i rozpakowuje paczkę. Błąd transferu nie zmienia plików aplikacji.
+   Osobno przesyłamy APK do tego samego prywatnego stagingu; jego suma, rozmiar,
+   wersja i zgodność certyfikatu z poprzednią publikacją są sprawdzane przed backupem.
 4. Właściwy npm CLI używanej wersji Node instaluje zależności produkcyjne w katalogu
    tymczasowym z `--ignore-scripts` i jawnym `--prefix`, z pominięciem wrappera cPanel.
    Sprawdzamy, czy `node_modules` jest rzeczywistym katalogiem tej paczki, oraz czy
@@ -625,17 +689,35 @@ Nie dodajemy zmiennych do `.env` API, migracji, cronów ani zależności runtime
    stare assety pozostają dla otwartych kart PWA. Zachowane są `.env`, baza/WAL/SHM,
    logi, backupy, `.htaccess`, konfiguracja cPanel, crony i trwałe pliki Androida.
    Zapis `tmp/restart.txt` restartuje Passengera. Migracje wykonuje aplikacja.
+   Przy pierwszej publikacji przed restartem tworzymy trwały katalog APK i atomowo
+   ustawiamy jego ścieżkę w `.env`, zachowując pozostałą konfigurację i uprawnienia pliku.
 8. Maksymalnie sześć prób (odstęp 5 s, limit żądania 20 s) sprawdza HTTPS:
    health JSON z `ok=true`, `dbOk=true`, HTML strony, 401 `/api/auth/me` bez sesji
    oraz niezmienione metadane i sumę APK. Błąd kończy workflow na czerwono.
    Staging i blokada są sprzątane także po błędzie; historia i backup pozostają.
+9. Dopiero po udanych kontrolach serwera kopiujemy nowe APK pod tymczasową nazwą
+   w katalogu pobierania i ponownie sprawdzamy SHA-256. Plik z niezmiennym adresem
+   zawierającym wersję zostaje zatwierdzony przez rename. Odcisk certyfikatu jest
+   zachowany w katalogu do kontroli następnych wydań. Na końcu atomowo podmieniamy
+   `latest.json`, zachowując stare APK. Ponownie sprawdzamy przez HTTPS metadane
+   i sumę pobranego nowego APK. Podsumowanie zawiera także numer i SHA-256 APK.
+   Błąd po publikacji zgłasza nieudany deploy; nie cofa automatycznie API ani bazy.
 
 Podmiana jest sekwencyjna, bez gwarancji zerowej przerwy. Wybieraj czas małego
 ruchu. Nie przerywaj joba w trakcie kopiowania. Zwykły cron nadal używa istniejącego
-`.env` i harmonogramu; workflow go nie edytuje. APK publikujemy osobno i nadal
-wymaga ono zgody instalatora na telefonie.
+`.env` i harmonogramu. Pierwsze ustawienie katalogu Androida opisano powyżej.
+Publikacja nowego APK jest częścią każdego Deploy; aktualizacja na telefonie
+nadal wymaga zgody instalatora Androida.
 
 ### Awaria i bezpieczne odzyskiwanie
+
+- Etapy `android-checksum`, `android-configuration`, `android-apk` i
+  `android-metadata` identyfikują kontrolę transferu, pierwszą konfigurację,
+  kopiowanie APK i zatwierdzanie metadanych. Do czasu podmiany `latest.json`
+  użytkownicy otrzymują poprzednie wydanie. Jeśli po awarii pozostało nowe APK
+  bez metadanych, nie nadpisuj go inną zawartością. Ustaw większy bazowy kod
+  w `android/version.properties` i uruchom Deploy ponownie. Stare linki pozostają
+  niezmienne. Zmiana klucza podpisującego jest odrzucana.
 
 - Etapy walidacji, transferu, rozpakowania, zależności, backupu i archiwizacji
   kończą się przed podmianą aplikacji. Popraw przyczynę i uruchom ponownie.
@@ -663,10 +745,16 @@ wymaga ono zgody instalatora na telefonie.
   `transaction.json`, sprawdź pełną ścieżkę stagingu i dopiero wtedy usuń wyłącznie
   wskazany staging i blokadę. Nie usuwaj historii ani bazy, aby odblokować deploy.
 
-Stan 17.10.2026: implementacja i próby lokalne; nie wykonano kontrolowanego
-uruchomienia GitHub Actions na vh.pl. Przed oznaczeniem wdrożenia jako sprawdzonego
-właściciel musi skonfigurować powyższe wartości i ręcznie uruchomić Deploy dla
-`main`, zanotować SHA/URL uruchomienia i potwierdzić backup, restart, HTTP,
-istniejące dane rodziny oraz pliki Androida. Nie powtarzamy tworzenia aplikacji,
-rodziny ani pierwszego wdrożenia. Pełna lista brakujących prób fazy 4 jest
-w `DEVELOPMENT.md`.
+Stan 18.10.2026: właściciel potwierdził udane wdrożenie API/PWA, a odczyt
+[run 39158518981](https://github.com/WojciechPreficz/rodzina/actions/runs/39158518981)
+potwierdził wynik `success`. Ten run używał jeszcze wariantu bez publikacji APK.
+Rozszerzenie o nowe APK przy każdym Deploy sprawdzono lokalnie: testy publikacji
+i deployu, pełny zestaw Vitest, lint, formatowanie, typecheck, build i smoke paczki
+serwera oraz rzeczywisty podpisany build z oddzielnym tymczasowym kluczem testowym.
+Klucz testowy i przygotowane nim pliki wydania usunięto; klucz właściciela pozostał
+niezmieniony. W repozytorium nie skonfigurowano jeszcze sekretów podpisywania.
+Pierwsza publikacja przez nowy workflow wymaga ich ustawienia i ręcznego Deploy
+z `main`; trzeba zanotować SHA/URL oraz potwierdzić backup, restart, HTTP, dane
+rodziny i pobranie APK. Testu aktualizacji i alarmów na fizycznym telefonie
+nie zastępuje build. Nie powtarzamy tworzenia aplikacji, rodziny ani pierwszego
+wdrożenia. Pełna lista prób fazy 4 jest w `DEVELOPMENT.md`.

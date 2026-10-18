@@ -320,6 +320,32 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   brak katalogu i dowiązanie do produkcyjnych zależności. Potwierdzenie poprawki
   na produkcji wymaga kolejnego ręcznego uruchomienia workflow przez właściciela.
 
+# 18.10.2026 — nowe APK przy każdym Deploy
+
+- Na wyraźne polecenie właściciela rozszerzamy krok 4.7: każde ręczne uruchomienie
+  Deploy z main buduje, podpisuje i publikuje APK razem z aktualizacją API/PWA.
+  Zastępuje to wcześniejszą granicę „workflow tylko zachowuje APK”. Nie wymaga
+  ręcznego pierwszego uploadu; konfiguracja klucza w Actions pozostaje jednorazowa.
+- Korzystamy z istniejącego keystore i dwóch haseł zapisanych jako sekrety Actions,
+  aliasu i zatwierdzonego publicznego odcisku certyfikatu jako zmiennych. Nie zmieniamy
+  klucza właściciela. Tymczasowy magazyn jest poza checkoutem i jest sprzątany także
+  po błędzie. Certyfikat sprawdzamy przed SSH i względem poprzedniej publikacji.
+- Kod wersji to max(kod bazowy z repo + 1, kod opublikowany + 1); wersja widoczna
+  ma przyrostek deploy z kodem. Numer jest ustawiany wyłącznie podczas budowania
+  na runnerze. Grupa rodzina-production serializuje odczyt wersji, build i publikację.
+- Sprawdzony ZIP PWA pozostaje niezmieniony; build Androida ma osobny dist-android.
+  APK przesyłamy do prywatnego stagingu i weryfikujemy przed backupem/podmianą kodu.
+  Po udanych kontrolach API kopiujemy APK do trwałego katalogu i dopiero wtedy
+  atomowo zatwierdzamy latest.json. Poprzednie APK pozostają pod niezmiennymi URL.
+- Przy pierwszym wydaniu tworzymy katalog obok aplikacji i atomowo ustawiamy
+  istniejącą zmienną RODZINA_ANDROID_DOWNLOAD_DIR w .env, jeśli brakowała/była pusta.
+  Zachowujemy pozostałą konfigurację i uprawnienia, nie dodajemy cronów, migracji
+  ani zależności runtime. Istniejąca ścieżka jest zachowana i walidowana.
+- Automatyzacja nie zastępuje fizycznego testu aktualizacji i alarmów. Hasła klucza
+  nie są znane agentowi; pierwsze produkcyjne wykonanie wymaga ich konfiguracji
+  w Actions przez właściciela. Nie deklarujemy publikacji ani testu telefonu bez
+  ich wykonania. Instalację aktualizacji nadal zatwierdza użytkownik Androida.
+
 # 17.10.2026 — krok 4.7: ręczny deploy istniejącego serwera
 
 - Wzorzec przeczytano z lokalnego repozytorium `../portfel`: workflow deploy.yml

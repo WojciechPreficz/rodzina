@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { unzipSync } from 'fflate';
+import { validateAndroidPublication } from './deploy-remote.mjs';
 
 export const origin = 'https://rodzina.preficze.pl';
 export const managed = ['server.cjs', 'package.json', 'dist', 'public', 'drizzle'];
@@ -91,6 +92,11 @@ export function failureDiagnostic(stdout, stderr) {
     'preflight-database-path',
     'preflight-backup-path',
     'preflight-downloads',
+    'preflight-android-config',
+    'android-checksum',
+    'android-configuration',
+    'android-apk',
+    'android-metadata',
     'preflight-modules',
     'preflight-unzip',
     'preflight-tar',
@@ -272,11 +278,15 @@ export async function deploy({
   let remote;
   let transaction;
   let digest;
+  let android;
   const report = async (status) => {
     if (env.GITHUB_STEP_SUMMARY)
       await appendFile(
         env.GITHUB_STEP_SUMMARY,
-        `\nDeploy: ${status}; stage: ${phase}\n\nCommit: \`${env.GITHUB_SHA}\`\n\nZIP SHA-256: \`${digest ?? 'not calculated'}\`\n`,
+        `\nDeploy: ${status}; stage: ${phase}\n\nCommit: \`${env.GITHUB_SHA}\`\n\nZIP SHA-256: \`${digest ?? 'not calculated'}\`\n` +
+          (android
+            ? `\nAndroid: ${android.release.versionName} (${android.release.versionCode})\n\nAPK SHA-256: \`${android.release.sha256}\`\n`
+            : ''),
       );
   };
   try {
@@ -290,6 +300,28 @@ export async function deploy({
     const baseline = await androidState(fetcher, { allowLegacySpa: true });
     const legacyAndroidBaseline = baseline === 'legacy-spa';
     const before = legacyAndroidBaseline ? null : baseline;
+    let apkBytes;
+    if (env.DEPLOY_ANDROID_RELEASE) {
+      phase = 'Android release validation';
+      const metadataFile = path.resolve(repository, env.DEPLOY_ANDROID_RELEASE);
+      if ((await lstat(metadataFile)).size > 4096) throw new Error('Android metadata too large.');
+      const release = JSON.parse(await readFile(metadataFile, 'utf8'));
+      const certificate = (await readFile(path.join(path.dirname(metadataFile), 'certificate-sha256.txt'), 'utf8'))
+        .trim()
+        .replace(/:/g, '')
+        .toLowerCase();
+      // Validate the URL before using its basename as a local path.
+      const filename = validateAndroidPublication({ release, certificate, size: 1 });
+      const apkFile = path.join(path.dirname(metadataFile), filename);
+      const size = (await lstat(apkFile)).size;
+      android = { release, certificate, size, before };
+      validateAndroidPublication(android);
+      if (before && release.versionCode <= JSON.parse(before).versionCode)
+        throw new Error('Android versionCode must increase.');
+      apkBytes = await readFile(apkFile);
+      if (createHash('sha256').update(apkBytes).digest('hex') !== release.sha256)
+        throw new Error('Local APK checksum mismatch.');
+    }
     if (legacyAndroidBaseline)
       console.log('Legacy Android SPA fallback detected; remote preflight must confirm downloads are not configured.');
     directory = await mkdtemp(path.join(tmpdir(), 'rodzina-ssh-'));
@@ -329,7 +361,7 @@ export async function deploy({
           '-p',
           config.port,
           target,
-          `printf 'DEPLOY_STAGE=node-startup\\n' >&2; ${config.node} --input-type=module - ${action} ${Buffer.from(JSON.stringify({ ...config, digest, legacyAndroidBaseline, ...extra })).toString('base64url')}`,
+          `printf 'DEPLOY_STAGE=node-startup\\n' >&2; ${config.node} --input-type=module - ${action} ${Buffer.from(JSON.stringify({ ...config, digest, legacyAndroidBaseline, ...(android ? { android } : {}), ...extra })).toString('base64url')}`,
         ],
         source,
       );
@@ -342,10 +374,22 @@ export async function deploy({
     const frozen = path.join(directory, 'release.zip');
     await writeFile(frozen, archive);
     await execute('scp', [...options, '-P', config.port, frozen, `${target}:${transaction.stage}/release.zip`]);
+    if (android) {
+      phase = 'Android transfer';
+      const frozenApk = path.join(directory, 'android.apk');
+      await writeFile(frozenApk, apkBytes);
+      await execute('scp', [...options, '-P', config.port, frozenApk, `${target}:${transaction.stage}/android.apk`]);
+    }
     phase = 'checksum / staging / dependencies / backup / promotion / restart';
     await remote('apply', transaction);
     phase = 'HTTP verification';
     await checkSite(before, { fetcher, pause });
+    if (android) {
+      phase = 'Android publication';
+      await remote('publish-android', { ...transaction, legacyAndroidBaseline: false });
+      phase = 'Android HTTP verification';
+      await checkSite(JSON.stringify(android.release), { fetcher, pause });
+    }
     phase = 'completed';
     await report('success');
     console.log(`Deploy completed: ${config.sha}, ZIP SHA-256 ${digest}`);

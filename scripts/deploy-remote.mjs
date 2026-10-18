@@ -1,11 +1,138 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { access, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  access,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import { parseEnv } from 'node:util';
 import path from 'node:path';
 
 const names = ['server.cjs', 'package.json', 'dist', 'public', 'drizzle'];
 const inside = (parent, candidate) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
+
+export function validateAndroidPublication(android) {
+  const release = android?.release;
+  if (
+    !release ||
+    Object.keys(release).sort().join(',') !== 'apkUrl,sha256,versionCode,versionName' ||
+    !Number.isSafeInteger(release.versionCode) ||
+    release.versionCode < 1 ||
+    release.versionCode > 2100000000 ||
+    typeof release.versionName !== 'string' ||
+    !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(release.versionName) ||
+    release.versionName.length > 80 ||
+    !/^[a-f0-9]{64}$/.test(release.sha256 ?? '') ||
+    !/^[a-f0-9]{64}$/.test(android.certificate ?? '') ||
+    !Number.isSafeInteger(android.size) ||
+    android.size < 1 ||
+    android.size > 200 * 1024 * 1024
+  )
+    throw new Error('Invalid Android publication.');
+  const filename = `rodzina-${release.versionCode}-${release.versionName}.apk`;
+  if (release.apkUrl !== `https://rodzina.preficze.pl/downloads/android/${filename}`)
+    throw new Error('Invalid Android publication URL.');
+  return filename;
+}
+
+async function optionalFile(file) {
+  try {
+    const info = await lstat(file);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error('Unsafe Android publication file.');
+    return await readFile(file);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+export async function checkAndroidTransfer(config, transaction) {
+  const filename = validateAndroidPublication(config.android);
+  const file = path.join(transaction.stage, 'android.apk');
+  const info = await lstat(file);
+  if (
+    !info.isFile() ||
+    info.isSymbolicLink() ||
+    info.size !== config.android.size ||
+    createHash('sha256')
+      .update(await readFile(file))
+      .digest('hex') !== config.android.release.sha256
+  )
+    throw new Error('Android transfer checksum mismatch.');
+  const current = await optionalFile(path.join(config.downloads, 'latest.json'));
+  const expected = config.android.before;
+  if (current) {
+    const previous = JSON.parse(current.toString());
+    const baseline = expected === null ? null : JSON.parse(expected);
+    if (
+      !baseline ||
+      ['versionCode', 'versionName', 'apkUrl', 'sha256'].some((key) => previous[key] !== baseline[key]) ||
+      previous.versionCode >= config.android.release.versionCode
+    )
+      throw new Error('Published Android version changed or is not older.');
+  } else if (expected !== null) throw new Error('Published Android baseline disappeared.');
+  const certificate = await optionalFile(path.join(config.downloads, 'certificate-sha256.txt'));
+  if (certificate && certificate.toString().trim().replace(/:/g, '').toLowerCase() !== config.android.certificate)
+    throw new Error('Published Android signing certificate differs.');
+  if (await optionalFile(path.join(config.downloads, filename)))
+    throw new Error('Immutable Android version already exists.');
+  return filename;
+}
+
+export async function configureAndroidDownloads(config) {
+  if (!config.configureDownloads) return;
+  const source = await readFile(config.envFile, 'utf8');
+  if (parseEnv(source).RODZINA_ANDROID_DOWNLOAD_DIR) throw new Error('Android configuration changed during deploy.');
+  // Replace only empty definitions; preserve every other setting and comment.
+  const withoutEmpty = source.replace(/^\s*(?:export\s+)?RODZINA_ANDROID_DOWNLOAD_DIR\s*=.*$/gm, '');
+  await mkdir(config.downloads, { recursive: true, mode: 0o755 });
+  if ((await realpath(config.downloads)) !== config.downloads) throw new Error('Unsafe Android directory.');
+  const temporary = path.join(path.dirname(config.envFile), `.rodzina-android-env-${randomUUID()}`);
+  try {
+    await writeFile(temporary, `${withoutEmpty.trimEnd()}\nRODZINA_ANDROID_DOWNLOAD_DIR=${config.downloads}\n`, {
+      flag: 'wx',
+      mode: (await stat(config.envFile)).mode & 0o777,
+    });
+    await rename(temporary, config.envFile);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+export async function publishAndroid(config, transaction, { mark = () => {} } = {}) {
+  mark('android-checksum');
+  const filename = await checkAndroidTransfer(config, transaction);
+  const temporary = path.join(config.downloads, `.upload-${transaction.id}`);
+  try {
+    mark('android-apk');
+    await cp(path.join(transaction.stage, 'android.apk'), temporary, { errorOnExist: true, force: false });
+    if (
+      (await stat(temporary)).size !== config.android.size ||
+      createHash('sha256')
+        .update(await readFile(temporary))
+        .digest('hex') !== config.android.release.sha256
+    )
+      throw new Error('Android publication checksum mismatch.');
+    await rename(temporary, path.join(config.downloads, filename));
+    await writeFile(temporary, `${config.android.certificate}\n`, { flag: 'wx' });
+    await rename(temporary, path.join(config.downloads, 'certificate-sha256.txt'));
+    mark('android-metadata');
+    await writeFile(temporary, `${JSON.stringify(config.android.release, null, 2)}\n`, { flag: 'wx' });
+    await rename(temporary, path.join(config.downloads, 'latest.json'));
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
 
 export function safeErrorCode(error) {
   const codes = new Set([
@@ -143,7 +270,42 @@ export async function preflight(
     )
       throw new Error('Persistent path overlaps application files.');
   }
-  if (settings.RODZINA_ANDROID_DOWNLOAD_DIR) {
+  let downloads;
+  let configureDownloads = false;
+  if (config.android) {
+    validateAndroidPublication(config.android);
+    mark('preflight-android-config');
+    const source = await readFile(config.envFile, 'utf8');
+    const configured = parseEnv(source).RODZINA_ANDROID_DOWNLOAD_DIR;
+    if ((settings.RODZINA_ANDROID_DOWNLOAD_DIR || '') !== (configured || ''))
+      throw new Error('Android configuration differs between environment and env file.');
+    configureDownloads = !configured;
+    downloads = configured || `${config.root}-android`;
+    if (
+      !path.isAbsolute(downloads) ||
+      path.normalize(downloads) !== downloads ||
+      !/^[a-zA-Z0-9_./:\\-]+$/.test(downloads) ||
+      inside(config.root, downloads) ||
+      inside(downloads, config.root) ||
+      persistent.some((value) => inside(downloads, value) || inside(value, downloads))
+    )
+      throw new Error('Unsafe persistent Android directory.');
+    try {
+      if ((await realpath(downloads)) !== downloads || !(await lstat(downloads)).isDirectory())
+        throw new Error('Android directory must be canonical.');
+    } catch (error) {
+      if (error.code !== 'ENOENT' || !configureDownloads) throw error;
+      if ((await realpath(path.dirname(downloads))) !== path.dirname(downloads))
+        throw new Error('Unsafe Android parent.');
+    }
+    persistent.push(downloads);
+    // The env file will be updated only after backup and successful code promotion.
+    if (
+      configureDownloads &&
+      ((await realpath(config.envFile)) !== config.envFile || !(await lstat(config.envFile)).isFile())
+    )
+      throw new Error('Android setup requires a regular canonical env file.');
+  } else if (settings.RODZINA_ANDROID_DOWNLOAD_DIR) {
     mark('preflight-downloads');
     const downloads = await realpath(settings.RODZINA_ANDROID_DOWNLOAD_DIR);
     persistent.push(downloads);
@@ -162,7 +324,7 @@ export async function preflight(
   }
   mark('preflight-npm');
   await runNpm({ ...config, npm, runtimeNode }, ['--version'], config.root, execute);
-  return { npm, modules, runtimeNode };
+  return { npm, modules, runtimeNode, ...(config.android ? { downloads, configureDownloads } : {}) };
 }
 
 export async function applyRelease(
@@ -172,6 +334,10 @@ export async function applyRelease(
 ) {
   const { root, node, envFile, digest } = config;
   const { stage } = transaction;
+  if (config.android) {
+    mark('android-checksum');
+    await checkAndroidTransfer(config, transaction);
+  }
   mark('checksum');
   if (
     createHash('sha256')
@@ -251,6 +417,10 @@ export async function applyRelease(
     await cp(path.join(unpacked, name), path.join(root, name), { recursive: true });
   }
   mark('promotion-restart-directory');
+  if (config.android) {
+    mark('android-configuration');
+    await configureAndroidDownloads(config);
+  }
   const restart = path.join(root, 'tmp');
   await mkdir(restart, { recursive: true });
   if ((await lstat(restart)).isSymbolicLink()) throw new Error('Unsafe restart directory.');
@@ -304,6 +474,9 @@ export async function remoteMain(action, config) {
   } else if (action === 'apply') {
     const checked = await preflight(config, { mark });
     await applyRelease({ ...config, ...checked }, stored, { mark });
+  } else if (action === 'publish-android') {
+    const checked = await preflight(config, { mark });
+    await publishAndroid({ ...config, ...checked }, stored, { mark });
   } else throw new Error('Unknown deploy action.');
 }
 
