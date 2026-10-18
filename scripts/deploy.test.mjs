@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { zipSync, unzipSync } from 'fflate';
@@ -15,7 +15,7 @@ import {
   validateArchive,
   validateConfig,
 } from './deploy.mjs';
-import { applyRelease, preflight } from './deploy-remote.mjs';
+import { applyRelease, preflight, runNpm } from './deploy-remote.mjs';
 
 const sha = 'a'.repeat(40);
 const env = {
@@ -106,6 +106,39 @@ const http = async (url) => {
   if (pathname === '/api/auth/me') return new Response('', { status: 401 });
   return new Response('', { status: 404 });
 };
+
+describe('nodevenv npm execution', () => {
+  it.each([['--version'], ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']])(
+    'executes npm directly with nodevenv first in PATH (%s)',
+    async (...args) => {
+      const execute = vi.fn();
+      const config = { node: '/home/owner/nodevenv/app/24/bin/node', npm: '/home/owner/nodevenv/app/24/bin/npm' };
+      await runNpm(config, args, '/staging', execute);
+      expect(execute).toHaveBeenCalledWith(
+        config.npm,
+        args,
+        '/staging',
+        expect.objectContaining({
+          PATH: `${path.dirname(config.node)}${path.delimiter}${process.env.PATH ?? ''}`,
+        }),
+      );
+    },
+  );
+  it.skipIf(process.platform === 'win32')(
+    'runs a symlink to a Bash wrapper without parsing it as JavaScript',
+    async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), 'rodzina-npm-wrapper-'));
+      directories.push(directory);
+      const wrapper = path.join(directory, 'npm-wrapper');
+      const npm = path.join(directory, 'bin/npm');
+      await mkdir(path.dirname(npm));
+      await writeFile(wrapper, '#!/bin/bash\nif [[ "$1" == "--version" ]]; then exit 0; else exit 1; fi\n');
+      await chmod(wrapper, 0o700);
+      await symlink(wrapper, npm);
+      await runNpm({ node: process.execPath, npm }, ['--version'], directory);
+    },
+  );
+});
 
 describe('safe deploy diagnostics', () => {
   it('reports the last known stage and never forwards arbitrary output or secrets', async () => {
@@ -221,6 +254,12 @@ it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
     await write(f.root, 'package.json', JSON.stringify({ name: 'rodzina-release' }));
     await preflight(config, { execute, environment });
     expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute).toHaveBeenLastCalledWith(
+      path.join(f.directory, 'bin/npm'),
+      ['--version'],
+      f.root,
+      expect.objectContaining({ PATH: expect.stringContaining(`${path.join(f.directory, 'bin')}${path.delimiter}`) }),
+    );
     await expect(
       preflight(config, {
         execute,

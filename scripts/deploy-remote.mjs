@@ -15,6 +15,14 @@ async function command(executable, args, cwd, env = process.env) {
   });
 }
 
+export async function runNpm(config, args, cwd, execute = command) {
+  // Keep the nodevenv path: cPanel's npm can be a symlink to a Bash wrapper.
+  await execute(config.npm, args, cwd, {
+    ...process.env,
+    PATH: `${path.dirname(config.node)}${path.delimiter}${process.env.PATH ?? ''}`,
+  });
+}
+
 export async function checkTree(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory()))
@@ -62,7 +70,8 @@ export async function preflight(config, { execute = command, environment, mark =
   mark('preflight-node-path');
   await access(config.node);
   mark('preflight-npm-path');
-  const npm = await realpath(path.join(path.dirname(config.node), 'npm'));
+  const npm = path.join(path.dirname(config.node), 'npm');
+  await access(npm);
   // Validate without printing environment values, database contents or credentials.
   mark('preflight-env-file');
   if (!environment) process.loadEnvFile(config.envFile);
@@ -111,7 +120,7 @@ export async function preflight(config, { execute = command, environment, mark =
     await execute(tool, ['--help'], config.root);
   }
   mark('preflight-npm');
-  await execute(config.node, [npm, '--version'], config.root);
+  await runNpm({ ...config, npm }, ['--version'], config.root, execute);
   return { npm, modules };
 }
 
@@ -144,12 +153,7 @@ export async function applyRelease(
   if (dependencies) await dependencies(unpacked);
   else {
     // Install outside the live application, disabling all lifecycle compilation.
-    await execute(
-      node,
-      [config.npm, 'install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
-      unpacked,
-      { ...process.env, PATH: `${path.dirname(node)}:${process.env.PATH}` },
-    );
+    await runNpm(config, ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], unpacked, execute);
     const require = createRequire(path.join(unpacked, 'package.json'));
     const sqlite = path.dirname(require.resolve('better-sqlite3/package.json'));
     await execute(node, [require.resolve('prebuild-install/bin.js')], sqlite);

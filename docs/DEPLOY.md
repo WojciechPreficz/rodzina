@@ -518,6 +518,14 @@ Node, npm z sąsiedniego `bin/npm`, `unzip` i `tar`. Runner potrzebuje OpenSSH
 (`ssh` i `scp`, dostępne na Ubuntu). Konto SSH musi mieć prawo zapisu do aplikacji,
 docelowego katalogu `node_modules` i katalogu nadrzędnego aplikacji.
 
+`bin/npm` uruchamiamy bezpośrednio, z katalogiem `bin` wskazanego nodevenv na
+początku `PATH`, zarówno przy `--version`, jak i instalacji w stagingu. Na vh.pl
+npm jest dowiązaniem do skryptu Bash (`/usr/share/l.v.e-manager/utils/npm_wrapper`),
+dlatego nie wolno uruchamiać go poleceniem `node bin/npm` ani zastępować ścieżki
+nodevenv docelową ścieżką wrappera. Błąd `SyntaxError: Unexpected token '['`
+w `preflight-npm` oznaczał właśnie próbę odczytu wrappera przez Node; poprawka
+dotyczy skryptu deployu i nie wymaga zmiany `.env` ani npm na serwerze.
+
 W **Secrets** dodaj:
 
 - `DEPLOY_SSH_KEY`: prywatny klucz konta wdrożeniowego bez interaktywnego hasła;
