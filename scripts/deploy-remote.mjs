@@ -7,6 +7,34 @@ import path from 'node:path';
 const names = ['server.cjs', 'package.json', 'dist', 'public', 'drizzle'];
 const inside = (parent, candidate) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
 
+export function safeErrorCode(error) {
+  const codes = new Set([
+    'EACCES',
+    'EPERM',
+    'ENOENT',
+    'ENOSPC',
+    'EDQUOT',
+    'EROFS',
+    'EIO',
+    'EINVAL',
+    'EEXIST',
+    'ENOTDIR',
+    'EISDIR',
+    'ENOTEMPTY',
+    'ELOOP',
+    'EXDEV',
+    'EMFILE',
+    'ENFILE',
+    'ENAMETOOLONG',
+    'ERR_FS_CP_DIR_TO_NON_DIR',
+    'ERR_FS_CP_NON_DIR_TO_DIR',
+    'ERR_FS_CP_EINVAL',
+    'ERR_FS_CP_SYMLINK_TO_SUBDIRECTORY',
+    'ERR_FS_CP_UNKNOWN',
+  ]);
+  return codes.has(error?.code) ? error.code : 'UNKNOWN';
+}
+
 async function command(executable, args, cwd, env = process.env) {
   await new Promise((resolve, reject) => {
     const child = spawn(executable, args, { cwd, env, stdio: ['ignore', 'ignore', 'ignore'] });
@@ -185,15 +213,25 @@ export async function applyRelease(
     { mode: 0o600 },
   );
   mark('promotion');
+  mark('promotion-check-restart');
   await checkRestart(root);
   // Overlay only managed files. No deletion of data, old assets or cPanel files.
   // Validate old trees again immediately before writing, including nested links.
-  for (const name of ['dist', 'public', 'drizzle']) await checkTree(path.join(root, name));
+  for (const name of ['dist', 'public', 'drizzle']) {
+    mark(`promotion-check-${name}`);
+    await checkTree(path.join(root, name));
+  }
+  mark('promotion-copy-dependencies');
   await cp(path.join(unpacked, 'node_modules'), config.modules, { recursive: true, verbatimSymlinks: true });
-  for (const name of names) await cp(path.join(unpacked, name), path.join(root, name), { recursive: true });
+  for (const name of names) {
+    mark(`promotion-copy-${name === 'server.cjs' ? 'server' : name === 'package.json' ? 'package' : name}`);
+    await cp(path.join(unpacked, name), path.join(root, name), { recursive: true });
+  }
+  mark('promotion-restart-directory');
   const restart = path.join(root, 'tmp');
   await mkdir(restart, { recursive: true });
   if ((await lstat(restart)).isSymbolicLink()) throw new Error('Unsafe restart directory.');
+  mark('promotion-restart-marker');
   const marker = path.join(restart, 'restart.txt');
   try {
     if (!(await lstat(marker)).isFile()) throw new Error('Unsafe restart marker.');
@@ -248,7 +286,8 @@ export async function remoteMain(action, config) {
 
 if (process.argv[1] === '-') {
   console.error('DEPLOY_STAGE=remote-entry');
-  remoteMain(process.argv[2], JSON.parse(Buffer.from(process.argv[3], 'base64url').toString())).catch(() => {
+  remoteMain(process.argv[2], JSON.parse(Buffer.from(process.argv[3], 'base64url').toString())).catch((error) => {
+    console.error(`DEPLOY_ERROR=${safeErrorCode(error)}`);
     console.error('Remote deploy failed. Check the recorded stage and docs/DEPLOY.md.');
     process.exitCode = 1;
   });

@@ -554,6 +554,19 @@ się też stały opis problemu z kluczem, weryfikacją hosta, DNS lub połączen
 Surowe stdout/stderr błędów nie są kopiowane do logu. Nie włączaj `ssh -v` ani
 wypisywania `.env`; sprawdź wskazany warunek w prywatnej sesji administratora.
 
+Diagnostyka podmiany również trafia bezpośrednio do GitHub Actions, bez pliku logu
+na hostingu. `promotion-check-*` oznacza ponowne sprawdzenie drzew i ścieżki restartu,
+`promotion-copy-dependencies` kopiowanie `node_modules`, a `promotion-copy-server`,
+`promotion-copy-package`, `promotion-copy-dist`, `promotion-copy-public` i
+`promotion-copy-drizzle` wskazują kopiowany element aplikacji. Etapy
+`promotion-restart-directory` i `promotion-restart-marker` dotyczą przygotowania
+restartu; `restart` oznacza zapis znacznika. Błąd może zawierać bezpieczny kod z
+zamkniętej listy, np. `EACCES`/`EPERM` (uprawnienia), `ENOENT` (brak ścieżki),
+`ENOSPC`/`EDQUOT` (miejsce/limit) albo `ERR_FS_CP_DIR_TO_NON_DIR` (konflikt typów).
+`UNKNOWN` oznacza błąd bez rozpoznanego kodu. Pełne komunikaty, ścieżki plików
+i wartości konfiguracji pozostają ukryte. Działająca strona nie potwierdza pełnego
+wdrożenia ani braku częściowej podmiany; wymagane są wszystkie kontrole workflow.
+
 Konfiguracja serwera pozostaje dotychczasowa: `NODE_ENV=production`,
 `RODZINA_PUBLIC_URL=https://rodzina.preficze.pl`, `RODZINA_WEB_DIR=./public`
 (lub bezwzględne `DEPLOY_PATH/public`). Baza i katalog backupu muszą już istnieć,

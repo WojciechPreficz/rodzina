@@ -105,6 +105,18 @@ export function failureDiagnostic(stdout, stderr) {
     'backup',
     'previous-package',
     'promotion',
+    'promotion-check-restart',
+    'promotion-check-dist',
+    'promotion-check-public',
+    'promotion-check-drizzle',
+    'promotion-copy-dependencies',
+    'promotion-copy-server',
+    'promotion-copy-package',
+    'promotion-copy-dist',
+    'promotion-copy-public',
+    'promotion-copy-drizzle',
+    'promotion-restart-directory',
+    'promotion-restart-marker',
     'restart',
   ]);
   const stage =
@@ -122,7 +134,37 @@ export function failureDiagnostic(stdout, stderr) {
     [/No such file or directory|command not found/i, 'remote executable or path unavailable'],
   ];
   const reason = reasons.find(([pattern]) => pattern.test(stderr))?.[1];
-  return `stage ${stage}${reason ? `; ${reason}` : ''}`;
+  // Only accept known filesystem codes; never forward raw error messages or paths.
+  const codes = new Set([
+    'EACCES',
+    'EPERM',
+    'ENOENT',
+    'ENOSPC',
+    'EDQUOT',
+    'EROFS',
+    'EIO',
+    'EINVAL',
+    'EEXIST',
+    'ENOTDIR',
+    'EISDIR',
+    'ENOTEMPTY',
+    'ELOOP',
+    'EXDEV',
+    'EMFILE',
+    'ENFILE',
+    'ENAMETOOLONG',
+    'ERR_FS_CP_DIR_TO_NON_DIR',
+    'ERR_FS_CP_NON_DIR_TO_DIR',
+    'ERR_FS_CP_EINVAL',
+    'ERR_FS_CP_SYMLINK_TO_SUBDIRECTORY',
+    'ERR_FS_CP_UNKNOWN',
+    'UNKNOWN',
+  ]);
+  const code = [...stderr.matchAll(/^DEPLOY_ERROR=([A-Z_]+)\r?$/gm)]
+    .map((match) => match[1])
+    .filter((value) => codes.has(value))
+    .at(-1);
+  return `stage ${stage}${code ? `; code ${code}` : ''}${reason ? `; ${reason}` : ''}`;
 }
 
 export async function run(command, args, input) {

@@ -15,7 +15,7 @@ import {
   validateArchive,
   validateConfig,
 } from './deploy.mjs';
-import { applyRelease, preflight, runNpm } from './deploy-remote.mjs';
+import { applyRelease, preflight, runNpm, safeErrorCode } from './deploy-remote.mjs';
 
 const sha = 'a'.repeat(40);
 const env = {
@@ -141,6 +141,33 @@ describe('nodevenv npm execution', () => {
 });
 
 describe('safe deploy diagnostics', () => {
+  it('accepts only fixed error codes and promotion operations, hiding paths and private messages', () => {
+    const error = { code: 'EACCES', message: 'private secret', path: '/private/.env' };
+    expect(safeErrorCode(error)).toBe('EACCES');
+    expect(safeErrorCode({ code: 'SECRET_VALUE' })).toBe('UNKNOWN');
+    expect(safeErrorCode(null)).toBe('UNKNOWN');
+    expect(
+      failureDiagnostic(
+        '',
+        `DEPLOY_STAGE=promotion-copy-dependencies\nDEPLOY_ERROR=${safeErrorCode(error)}\n${error.message}\n${error.path}`,
+      ),
+    ).toBe('stage promotion-copy-dependencies; code EACCES');
+    expect(failureDiagnostic('', 'DEPLOY_STAGE=promotion-copy-public\nDEPLOY_ERROR=SECRET_VALUE\n')).toBe(
+      'stage promotion-copy-public',
+    );
+  });
+  it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
+    'transports a remote filesystem error to Actions without exposing its path',
+    async () => {
+      const source = await readFile(new URL('./deploy-remote.mjs', import.meta.url), 'utf8');
+      const config = Buffer.from(
+        JSON.stringify({ root: path.join(tmpdir(), `PRIVATE-PATH-${randomUUID()}`) }),
+      ).toString('base64url');
+      await expect(run(process.execPath, ['--input-type=module', '-', 'prepare', config], source)).rejects.toThrow(
+        'stage preflight-root; code ENOENT',
+      );
+    },
+  );
   it('reports the last known stage and never forwards arbitrary output or secrets', async () => {
     const secret = 'PRIVATE-TEST-ENV-VALUE';
     const result = failureDiagnostic('', `DEPLOY_STAGE=preflight-env-file\nDEPLOY_STAGE=${secret}\n${secret}`);
@@ -349,10 +376,38 @@ describe('local directory with fake SSH transport', () => {
       'backup',
       'previous-package',
       'promotion',
+      'promotion-check-restart',
+      'promotion-check-dist',
+      'promotion-check-public',
+      'promotion-check-drizzle',
+      'promotion-copy-dependencies',
+      'promotion-copy-server',
+      'promotion-copy-package',
+      'promotion-copy-dist',
+      'promotion-copy-public',
+      'promotion-copy-drizzle',
+      'promotion-restart-directory',
+      'promotion-restart-marker',
       'restart',
     ]);
     expect(await readdir(path.join(f.directory, 'app-deploy-history'))).toHaveLength(3);
     expect(execute.mock.calls.some(([tool]) => tool === 'scp')).toBe(true);
+  });
+  it('identifies dependency copy failure before application files are overwritten', async () => {
+    const f = await fixture();
+    f.config.modules = path.join(f.directory, 'not-a-directory');
+    await writeFile(f.config.modules, 'existing file');
+    let failure;
+    try {
+      await applyRelease(f.config, f.transaction, f.options);
+    } catch (error) {
+      failure = error;
+    }
+    expect(safeErrorCode(failure)).toBe('ERR_FS_CP_DIR_TO_NON_DIR');
+    expect(f.events.at(-1)).toBe('promotion-copy-dependencies');
+    expect(await readFile(path.join(f.root, 'server.cjs'), 'utf8')).toBe('old server.cjs');
+    expect(await readFile(f.config.modules, 'utf8')).toBe('existing file');
+    await expect(readFile(path.join(f.root, 'tmp/restart.txt'))).rejects.toThrow();
   });
   it.each(['checksum', 'extraction', 'dependencies', 'backup', 'previous-package'])(
     'failure at %s leaves the live application unchanged',
