@@ -58,6 +58,8 @@ export async function preflight(config, { execute = command, environment } = {})
   // Validate without printing environment values, database contents or credentials.
   if (!environment) process.loadEnvFile(config.envFile);
   const settings = environment ?? process.env;
+  if (config.legacyAndroidBaseline && settings.RODZINA_ANDROID_DOWNLOAD_DIR)
+    throw new Error('Legacy SPA fallback cannot hide configured Android downloads.');
   if (settings.NODE_ENV !== 'production' || settings.RODZINA_PUBLIC_URL !== 'https://rodzina.preficze.pl')
     throw new Error('Wrong production environment.');
   const resolve = (value) => path.resolve(config.root, value);

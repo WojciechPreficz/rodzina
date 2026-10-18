@@ -291,6 +291,15 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   cache. To ograniczenie przechowywania sekretów, nie potwierdzona diagnoza
   wcześniejszego błędu właściciela. Klucz właściciela nie został zmieniony.
 
+# 18.10.2026 — deploy ze starszego API bez pobierania Androida
+
+- Run Actions `39152336060` zatrzymał się przed SSH na kontroli Androida: produkcja
+  zwracała HTML SPA z HTTP 200 pod adresem metadanych. Przed aktualizacją dopuszczamy
+  wyłącznie HTML identyczny ze stroną główną z elementem `root`, przy potwierdzonym
+  przez preflight SSH braku konfiguracji katalogu APK. Nie ignorujemy błędnego JSON,
+  błędów sieci ani nieprawidłowego opublikowanego wydania. Po aktualizacji brak APK
+  musi zwracać 404; HTML nie zalicza kontroli. Nie zmieniamy konfiguracji hostingu.
+
 # 17.10.2026 — krok 4.7: ręczny deploy istniejącego serwera
 
 - Wzorzec przeczytano z lokalnego repozytorium `../portfel`: workflow deploy.yml

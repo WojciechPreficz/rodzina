@@ -98,11 +98,27 @@ async function get(url, fetcher) {
   return fetcher(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(20000) });
 }
 
-export async function androidState(fetcher = fetch) {
+export async function androidState(fetcher = fetch, { allowLegacySpa = false } = {}) {
   const response = await get(`${origin}/downloads/android/latest.json`, fetcher);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('Cannot read Android metadata.');
-  const data = await response.json();
+  if (
+    allowLegacySpa &&
+    response.status === 200 &&
+    /^text\/html(?:;|$)/i.test(response.headers.get('content-type') ?? '')
+  ) {
+    const html = await response.text();
+    const page = await get(`${origin}/`, fetcher);
+    if (page.status === 200 && html.includes('<div id="root"></div>') && html === (await page.text()))
+      return 'legacy-spa';
+    throw new Error('Android metadata is not the legacy application page.');
+  }
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Android metadata must be JSON (or HTTP 404 when unpublished).');
+  }
   const url = new URL(data.apkUrl);
   if (
     url.origin !== origin ||
@@ -175,7 +191,11 @@ export async function deploy({
     if ((await execute('git', ['rev-parse', 'HEAD'])) !== config.sha)
       throw new Error('Checkout SHA differs from requested commit.');
     phase = 'Android baseline';
-    const before = await androidState(fetcher);
+    const baseline = await androidState(fetcher, { allowLegacySpa: true });
+    const legacyAndroidBaseline = baseline === 'legacy-spa';
+    const before = legacyAndroidBaseline ? null : baseline;
+    if (legacyAndroidBaseline)
+      console.log('Legacy Android SPA fallback detected; remote preflight must confirm downloads are not configured.');
     directory = await mkdtemp(path.join(tmpdir(), 'rodzina-ssh-'));
     await chmod(directory, 0o700);
     const key = path.join(directory, 'identity');
@@ -213,7 +233,7 @@ export async function deploy({
           '-p',
           config.port,
           target,
-          `${config.node} --input-type=module - ${action} ${Buffer.from(JSON.stringify({ ...config, digest, ...extra })).toString('base64url')}`,
+          `${config.node} --input-type=module - ${action} ${Buffer.from(JSON.stringify({ ...config, digest, legacyAndroidBaseline, ...extra })).toString('base64url')}`,
         ],
         source,
       );

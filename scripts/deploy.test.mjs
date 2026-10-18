@@ -176,6 +176,13 @@ it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
     await write(f.root, 'package.json', JSON.stringify({ name: 'rodzina-release' }));
     await preflight(config, { execute, environment });
     expect(execute).toHaveBeenCalledTimes(3);
+    await preflight({ ...config, legacyAndroidBaseline: true }, { execute, environment });
+    await expect(
+      preflight(
+        { ...config, legacyAndroidBaseline: true },
+        { environment: { ...environment, RODZINA_ANDROID_DOWNLOAD_DIR: f.directory } },
+      ),
+    ).rejects.toThrow('cannot hide configured Android downloads');
     for (const changes of [
       { NODE_ENV: 'development' },
       { RODZINA_PUBLIC_URL: 'https://other.example.com' },
@@ -199,6 +206,30 @@ it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
 );
 
 describe('local directory with fake SSH transport', () => {
+  it('upgrades a legacy SPA baseline and requires 404 after restart', async () => {
+    const f = await fixture();
+    await write(f.directory, 'release.zip', archive());
+    let applied = false;
+    const execute = vi.fn(async (tool, args) => {
+      if (tool === 'git') return sha;
+      if (tool === 'scp') return '';
+      const command = args.at(-1).split(' ');
+      const action = command.at(-2);
+      const config = JSON.parse(Buffer.from(command.at(-1), 'base64url').toString());
+      expect(config.legacyAndroidBaseline).toBe(true);
+      if (action === 'prepare') return JSON.stringify({ stage: '/tmp/rodzina-stage', id: f.transaction.id });
+      if (action === 'apply') applied = true;
+      return '';
+    });
+    const fetcher = async (url) => {
+      if (!applied && (url.endsWith('latest.json') || url === 'https://rodzina.preficze.pl/'))
+        return new Response('<div id="root"></div>', { headers: { 'content-type': 'text/html' } });
+      return http(url);
+    };
+    // The old server serves the same SPA HTML at both addresses.
+    await deploy({ env, execute, repository: f.directory, fetcher });
+    expect(applied).toBe(true);
+  });
   it('transfers checked bytes, backs up before promotion, preserves private data and APK, restarts and checks HTTP', async () => {
     const f = await fixture();
     await write(f.directory, 'release.zip', archive());
@@ -286,6 +317,26 @@ describe('local directory with fake SSH transport', () => {
 });
 
 describe('bounded HTTP verification', () => {
+  it('accepts only a matching SPA page before deploy and rejects HTML after restart', async () => {
+    const html = '<!doctype html><div id="root"></div>';
+    const legacy = async (url) =>
+      url.endsWith('latest.json') || url === 'https://rodzina.preficze.pl/'
+        ? new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+        : http(url);
+    expect(await androidState(legacy, { allowLegacySpa: true })).toBe('legacy-spa');
+    await expect(androidState(legacy)).rejects.toThrow('must be JSON');
+    await expect(checkSite(null, { fetcher: legacy, attempts: 1 })).rejects.toThrow('Post-restart');
+    for (const response of [
+      () => new Response('<html>Hosting error</html>', { headers: { 'content-type': 'text/html' } }),
+      () => new Response(html + 'different', { headers: { 'content-type': 'text/html' } }),
+      () => new Response('{broken', { headers: { 'content-type': 'application/json' } }),
+      () => new Response(html, { status: 503, headers: { 'content-type': 'text/html' } }),
+    ]) {
+      const fetcher = async (url) => (url.endsWith('latest.json') ? response() : legacy(url));
+      await expect(androidState(fetcher, { allowLegacySpa: true })).rejects.toThrow();
+    }
+    expect(await androidState(http, { allowLegacySpa: true })).toBeNull();
+  });
   it('retries health, HTML and unauthenticated access, then fails without database rollback', async () => {
     const pause = vi.fn();
     for (const broken of ['/api/health', '/', '/api/auth/me']) {

@@ -551,6 +551,12 @@ Nie dodajemy zmiennych do `.env` API, migracji, cronów ani zależności runtime
 2. Skrypt sprawdza zawartość ZIP-a, commit checkoutu i SHA-256. Przed zmianami
    pobiera aktualne metadane Androida oraz sprawdza SHA-256 opublikowanego APK,
    jeśli istnieje. Nieprawidłowe lub niedostępne wydanie przerywa deploy.
+   Starsza wersja API bez obsługi pobierania Androida może zwracać HTTP 200 z HTML
+   zamiast 404. Wyłącznie przed aktualizacją dopuszczamy taką odpowiedź, jeśli jest
+   identyczna ze stroną główną i zawiera element aplikacji `root`. Preflight SSH
+   musi dodatkowo potwierdzić brak `RODZINA_ANDROID_DOWNLOAD_DIR` w konfiguracji.
+   Po aktualizacji wymagamy HTTP 404 przy braku wydania; HTML nadal jest błędem.
+   Nie trzeba zmieniać konfiguracji vh.pl ani ręcznie wgrywać endpointu.
 3. Preflight przez SSH sprawdza istniejącą instalację i konfigurację. Powstaje
    prywatny staging obok aplikacji oraz `.rodzina-deploy-lock` (dla katalogu
    aplikacji `rodzina`). ZIP trafia przez SCP do stagingu; serwer porównuje SHA-256
