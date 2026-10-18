@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { createECDH } from 'node:crypto';
+import webPush from 'web-push';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -56,8 +56,7 @@ try {
 
   const port = 3000 + Math.floor(Math.random() * 10000);
   const envFile = path.join(temporaryDirectory, 'smoke.env');
-  const vapid = createECDH('prime256v1');
-  vapid.generateKeys();
+  const vapid = webPush.generateVAPIDKeys();
   await writeFile(
     envFile,
     [
@@ -69,8 +68,8 @@ try {
       'RODZINA_PUBLIC_URL=http://localhost',
       'RODZINA_ANDROID_DOWNLOAD_DIR=',
       'RODZINA_ALLOW_REGISTRATION=false',
-      `RODZINA_VAPID_PUBLIC_KEY=${vapid.getPublicKey().toString('base64url')}`,
-      `RODZINA_VAPID_PRIVATE_KEY=${vapid.getPrivateKey().toString('base64url')}`,
+      `RODZINA_VAPID_PUBLIC_KEY=${vapid.publicKey}`,
+      `RODZINA_VAPID_PRIVATE_KEY=${vapid.privateKey}`,
       'RODZINA_VAPID_SUBJECT=mailto:smoke@example.com',
       '',
     ].join('\n'),

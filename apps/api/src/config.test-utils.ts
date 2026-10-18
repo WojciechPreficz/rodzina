@@ -1,11 +1,10 @@
-import { createECDH } from 'node:crypto';
+import webPush from 'web-push';
 import { loadConfig } from './config.js';
 
-const ecdh = createECDH('prime256v1');
-ecdh.generateKeys();
+const vapid = webPush.generateVAPIDKeys();
 export const testVapidEnvironment = {
-  RODZINA_VAPID_PUBLIC_KEY: ecdh.getPublicKey().toString('base64url'),
-  RODZINA_VAPID_PRIVATE_KEY: ecdh.getPrivateKey().toString('base64url'),
+  RODZINA_VAPID_PUBLIC_KEY: vapid.publicKey,
+  RODZINA_VAPID_PRIVATE_KEY: vapid.privateKey,
   RODZINA_VAPID_SUBJECT: 'mailto:test@example.com',
 };
 

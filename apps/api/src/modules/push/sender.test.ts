@@ -4,7 +4,10 @@ import webPush from 'web-push';
 import { loadTestConfig } from '../../config.test-utils.js';
 import { createPushSender } from './sender.js';
 
-vi.mock('web-push', () => ({ default: { sendNotification: vi.fn() } }));
+vi.mock('web-push', async (importOriginal) => {
+  const original = await importOriginal<{ default: typeof webPush }>();
+  return { default: { ...original.default, sendNotification: vi.fn() } };
+});
 
 describe('Web Push adapter', () => {
   it('passes raw subscription keys, JSON payload and per-call VAPID credentials', async () => {
