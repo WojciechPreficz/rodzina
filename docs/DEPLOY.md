@@ -534,6 +534,18 @@ w `finally`. Nie są artefaktami Actions. Skrypt nie wypisuje środowiska, zawar
 W razie awarii log pokazuje bezpieczną nazwę etapu; szczegółową diagnostykę wykonuj
 w prywatnej sesji SSH, bez kopiowania sekretów do issue lub logów Actions.
 
+Preflight nie zapisuje osobnego logu na serwerze. Błąd przed uruchomieniem backupu
+i restartem nie musi pojawić się w logach Passengera ani cronów. W Actions skrypt
+raportuje ostatnią rozpoczętą kontrolę: `node-startup` oznacza próbę uruchomienia
+Node przez powłokę SSH, `remote-entry` wejście do skryptu, a `preflight-*` konkretny
+warunek (np. `preflight-package`, `preflight-env-file`, `preflight-database-path`,
+`preflight-backup-path`, `preflight-npm`). `lock` i `staging` dotyczą przygotowania
+transakcji po udanej kontroli. Nazwa wskazuje kontrolę, która nie zakończyła się
+pomyślnie; nie ujawnia wartości konfiguracji. Dla rozpoznanych błędów SSH pojawia
+się też stały opis problemu z kluczem, weryfikacją hosta, DNS lub połączeniem.
+Surowe stdout/stderr błędów nie są kopiowane do logu. Nie włączaj `ssh -v` ani
+wypisywania `.env`; sprawdź wskazany warunek w prywatnej sesji administratora.
+
 Konfiguracja serwera pozostaje dotychczasowa: `NODE_ENV=production`,
 `RODZINA_PUBLIC_URL=https://rodzina.preficze.pl`, `RODZINA_WEB_DIR=./public`
 (lub bezwzględne `DEPLOY_PATH/public`). Baza i katalog backupu muszą już istnieć,

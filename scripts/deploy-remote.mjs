@@ -40,33 +40,50 @@ async function checkRestart(root) {
   }
 }
 
-export async function preflight(config, { execute = command, environment } = {}) {
+export async function preflight(config, { execute = command, environment, mark = () => {} } = {}) {
+  mark('preflight-node');
   if (Number(process.versions.node.split('.')[0]) !== 24) throw new Error('Hosting requires Node 24.');
+  mark('preflight-root');
   if ((await realpath(config.root)) !== config.root) throw new Error('Application path must be canonical.');
+  mark('preflight-package');
   if (JSON.parse(await readFile(path.join(config.root, 'package.json'), 'utf8')).name !== 'rodzina-release')
     throw new Error('Target is not the existing Rodzina release.');
+  mark('preflight-tree');
   for (const name of names) {
     const info = await lstat(path.join(config.root, name));
     if (info.isSymbolicLink()) throw new Error('Managed path is a symlink.');
     if (info.isDirectory()) await checkTree(path.join(config.root, name));
     else if (!info.isFile()) throw new Error('Invalid managed path.');
   }
+  mark('preflight-backup-job');
   await access(path.join(config.root, 'dist/jobs/backup-db.js'));
+  mark('preflight-restart');
   await checkRestart(config.root);
+  mark('preflight-node-path');
   await access(config.node);
+  mark('preflight-npm-path');
   const npm = await realpath(path.join(path.dirname(config.node), 'npm'));
   // Validate without printing environment values, database contents or credentials.
+  mark('preflight-env-file');
   if (!environment) process.loadEnvFile(config.envFile);
   const settings = environment ?? process.env;
+  mark('preflight-android-baseline');
   if (config.legacyAndroidBaseline && settings.RODZINA_ANDROID_DOWNLOAD_DIR)
     throw new Error('Legacy SPA fallback cannot hide configured Android downloads.');
+  mark('preflight-environment');
   if (settings.NODE_ENV !== 'production' || settings.RODZINA_PUBLIC_URL !== 'https://rodzina.preficze.pl')
     throw new Error('Wrong production environment.');
   const resolve = (value) => path.resolve(config.root, value);
+  mark('preflight-web-dir');
   if (resolve(settings.RODZINA_WEB_DIR || 'public') !== path.join(config.root, 'public'))
     throw new Error('RODZINA_WEB_DIR must resolve to application public/.');
   const persistent = [];
-  for (const value of [config.envFile, settings.RODZINA_DATABASE_PATH, settings.RODZINA_BACKUP_DIR]) {
+  for (const [stage, value] of [
+    ['preflight-env-path', config.envFile],
+    ['preflight-database-path', settings.RODZINA_DATABASE_PATH],
+    ['preflight-backup-path', settings.RODZINA_BACKUP_DIR],
+  ]) {
+    mark(stage);
     if (!value || !path.isAbsolute(value)) throw new Error('Persistent paths must be absolute.');
     const resolved = await realpath(value);
     persistent.push(resolved);
@@ -77,17 +94,23 @@ export async function preflight(config, { execute = command, environment } = {})
       throw new Error('Persistent path overlaps application files.');
   }
   if (settings.RODZINA_ANDROID_DOWNLOAD_DIR) {
+    mark('preflight-downloads');
     const downloads = await realpath(settings.RODZINA_ANDROID_DOWNLOAD_DIR);
     persistent.push(downloads);
     if (inside(config.root, downloads) || inside(downloads, config.root))
       throw new Error('APK directory must be outside application.');
   }
   // cPanel may own a node_modules symlink; retain it and operate on its target.
+  mark('preflight-modules');
   const modules = await realpath(path.join(config.root, 'node_modules'));
   if (modules === config.root || inside(modules, config.root)) throw new Error('Invalid node_modules target.');
   if (persistent.some((value) => inside(modules, value) || inside(value, modules)))
     throw new Error('Dependencies overlap persistent storage.');
-  for (const tool of ['unzip', 'tar']) await execute(tool, ['--help'], config.root);
+  for (const tool of ['unzip', 'tar']) {
+    mark(`preflight-${tool}`);
+    await execute(tool, ['--help'], config.root);
+  }
+  mark('preflight-npm');
   await execute(config.node, [npm, '--version'], config.root);
   return { npm, modules };
 }
@@ -178,14 +201,18 @@ export async function applyRelease(
 }
 
 export async function remoteMain(action, config) {
+  // stderr keeps prepare's stdout exclusively JSON. Only fixed stage names leave the host.
+  const mark = (phase) => console.error(`DEPLOY_STAGE=${phase}`);
   const parent = path.dirname(config.root);
   const lock = path.join(parent, `.${path.basename(config.root)}-deploy-lock`);
   if (action === 'prepare') {
-    await preflight(config);
+    await preflight(config, { mark });
     const id = randomUUID();
     // mkdir is the server-side exclusion lock, shared by workflow and local runs.
+    mark('lock');
     await mkdir(lock, { mode: 0o700 });
     try {
+      mark('staging');
       const stage = await mkdtemp(path.join(parent, '.rodzina-deploy-'));
       await writeFile(path.join(lock, 'transaction.json'), JSON.stringify({ id, stage }), { mode: 0o600 });
       console.log(JSON.stringify({ id, stage }));
@@ -195,6 +222,7 @@ export async function remoteMain(action, config) {
     }
     return;
   }
+  mark('transaction');
   const stored = JSON.parse(await readFile(path.join(lock, 'transaction.json'), 'utf8'));
   if (
     stored.id !== config.id ||
@@ -205,15 +233,17 @@ export async function remoteMain(action, config) {
   )
     throw new Error('Invalid transaction.');
   if (action === 'cleanup') {
+    mark('cleanup');
     await rm(config.stage, { recursive: true });
     await rm(lock, { recursive: true });
   } else if (action === 'apply') {
-    const checked = await preflight(config);
-    await applyRelease({ ...config, ...checked }, stored, { mark: (phase) => console.log(`DEPLOY_STAGE=${phase}`) });
+    const checked = await preflight(config, { mark });
+    await applyRelease({ ...config, ...checked }, stored, { mark });
   } else throw new Error('Unknown deploy action.');
 }
 
 if (process.argv[1] === '-') {
+  console.error('DEPLOY_STAGE=remote-entry');
   remoteMain(process.argv[2], JSON.parse(Buffer.from(process.argv[3], 'base64url').toString())).catch(() => {
     console.error('Remote deploy failed. Check the recorded stage and docs/DEPLOY.md.');
     process.exitCode = 1;

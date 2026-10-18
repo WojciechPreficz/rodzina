@@ -5,7 +5,16 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { zipSync, unzipSync } from 'fflate';
-import { androidState, checkSite, deploy, managed, validateArchive, validateConfig } from './deploy.mjs';
+import {
+  androidState,
+  checkSite,
+  deploy,
+  failureDiagnostic,
+  managed,
+  run,
+  validateArchive,
+  validateConfig,
+} from './deploy.mjs';
 import { applyRelease, preflight } from './deploy-remote.mjs';
 
 const sha = 'a'.repeat(40);
@@ -98,6 +107,40 @@ const http = async (url) => {
   return new Response('', { status: 404 });
 };
 
+describe('safe deploy diagnostics', () => {
+  it('reports the last known stage and never forwards arbitrary output or secrets', async () => {
+    const secret = 'PRIVATE-TEST-ENV-VALUE';
+    const result = failureDiagnostic('', `DEPLOY_STAGE=preflight-env-file\nDEPLOY_STAGE=${secret}\n${secret}`);
+    expect(result).toBe('stage preflight-env-file');
+    await expect(
+      run(process.execPath, [
+        '-e',
+        `console.error('DEPLOY_STAGE=preflight-database-path'); console.error('${secret}'); process.exitCode = 1;`,
+      ]),
+    ).rejects.toThrow('stage preflight-database-path');
+    try {
+      await run(process.execPath, ['-e', `console.error('${secret}'); process.exitCode = 1;`]);
+    } catch (error) {
+      expect(error.message).not.toContain(secret);
+      expect(error.message).toContain('connection/command');
+    }
+    expect(
+      await run(process.execPath, ['-e', 'console.error("DEPLOY_STAGE=staging"); console.log("{\\"id\\":1}");']),
+    ).toBe('{"id":1}');
+  });
+  it.each([
+    ['Permission denied (publickey).', 'SSH authentication rejected'],
+    ['Host key verification failed.', 'SSH host verification failed'],
+    ['Load key "private-file": error in libcrypto', 'SSH private key could not be loaded'],
+    ['Could not resolve hostname private-host', 'SSH hostname resolution failed'],
+    ['Connection refused', 'SSH connection refused'],
+    ['Connection timed out', 'SSH connection timed out'],
+    ['bash: /private/node: No such file or directory', 'remote executable or path unavailable'],
+  ])('classifies transport errors without copying their private details: %s', (stderr, reason) => {
+    expect(failureDiagnostic('', stderr)).toBe(`stage connection/command; ${reason}`);
+  });
+});
+
 describe('deploy configuration and archive', () => {
   it('requires main, immutable commit, safe host, port, nodevenv and absolute paths before SSH', () => {
     expect(validateConfig(env).port).toBe('22');
@@ -171,11 +214,21 @@ it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
       RODZINA_BACKUP_DIR: path.join(f.root, 'backups'),
     };
     const execute = vi.fn(async () => {});
+    const mark = vi.fn();
     await write(f.root, 'package.json', JSON.stringify({ name: 'other-app' }));
-    await expect(preflight(config, { execute, environment })).rejects.toThrow('not the existing');
+    await expect(preflight(config, { execute, environment, mark })).rejects.toThrow('not the existing');
+    expect(mark).toHaveBeenLastCalledWith('preflight-package');
     await write(f.root, 'package.json', JSON.stringify({ name: 'rodzina-release' }));
     await preflight(config, { execute, environment });
     expect(execute).toHaveBeenCalledTimes(3);
+    await expect(
+      preflight(config, {
+        execute,
+        environment: { ...environment, RODZINA_DATABASE_PATH: 'relative.db' },
+        mark,
+      }),
+    ).rejects.toThrow('Persistent paths must be absolute');
+    expect(mark).toHaveBeenLastCalledWith('preflight-database-path');
     await preflight({ ...config, legacyAndroidBaseline: true }, { execute, environment });
     await expect(
       preflight(

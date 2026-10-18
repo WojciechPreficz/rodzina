@@ -71,25 +71,78 @@ export function validateArchive(bytes) {
 }
 
 // Do not forward SSH/npm diagnostics: a remote command may include private configuration.
+export function failureDiagnostic(stdout, stderr) {
+  const stages = new Set([
+    'node-startup',
+    'remote-entry',
+    'preflight-node',
+    'preflight-root',
+    'preflight-package',
+    'preflight-tree',
+    'preflight-backup-job',
+    'preflight-restart',
+    'preflight-node-path',
+    'preflight-npm-path',
+    'preflight-env-file',
+    'preflight-android-baseline',
+    'preflight-environment',
+    'preflight-web-dir',
+    'preflight-env-path',
+    'preflight-database-path',
+    'preflight-backup-path',
+    'preflight-downloads',
+    'preflight-modules',
+    'preflight-unzip',
+    'preflight-tar',
+    'preflight-npm',
+    'lock',
+    'staging',
+    'transaction',
+    'cleanup',
+    'checksum',
+    'extraction',
+    'dependencies',
+    'backup',
+    'previous-package',
+    'promotion',
+    'restart',
+  ]);
+  const stage =
+    [...`${stdout}\n${stderr}`.matchAll(/^DEPLOY_STAGE=([a-z-]+)\r?$/gm)]
+      .map((match) => match[1])
+      .filter((value) => stages.has(value))
+      .at(-1) ?? 'connection/command';
+  const reasons = [
+    [/Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/i, 'SSH host verification failed'],
+    [/Permission denied \([^)]*(?:publickey|password)[^)]*\)/i, 'SSH authentication rejected'],
+    [/Load key .*: (?:invalid format|error in libcrypto)/i, 'SSH private key could not be loaded'],
+    [/Could not resolve hostname/i, 'SSH hostname resolution failed'],
+    [/Connection refused/i, 'SSH connection refused'],
+    [/Connection timed out|Operation timed out/i, 'SSH connection timed out'],
+    [/No such file or directory|command not found/i, 'remote executable or path unavailable'],
+  ];
+  const reason = reasons.find(([pattern]) => pattern.test(stderr))?.[1];
+  return `stage ${stage}${reason ? `; ${reason}` : ''}`;
+}
+
 export async function run(command, args, input) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let output = '';
+    let diagnostics = '';
     child.stdout.setEncoding('utf8').on('data', (chunk) => {
       output += chunk;
     });
-    child.stderr.resume();
+    child.stderr.setEncoding('utf8').on('data', (chunk) => {
+      diagnostics = (diagnostics + chunk).slice(-65536);
+    });
     child.stdin.on('error', () => {});
     child.stdin.end(input);
     child.once('error', () => reject(new Error(`Cannot start ${command}.`)));
-    child.once('exit', (code) =>
+    child.once('close', (code) =>
       code === 0
         ? resolve(output.trim())
-        : reject(
-            new Error(
-              `${command} failed (exit ${code}, stage ${output.match(/DEPLOY_STAGE=([a-z-]+)/g)?.at(-1) ?? 'connection/command'}).`,
-            ),
-          ),
+        : reject(new Error(`${command} failed (exit ${code}, ${failureDiagnostic(output, diagnostics)}).`)),
     );
   });
 }
@@ -233,7 +286,7 @@ export async function deploy({
           '-p',
           config.port,
           target,
-          `${config.node} --input-type=module - ${action} ${Buffer.from(JSON.stringify({ ...config, digest, legacyAndroidBaseline, ...extra })).toString('base64url')}`,
+          `printf 'DEPLOY_STAGE=node-startup\\n' >&2; ${config.node} --input-type=module - ${action} ${Buffer.from(JSON.stringify({ ...config, digest, legacyAndroidBaseline, ...extra })).toString('base64url')}`,
         ],
         source,
       );
