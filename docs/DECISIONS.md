@@ -300,6 +300,26 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   błędów sieci ani nieprawidłowego opublikowanego wydania. Po aktualizacji brak APK
   musi zwracać 404; HTML nie zalicza kontroli. Nie zmieniamy konfiguracji hostingu.
 
+# 18.10.2026 — izolacja instalacji zależności podczas deployu
+
+- Run `39156883732` przeszedł build i wszystkie testy, ale zakończył się błędem
+  `promotion-copy-dependencies`, `ENOENT`. Odczyt wrappera npm na vh.pl potwierdził,
+  że `npm install` wymusza `--prefix` katalogu produkcyjnego nodevenv i zmienia
+  dowiązania produkcji, mimo wskazania innego katalogu roboczego. Poprzednia próba
+  mogła zmienić zależności produkcji przed backupem; sam brak podmiany kodu nie
+  oznacza braku zmian w zależnościach.
+- Zdalny helper ustala rzeczywisty Node przez `process.execPath`, rozwiązuje jego
+  sąsiedni npm do CLI JavaScript i wywołuje go bez wrappera cPanel, z jawnym
+  `--prefix` katalogu tymczasowego i pustym `NODE_PATH`. Nie hardkodujemy ścieżki
+  `/opt/alt`, nie zmieniamy środowiska produkcji ani konfiguracji hostingu.
+- Przed pobraniem binarki sprawdzamy lokalne położenie zależności. Brak katalogu
+  `node_modules`, dowiązanie zamiast katalogu albo rozwiązywanie modułów spoza
+  przygotowanej paczki przerywa wdrożenie przed backupem i kopiowaniem.
+- Katalog roboczy zwany stagingiem znajduje się na tym samym serwerze produkcyjnym;
+  nie jest dodatkowym środowiskiem. Testy lokalne obejmują izolowaną instalację,
+  brak katalogu i dowiązanie do produkcyjnych zależności. Potwierdzenie poprawki
+  na produkcji wymaga kolejnego ręcznego uruchomienia workflow przez właściciela.
+
 # 17.10.2026 — krok 4.7: ręczny deploy istniejącego serwera
 
 - Wzorzec przeczytano z lokalnego repozytorium `../portfel`: workflow deploy.yml

@@ -102,6 +102,7 @@ export function failureDiagnostic(stdout, stderr) {
     'checksum',
     'extraction',
     'dependencies',
+    'dependencies-check',
     'backup',
     'previous-package',
     'promotion',

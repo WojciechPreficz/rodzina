@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { zipSync, unzipSync } from 'fflate';
@@ -107,37 +107,54 @@ const http = async (url) => {
   return new Response('', { status: 404 });
 };
 
-describe('nodevenv npm execution', () => {
+describe('isolated npm execution', () => {
   it.each([['--version'], ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']])(
-    'executes npm directly with nodevenv first in PATH (%s)',
+    'executes the real npm CLI with an explicit temporary prefix (%s)',
     async (...args) => {
       const execute = vi.fn();
-      const config = { node: '/home/owner/nodevenv/app/24/bin/node', npm: '/home/owner/nodevenv/app/24/bin/npm' };
+      const config = {
+        node: '/home/owner/nodevenv/app/24/bin/node',
+        runtimeNode: '/runtime/bin/node',
+        npm: '/runtime/lib/npm/bin/npm-cli.js',
+      };
       await runNpm(config, args, '/staging', execute);
       expect(execute).toHaveBeenCalledWith(
-        config.npm,
-        args,
+        config.runtimeNode,
+        [config.npm, ...args, '--prefix', '/staging'],
         '/staging',
         expect.objectContaining({
-          PATH: `${path.dirname(config.node)}${path.delimiter}${process.env.PATH ?? ''}`,
+          NODE_PATH: '',
+          PATH: `${path.dirname(config.runtimeNode)}${path.delimiter}${process.env.PATH ?? ''}`,
         }),
       );
     },
   );
-  it.skipIf(process.platform === 'win32')(
-    'runs a symlink to a Bash wrapper without parsing it as JavaScript',
-    async () => {
-      const directory = await mkdtemp(path.join(tmpdir(), 'rodzina-npm-wrapper-'));
-      directories.push(directory);
-      const wrapper = path.join(directory, 'npm-wrapper');
-      const npm = path.join(directory, 'bin/npm');
-      await mkdir(path.dirname(npm));
-      await writeFile(wrapper, '#!/bin/bash\nif [[ "$1" == "--version" ]]; then exit 0; else exit 1; fi\n');
-      await chmod(wrapper, 0o700);
-      await symlink(wrapper, npm);
-      await runNpm({ node: process.execPath, npm }, ['--version'], directory);
-    },
-  );
+  it('bypasses the hosting wrapper and installs only in the temporary release directory', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'rodzina-npm-wrapper-'));
+    directories.push(directory);
+    const unpacked = path.join(directory, 'temporary-release');
+    const live = path.join(directory, 'production/node_modules/keep.txt');
+    const wrapper = path.join(directory, 'nodevenv/bin/npm');
+    const npm = path.join(directory, 'runtime/npm-cli.cjs');
+    await mkdir(unpacked);
+    await write(directory, 'production/node_modules/keep.txt', 'old production dependency');
+    await write(directory, 'nodevenv/bin/npm', "throw new Error('Hosting wrapper must not run');");
+    await write(
+      directory,
+      'runtime/npm-cli.cjs',
+      `
+        const fs = require('node:fs');
+        const path = require('node:path');
+        const prefix = process.argv[process.argv.indexOf('--prefix') + 1];
+        if (prefix !== process.cwd() || process.env.NODE_PATH) process.exit(1);
+        fs.mkdirSync(path.join(prefix, 'node_modules'), { recursive: true });
+        fs.writeFileSync(path.join(prefix, 'node_modules/installed.txt'), 'new dependency');
+      `,
+    );
+    await runNpm({ node: wrapper, runtimeNode: process.execPath, npm }, ['install', '--ignore-scripts'], unpacked);
+    expect(await readFile(path.join(unpacked, 'node_modules/installed.txt'), 'utf8')).toBe('new dependency');
+    expect(await readFile(live, 'utf8')).toBe('old production dependency');
+  });
 });
 
 describe('safe deploy diagnostics', () => {
@@ -264,7 +281,11 @@ it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
   'remote preflight rejects wrong application, environment, protected paths and missing tools before staging',
   async () => {
     const f = await fixture();
-    const config = { ...f.config, node: path.join(f.directory, 'bin/node') };
+    const config = {
+      ...f.config,
+      node: path.join(f.directory, 'bin/node'),
+      runtimeNode: path.join(f.directory, 'bin/node'),
+    };
     await write(f.directory, 'bin/node', 'node executable');
     await write(f.directory, 'bin/npm', 'npm CLI');
     const environment = {
@@ -282,8 +303,8 @@ it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
     await preflight(config, { execute, environment });
     expect(execute).toHaveBeenCalledTimes(3);
     expect(execute).toHaveBeenLastCalledWith(
-      path.join(f.directory, 'bin/npm'),
-      ['--version'],
+      config.runtimeNode,
+      [path.join(f.directory, 'bin/npm'), '--version', '--prefix', f.root],
       f.root,
       expect.objectContaining({ PATH: expect.stringContaining(`${path.join(f.directory, 'bin')}${path.delimiter}`) }),
     );
@@ -373,6 +394,7 @@ describe('local directory with fake SSH transport', () => {
       'checksum',
       'extraction',
       'dependencies',
+      'dependencies-check',
       'backup',
       'previous-package',
       'promotion',
@@ -408,6 +430,23 @@ describe('local directory with fake SSH transport', () => {
     expect(await readFile(path.join(f.root, 'server.cjs'), 'utf8')).toBe('old server.cjs');
     expect(await readFile(f.config.modules, 'utf8')).toBe('existing file');
     await expect(readFile(path.join(f.root, 'tmp/restart.txt'))).rejects.toThrow();
+  });
+  it.each(['missing', 'live-link'])('rejects %s temporary dependencies before backup or promotion', async (kind) => {
+    const f = await fixture();
+    f.options.dependencies = async (unpacked) => {
+      if (kind === 'live-link')
+        await symlink(
+          f.config.modules,
+          path.join(unpacked, 'node_modules'),
+          process.platform === 'win32' ? 'junction' : 'dir',
+        );
+    };
+    await expect(applyRelease(f.config, f.transaction, f.options)).rejects.toThrow();
+    expect(f.events.at(-1)).toBe('dependencies-check');
+    expect(f.options.backup).not.toHaveBeenCalled();
+    expect(f.events).not.toContain('promotion');
+    expect(await readFile(path.join(f.root, 'node_modules/old-package/index.js'), 'utf8')).toBe('old dependency');
+    expect(await readFile(path.join(f.root, 'server.cjs'), 'utf8')).toBe('old server.cjs');
   });
   it.each(['checksum', 'extraction', 'dependencies', 'backup', 'previous-package'])(
     'failure at %s leaves the live application unchanged',

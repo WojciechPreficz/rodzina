@@ -514,17 +514,24 @@ W **Settings → Secrets and variables → Actions → Variables** ustaw:
 Ścieżki są bezwzględne, bez końcowego ukośnika, spacji, `..` i znaków powłoki.
 Nie wybieraj katalogu domowego, subdomeny innej aplikacji ani systemowego Node.
 Skrypt sprawdza `package.json` z nazwą `rodzina-release`, istniejące pliki, wersję
-Node, npm z sąsiedniego `bin/npm`, `unzip` i `tar`. Runner potrzebuje OpenSSH
+Node, właściwy npm CLI tej wersji Node, `unzip` i `tar`. Runner potrzebuje OpenSSH
 (`ssh` i `scp`, dostępne na Ubuntu). Konto SSH musi mieć prawo zapisu do aplikacji,
 docelowego katalogu `node_modules` i katalogu nadrzędnego aplikacji.
 
-`bin/npm` uruchamiamy bezpośrednio, z katalogiem `bin` wskazanego nodevenv na
-początku `PATH`, zarówno przy `--version`, jak i instalacji w stagingu. Na vh.pl
-npm jest dowiązaniem do skryptu Bash (`/usr/share/l.v.e-manager/utils/npm_wrapper`),
-dlatego nie wolno uruchamiać go poleceniem `node bin/npm` ani zastępować ścieżki
-nodevenv docelową ścieżką wrappera. Błąd `SyntaxError: Unexpected token '['`
-w `preflight-npm` oznaczał właśnie próbę odczytu wrappera przez Node; poprawka
-dotyczy skryptu deployu i nie wymaga zmiany `.env` ani npm na serwerze.
+Na vh.pl `nodevenv/bin/npm` jest dowiązaniem do skryptu Bash
+`/usr/share/l.v.e-manager/utils/npm_wrapper`. Wrapper przy `npm install` wymusza
+`--prefix` wskazujący zależności produkcyjnej aplikacji i modyfikuje jej dowiązania,
+niezależnie od katalogu roboczego. Nie używamy go do przygotowania aktualizacji.
+Zdalny helper uruchomiony przez `DEPLOY_NODE` ustala faktyczny interpreter przez
+`process.execPath`, rozwiązuje sąsiedni `bin/npm` do pliku `npm-cli.js` i uruchamia
+ten CLI właściwym Node. Instalacja ma jawny `--prefix` katalogu tymczasowego,
+pusty `NODE_PATH` i katalog rzeczywistego Node na początku `PATH`. Nie uruchamiamy
+skryptów Bash przez Node. Nie wymaga to zmiany `.env`, zmiennych Actions ani npm
+na serwerze.
+
+„Staging” w tym skrypcie oznacza wyłącznie prywatny katalog tymczasowy na serwerze
+produkcyjnym, obok aplikacji. Nie jest osobnym środowiskiem ani drugą instalacją
+aplikacji; katalog służy do przygotowania i sprawdzenia paczki przed podmianą.
 
 W **Secrets** dodaj:
 
@@ -594,7 +601,11 @@ Nie dodajemy zmiennych do `.env` API, migracji, cronów ani zależności runtime
    prywatny staging obok aplikacji oraz `.rodzina-deploy-lock` (dla katalogu
    aplikacji `rodzina`). ZIP trafia przez SCP do stagingu; serwer porównuje SHA-256
    i rozpakowuje paczkę. Błąd transferu nie zmienia plików aplikacji.
-4. npm z nodevenv instaluje zależności produkcyjne w stagingu z `--ignore-scripts`.
+4. Właściwy npm CLI używanej wersji Node instaluje zależności produkcyjne w katalogu
+   tymczasowym z `--ignore-scripts` i jawnym `--prefix`, z pominięciem wrappera cPanel.
+   Sprawdzamy, czy `node_modules` jest rzeczywistym katalogiem tej paczki, oraz czy
+   SQLite, Argon2 i prebuild-install są rozwiązywane z niego, bez użycia produkcyjnych
+   zależności. Etap `dependencies-check` powtarza kontrolę przed backupem i podmianą.
    Dla `better-sqlite3` uruchamiamy wyłącznie pobranie gotowego modułu przez
    `prebuild-install`, bez awaryjnego `node-gyp`. Sprawdzamy otwarcie bazy w pamięci
    oraz dostępność Argon2. Brak gotowej binarki przerywa wdrożenie przed podmianą.
@@ -634,7 +645,8 @@ wymaga ono zgody instalatora na telefonie.
 - Ustal UUID ostatniego wdrożenia z historii. Zachowaj dodatkową kopię obecnej
   bazy istniejącym jobem przed odzyskiwaniem. Poprzednia paczka nie zawiera
   `node_modules`; zależności trzeba przygotować ponownie dla jej `package.json`
-  w prywatnym stagingu, tym samym npm z nodevenv, bez kompilacji ze źródeł.
+  w prywatnym katalogu tymczasowym, właściwym npm CLI tej samej wersji Node,
+  z jawnym `--prefix` i pominięciem wrappera cPanel, bez kompilacji ze źródeł.
 - Przed cofnięciem kodu porównaj `drizzle/meta/_journal.json` obu paczek i oceń
   zgodność starszego API z obecną bazą. Przy niezgodnej migracji preferuj poprawkę
   do przodu. Nie uruchamiaj starego kodu bez tej oceny. Cofnięcie produkcyjnej bazy

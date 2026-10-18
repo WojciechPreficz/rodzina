@@ -44,11 +44,21 @@ async function command(executable, args, cwd, env = process.env) {
 }
 
 export async function runNpm(config, args, cwd, execute = command) {
-  // Keep the nodevenv path: cPanel's npm can be a symlink to a Bash wrapper.
-  await execute(config.npm, args, cwd, {
+  // The cPanel wrapper forces --prefix to the live nodevenv, ignoring cwd.
+  // Run the actual npm CLI with the interpreter already running this helper.
+  await execute(config.runtimeNode ?? process.execPath, [config.npm, ...args, '--prefix', cwd], cwd, {
     ...process.env,
-    PATH: `${path.dirname(config.node)}${path.delimiter}${process.env.PATH ?? ''}`,
+    NODE_PATH: '',
+    PATH: `${path.dirname(config.runtimeNode ?? process.execPath)}${path.delimiter}${process.env.PATH ?? ''}`,
   });
+}
+
+export async function checkDependencies(unpacked) {
+  const modules = path.join(unpacked, 'node_modules');
+  const info = await lstat(modules);
+  if (!info.isDirectory() || info.isSymbolicLink() || (await realpath(modules)) !== modules)
+    throw new Error('Dependencies must be installed in the temporary release directory.');
+  return modules;
 }
 
 export async function checkTree(directory) {
@@ -76,7 +86,10 @@ async function checkRestart(root) {
   }
 }
 
-export async function preflight(config, { execute = command, environment, mark = () => {} } = {}) {
+export async function preflight(
+  config,
+  { execute = command, environment, mark = () => {}, runtimeNode = config.runtimeNode ?? process.execPath } = {},
+) {
   mark('preflight-node');
   if (Number(process.versions.node.split('.')[0]) !== 24) throw new Error('Hosting requires Node 24.');
   mark('preflight-root');
@@ -98,7 +111,7 @@ export async function preflight(config, { execute = command, environment, mark =
   mark('preflight-node-path');
   await access(config.node);
   mark('preflight-npm-path');
-  const npm = path.join(path.dirname(config.node), 'npm');
+  const npm = await realpath(path.join(path.dirname(runtimeNode), 'npm'));
   await access(npm);
   // Validate without printing environment values, database contents or credentials.
   mark('preflight-env-file');
@@ -148,8 +161,8 @@ export async function preflight(config, { execute = command, environment, mark =
     await execute(tool, ['--help'], config.root);
   }
   mark('preflight-npm');
-  await runNpm({ ...config, npm }, ['--version'], config.root, execute);
-  return { npm, modules };
+  await runNpm({ ...config, npm, runtimeNode }, ['--version'], config.root, execute);
+  return { npm, modules, runtimeNode };
 }
 
 export async function applyRelease(
@@ -182,11 +195,19 @@ export async function applyRelease(
   else {
     // Install outside the live application, disabling all lifecycle compilation.
     await runNpm(config, ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], unpacked, execute);
+    await checkDependencies(unpacked);
     const require = createRequire(path.join(unpacked, 'package.json'));
-    const sqlite = path.dirname(require.resolve('better-sqlite3/package.json'));
-    await execute(node, [require.resolve('prebuild-install/bin.js')], sqlite);
+    const resolveLocal = async (name) => {
+      const resolved = await realpath(require.resolve(name));
+      if (!inside(path.join(unpacked, 'node_modules'), resolved))
+        throw new Error('Dependency resolved outside the temporary release directory.');
+      return resolved;
+    };
+    const sqlite = path.dirname(await resolveLocal('better-sqlite3/package.json'));
+    await resolveLocal('@node-rs/argon2');
+    await execute(config.runtimeNode, [await resolveLocal('prebuild-install/bin.js')], sqlite);
     await execute(
-      node,
+      config.runtimeNode,
       [
         '--input-type=commonjs',
         '-e',
@@ -195,6 +216,8 @@ export async function applyRelease(
       unpacked,
     );
   }
+  mark('dependencies-check');
+  await checkDependencies(unpacked);
   mark('backup');
   if (backup) await backup();
   else await execute(node, [`--env-file=${envFile}`, 'dist/jobs/backup-db.js'], root);
