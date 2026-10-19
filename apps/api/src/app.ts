@@ -27,6 +27,7 @@ import type { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
 import { registerEventRoutes } from './modules/events/routes.js';
 import { registerReminderRoutes } from './modules/reminders/routes.js';
+import { registerShoppingRoutes } from './modules/shopping/routes.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 
 type Database = ReturnType<typeof createDatabase>;
@@ -1183,6 +1184,7 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
   });
 
   registerEventRoutes(app, database);
+  registerShoppingRoutes(app, database);
   registerAndroidDownloads(app, config);
   app.get('/.well-known/assetlinks.json', async (_request, reply) => {
     reply.header('Cache-Control', 'public, max-age=300');

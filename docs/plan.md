@@ -299,7 +299,7 @@ rodzina/
 - `event_exceptions`: id, event_id, original_date, is_cancelled, override_start_date, override_start_time, override_duration_minutes, override_title
 - `reminders`: id, family_id, event_id (nullable), task_id (nullable, faza 7), document_id (nullable, faza 8), type (`offset` | `absolute`), offset_value (integer, nullable), offset_unit (`minute` | `hour` | `day` | `week` | `month`, nullable), remind_at (nullable, ms UTC, tylko dla `absolute`), audience (`participants` | `family` | `adults` | `owner` | `user`, od fazy 7 także `list_members`; znaczenie w sekcji 2), user_id (nullable, wymagane przy `audience=user`), created_by, next_fire_at (nullable), last_sent_at (nullable). Walidacja w serwisie: dokładnie jedno ze źródeł jest ustawione.
 - Historyczna `push_subscriptions` została usunięta migracją 0013; nie należy do bieżącego modelu. Historyczne pola `next_fire_at` i `last_sent_at` w `reminders` pozostają dla zgodności, ale nie sterują dostarczaniem alarmów APK.
-- `shopping_lists`: id, family_id, name, position, created_at
+- `shopping_lists`: id, family_id, name, position, created_by, created_at, updated_at
 - `shopping_items`: id, list_id, name, quantity (text), category, is_checked, checked_by, checked_at, position, created_by, created_at, updated_at
 - `shopping_history`: family_id, name_normalized, display_name, category, use_count, last_used_at (do podpowiedzi)
 - `meals`: id, family_id, date, slot (`dinner`, enum rozszerzalny), title, notes, created_by, updated_at
@@ -873,6 +873,13 @@ rodzina/
 **Kroki realizacji:**
 
 #### Krok 5.1 - API zakupów
+
+**Stan 19.10.2026:** zrealizowany i sprawdzony lokalnie. Migracja 0014,
+schematy shared i wszystkie endpointy zakupów są gotowe. Przechodzą lint,
+format:check, typecheck, 385 testów Vitest (w tym 18 nowych testów zakupów
+i migracji), build i `release:smoke`. Wyniki i mapowanie kryteriów są
+w DEVELOPMENT, decyzje kontraktu w DECISIONS. UI i kolejka offline pozostają
+w krokach 5.2–5.3. Ten krok nie wdraża produkcji ani nie publikuje APK.
 
 - **Zakres:** migracje `shopping_lists`, `shopping_items`, `shopping_history`. Stała lista kategorii w `shared`. Wszystkie endpointy z tej fazy (listy, pozycje, `clear-checked`, `suggestions`). Domyślna lista "Zakupy" przy pierwszym wejściu. Aktualizacja historii przy dodaniu pozycji i podpowiadanie kategorii. Pola `checked_by` i `checked_at`. Uprawnienia dziecka: przegląda, dodaje i odhacza dowolne pozycje, edytuje i usuwa tylko własne, bez "Wyczyść kupione" i zarządzania listami.
 - **Gotowe, gdy:** testy API: CRUD, izolacja rodzin, podpowiedzi z historii (maksymalnie 8, sortowanie po `use_count` i `last_used_at`), `clear-checked`, uprawnienia dziecka.

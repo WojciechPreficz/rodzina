@@ -506,3 +506,49 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   zachowując globalny monitor wersji oraz widoczność na ekranach logowania i offline.
 - Brak nowych zależności, migracji, zmiennych środowiskowych i cronów. Zmiana
   wspólnego frontendu wymaga osobnej aktualizacji WWW i APK według DEPLOY.
+
+## 19.10.2026 — API zakupów, krok 5.1
+
+- Wszystkie listy zakupów są wspólne w obrębie rodziny. Dorośli tworzą,
+  nazywają, zmieniają kolejność i usuwają listy. Dzieci czytają, dodają pozycje
+  i zmieniają `isChecked` dowolnej pozycji; pozostałe pola oraz usuwanie dotyczą
+  wyłącznie ich własnych pozycji. Mieszane żądanie zmiany checkboxa i cudzej
+  nazwy/ilości/kategorii/pozycji jest odrzucane w całości. Zasoby innej rodziny
+  zwracają 404 także dziecku; dostęp jest ustalany przez listę i sesję.
+- `GET /api/shopping/lists` tworzy „Zakupy”, jeżeli rodzina nie ma żadnej listy,
+  również gdy jako pierwsze wejdzie dziecko. Odczyt i utworzenie są w transakcji
+  `IMMEDIATE`, aby nie dublować listy przy równoległych wejściach. Domyślna lista
+  nie jest specjalnie chroniona: dorosły może ją przemianować lub usunąć; po
+  usunięciu ostatniej listy następne wejście ponownie utworzy „Zakupy”.
+- Listy mają również `created_by` i `updated_at`, zgodnie z ogólną konwencją
+  encji z sekcji 4 planu. Autorzy i osoby odhaczające mają FK `ON DELETE SET NULL`;
+  usunięcie domownika zachowuje wspólne zakupy. Usunięcie listy usuwa jej pozycje,
+  ale zachowuje historię rodziny do podpowiedzi.
+- Identyfikatory kategorii są po angielsku, a ich polskie etykiety i kolejność
+  są w `SHOPPING_CATEGORIES` w shared. `other` odpowiada „Inne”. Niepodana kategoria
+  pochodzi z historii dokładnie tej nazwy; przy braku historii przyjmujemy `other`.
+  Jawna kategoria ma pierwszeństwo i jest zapamiętywana przy dodawaniu.
+- Klucz historii normalizujemy przez Unicode NFKC, usunięcie skrajnych spacji,
+  scalenie białych znaków i małe litery polskiego locale. Historia jest wspólna
+  dla wszystkich list jednej rodziny. Każde dodanie pozycji atomowo zwiększa
+  `use_count` i zapisuje ostatnią nazwę, kategorię i czas. Edycja, checkbox oraz
+  usunięcie nie zwiększają licznika ani nie zmieniają historii.
+- Podpowiedzi wymagają niepustego `q`, dopasowują początek znormalizowanej nazwy
+  i zwracają najwyżej 8 obiektów `{ name, category }`, bez ilości. Sortowanie:
+  malejąco licznik użycia, malejąco ostatnie użycie, potem nazwa dla rozstrzygnięcia
+  remisu. Znaki `%` i `_` są literalne. Brak historii daje pustą tablicę.
+- API zwraca `{ ok: true, lists }`, `{ ok: true, list }`, analogicznie `items`,
+  `item` i `suggestions`. DELETE zwraca `{ ok: true, deleted: true }`, a czyszczenie
+  kupionych `{ ok: true, deletedCount }`. POST tworzący listę/pozycję ma status 201.
+  Nazwy i `q` mają 1–200 znaków po trim, ilość do 100 znaków; pusta ilość to null.
+  PATCH wymaga przynajmniej jednego dozwolonego pola, dane autora i odhaczenia
+  wyznacza serwer. Listy są sortowane po `position`, pozycje najpierw niekupione,
+  potem kupione, w każdej grupie po `position`; remisy rozstrzyga ID.
+- Zmiana na kupione zapisuje `checked_by` i `checked_at`; ponowienie tego samego
+  stanu zachowuje pierwotnego kupującego i czas. Odznaczenie czyści oba pola.
+  PATCH stosuje last-write-wins dla przesłanych pól. Pozycje kolejności mają zakres
+  0–2147483647, dopisywanie zwiększa maksymalną pozycję do tego limitu.
+- Migracja `0014_shopping.sql` dodaje trzy tabele bez zmiany kalendarza,
+  przypomnień lub sesji. Brak nowych zależności, konfiguracji i cronów. Zakres
+  lokalny obejmuje API; UI i parser (5.2) oraz trwała kolejka offline (5.3) pozostają
+  w swoich krokach. Aktualizacja produkcji wymaga osobnego polecenia właściciela.

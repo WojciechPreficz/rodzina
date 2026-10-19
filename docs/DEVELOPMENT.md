@@ -1332,3 +1332,37 @@ Nie uruchamiano testów instrumentacyjnych na urządzeniu.
 Krok 4.10 realizuje zakres lokalny. Zgodnie z odpowiedzią właściciela próby
 fizycznego telefonu nastąpią później; pełna akceptacja sprzętowa fazy 4 pozostaje
 otwarta. Wdrożenie tego wydania i publikacja APK wymagają osobnego polecenia.
+
+## Krok 5.1 — API zakupów (19.10.2026)
+
+Gotowe lokalnie: schematy Zod i stałe kategorii w shared, migracja
+`0014_shopping.sql` oraz trasy `/api/shopping/*`. Widoczność obejmuje całą
+rodzinę; nie ma list prywatnych. Szczegóły kontraktu, normalizacji historii
+i automatycznej listy „Zakupy” są w DECISIONS.
+
+| Warunek „Gotowe, gdy”  | Potwierdzenie automatyczne                                                                                                                                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CRUD                   | Tworzenie i zmiana nazw list, kolejność, częściowa edycja pozycji, ilości, kategorie, usuwanie i kaskada listy. Domyślna lista także przy pierwszym wejściu dziecka i nakładających się żądaniach.                                              |
+| Izolacja rodzin        | Odczyty i wszystkie mutacje cudzych list/pozycji zwracają 404, także dla dzieci. Podpowiedzi i historia tej samej nazwy są osobne dla rodzin.                                                                                                   |
+| Historia i podpowiedzi | Maksymalnie 8 wyników, kolejność po liczniku i czasie, normalizacja Unicode/spacji/liter, literalne znaki SQL, kategoria z historii z możliwością jawnego zastąpienia. Błąd historii wycofuje także dodawaną pozycję.                           |
+| `clear-checked`        | Usuwa tylko kupione pozycje wskazanej listy, zwraca licznik, pozostawia otwarte pozycje, inne listy i historię.                                                                                                                                 |
+| Uprawnienia dzieci     | Dodawanie i odhaczanie dowolnych pozycji, edycja/usuwanie własnych; 403 dla cudzych pól i mieszanych żądań oraz zarządzania listami/czyszczenia.                                                                                                |
+| Dane i autoryzacja     | Walidacja wejścia, blokada nadpisywania autora/rodziny i danych odhaczenia, 401 bez sesji i zachowana ochrona CSRF. Powtórzenie odhaczenia zachowuje pierwotnego kupującego i czas. Usunięcie domownika zostawia zakupy z null zamiast jego ID. |
+| Migracja               | Nowa i istniejąca baza; ponowne uruchomienie bez utraty sesji, wydarzeń, przypomnień ani zakupów, poprawne FK. Historyczny test 0013 sprawdza teraz dokładnie zakres tej migracji, niezależnie od tabel dodanych przez kolejne funkcje.         |
+
+Weryfikacja końcowa:
+
+- `npm run lint` — poprawny, pozostały dwa istniejące ostrzeżenia React Refresh w `auth.tsx`.
+- `npm run format:check` i `npm run typecheck` — poprawne.
+- `npm test` — 385/385 testów, 48/48 plików; 17 testów API zakupów i 1 migracji.
+  Vitest uruchomiono poza piaskownicą po błędzie odczytu jej pliku tymczasowego.
+- `npm run build` — poprawny build shared, WWW i API; istniejące ostrzeżenia
+  Vite dotyczą wielkości pakietu i mieszanego importowania harmonogramu.
+- `npm run release:smoke` — ZIP zawiera 41 plików, w tym migrację 0014.
+  Instalacja zależności produkcyjnych, migracje, start serwera, health/SPA
+  i backup zakończone poprawnie, bez konfiguracji VAPID.
+
+Bez nowych zależności runtime, zmiennych środowiskowych, cronów i usług w tle.
+Nie zmieniano wspólnego UI; ten krok nie obejmuje testów interfejsu zakupów,
+kolejki offline ani fizycznego telefonu. Kroki 5.2 i 5.3 pozostają osobne.
+Serwer i opublikowane APK nie zostały zmienione.

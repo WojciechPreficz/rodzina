@@ -99,6 +99,13 @@
       "when": 1792431931934,
       "tag": "0013_drop_web_push",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1792438456538,
+      "tag": "0014_shopping",
+      "breakpoints": true
     }
   ]
 }

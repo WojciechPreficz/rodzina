@@ -34,6 +34,7 @@ it('migrates a fresh database without subscriptions and preserves the reminder s
 it('drops only subscriptions from an existing database and keeps sessions, data and the APK snapshot', async () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'rodzina-retire-push-'));
   const oldMigrations = path.join(directory, 'old-migrations');
+  const retiredPushMigrations = path.join(directory, 'retired-push-migrations');
   const config = loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: path.join(directory, 'existing.db') });
   const familyId = randomUUID();
   const userId = randomUUID();
@@ -43,6 +44,15 @@ it('drops only subscriptions from an existing database and keeps sessions, data 
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-19T10:00:00Z'));
   try {
     const journal = JSON.parse(readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'));
+    // Test migration 0013 in isolation; later features may legitimately add tables.
+    journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= 13);
+    mkdirSync(path.join(retiredPushMigrations, 'meta'), { recursive: true });
+    writeFileSync(path.join(retiredPushMigrations, 'meta/_journal.json'), JSON.stringify(journal));
+    for (const entry of journal.entries)
+      copyFileSync(
+        path.join(migrationsFolder, `${entry.tag}.sql`),
+        path.join(retiredPushMigrations, `${entry.tag}.sql`),
+      );
     journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= 12);
     mkdirSync(path.join(oldMigrations, 'meta'), { recursive: true });
     writeFileSync(path.join(oldMigrations, 'meta/_journal.json'), JSON.stringify(journal));
@@ -130,8 +140,8 @@ it('drops only subscriptions from an existing database and keeps sessions, data 
     expect(snapshot.reminders).toHaveLength(6);
     database.sqlite.close();
     database = createDatabase(config);
-    migrate(database.db, { migrationsFolder });
-    migrate(database.db, { migrationsFolder });
+    migrate(database.db, { migrationsFolder: retiredPushMigrations });
+    migrate(database.db, { migrationsFolder: retiredPushMigrations });
     expect(readRows()).toEqual(before);
     expect(
       database.sqlite

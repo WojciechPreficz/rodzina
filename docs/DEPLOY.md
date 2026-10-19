@@ -1,5 +1,15 @@
 # Wdrożenie i aktualizacje na cPanel vh.pl
 
+**API zakupów, krok 5.1 (19.10.2026):** aktualizacja zawiera migrację
+`0014_shopping.sql`, która dodaje `shopping_lists`, `shopping_items`
+i `shopping_history`. Migracja uruchamia się przy starcie API; nie zmienia
+istniejących sesji, wydarzeń ani przypomnień. Obowiązuje dotychczasowa procedura
+aktualizacji z backupem. Nie ma nowych zmiennych środowiskowych, zależności
+runtime ani cronów; istniejący backup obejmuje również nowe tabele.
+Ten krok udostępnia API, ekran zakupów powstaje w 5.2, a kolejka offline w 5.3.
+Weryfikację lokalną opisuje DEVELOPMENT; ten krok nie aktualizował serwera
+ani nie publikował APK.
+
 **Stan po kroku 4.10, 19.10.2026:** strona WWW + APK, bez PWA/Web Push.
 Aktualizację istniejącej aplikacji opisują sekcja 6, ręczny workflow Deploy
 z kroku 4.7 i procedura wycofania PWA na końcu dokumentu. Sekcje 1, 3 i 4

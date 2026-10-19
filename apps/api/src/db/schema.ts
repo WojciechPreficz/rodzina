@@ -1,6 +1,7 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { check } from 'drizzle-orm/sqlite-core';
+import { shoppingCategorySchema } from '@rodzina/shared';
 
 export const families = sqliteTable('families', {
   id: text('id').primaryKey(),
@@ -152,4 +153,62 @@ export const reminders = sqliteTable(
       sql`(${table.audience} = 'user' AND ${table.userId} IS NOT NULL) OR (${table.audience} <> 'user' AND ${table.userId} IS NULL)`,
     ),
   ],
+);
+
+export const shoppingLists = sqliteTable(
+  'shopping_lists',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('shopping_lists_family_position_idx').on(table.familyId, table.position)],
+);
+
+export const shoppingItems = sqliteTable(
+  'shopping_items',
+  {
+    id: text('id').primaryKey(),
+    listId: text('list_id')
+      .notNull()
+      .references(() => shoppingLists.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    quantity: text('quantity'),
+    category: text('category', {
+      enum: shoppingCategorySchema.options,
+    })
+      .notNull()
+      .default('other'),
+    isChecked: integer('is_checked', { mode: 'boolean' }).notNull().default(false),
+    checkedBy: text('checked_by').references(() => users.id, { onDelete: 'set null' }),
+    checkedAt: integer('checked_at'),
+    position: integer('position').notNull().default(0),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('shopping_items_list_position_idx').on(table.listId, table.position)],
+);
+
+export const shoppingHistory = sqliteTable(
+  'shopping_history',
+  {
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    nameNormalized: text('name_normalized').notNull(),
+    displayName: text('display_name').notNull(),
+    category: text('category', {
+      enum: shoppingCategorySchema.options,
+    }).notNull(),
+    useCount: integer('use_count').notNull(),
+    lastUsedAt: integer('last_used_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.familyId, table.nameNormalized] })],
 );
