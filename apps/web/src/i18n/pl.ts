@@ -1,4 +1,10 @@
 export const labels = {
+  navigation: {
+    main: 'Nawigacja główna',
+    title: 'Menu Rodziny',
+    open: 'Otwórz menu',
+    close: 'Zamknij menu',
+  },
   androidUpdates: {
     checkError: 'Nie udało się sprawdzić wersji. Sprawdź połączenie i spróbuj ponownie.',
     updateError: 'Nie udało się zaktualizować aplikacji. Spróbuj ponownie.',

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openNavigation } from './navigation.js';
 
 test('Android cold notification opens a stored occurrence offline and warm App Links reach auth screens', async ({
   page,
@@ -101,6 +102,7 @@ test('calendar form survives rejecting discard on modal close and browser naviga
   });
   expect(registered.ok()).toBe(true);
   await page.goto('/wiecej');
+  await openNavigation(page);
   await page.getByRole('link', { name: 'Kalendarz', exact: true }).click();
   await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
   const dialog = page.getByRole('dialog');

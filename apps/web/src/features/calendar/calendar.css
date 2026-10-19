@@ -12,7 +12,7 @@
 .calendar-add {
   position: fixed;
   right: max(20px, calc((100vw - 1200px) / 2));
-  bottom: 88px;
+  bottom: calc(20px + var(--safe-bottom, 0px));
   z-index: 100;
   width: 56px;
   height: 56px;

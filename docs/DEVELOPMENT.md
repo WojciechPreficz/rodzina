@@ -4,6 +4,60 @@ Aktualne zasady po kroku 4.10 (19.10.2026). Starsze przebiegi i instrukcje
 zachowano w części „Historia realizacji”; opisy PWA i usuniętych poleceń Web Push
 w tej części nie są instrukcją dla obecnego wydania.
 
+## Nawigacja WWW i APK — 19.10.2026
+
+Na komputerze (WWW od 768 px) menu ma szerokość 240 px i jest stale widoczne
+po lewej. Na telefonie strona WWW i APK mają tę samą pionową listę w panelu
+wysuwanym z prawej, otwieranym hamburgerem w prawym górnym rogu. APK zachowuje
+hamburger również na szerszym ekranie. Pozycje: Kalendarz, Zakupy, Obiady,
+Rodzina, Powiadomienia, Wersja aplikacji. Konto i wylogowanie są na dole menu.
+Zakupy i Obiady nadal są pustymi ekranami przed realizacją kolejnych faz.
+
+Nie ma dolnego paska ani pośredniego ekranu „Więcej”. Dotychczasowe adresy
+`/wiecej/rodzina`, `/wiecej/powiadomienia` i `/wiecej` pozostają prawidłowe;
+ostatni pokazuje pobieranie APK lub aktualizator. W bieżących instrukcjach
+historyczne „Więcej > Powiadomienia” oznacza bezpośrednią pozycję Powiadomienia,
+a „Więcej > Wersja aplikacji” oznacza pozycję Wersja aplikacji.
+
+Panel zamyka wybór strony, krzyżyk, kliknięcie tła, Escape lub systemowe Wstecz.
+Zmiana trasy (także przez link zewnętrzny) i przejście WWW na szeroki ekran
+również go zamykają. Otwarcie blokuje przewijanie tła i zatrzymuje fokus wewnątrz;
+zamknięcie przywraca fokus do hamburgera. Wylogowanie respektuje ochronę formularzy.
+Nagłówek, panel i przycisk dodawania wydarzenia uwzględniają obszary systemowe.
+Komunikat nowej wersji APK jest częścią treści pod stałym nagłówkiem.
+
+Weryfikacja fizycznego telefonu po instalacji nowego APK: otwórz menu, przejdź
+do Rodziny i Powiadomień, sprawdź aktywną pozycję i zamknięcie przez Wstecz;
+następnie sprawdź aktualizator, formularz wydarzenia i wylogowanie.
+Testy atrapy mostka ani build debug nie zastępują tej próby.
+
+Wyniki lokalne tej zmiany:
+
+- `npm test`: 367/367, 46 plików; aktywna sekcja (także `/` i szczegóły wydarzenia),
+  bezpośrednie odnośniki, zamykanie panelu po wyborze/Escape i ochrona wylogowania.
+- `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm run build`:
+  poprawne. Pozostają dwa wcześniejsze ostrzeżenia Fast Refresh w `auth.tsx`
+  i ostrzeżenie rozmiaru bundla Vite.
+- `npm run test:e2e`: 28/28, Chromium headless przy 390 i 1280 px. Regresja
+  kont, kalendarza, linków, APK i wycofania PWA. Nowe scenariusze sprawdzają
+  pionowy układ, lewą kolumnę/prawy panel, aktywną pozycję, wybór strony,
+  zamykanie krzyżykiem/Escape/tłem, powrót fokusu, zmianę szerokości oraz
+  systemowe Wstecz przez atrapę Androida bez opuszczania strony.
+- Po przesunięciu przycisku dodawania kalendarza w miejsce usuniętego dolnego
+  paska: ponowny build WWW/API, 4/4 testy nawigacji headless i debug APK poprawne.
+  Obejrzano zrzuty WWW przy 1280 px oraz menu i stronę przy 390 px, również po
+  zmianie szerokości. Test geometrii czeka na koniec animacji panelu i układu.
+- `npm run android:debug`: `BUILD SUCCESSFUL`. `npm run release:smoke`:
+  poprawna paczka 39 plików, start serwera, health, SPA i backup.
+- Vitest, serwer e2e/SQLite, smoke i Gradle wymagały pracy poza piaskownicą;
+  zatrzymane przebiegi w ograniczonym środowisku nie są zaliczonymi testami.
+  Dodatkowego powtórzenia wyłącznie dla zrzutów po animacji APK nie zatwierdzono;
+  testy pozostawiono w wariancie, który przeszedł. Nie wykonano nowej próby
+  fizycznego telefonu ani aktualizacji produkcji/publikacji podpisanego APK.
+
+Zmiana nie wprowadza konfiguracji, migracji, cronów ani nowych zależności runtime.
+Paczka release aktualizuje WWW/API, a APK wymaga osobnej instalacji według DEPLOY.
+
 ## Uruchomienie i konfiguracja
 
 Wymagane: Node.js 22 lub 24 i npm. Wykonaj `npm ci`, skopiuj

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openNavigation } from './navigation.js';
 
 test.use({ serviceWorkers: 'allow' });
 
@@ -95,6 +96,7 @@ test('returning legacy PWA leaves its cached shell and reopens the website with 
   });
   await expectRetired(returning);
   await returning.reload();
+  await openNavigation(returning);
   await expect(returning.getByText('Anna · Powrót z PWA')).toBeVisible();
   await returning.getByRole('link', { name: 'Kalendarz', exact: true }).click();
   await expect(returning.getByRole('button', { name: 'Dodaj wydarzenie' })).toBeVisible();

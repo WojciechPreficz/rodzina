@@ -11,14 +11,39 @@ body {
   --safe-bottom: 0px;
 }
 .mantine-AppShell-main {
-  padding-top: calc(var(--safe-top) + var(--mantine-spacing-md));
-  padding-bottom: calc(84px + var(--safe-bottom));
+  padding-top: calc(var(--app-shell-header-offset, 0px) + var(--mantine-spacing-md));
+  padding-bottom: calc(var(--mantine-spacing-md) + var(--safe-bottom));
 }
-.mantine-AppShell-footer {
-  height: calc(68px + var(--safe-bottom));
-  padding-bottom: var(--safe-bottom);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+.app-header {
+  padding: var(--safe-top) max(var(--mantine-spacing-md), env(safe-area-inset-right, 0px)) 0
+    max(var(--mantine-spacing-md), env(safe-area-inset-left, 0px));
+}
+.app-sidebar {
+  padding: calc(var(--safe-top) + var(--mantine-spacing-lg)) var(--mantine-spacing-md)
+    calc(var(--safe-bottom) + var(--mantine-spacing-md));
+  overflow-y: auto;
+}
+.app-navigation {
+  flex: 1;
+  min-height: 0;
+}
+.app-navigation-link {
+  min-height: 48px;
+  border-radius: var(--mantine-radius-md);
+}
+.app-navigation-link[data-active] {
+  font-weight: 600;
+}
+.app-menu-header {
+  padding-top: calc(var(--safe-top) + var(--mantine-spacing-md));
+  padding-right: max(var(--mantine-spacing-md), env(safe-area-inset-right, 0px));
+}
+.app-menu-body {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--safe-top) - 72px);
+  padding-right: max(var(--mantine-spacing-md), env(safe-area-inset-right, 0px));
+  padding-bottom: calc(var(--safe-bottom) + var(--mantine-spacing-md));
 }
 .auth-layout {
   padding-top: calc(var(--safe-top) + var(--mantine-spacing-md));

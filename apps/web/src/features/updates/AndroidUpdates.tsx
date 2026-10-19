@@ -12,8 +12,6 @@ import { useLocation } from 'react-router';
 const text = labels.androidUpdates;
 
 export function AndroidUpdateMonitor() {
-  const location = useLocation();
-  const state = useSyncExternalStore(updateService.subscribe, updateService.snapshot);
   useEffect(() => {
     if (!isAndroid()) return;
     let disposed = false;
@@ -44,6 +42,12 @@ export function AndroidUpdateMonitor() {
       for (const handle of handles) void handle.remove();
     };
   }, []);
+  return null;
+}
+
+export function AndroidUpdateNotice() {
+  const location = useLocation();
+  const state = useSyncExternalStore(updateService.subscribe, updateService.snapshot);
   if (!isAndroid() || !state.release || location.pathname === '/wiecej') return null;
   return (
     <Alert mx="md" my="sm">

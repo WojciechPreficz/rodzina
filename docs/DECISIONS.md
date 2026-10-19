@@ -486,3 +486,23 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   bez PWA, samodzielnego wycofania workera oraz powrotu ze starego cache z zachowaniem sesji.
   Usunięty scenariusz sprzątania przez nowy frontend nie ma już osobnego testu e2e;
   pozostają jego testy jednostkowe.
+
+## 19.10.2026 — pionowa nawigacja WWW i menu mobilne
+
+- Na polecenie właściciela usuwamy dolny pasek. WWW od 768 px ma stały panel
+  240 px po lewej; węższa strona i APK korzystają z tego samego menu wysuwanego
+  z prawej po kliknięciu hamburgera w prawym górnym rogu. APK zachowuje hamburger
+  także na szerszym ekranie. Każda pozycja ma ikonę, tekst i zaznaczenie aktywnej sekcji.
+- Udostępniamy bezpośrednio Rodzinę, Powiadomienia i Wersję aplikacji zamiast
+  pośredniego „Więcej”. Zachowujemy dotychczasowe adresy i linki do szczegółów.
+  Zakupy i Obiady pozostają istniejącymi pustymi ekranami; nie wdrażamy faz 5–8.
+  Dane konta i wylogowanie przenosimy do menu. Wylogowanie respektuje ochronę formularzy.
+- Panel zamyka się po wyborze strony, zmianie trasy, przełączeniu WWW na szeroki
+  ekran, kliknięciu tła/krzyżyka i Escape. Mantine zapewnia blokadę przewijania,
+  ograniczenie fokusu do panelu i powrót fokusu. Systemowe Wstecz zamyka panel
+  przez istniejącą obsługę dialogów; zdarzenie Escape wysyłamy z elementu dialogu,
+  ponieważ Mantine odczytuje atrybuty jego celu (Document nie ma `getAttribute`).
+- Powiadomienie o aktualizacji APK renderujemy w treści pod stałym nagłówkiem,
+  zachowując globalny monitor wersji oraz widoczność na ekranach logowania i offline.
+- Brak nowych zależności, migracji, zmiennych środowiskowych i cronów. Zmiana
+  wspólnego frontendu wymaga osobnej aktualizacji WWW i APK według DEPLOY.

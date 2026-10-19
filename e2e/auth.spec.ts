@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openNavigation } from './navigation.js';
 
 test('registers, joins through an invitation, logs in a child and resets a password', async ({
   page,
@@ -24,9 +25,9 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await page.getByLabel('E-mail', { exact: true }).fill(`anna-${suffix}@example.com`);
     await page.getByLabel('Hasło', { exact: true }).fill('password123');
     await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
-    await expect(page.getByRole('navigation')).toBeVisible();
+    await expect(page.locator('.mantine-AppShell-header')).toBeVisible();
     await page.reload();
-    await expect(page.getByRole('navigation')).toBeVisible();
+    await expect(page.locator('.mantine-AppShell-header')).toBeVisible();
     await page.goto('/wiecej/rodzina');
     await page.getByRole('button', { name: 'Utwórz zaproszenie' }).click();
     const invitationLink = await page.getByLabel('Link', { exact: true }).inputValue();
@@ -39,7 +40,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await memberPage.getByRole('textbox', { name: /E-mail/ }).fill(`piotr-${suffix}@example.com`);
     await memberPage.getByLabel(/^Hasło/).fill('password123');
     await memberPage.getByRole('button', { name: 'Dołącz do rodziny' }).click();
-    await expect(memberPage.getByRole('navigation')).toBeVisible();
+    await expect(memberPage.locator('.mantine-AppShell-header')).toBeVisible();
     for (const current of [page, memberPage]) {
       await current.goto('/wiecej/rodzina');
       await expect(current.getByText(/^Anna(?: \(Ty\))?$/)).toBeVisible();
@@ -66,7 +67,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await childPage.getByRole('button', { name: 'Zaloguj się', exact: true }).click();
     await expect(childPage).toHaveURL(/\/zakupy$/);
     await childPage.reload();
-    await expect(childPage.getByRole('navigation')).toBeVisible();
+    await expect(childPage.locator('.mantine-AppShell-header')).toBeVisible();
     await childPage.goto('/wiecej/rodzina');
     await expect(childPage.getByRole('button', { name: 'Edytuj: Zosia' })).toBeVisible();
     await expect(childPage.getByRole('button', { name: 'Dodaj dziecko' })).toHaveCount(0);
@@ -75,6 +76,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await page.getByRole('button', { name: 'Wygeneruj link resetu hasła' }).click();
     const resetLink = await page.getByRole('dialog').getByLabel('Link', { exact: true }).inputValue();
     await memberPage.goto('/wiecej');
+    await openNavigation(memberPage);
     await memberPage.getByRole('button', { name: 'Wyloguj się' }).click();
     await expect(memberPage.getByRole('button', { name: 'Zaloguj się', exact: true })).toBeVisible();
     await memberPage.goto(resetLink);
@@ -88,7 +90,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await memberPage.getByLabel('E-mail', { exact: true }).fill(`piotr-${suffix}@example.com`);
     await memberPage.getByLabel('Hasło', { exact: true }).fill('newPassword123');
     await memberPage.getByRole('button', { name: 'Zaloguj się', exact: true }).click();
-    await expect(memberPage.getByRole('navigation')).toBeVisible();
+    await expect(memberPage.locator('.mantine-AppShell-header')).toBeVisible();
   } finally {
     await second.close();
     await childContext.close();

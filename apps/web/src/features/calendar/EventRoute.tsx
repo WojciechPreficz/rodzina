@@ -4,6 +4,7 @@ import { ProtectedRoute, useMe } from '../../auth.js';
 import { isAndroid } from '../../platform.js';
 import { OfflineReminder } from '../notifications/OfflineReminder.js';
 import { EventDetailsPage } from './EventDetailsPage.js';
+import { AndroidUpdateNotice } from '../updates/AndroidUpdates.js';
 
 export function EventRoute() {
   const { user, isLoading } = useMe();
@@ -11,6 +12,7 @@ export function EventRoute() {
   if (!user && isAndroid())
     return (
       <div className="auth-layout" style={{ maxWidth: 800, margin: 'auto', padding: 16 }}>
+        <AndroidUpdateNotice />
         <OfflineReminder />
       </div>
     );

@@ -1,51 +1,117 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { sanitizeNextPath } from '../api.js';
 import { LoginPage, RegisterPage } from './AuthPages.js';
 import { AppShell } from './AppShell.js';
 import { AuthProvider } from '../auth.js';
+import { addNavigationGuard } from '../nativeNavigation.js';
+
+function mockViewport(desktop: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: desktop && query === '(min-width: 48em)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
+function renderShell(path = '/') {
+  return render(
+    <MantineProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <AuthProvider>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="*" element={<span>Page content</span>} />
+            </Route>
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    </MantineProvider>,
+  );
+}
 
 describe('AppShell', () => {
+  beforeEach(() => {
+    mockViewport(true);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ user: { displayName: 'Anna', role: 'admin' }, family: { name: 'Test' } }),
+      }),
+    );
+  });
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  it('shows all four primary navigation destinations', () => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockImplementation((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    );
-
-    render(
-      <MantineProvider>
-        <MemoryRouter initialEntries={['/']}>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route index element={<span>Kalendarz</span>} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </MantineProvider>,
-    );
-
+  it('shows direct destinations and selects the calendar at the root URL', async () => {
+    renderShell();
     const navigation = screen.getByRole('navigation', { name: 'Nawigacja główna' });
-    expect(navigation).toHaveTextContent('Kalendarz');
-    expect(navigation).toHaveTextContent('Zakupy');
-    expect(navigation).toHaveTextContent('Obiady');
-    expect(navigation).toHaveTextContent('Więcej');
+    expect(
+      within(navigation)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Kalendarz', 'Zakupy', 'Obiady', 'Rodzina', 'Powiadomienia', 'Wersja aplikacji']);
+    expect(within(navigation).getByRole('link', { name: 'Kalendarz' })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByText('Anna · Test')).toBeInTheDocument();
+  });
+
+  it.each(['/kalendarz/wydarzenie/event-1', '/wiecej/rodzina', '/wiecej/powiadomienia'])(
+    'marks only the matching section active at %s',
+    async (path) => {
+      renderShell(path);
+      const links = screen
+        .getByRole('navigation', { name: 'Nawigacja główna' })
+        .querySelectorAll('[aria-current="page"]');
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveAttribute('href', path.startsWith('/kalendarz') ? '/kalendarz' : path);
+      await screen.findByText('Anna · Test');
+    },
+  );
+
+  it('opens mobile navigation and closes it after selecting a destination or pressing Escape', async () => {
+    mockViewport(false);
+    renderShell();
+    expect(screen.queryByRole('navigation', { name: 'Nawigacja główna' })).not.toBeInTheDocument();
+    const burger = screen.getByRole('button', { name: 'Otwórz menu' });
+    fireEvent.click(burger);
+    const dialog = await screen.findByRole('dialog', { name: 'Menu Rodziny' });
+    expect(burger).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(within(dialog).getByRole('link', { name: 'Rodzina' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(burger);
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Rodzina' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', bubbles: true });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('protects dirty forms before logging out and calls logout after approval', async () => {
+    renderShell();
+    await screen.findByText('Anna · Test');
+    const remove = addNavigationGuard(() => false);
+    fireEvent.click(screen.getByRole('button', { name: 'Wyloguj się' }));
+    expect(fetch).not.toHaveBeenCalledWith('/api/auth/logout', expect.anything());
+    remove();
+    fireEvent.click(screen.getByRole('button', { name: 'Wyloguj się' }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' })),
+    );
   });
 
   it('rejects invalid next values and validates login and registration forms', async () => {

@@ -103,7 +103,7 @@ export function installNativeNavigation(navigate: (path: string | number) => voi
         const dialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
         if (dialog) {
           if (!allowOtherForms(dialog)) return;
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
           return;
         }
         if (!allowNavigation() || !allowOtherForms(document)) return;

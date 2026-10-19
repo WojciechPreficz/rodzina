@@ -1,45 +1,12 @@
-import { Button, Card, Group, Stack, Text } from '@mantine/core';
-import { useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router';
-import { useMe } from '../auth.js';
+import { Card, Stack, Title } from '@mantine/core';
 import { labels } from '../i18n/pl.js';
 import { AppVersionCard } from '../features/updates/AndroidUpdates.js';
 
 export function MorePage() {
-  const { user, family, logout } = useMe();
-  const queryClient = useQueryClient();
-
   return (
     <Card withBorder radius="lg" p="lg">
       <Stack gap="lg">
-        <Text component="h2" size="xl" fw={700}>
-          {labels.more}
-        </Text>
-        {user ? (
-          <>
-            <Text>
-              {user.displayName} · {family?.name ?? labels.family}
-            </Text>
-            <Text c="dimmed">{labels.roles[user.role]}</Text>
-          </>
-        ) : null}
-        <Button component={Link} to="/wiecej/rodzina" variant="light">
-          {labels.family}
-        </Button>
-        <Button component={Link} to="/wiecej/powiadomienia" variant="light">
-          {labels.notificationsUi.title}
-        </Button>
-        <Group justify="flex-end">
-          <Button
-            color="red"
-            onClick={async () => {
-              await logout();
-              queryClient.clear();
-            }}
-          >
-            {labels.logout}
-          </Button>
-        </Group>
+        <Title order={2}>{labels.androidUpdates.title}</Title>
         <AppVersionCard />
       </Stack>
     </Card>
