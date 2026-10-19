@@ -1,7 +1,12 @@
 # Wdrożenie i aktualizacje na cPanel vh.pl
 
-**Aktualizacja 19.10.2026:** wycofujemy PWA w krokach 4.8-4.10. Bieżące zasady
-przejścia ze starej instalacji opisuje sekcja „Wycofanie PWA” na końcu dokumentu.
+**Stan po kroku 4.10, 19.10.2026:** strona WWW + APK, bez PWA/Web Push.
+Aktualizację istniejącej aplikacji opisują sekcja 6, ręczny workflow Deploy
+z kroku 4.7 i procedura wycofania PWA na końcu dokumentu. Sekcje 1, 3 i 4
+zachowują instrukcję pierwszego uruchomienia; nie powtarzaj jej dla istniejącej rodziny.
+Najpierw zatrzymaj stary cron Web Push i wykonaj backup sprzed migracji 0013.
+Pozostaje dzienny backup; przejściowego `/sw.js` i blokady manifestu nie wycofujemy.
+Wyniki lokalne są w DEVELOPMENT; prób telefonu i wdrożenia tego wydania nie potwierdzono.
 
 **Pierwsze wdrożenie wykonano po fazie 3; aplikacja działa pod https://rodzina.preficze.pl (potwierdzenie właściciela z 16.10.2026).** W planie jest to zapis historyczny z krokami D.1-D.4, bez numeru fazy. Dalsza kolejność to: faza 4 Android, 5 zakupy, 6 obiady, 7 zadania i 8 dokumenty. Funkcje rozwijamy i testujemy lokalnie, a serwer aktualizujemy sprawdzoną paczką release. Nie powtarzamy pierwszego wdrożenia ani zakładania istniejącej rodziny.
 
@@ -24,11 +29,19 @@ Lokalnie, w katalogu repozytorium, uruchom kolejno:
 ```powershell
 npm ci
 npm run lint
+npm run format:check
 npm run typecheck
 npm test
 npm run release
+npm run test:e2e
 npm run release:smoke
+npm run android:debug
 ```
+
+Po buildzie Androida uruchom w `android/` także `./gradlew testDebugUnitTest lintDebug`
+(Windows: `./gradlew.bat testDebugUnitTest lintDebug`). Playwright działa wyłącznie headless.
+Jeżeli aktualizujesz instalację sprzed 4.9, przed rozpakowaniem ZIP wykonaj procedurę
+wycofania Web Push na końcu dokumentu, łącznie z zatrzymaniem starego crona.
 
 `npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, start serwera i backup na tymczasowej bazie bez VAPID. Wgraj `release.zip` do katalogu `~/rodzina/` i rozpakuj go. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
 
@@ -140,13 +153,13 @@ Procedurę aktualizacji opisuje krok D.4 historycznego etapu pierwszego wdrożen
 
 ### Aktualizacja istniejącego serwera od fazy 4
 
-API/PWA i Android mają osobne artefakty i terminy publikacji:
+API/WWW i Android mają osobne artefakty. Ręczny Deploy publikuje oba; przy ręcznej aktualizacji ZIP publikację APK wykonaj osobno:
 
-| Artefakt              | Zawartość i sposób aktualizacji                                                                                                                          |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `release.zip`         | API, migracje i PWA; wgrywany do istniejącej aplikacji Node w `~/rodzina/`.                                                                              |
-| Podpisane release APK | Lokalny frontend i kod Androida; budowane na komputerze, publikowane osobno i instalowane na telefonie. Dystrybucja i aktualizator powstaną w kroku 4.6. |
-| `latest.json`         | Informacja o najnowszym APK; publikowana po wgraniu i sprawdzeniu tego APK, od kroku 4.6.                                                                |
+| Artefakt              | Zawartość i sposób aktualizacji                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `release.zip`         | API, migracje i stronę WWW; wgrywany do istniejącej aplikacji Node w `~/rodzina/`.                                                                        |
+| Podpisane release APK | Lokalny frontend i kod Androida; budowane na komputerze, publikowane osobno i instalowane na telefonie. Dystrybucja i aktualizator działają od kroku 4.6. |
+| `latest.json`         | Informacja o najnowszym APK; publikowana po wgraniu i sprawdzeniu tego APK, od kroku 4.6.                                                                 |
 
 1. Lokalnie wykonaj weryfikację i zbuduj ZIP według sekcji 2. Dla zmian wspólnego frontendu sprawdź także build Androida i właściwe scenariusze na telefonie. Sam `release:smoke` nie testuje APK.
 2. Zachowaj poprzedni ZIP i wykonaj backup produkcyjnej bazy jobem z sekcji 5. Zachowaj istniejącą konfigurację `.env`, bazę i cron backupu. Przy przejściu na 4.9 najpierw wykonaj procedurę wycofania Web Push na końcu dokumentu.
@@ -156,9 +169,9 @@ API/PWA i Android mają osobne artefakty i terminy publikacji:
 
 Powrót do poprzedniego ZIP wymaga zgodności ze schematem bazy po migracjach. Nie cofaj bazy automatycznie: odtworzenie backupu może usunąć dane zapisane od chwili jego wykonania. Wycofanie publikacji APK opisuje sekcja 7.5.
 
-Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy przypomnień są zapisywane i przeliczane przy zapisie wydarzeń; wysyłka będzie realizowana w fazie 3.
+Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy są zapisywane i przeliczane przy zapisie wydarzeń; przypomnienia dostarcza APK po synchronizacji harmonogramu.
 
-### Kalendarz i przypomnienia — stan po kroku 2.7
+### Kalendarz i przypomnienia — zapis historyczny kroku 2.7
 
 Formularz wydarzenia zapisuje przypomnienia wspólne (uczestnicy, dorośli, cała rodzina lub twórca).
 „Moje przypomnienia” w szczegółach zapisują „Tylko ja” przez `/api/reminders/mine`, również dla
@@ -173,6 +186,37 @@ kroku nie uruchomiono testów ani `release:smoke`; pełne zamknięcie kryteriów
 jeszcze weryfikacji opisanej w `DEVELOPMENT.md`.
 
 ## 7. Android — konfiguracja, publikacja APK i aktualizacje
+
+Bieżące budowanie: Node 22/24, JDK 21, SDK 36, `npm run android:debug`.
+Release: istniejący klucz poza repo, `android/version.properties`,
+`npm run android:release:interactive` albo `npm run android:release`.
+Dokładne polecenia, konfiguracja klucza i backup są w części „Krok 4.6” poniżej;
+automatyczne podpisywanie i publikowanie przy każdym ręcznym Deploy opisuje 4.7.
+Nie generuj ponownie istniejącego klucza dla aktualizacji.
+
+API używa dotychczasowej sesji: cookie HttpOnly/SameSite=Lax i kontrola Origin
+w przeglądarce, natywny transport RodzinaApi w APK. Nie dodawaj wyjątków CORS/CSRF.
+`RODZINA_ANDROID_API_ORIGIN` wybiera API podczas budowania APK; release wymaga
+`https://rodzina.preficze.pl`, a HTTP localhost jest dostępne tylko w debug.
+Zmiana wymaga ponownej kompilacji. Backend zachowuje zgodność ze starszym wspieranym APK.
+
+`RODZINA_ANDROID_DOWNLOAD_DIR` w `.env` API wskazuje trwały katalog poza
+aplikacją i danymi rodziny. Puste oznacza brak wydania (404 JSON, czytelna informacja w UI).
+`RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS` zawiera publiczne odciski App Links.
+APK jest dostępne przez HTTPS tej samej domeny bez sesji, jako
+`application/vnd.android.package-archive`, pod niezmiennym adresem z wersją.
+Najpierw wgraj i sprawdź APK, potem atomowo opublikuj `latest.json` z `no-store`.
+ZIP nie zmienia plików zainstalowanego APK ani trwałego katalogu pobierania.
+Na serwer nie trafiają JDK/SDK, klucz, hasła ani lokalna baza; nie potrzeba nowego crona.
+
+### Historyczny projekt publikacji z kroku 4.1 — zastąpiony implementacją 4.6-4.7
+
+Poniższy zamknięty zapis zachowuje dawny projekt i stan z 16.10.2026.
+Stwierdzenia o braku skryptu release, serwowania APK i utrzymywaniu PWA
+nie dotyczą obecnego wydania.
+
+<details>
+<summary>Archiwalne sekcje 7.1–7.5</summary>
 
 ### 7.1 Stan obecny i konfiguracja od kroku 4.1
 
@@ -290,11 +334,13 @@ nie obniża wersji już zainstalowanej na telefonie. Dla takich telefonów przyg
 poprawione APK z jeszcze wyższym `versionCode`, podpisane tym samym kluczem;
 nie wymagaj odinstalowania aplikacji ani usunięcia jej danych.
 
+</details>
+
 ### Synchronizacja harmonogramu — krok 4.4
 
 Zmiana wymaga nowego APK z pluginami Capacitor App 8.1.2 i Network 8.0.1
 (`npm run android:sync`, następnie build Androida). Zwykła aktualizacja paczki
-API/PWA nie aktualizuje lokalnych plików ani pluginów zainstalowanego APK.
+API/WWW nie aktualizuje lokalnych plików ani pluginów zainstalowanego APK.
 Brak nowych zmiennych środowiskowych, migracji i cronów; API harmonogramu
 pozostaje zgodne z krokiem 4.2. Zależności App/Network dotyczą Androida,
 nie wymagają kompilacji nowych zależności runtime na vh.pl.
@@ -303,7 +349,7 @@ APK pobiera zmiany po wznowieniu, odzyskaniu sieci i co 20 s w aktywnym
 interfejsie. Zamknięte APK nie pobiera zmian z serwera. Ekran powiadomień
 pokazuje ostatnią udaną synchronizację oraz zakres zabezpieczenia offline;
 zmiany na innym urządzeniu mogą pozostawić stary alarm do kolejnej synchronizacji.
-PWA zachowuje dotychczasowy Web Push. Procedura i niepotwierdzone testy telefonu
+Strona nie dostarcza powiadomień; definicje pozostają wspólne z APK. Procedura i niepotwierdzone testy telefonu
 są w `DEVELOPMENT.md`, w sekcji kroku 4.4.
 
 ## Android App Links — krok 4.5
@@ -337,9 +383,9 @@ nie aktualizuje APK. Nie dodano migracji, cronów ani zależności runtime serwe
 Na 17.10.2026 w ramach kroku 4.5 nie aktualizowano produkcji ani odcisków certyfikatów
 na domenie. Testy App Links na telefonie pozostają do wykonania według DEVELOPMENT.md.
 
-# Krok 4.6 — osobne wydania API/PWA oraz Androida
+# Krok 4.6 — osobne wydania API/WWW oraz Androida
 
-ZIP serwera aktualizuje API i PWA. Nie zmienia lokalnych plików frontendu w już
+ZIP serwera aktualizuje API i stronę WWW. Nie zmienia lokalnych plików frontendu w już
 zainstalowanym APK. APK stanowi odrębny plik wydania. Poniżej opisano procedurę
 lokalną; workflow Deploy z kroku 4.7 buduje i publikuje APK automatycznie przy każdej
 aktualizacji serwera.
@@ -363,7 +409,7 @@ keytool -genkeypair -v -keystore C:\Users\<user>\rodzina-signing\rodzina-release
 Hasła podaj interaktywnie, bez wklejania ich do czatu, polecenia ani repo. Zachowaj
 keystore, alias i hasła w bezpiecznym miejscu oraz drugą zaszyfrowaną kopię na
 niezależnym nośniku. Sprawdź odtworzenie kopii przez `keytool -list -v -keystore
-<kopia.jks>`. Nie kopiuj klucza na hosting ani do GitHub Actions. Odcisk certyfikatu
+<kopia.jks>`. Nie kopiuj klucza na hosting. Do GitHub Actions trafia wyłącznie jako sekret według kroku 4.7. Odcisk certyfikatu
 SHA-256 jest publiczny: wpisz go w `RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS`
 zgodnie z procedurą App Links z kroku 4.5.
 
@@ -443,8 +489,8 @@ CI w tym kroku sprawdza debug Androida, testy JVM i Android Lint, bez klucza rel
 
 Na stronie logowania lub w „Więcej” wybierz „Pobierz aplikację na Androida”, otwórz
 APK z pobranych plików, zezwól przeglądarce na instalowanie z tego źródła i zatwierdź
-instalację. To odrębne od instalowania PWA; przy wyborze APK wyłącz powiadomienia
-osobno zainstalowanej PWA na tym telefonie, by uniknąć podwójnych przypomnień.
+instalację. Nowe wydanie strony nie oferuje instalowania PWA ani Web Push.
+Starą ikonę PWA można ręcznie usunąć po sprawdzeniu APK.
 
 APK sprawdza wersję przy uruchomieniu/wznowieniu/powrocie sieci, maks. raz na 15 min.
 Ręcznie: „Więcej > Wersja aplikacji > Sprawdź aktualizacje”. „Aktualizuj” pobiera
@@ -464,7 +510,7 @@ zastępuje weryfikacji podpisu przez Androida. Źródła:
 
 ## Krok 4.7 — ręczna aktualizacja przez GitHub Actions
 
-Workflow **Deploy** aktualizuje istniejącą instalację API/PWA oraz przy każdym
+Workflow **Deploy** aktualizuje istniejącą instalację API/WWW oraz przy każdym
 uruchomieniu buduje, podpisuje i publikuje nową wersję APK. Nie trzeba ręcznie
 wgrywać pierwszego ani następnych APK. Uruchamia się tylko
 przez **Actions → Deploy → Run workflow**, z wyborem `main`. Push i pull request
@@ -621,7 +667,7 @@ nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
    Smoke tworzy i testuje `release.zip`; deploy nie buduje go ponownie.
    Następnie JDK 21/SDK 36 buduje podpisane APK z automatycznym numerem wersji.
    Sprawdzamy tożsamość, podpis i odcisk, wykonujemy testy JVM i Android Lint.
-   Frontend Androida trafia do `dist-android`, więc sprawdzony ZIP PWA się nie zmienia.
+   Frontend Androida trafia do `dist-android`, więc sprawdzony ZIP strony WWW się nie zmienia.
 2. Skrypt sprawdza zawartość ZIP-a, commit checkoutu i SHA-256. Przed zmianami
    pobiera aktualne metadane Androida oraz sprawdza SHA-256 opublikowanego APK,
    jeśli istnieje. Nieprawidłowe lub niedostępne wydanie przerywa deploy.
@@ -658,7 +704,7 @@ nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
    okresowo usuwa starsze paczki po ocenie okresu potrzebnego do odzyskiwania.
 7. Kopiowane są przygotowane zależności do docelowego `node_modules`, następnie
    wyłącznie pięć zarządzanych ścieżek. Nie usuwamy szeroko zawartości aplikacji;
-   stare assety pozostają dla otwartych kart PWA. Zachowane są `.env`, baza/WAL/SHM,
+   stare assety pozostają dla wcześniej otwartych kart. Zachowane są `.env`, baza/WAL/SHM,
    logi, backupy, `.htaccess`, konfiguracja cPanel, crony i trwałe pliki Androida.
    Zapis `tmp/restart.txt` restartuje Passengera. Migracje wykonuje aplikacja.
    Przy pierwszej publikacji przed restartem tworzymy trwały katalog APK i atomowo
@@ -731,10 +777,10 @@ rodziny i pobranie APK. Testu aktualizacji i alarmów na fizycznym telefonie
 nie zastępuje build. Nie powtarzamy tworzenia aplikacji, rodziny ani pierwszego
 wdrożenia. Pełna lista prób fazy 4 jest w `DEVELOPMENT.md`.
 
-## Wycofanie PWA — stan kroku 4.8 (19.10.2026)
+## Wycofanie PWA — procedura wydania 4.8-4.10 (19.10.2026)
 
-Aktualny zakres to zwykła strona WWW i APK. Poniższa dokumentacja starszych
-wydań zachowuje historyczne odniesienia do PWA. Przypomnienia w nowym interfejsie
+Aktualny zakres to zwykła strona WWW i APK. Oznaczone zapisy historyczne
+zachowują dawne wymagania PWA; nie są instrukcją wdrożenia obecnego wydania. Przypomnienia w nowym interfejsie
 są dostępne tylko w APK; strona nadal pozwala tworzyć i edytować ich definicje.
 
 - Paczka serwera zawiera przejściowy `/sw.js` bez obsługi push i fetch. Nadpisuje
@@ -808,3 +854,41 @@ Wznów backup. Cron Web Push można przywrócić wyłącznie po świadomym powro
 poprzedniego wydania i sprawdzeniu jego konfiguracji. Usuniętych subskrypcji nie
 odtworzy nowa paczka; stara PWA, która już wyrejestrowała workera, sama nie wróci
 do powiadomień. Nie obiecujemy odzyskania Web Push przez samo cofnięcie serwera.
+
+### Kontrola po wdrożeniu kroku 4.10
+
+Aktualizację serwera i publikację APK wykonuje właściciel na osobne polecenie.
+Lokalna implementacja nie oznacza uruchomienia Deploy ani zmiany produkcji.
+Przed pierwszym przejściem ze starej wersji obowiązuje procedura 4.9 powyżej,
+także dla workflow: wyłączony cron wysyłki, zakończone procesy i zachowana
+kopia sprzed 0013 poza rotacją. Backup dzienny pozostaje bez zmian.
+
+1. Sprawdź `/api/health`, 401 z `/api/auth/me` bez sesji oraz logowanie
+   w przeglądarce i poprzednim wspieranym APK. Sprawdź zapis/odczyt kalendarza,
+   zaproszenie/reset i odczyt harmonogramu. Nie kasuj kont ani danych rodziny.
+2. Sprawdź `/sw.js`: 200, JavaScript, `Cache-Control: no-store`,
+   skrypt wycofujący bez obsługi fetch/push. Zachowuj go w kolejnych ZIP,
+   również gdy nikt ostatnio nie korzystał z PWA. Nie zastępuj go 404 ani SPA.
+   `/manifest.webmanifest` ma zwracać 410 mimo starego pliku na dysku;
+   zweryfikuj również reguły cache/proxy hostingu, żeby nie zwracały dawnej kopii.
+3. W profilu z dawniej zainstalowaną PWA otwórz ją online, pozwól przeglądarce
+   zaktualizować workera, zamknij i otwórz ponownie. Pierwsze wejście może
+   jeszcze pokazać dawny interfejs z cache. Sprawdź nową stronę, zachowaną sesję
+   i kalendarz, brak rejestracji oraz wyłącznie usunięty precache Rodziny.
+   Nie czyść danych witryny, bo ukryłoby to błąd migracji. Ikonę usuwa użytkownik.
+4. W czystym profilu sprawdź brak rejestracji SW, manifestu i żądań
+   `/api/push/*`. Przy 390 i 1280 px ekran powiadomień ma wyjaśniać wymaganie
+   APK i oferować pobieranie, gdy jest opublikowane wydanie.
+5. Sprawdź MIME/sumę APK i `latest.json` z `no-store`, numer wydania,
+   aktualizację tym samym kluczem i zachowanie sesji/harmonogramu na telefonie.
+   Wykonaj próby offline, zamkniętego interfejsu i restartu z DEVELOPMENT.
+6. Zapisz commit, SHA-256 ZIP i APK, wersję APK, wynik migracji, czas kontroli
+   oraz wynik backupu/logów. Wyniki telefonu zapisuj z modelem i opóźnieniem.
+   Brak potwierdzenia pozostaw jako „niewykonane”; historyczne udane wdrożenie
+   z 18.10 nie potwierdza wydania po wycofaniu PWA.
+
+Powrót po usunięciu tabeli subskrypcji wymaga zgodnej bazy i paczki według 4.9;
+nie przywracamy automatycznie bazy ani Web Push. Nie cofaj numeru APK:
+poprawione wydanie podpisz tym samym kluczem z wyższym `versionCode`.
+Nie dodano konfiguracji API, migracji, zależności runtime, crona ani procesu w tle
+w kroku 4.10; obowiązują istniejące `.env.example`, backup i ochrona danych.

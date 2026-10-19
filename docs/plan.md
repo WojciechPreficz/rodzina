@@ -27,8 +27,8 @@ todos:
     content: "Krok 4.9: usunięcie backendu Web Push, VAPID, joba i subskrypcji; zachowanie harmonogramu APK i backupu"
     status: completed
   - id: step4-10
-    content: "Krok 4.10: końcowa regresja strony i APK, dokumentacja oraz procedura wdrożenia bez PWA"
-    status: pending
+    content: "Krok 4.10: lokalna regresja strony i APK, dokumentacja oraz procedura wdrożenia bez PWA; próby telefonu i produkcji osobno"
+    status: completed
   - id: phase5
     content: "Faza 5: współdzielona lista zakupów (z obsługą słabego zasięgu)"
     status: pending
@@ -70,7 +70,7 @@ Każda faza, która to dotyczy, musi:
 - przejść `npm run release:smoke`: zip jest rozpakowywany do katalogu tymczasowego, instalowane są zależności produkcyjne, startuje `server.cjs` z testowym `.env`, a skrypt sprawdza `/api/health` i serwowanie `index.html`;
 - nie zakładać niczego, czego nie ma na cPanel: brak stałego procesu w tle, brak WebSocketów, brak Dockera, brak Redisa.
 
-Od fazy 4 zmiany wspólnego frontendu sprawdzamy także w APK. Paczka `release.zip` aktualizuje serwer i PWA; APK jest budowane i podpisywane osobno. Zależności Androida wymagają lokalnego SDK/JDK/Gradle, nie kompilacji na vh.pl. Backend zachowuje zgodność z poprzednią wspieraną wersją APK. Sekrety podpisywania nie trafiają do repo ani do paczki serwerowej. Kryteria alarmów offline i testy na telefonie opisuje faza 4; `release:smoke` nadal sprawdza wyłącznie paczkę serwera.
+Od fazy 4 zmiany wspólnego frontendu sprawdzamy także w APK. Paczka `release.zip` aktualizuje serwer i stronę WWW; APK jest budowane i podpisywane osobno. Ręczny workflow Deploy publikuje oba artefakty, a użytkownik zatwierdza aktualizację na telefonie. Zależności Androida wymagają lokalnego SDK/JDK/Gradle, nie kompilacji na vh.pl. Backend zachowuje zgodność z poprzednią wspieraną wersją APK. Sekrety podpisywania nie trafiają do repo ani do paczki serwerowej. Kryteria alarmów offline i testy na telefonie opisuje faza 4; `release:smoke` nadal sprawdza wyłącznie paczkę serwera. Przejściowy `/sw.js` pozostaje dostępny z `no-store` dla dawnych instalacji, a `/manifest.webmanifest` zwraca 410 także po deployu nakładkowym.
 
 ### Szablon polecenia dla agenta
 
@@ -102,7 +102,9 @@ Dla fazy 0 (bez kroków) polecenie brzmi: "Zrealizuj wyłącznie Fazę 0", a na 
 
 ### Testowanie na Androidzie lokalnie (bez serwera)
 
-Poniższa procedura dotyczy PWA. Dla APK od fazy 4 używamy Android SDK/ADB i debug APK z lokalnymi plikami frontendu oraz API osiągalnym przez konfigurację deweloperską. Produkcyjne APK łączy się wyłącznie przez HTTPS z rodzina.preficze.pl. Testy alarmów wykonujemy także poza sesją debugowania, z wyłączoną siecią i po restarcie; wyników PWA nie przenosimy automatycznie na APK.
+Dla APK używamy Android SDK/ADB i debug APK z lokalnymi plikami frontendu oraz API osiągalnym przez konfigurację deweloperską. Produkcyjne APK łączy się wyłącznie przez HTTPS z rodzina.preficze.pl. Testy alarmów wykonujemy także poza sesją debugowania, z wyłączoną siecią i po restarcie; wyników przeglądarki nie przenosimy automatycznie na APK. Bieżące polecenia i checklistę zawiera `docs/DEVELOPMENT.md`.
+
+**Zapis historyczny testowania PWA (fazy 0-3):** poniższe instrukcje do następnego nagłówka nie dotyczą aktualnego wydania. PWA i Web Push są wycofane; przekierowanie portów służy dziś tylko testowaniu zwykłej strony.
 
 Service worker, instalacja PWA i push wymagają bezpiecznego kontekstu, czyli HTTPS albo `localhost`. Lokalnie używamy **przekierowania portów w Chrome**:
 
@@ -114,7 +116,9 @@ Telefon traktuje tę stronę jak `localhost`, więc da się zainstalować PWA i 
 
 ### Testowanie lokalnie na komputerze (bez telefonu)
 
-Aplikację da się w całości uruchomić i testować na komputerze. `localhost` jest bezpiecznym kontekstem, więc w Chrome na desktopie działają service worker, instalacja PWA i push tak samo jak na telefonie. Komputer nie zastępuje jednak końcowej weryfikacji na Androidzie (platforma docelowa), tylko przyspiesza codzienną pracę.
+Aplikację uruchamiamy przez `npm run dev` (5173) albo `npm run build` i `npm start` (3000); oba tryby używają API na 3000, więc nie działają jednocześnie. Logowanie, kalendarz, zaproszenia/reset, pobieranie APK i migrację starej PWA sprawdzamy w Chromium headless przy 390 i 1280 px. Nowa wizyta nie rejestruje SW, nie pobiera manifestu ani nie wywołuje `/api/push/*`. Testy adaptera i atrapy mostka nie zastępują telefonu ani instalatora Androida.
+
+**Zapis historyczny testowania PWA (fazy 0-3):** poniższa tabela i punkty do sekcji 2 opisują poprzednie wydania. Usunięte polecenia Web Push nie obowiązują.
 
 | Tryb | Komenda i adres | Do czego |
 | --- | --- | --- |
@@ -141,20 +145,20 @@ Oba tryby używają portu API 3000, więc nie uruchamiaj ich jednocześnie.
 - **Licencja:** dotychczasowa deklaracja MIT pozostaje bez zmian; nie planujemy publikacji projektu ani osobnej fazy wydania open source.
 - **Runtime:** Node 24 . Node 20 nie jest już wspierany (koniec wsparcia: kwiecień 2026). W etapie pierwszego wdrożenia wybieramy najwyższą z tych wersji dostępną w cPanel - obecnie 24
 - **Monorepo:** npm workspaces, bez Nx i bez Turborepo.
-- **Skrypty wieloplatformowe (Windows, macOS, Linux):** w `package.json` nie używamy składni powłoki specyficznej dla systemu (np. `VAR=wartość komenda`). Zmienne środowiskowe ustawia `cross-env`, a równoległe uruchamianie `concurrently` (obie jako devDependencies). Skrypty w `scripts/` to pliki `.mjs`, bez `bash`. Dotyczy to też `dev`, `dev:cron` i `release`.
-- **Frontend:** React 19, Vite, TypeScript (strict), React Router (tryb biblioteki), TanStack Query, Mantine (+ `@mantine/dates`, `@mantine/notifications`, `@mantine/form`), Schedule-X (`@schedule-x/react`) do widoku kalendarza, `vite-plugin-pwa` w trybie `injectManifest`.
-- **Backend:** Fastify, `fastify-type-provider-zod`, Drizzle ORM + SQLite, `@node-rs/argon2` (prebuilt, bez kompilacji), `web-push`, `rrule`, `date-fns` + `@date-fns/tz`, `@fastify/cookie`, `@fastify/rate-limit`, `@fastify/static`.
+- **Skrypty wieloplatformowe (Windows, macOS, Linux):** w `package.json` nie używamy składni powłoki specyficznej dla systemu (np. `VAR=wartość komenda`). Środowisko przekazują skrypty Node, a równoległe uruchamianie zapewnia `concurrently`. Skrypty w `scripts/` to pliki `.mjs`, bez `bash`. Dotyczy to też `dev`, `release` i backupu.
+- **Frontend:** React 19, Vite, TypeScript (strict), React Router (tryb biblioteki), TanStack Query, Mantine (+ `@mantine/dates`, `@mantine/notifications`, `@mantine/form`), Schedule-X (`@schedule-x/react`) do widoku kalendarza. Bez `vite-plugin-pwa`, Workbox i manifestu od 4.8; `legacy-sw.js` służy wyłącznie wycofaniu starych rejestracji i nie trafia do APK.
+- **Backend:** Fastify, `fastify-type-provider-zod`, Drizzle ORM + SQLite, `@node-rs/argon2` (prebuilt, bez kompilacji), `rrule`, `date-fns` + `@date-fns/tz`, `@fastify/cookie`, `@fastify/rate-limit`, `@fastify/static`. Bez `web-push`, VAPID i wysyłki przypomnień od 4.9.
 - **Sterownik SQLite:** domyślnie `better-sqlite3`. Cała zależność od sterownika siedzi wyłącznie w `apps/api/src/db/client.ts`, żeby w etapie pierwszego wdrożenia dało się go podmienić na `@libsql/client` w jednym pliku, gdyby `better-sqlite3` nie zainstalował się na serwerze.
 - **Wspólne typy:** `packages/shared` ze schematami zod. Front i API importują te same schematy.
 - **Synchronizacja:** bez WebSocketów. TanStack Query z `refetchOnWindowFocus`, `refetchInterval: 20000` na aktywnych widokach i optymistycznymi mutacjami. Konflikty rozstrzyga reguła last-write-wins.
-- **Android od fazy 4:** Capacitor, lokalne pliki wspólnego frontendu, zdalne API na vh.pl i systemowe alarmy lokalne. Wznowienie aplikacji i powrót sieci odświeżają dane oraz harmonogram. Brak gwarancji odświeżania przy zamkniętym APK; szczegóły i ograniczenia offline opisuje faza 4. Zasady uprawnień przy wysyłce z serwera nie oznaczają sprawdzenia online przy lokalnym alarmie.
+- **Android od fazy 4:** Capacitor, lokalne pliki wspólnego frontendu, zdalne API na vh.pl i systemowe alarmy lokalne. Wznowienie aplikacji i powrót sieci odświeżają dane oraz harmonogram. Brak gwarancji odświeżania przy zamkniętym APK; szczegóły i ograniczenia offline opisuje faza 4. Odczyt harmonogramu sprawdza uprawnienia na serwerze, a zapisany alarm offline nie wykonuje ponownej kontroli online.
 - **Testy:** Vitest (api, shared, web), Testing Library dla komponentów, Playwright (tylko headless) dla smoke e2e od fazy 1.
 - **Format daty i czasu:**
   - Momenty w czasie (`created_at`, `next_fire_at` itp.) to integer ms UTC.
   - Daty i godziny wydarzeń to lokalny czas ściany w strefie rodziny: `start_date` jako `YYYY-MM-DD` i `start_time` jako `HH:mm` lub null dla całodniowych.
   - Przeliczenie na UTC wyłącznie w `packages/shared/src/time.ts`.
 - **ID:** `crypto.randomUUID()` jako text.
-- **Przypomnienia są wspólne dla modułów.** Jedna tabela `reminders` i jeden job wysyłki. Źródło przypomnienia to dokładnie jedno z pól: `event_id`, `task_id` (od fazy 7) albo `document_id` (od fazy 8). Treść powiadomienia buduje funkcja per źródło (`buildReminderPayload`).
+- **Przypomnienia są wspólne dla modułów.** Jedna tabela `reminders` i jeden kontrakt `/api/reminders/schedule` dla APK. Źródło przypomnienia to dokładnie jedno z pól: `event_id`, `task_id` (od fazy 7) albo `document_id` (od fazy 8). Serwer wyznacza odbiorców i konkretne terminy; APK zapisuje alarmy systemowe. Treść ma bezwzględną datę, a przyszłe prywatne zadania wyłącznie ogólny komunikat. Nie przywracamy joba wysyłki.
 - **Odbiorcy przypomnień (`audience`)**, z jedną funkcją `resolveRecipients(reminder, source)` w API:
   - `participants`: uczestnicy wydarzenia. Gdy wydarzenie nie ma uczestników, przypomnienie trafia do twórcy. Dotyczy tylko wydarzeń.
   - `family`: wszyscy domownicy, łącznie z dziećmi.
@@ -166,8 +170,8 @@ Oba tryby używają portu API 3000, więc nie uruchamiaj ich jednocześnie.
   - wydarzenia: `participants`, `family`, `adults`, `owner`, `user`;
   - zadania: `owner`, `list_members`, `user`. **Nigdy `family` ani `adults`**, bo listy zadań mogą być prywatne;
   - dokumenty: `family`, `adults`, `owner`, `user`.
-- **Kontrola dostępu przy wysyłce z serwera.** `resolveRecipients` zawsze odfiltrowuje osoby, które w chwili wysyłki nie widzą źródła. Przykład: członek, który opuścił listę zadań, przestaje dostawać jej przypomnienia, także te "tylko ja".
-- **Awaryjny odbiorca.** Jeśli po odfiltrowaniu lista odbiorców jest pusta (np. twórca albo uczestnicy zostali usunięci), przypomnienie trafia do `adults`. Wyjątek stanowią zadania: przy pustej liście odbiorców job tylko zapisuje to w logu i niczego nie wysyła.
+- **Kontrola dostępu przy odczycie harmonogramu.** `resolveRecipients` odfiltrowuje osoby, które w chwili synchronizacji nie widzą źródła. Członek, który opuścił listę zadań, nie otrzyma jej wpisów, także "tylko ja"; udana synchronizacja anuluje wcześniejsze alarmy. Telefon offline nie pozna cofnięcia dostępu, dlatego prywatne zadania mają ogólny payload i wymagają autoryzacji online przy otwarciu.
+- **Awaryjny odbiorca.** Jeśli po odfiltrowaniu lista odbiorców jest pusta (np. twórca albo uczestnicy zostali usunięci), przypomnienie trafia do `adults`. Wyjątek stanowią zadania: pusta lista odbiorców oznacza brak wpisu w harmonogramie, bez awaryjnego `adults`.
 - **Przypomnienia wspólne i osobiste:**
   - Wspólne, czyli z `audience` innym niż `user`, są częścią edycji źródła i zapisuje je ten, kto ma prawo edytować źródło.
   - Osobiste (`audience=user`) mają osobne endpointy (faza 2) i może je ustawić każdy, kto widzi źródło, ale tylko dla siebie.
@@ -182,11 +186,11 @@ Oba tryby używają portu API 3000, więc nie uruchamiaj ich jednocześnie.
   - Usunięcie domownika usuwa jego sesje, subskrypcje push, członkostwa w listach zadań, przypomnienia z `audience=user` wskazujące na niego i jego prywatne listy zadań. Listy udostępnione przechodzą na pierwszego członka z ustawieniem `is_default=false`, a gdy członków brak, są usuwane.
   - Przy usuwanym domowniku jego przypisania do zadań i bycie posiadaczem dokumentu zmieniają się na `null`, a jego udział w wydarzeniach jest usuwany.
   - Treści, które utworzył (`created_by`), zostają, a w UI wyświetlają się jako "były domownik".
-  - **Klucze obce do `users`:** wszystkie kolumny wskazujące osobę, która coś zrobiła albo za coś odpowiada (`created_by` we wszystkich tabelach, `checked_by`, `done_by`, `assignee_id`, `holder_user_id`), są nullable z `ON DELETE SET NULL`. W UI `null` wyświetla się jako "były domownik". Kaskadowo (`ON DELETE CASCADE`) usuwane są tylko: `sessions`, `push_subscriptions`, `password_resets`, `event_participants`, `task_list_members` i `reminders` z `audience=user`. Listy zadań obsługuje reguła przeniesienia opisana wyżej, wykonywana w serwisie przed usunięciem użytkownika.
+  - **Klucze obce do `users`:** wszystkie kolumny wskazujące osobę, która coś zrobiła albo za coś odpowiada (`created_by` we wszystkich tabelach, `checked_by`, `done_by`, `assignee_id`, `holder_user_id`), są nullable z `ON DELETE SET NULL`. W UI `null` wyświetla się jako "były domownik". Kaskadowo (`ON DELETE CASCADE`) usuwane są tylko: `sessions`, `password_resets`, `event_participants`, `task_list_members` i `reminders` z `audience=user`. Listy zadań obsługuje reguła przeniesienia opisana wyżej, wykonywana w serwisie przed usunięciem użytkownika.
 
 ## 3. Ograniczenia hostingu i jak je obchodzimy
 
-- **Passenger usypia proces.** Brak schedulera w pamięci, wszystkie zadania okresowe idą przez **cron z cPanel**. Lokalnie job uruchamia się ręcznie przez `npm run job:reminders` albo w pętli przez `npm run dev:cron`.
+- **Passenger usypia proces.** Brak schedulera w pamięci; jedyny job okresowy to backup przez **cron z cPanel**. Lokalnie: `npm run job:backup` po buildzie. Przypomnienia realizuje APK z trwałego harmonogramu, bez crona wysyłki.
 - **Zmienne środowiskowe** ustawione w panelu aplikacji Node nie są widoczne dla crona. Dlatego cała konfiguracja jest w pliku `~/rodzina-data/.env`. Serwer wczytuje go przez `process.loadEnvFile(process.env.RODZINA_ENV_FILE ?? '<home>/rodzina-data/.env')` w `server.cjs`, a joby przez flagę `node --env-file=...`. Lokalnie używamy `apps/api/.env`.
 - **ESM pod Passengerem.** Plik startowy to `server.cjs` (CommonJS), który robi `import('./dist/server.js')`. Fastify nasłuchuje na `process.env.PORT ?? 3000`.
 - **Ścieżki w paczce release.** Wszystkie ścieżki do plików (frontend, migracje) są liczone względem katalogu `server.cjs`, a nie względem repo. Frontend w paczce leży w `public/` (zmienna `RODZINA_WEB_DIR`, domyślnie `./public`), a migracje w `drizzle/`. Lokalnie `server.cjs` leży w `apps/api/`, więc `apps/api/.env.example` zawiera `RODZINA_WEB_DIR=../web/dist`.
@@ -197,15 +201,10 @@ Oba tryby używają portu API 3000, więc nie uruchamiaj ich jednocześnie.
 
 ```mermaid
 flowchart LR
-  Phone["PWA na Androidzie"] -->|"HTTPS /api"| Api["Fastify via Passenger"]
+  Web["Strona WWW"] -->|"HTTPS /api"| Api["Fastify via Passenger"]
   Api --> Db[("SQLite WAL")]
-  Cron["cPanel cron */5"] --> Job["send-reminders.js"]
   CronDaily["cPanel cron daily"] --> Backup["backup-db.js"]
-  Job --> Db
   Backup --> Db
-  Job -->|"Web Push VAPID"| Fcm["FCM"]
-  Fcm --> SW["Service Worker"]
-  SW --> Phone
   Apk["APK Android / Capacitor"] -->|"HTTPS /api i harmonogram"| Api
   Apk --> Local["Trwały harmonogram / alarmy Androida"]
   Local -->|"Powiadomienie także offline"| Apk
@@ -234,7 +233,6 @@ rodzina/
   scripts/
     build-release.mjs       # cross-platform, tworzy release.zip
     smoke-release.mjs       # rozpakowuje zip, instaluje prod deps, startuje server.cjs, sprawdza health
-    generate-vapid.mjs
   packages/shared/src/
     schemas/                # zod: auth, events, reminders, shopping, meals, tasks, documents
     time.ts                 # strefy czasu, rozwijanie RRULE, liczenie przypomnień
@@ -251,13 +249,13 @@ rodzina/
       db/schema.ts, db/client.ts
       plugins/              # auth (sesja -> request.user), errors, static
       modules/<moduł>/      # routes.ts, service.ts, repository.ts, *.test.ts
-      jobs/send-reminders.ts, jobs/backup-db.ts
+      jobs/backup-db.ts
   apps/web/
     index.html
     vite.config.ts          # proxy /api -> :3000 w dev, changeOrigin: false
     public/icons/           # 192, 512, maskable
     src/
-      main.tsx, router.tsx, sw.ts
+      main.tsx, router.tsx, retireLegacyPwa.ts
       api/                  # klient fetch + hooki TanStack Query per moduł
       i18n/pl.ts            # wszystkie teksty UI w jednym obiekcie
       features/<moduł>/     # strony i komponenty
@@ -267,15 +265,14 @@ rodzina/
 ### Skrypty root (`package.json`)
 
 - `dev`: równolegle API (`tsx watch --env-file=apps/api/.env apps/api/src/server.ts`, port 3000) i Vite (port 5173 z proxy `/api`)
-- `start`: uruchamia zbudowaną aplikację produkcyjnie (`cross-env RODZINA_ENV_FILE=apps/api/.env node apps/api/server.cjs`, port 3000, API i frontend razem). Używa tego samego portu co API w `dev`, więc oba nie mogą działać jednocześnie, co trzeba opisać w `DEVELOPMENT.md`.
-- `dev:cron`: uruchamia joby co minutę lokalnie (symulacja crona)
-- `job:reminders`, `job:backup`: jednorazowe uruchomienie joba
+- `start`: uruchamia zbudowaną aplikację produkcyjnie (Node wczytuje `apps/api/.env` i uruchamia `apps/api/server.cjs` w trybie produkcyjnym; port 3000, API i frontend razem). Używa tego samego portu co API w `dev`, więc oba nie mogą działać jednocześnie, co trzeba opisać w `DEVELOPMENT.md`.
+- `job:backup`: jednorazowe uruchomienie backupu po buildzie
 - `build`: shared, web, api (bundling przez `tsup`, natywne zależności jako external)
 - `lint`, `format`, `format:check`, `typecheck`, `test`, `test:e2e` (Playwright headless)
 - `db:generate` (drizzle-kit generate), `db:migrate`
 - `release`: `node scripts/build-release.mjs`
 - `release:smoke`: `node scripts/smoke-release.mjs`
-- `vapid:generate`
+- `android:debug`, `android:release`, `android:release:interactive`, `android:package`: osobne budowanie, podpisywanie i pakowanie APK; szczegóły w DEVELOPMENT i DEPLOY
 
 ### Konwencje API
 
@@ -300,7 +297,7 @@ rodzina/
 - `event_participants`: event_id, user_id
 - `event_exceptions`: id, event_id, original_date, is_cancelled, override_start_date, override_start_time, override_duration_minutes, override_title
 - `reminders`: id, family_id, event_id (nullable), task_id (nullable, faza 7), document_id (nullable, faza 8), type (`offset` | `absolute`), offset_value (integer, nullable), offset_unit (`minute` | `hour` | `day` | `week` | `month`, nullable), remind_at (nullable, ms UTC, tylko dla `absolute`), audience (`participants` | `family` | `adults` | `owner` | `user`, od fazy 7 także `list_members`; znaczenie w sekcji 2), user_id (nullable, wymagane przy `audience=user`), created_by, next_fire_at (nullable), last_sent_at (nullable). Walidacja w serwisie: dokładnie jedno ze źródeł jest ustawione.
-- `push_subscriptions`: id, user_id, endpoint (unique), p256dh, auth, user_agent, created_at, last_success_at
+- Historyczna `push_subscriptions` została usunięta migracją 0013; nie należy do bieżącego modelu. Historyczne pola `next_fire_at` i `last_sent_at` w `reminders` pozostają dla zgodności, ale nie sterują dostarczaniem alarmów APK.
 - `shopping_lists`: id, family_id, name, position, created_at
 - `shopping_items`: id, list_id, name, quantity (text), category, is_checked, checked_by, checked_at, position, created_by, created_at, updated_at
 - `shopping_history`: family_id, name_normalized, display_name, category, use_count, last_used_at (do podpowiedzi)
@@ -316,6 +313,8 @@ rodzina/
 ---
 
 ### Faza 0 - szkielet, jakość i paczka wdrożeniowa
+
+**Zapis historyczny faz 0-3:** wymagania instalacji PWA, SW, VAPID, Web Push i joba wysyłki w tych fazach są zastąpione krokami 4.8-4.10. Pozostałe reguły kont, kalendarza, odbiorców, czasu, backupu i wdrożenia obowiązują nadal.
 
 **Cel:** pusta aplikacja działa lokalnie w trybie dev i w trybie produkcyjnym z paczki release, jest instalowalna jako PWA na Androidzie (przez przekierowanie portów), a lokalny "cron" potrafi zapisać do SQLite.
 
@@ -716,13 +715,13 @@ rodzina/
 
 ### Faza 4 - Android przez Capacitor i przypomnienia offline
 
-**Cel:** ta sama aplikacja React działa jako APK na Androidzie oraz jako dotychczasowa PWA. API i SQLite pozostają na https://rodzina.preficze.pl. Telefon wyświetla wcześniej zaplanowane przypomnienie kalendarza bez internetu i przy zamkniętym interfejsie aplikacji. Fazę wykonujemy po już zakończonym pierwszym wdrożeniu, przed fazami 5-8. Etap wydania open source został usunięty; kroki 4.1-4.6 dotyczą Androida, a krok 4.7 dodaje ręcznie uruchamianą aktualizację istniejącego serwera przez GitHub Actions i domyka fazę.
+**Cel:** ta sama aplikacja React działa jako APK na Androidzie i zwykła strona WWW. API i SQLite pozostają na https://rodzina.preficze.pl. Telefon wyświetla wcześniej zaplanowane przypomnienie kalendarza bez internetu i przy zamkniętym interfejsie aplikacji. Fazę wykonujemy po pierwszym wdrożeniu, przed fazami 5-8. Kroki 4.1-4.7 dodają Androida i ręczny deploy GitHub Actions, a 4.8-4.10 wycofują PWA i Web Push. Implementacja lokalna nie potwierdza testów telefonu ani aktualizacji produkcji.
 
 **Architektura i granice:**
 
 - Jeden interfejs `apps/web`, wspólne typy i logika czasu w `packages/shared`, ten sam backend. Dodajemy konfigurację Capacitor i projekt `android/`, bez przepisywania UI na Kotlin lub React Native. Kod Kotlin/Java dopuszczamy dla funkcji systemowych, których plugin nie obsługuje wystarczająco.
 - Pliki frontendu są dołączone do APK. Produkcyjne APK nie polega na `server.url` ładującym zdalną stronę. Brak internetu nie uniemożliwia uruchomienia interfejsu i obsługi lokalnych alarmów. Fastify, serwerowa baza i cron nie są uruchamiane na telefonie.
-- PWA zachowuje manifest, service worker i Web Push VAPID. APK ma osobny adapter powiadomień lokalnych; nie rejestruje webowego service workera ani subskrypcji Web Push. Sam plugin lokalnych powiadomień nie dostarcza zdalnych wiadomości do zamkniętego APK.
+- Strona nie udostępnia manifestu, nie rejestruje SW ani Web Push. Przejściowy `/sw.js` wycofuje stare instalacje i pozostaje dostępny dla późno wracających użytkowników. APK ma adapter powiadomień lokalnych i nie zawiera tego workera. Lokalny alarm nie dostarcza zdalnych zmian do zamkniętego APK.
 - W fazie 4 nie dodajemy FCM ani stałej synchronizacji w tle. Telefon pobiera zmiany przy otwarciu, wznowieniu i odzyskaniu sieci oraz co 20 s przy aktywnej aplikacji. Zmiana na innym telefonie przy zamkniętym APK będzie uwzględniona dopiero przy następnej synchronizacji. Rozszerzenie o natywny push jest osobnym punktem roadmapy; nie jest warunkiem alarmu już zapisanego na urządzeniu.
 - Offline dotyczy lokalnego harmonogramu i minimalnych danych do obsługi przypomnienia. Nie wprowadzamy pełnej edycji kalendarza offline. Zapis wydarzenia nadal wymaga serwera. Zakupy otrzymują własną kolejkę offline dopiero w fazie 5.
 - Faza obejmuje wyłącznie istniejący kalendarz. Zadania i dokumenty rozbudują ten sam kontrakt oraz adapter w fazach 7 i 8; nie tworzymy teraz ich tabel, ekranów ani endpointów.
@@ -741,6 +740,8 @@ rodzina/
 - Alarmy muszą być odtwarzane z trwałych danych po restarcie telefonu, także bez internetu; jeśli plugin nie zapewnia tego zachowania, dodajemy natywną obsługę. Zmiana czasu, aktualizacja APK i powrót z ustawień wymagają ponownego uzgodnienia alarmów. Telefon wyłączony, wymuszone zatrzymanie aplikacji, cofnięte zgody i ograniczenia producenta nie dają bezwarunkowej gwarancji; UI i instrukcja opisują te sytuacje.
 
 **Kroki realizacji:**
+
+**Zapis historyczny kroków 4.1-4.7:** wzmianki o zachowaniu PWA, jej Web Push i publikowaniu API/PWA opisują wcześniejszy zakres. Obowiązują teraz strona WWW + APK oraz kryteria po kroku 4.10; wymagania Androida, sesji i zgodności API pozostają.
 
 #### Krok 4.1 - Projekt Android, połączenie z API i sesja
 
@@ -789,14 +790,14 @@ rodzina/
 
 **Kryteria akceptacji:**
 
-- APK zawiera lokalny frontend, współpracuje z istniejącym API i zachowuje sesję. PWA i desktop działają nadal; istniejąca produkcyjna baza nie jest zastępowana ani resetowana.
+- APK zawiera lokalny frontend, współpracuje z istniejącym API i zachowuje sesję. Strona działa na telefonie i desktopie; istniejąca produkcyjna baza nie jest zastępowana ani resetowana. Nowe wizyty nie rejestrują SW ani Web Push. Powrót ze starej PWA online wycofuje rejestrację i precache Rodziny, zachowując sesję i inne dane; manifest zwraca 410.
 - Scenariusz właściciela: przypomnienie ustawione na **18.10.2026, 15:00 Europe/Warsaw**, zapisane w systemowym harmonogramie danego telefonu przed 10:00. Od 10:00 telefon nie ma internetu. O 15:00 wyświetla alarm przy zablokowanym ekranie i zamkniętym interfejsie, przy udzielonych zgodach i włączonym telefonie. Sprawdzamy na rzeczywistym urządzeniu i zapisujemy opóźnienie; dla pojedynczego alarmu w tym teście akceptujemy maksymalnie 60 s. Krótszy test względny wolno wykonać wcześniej, ale nie raportujemy datowanego scenariusza jako przetestowanego przed jego wykonaniem.
 - Restart offline odtwarza alarmy; edycja, anulowanie i zmiana serii po synchronizacji nie zostawiają starych ani podwójnych alarmów. Brak internetu nie uruchamia webowego timera jako zamiennika alarmu systemowego.
 - Godziny pozostają zgodne ze strefą rodziny, także przy zmianie czasu i innej strefie telefonu. Bliskie terminy, limity i brak zgód są jawnie obsłużone; nie obiecujemy obejścia wymuszonego zatrzymania ani wyłączonego urządzenia.
 - Wylogowanie i zmiana użytkownika czyszczą lokalne dane i alarmy. API harmonogramu respektuje odbiorców oraz izolację rodzin. UI pokazuje czas ostatniej synchronizacji i zakres zabezpieczenia offline.
-- Alarm lokalny nie jest dublowany przez Web Push w APK. Osobno zainstalowana PWA ma niezależne zgody/subskrypcję; instrukcja zaleca wyłączenie jej powiadomień na telefonie, jeśli użytkownik wybiera APK, bez wyłączania subskrypcji innych urządzeń.
+- Nie ma Web Push w APK ani wysyłki z serwera. Migracja 0013 usuwa tylko subskrypcje; istniejące wydarzenia, przypomnienia, odbiorcy i sesje pozostają. Serwer i backup startują bez VAPID, także ze starymi dodatkowymi zmiennymi `.env`. Stary cron wysyłki zatrzymujemy przed aktualizacją; cron backupu zostaje. Ikonę starej PWA użytkownik może usunąć ręcznie.
 - Strona umożliwia pobranie najnowszego podpisanego APK. Zainstalowana aplikacja wykrywa nowsze wydanie i umożliwia jego pobranie oraz aktualizację przez systemowy instalator z potwierdzeniem użytkownika. Aktualizacja zachowuje sesję i harmonogram, pokazuje nowy numer wersji i nie dubluje alarmów. Brak sieci lub błąd sprawdzenia wersji nie blokuje aplikacji ani alarmów offline.
-- Serwer przechodzi `release:smoke`. Dokumentacja opisuje osobne publikowanie API/PWA oraz APK z metadanymi i odpowiada faktycznie sprawdzonemu zachowaniu, a niepotwierdzone testy są wymienione jawnie.
+- Serwer przechodzi `release:smoke`. Dokumentacja opisuje osobne artefakty API/WWW oraz APK z metadanymi, zachowanie przejściowego `/sw.js`, blokadę manifestu i bezpieczny powrót po migracji. Pełne kontrole, Playwright headless, build Androida, testy JVM i Android Lint przechodzą. Niepotwierdzone próby telefonu i produkcji są wymienione jawnie.
 - GitHub Actions aktualizuje istniejący serwer wyłącznie po ręcznym „Run workflow” z `main`, po poprawnej weryfikacji paczki. Push nie uruchamia deployu. Sprawdzone wdrożenie zachowuje dane, konfigurację i opublikowane APK, wykonuje backup, restart i kontrole HTTP; udokumentowano odzyskiwanie po awarii.
 
 **Poza zakresem:** wydanie open source, Docker/VPS, publikacja w Google Play, iOS, FCM i zdalne budzenie APK, pełna edycja kalendarza/zadań/dokumentów offline, implementacja modułów faz 5-8, gwarancja wykrycia zmiany uprawnień bez połączenia z serwerem.
@@ -825,6 +826,8 @@ rodzina/
 - **Gotowe, gdy:** serwer i backup startują bez VAPID; nowa i istniejąca baza przechodzą migracje bez utraty wydarzeń, przypomnień i sesji. Testy potwierdzają zgodność harmonogramu/odbiorców i brak endpointów Web Push. DEPLOY opisuje zatrzymanie starego crona **przed** podmianą paczki, sprzątnięcie pozostałego pliku joba po nakładkowym deployu, backup i powrót do poprzedniej wersji. Stary `.env` z dodatkowymi zmiennymi nie blokuje serwera. Przechodzą standardowe kontrole, `release:smoke` i build Androida. Bez zmiany produkcji w ramach implementacji.
 
 #### Krok 4.10 - Regresja i dokumentacja końcowego wydania
+
+**Stan 19.10.2026:** implementacja i regresja lokalna są opisane w DEVELOPMENT, a procedura aktualizacji w DEPLOY. Właściciel zlecił wykonanie testów fizycznego telefonu dopiero po kroku 4.10. Ich brak oraz brak wdrożenia tego wydania nie są sukcesem; pełna akceptacja sprzętowa i produkcyjna fazy 4 pozostaje otwarta. Historyczny scenariusz 18.10 o 15:00 nadal nie ma potwierdzenia; nową próbę zapisujemy z jej rzeczywistą datą.
 
 - **Zakres:** aktualizacja bieżących wymagań PLAN, README, DEVELOPMENT i DEPLOY do strony + APK, zachowanie oznaczonych zapisów historycznych oraz zmiana wymagań przypomnień przyszłych modułów z joba na harmonogram APK. Regresja logowania, kalendarza, zaproszeń/resetu, pobierania i aktualizacji APK. Procedura wdrożenia zachowuje przejściowy `/sw.js` dla użytkowników wracających po dłuższej przerwie i blokuje stary manifest. Test powrotu ze starej PWA po wdrożeniu oraz testy APK na telefonie bez sieci, z zamkniętym interfejsem i po restarcie.
 - **Gotowe, gdy:** kryteria 4.8-4.9 i gotowości do deployu są spełnione; przechodzą pełne kontrole projektu, Playwright headless, `release:smoke`, build Androida i kontrole natywne. Wyniki telefonu i produkcji są potwierdzone osobno; ich brak nie oznacza sukcesu. Aktualizacja serwera i publikacja APK następują na polecenie właściciela według DEPLOY. Ten krok domyka rozszerzony zakres fazy 4.
@@ -979,7 +982,7 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
   - własne.
 - Domyślny odbiorca to `audience=owner`, czyli osoba przypisana, a gdy jej brak, właściciel listy (sekcja 2). Dla list udostępnionych można wybrać też "wszyscy na liście". To dodatkowa wartość `audience=list_members`, dopisywana do enuma w tej fazie. Dostępne jest też "tylko ja" przez `/api/reminders/mine` z `taskId`. Wartości `family` i `adults` są dla zadań odrzucane przez walidację (sekcja 2).
 - Odhaczenie zadania ustawia `next_fire_at = null` jego przypomnieniom, a odznaczenie przelicza je od nowa (sekcja 2).
-- `buildReminderPayload` dostaje gałąź dla zadań, np. "Dziś: Zapłacić za przedszkole".
+- Harmonogram APK dostaje gałąź dla zadań z ogólną treścią bez tytułu, notatki ani nazwy prywatnej listy. Szczegóły wymagają aktualnego dostępu online; payload nie zawiera względnego „dziś” zapisanego na wiele dni.
 
 **UI:**
 
@@ -1009,8 +1012,8 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
 
 **Integracja Androida:** rozszerzamy kontrakt `/api/reminders/schedule` z fazy 4 o zadania, filtrując widoczność i odbiorców na serwerze. Lokalny alarm prywatnego zadania ma ogólną treść, bez danych zadania/listy; szczegóły wymagają aktualnego dostępu online. Odhaczenie, usunięcie, zmiana terminu, przypisania i członkostwa aktualizują/anulują alarmy po synchronizacji. Cofnięcie dostępu na serwerze nie może odwołać alarmu na telefonie offline. Testy obejmują usunięcie dostępu, wylogowanie, synchronizację i brak ujawnienia treści w zapisanym payloadzie; nie deklarujemy natychmiastowej synchronizacji przy zamkniętym APK.
 
-- **Zakres:** dopisanie `list_members` do enuma `audience`. Walidacja `audience` per źródło (zadania: `owner`, `list_members`, `user`; `family` i `adults` dają 400). Przypomnienia w body tworzenia i edycji zadania oraz `/api/reminders/mine` z `taskId`. Odhaczenie ustawia `next_fire_at = null`, odznaczenie przelicza od nowa. `resolveRecipients` dla zadań (`owner` to osoba przypisana, a bez niej właściciel listy; filtr widoczności; pusta lista odbiorców oznacza brak wysyłki i wpis w logu, bez awaryjnego `adults`). `buildReminderPayload` dla zadań (np. "Dziś: Zapłacić za przedszkole") z adresem `taskUrl(listId, taskId)` w `shared` (trasa `/zadania/:listId?zadanie=:taskId` powstaje w kroku 7.4).
-- **Gotowe, gdy:** testy API i joba: przypomnienie trafia do osoby przypisanej, a bez niej do właściciela, po opuszczeniu listy przez członka jego przypomnienia "tylko ja" z tej listy nie są wysyłane, zadanie z prywatnej listy nigdy nie trafia do osoby spoza listy, `family` i `adults` dla zadania dają 400, odhaczenie czyści przypomnienie, a odznaczenie przywraca je z przeliczonym `next_fire_at`. (+ `release:smoke`.)
+- **Zakres:** dopisanie `list_members` do enuma `audience`. Walidacja per źródło (zadania: `owner`, `list_members`, `user`; `family` i `adults` dają 400). Przypomnienia w body zadania i `/api/reminders/mine` z `taskId`. Ukończone zadania są pomijane w snapshotach; odznaczenie przywraca przyszłe terminy. `resolveRecipients`: osoba przypisana albo właściciel, filtr widoczności, pusta lista bez awaryjnego `adults`. Ogólny payload APK z `taskUrl(listId, taskId)` w shared (trasa powstaje w 7.4). Historyczne `next_fire_at` przeliczamy zgodnie z sekcją 2, ale dostarczanie opiera się na snapshotach, bez joba.
+- **Gotowe, gdy:** testy API harmonogramu potwierdzają właściwego odbiorcę, brak wpisów po opuszczeniu listy i dla osób spoza prywatnej listy, odrzucenie `family`/`adults`, usunięcie alarmów po odhaczeniu i ponowne wyliczenie po odznaczeniu. Testy adaptera potwierdzają anulowanie po synchronizacji/wylogowaniu i ogólny payload bez prywatnych treści. (+ `release:smoke`.)
 
 #### Krok 7.4 - UI: zakładka Zadania
 
@@ -1030,10 +1033,11 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
   - Listy domyślnej nie da się usunąć.
   - Izolacja rodzin.
   - Odhaczenie zadania czyści przypomnienie, a odznaczenie przywraca je z przeliczonym `next_fire_at`.
-- Test joba:
+- Testy harmonogramu APK i adaptera:
   - przypomnienie dla zadania trafia do assignee, a gdy go nie ma, do właściciela;
-  - po opuszczeniu listy przez członka jego przypomnienia "tylko ja" z tej listy nie są wysyłane;
-  - zadanie z prywatnej listy nigdy nie trafia do osoby spoza listy, także przy pustej liście odbiorców (wtedy brak wysyłki i wpis w logu).
+  - po opuszczeniu listy przez członka jego wpisy, także „tylko ja”, znikają ze snapshotu i są anulowane po synchronizacji;
+  - prywatne zadanie nie trafia do osoby spoza listy, także przy pustej liście odbiorców (bez awaryjnego `adults`);
+  - payload nie ujawnia treści zadania/listy, wylogowanie usuwa dane i alarmy, a szczegóły wymagają dostępu online.
 - Test walidacji: `audience=family` i `audience=adults` dla zadania dają 400.
 - Manualnie: lista udostępniona drugiemu domownikowi pojawia się u niego po maksymalnie 20 s, a po cofnięciu udostępnienia znika.
 - Spełnione punkty z sekcji 1.1.
@@ -1083,7 +1087,7 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
   - filtr: osoby, pojazdy, wszystkie.
 - Formularz z wyborem typu, który dopasowuje pola (posiadacz albo pojazd) i podstawia domyślne przypomnienia z możliwością edycji.
 - Plakietka na pozycji "Więcej" w nawigacji, gdy jakiś dokument jest w stanie `expiring` albo `expired`.
-- `buildReminderPayload` dla dokumentów, np. "Za 30 dni wygasa: OC Skoda (15.11.2026)".
+- Payload harmonogramu APK dla dokumentów zawiera bezwzględną datę ważności, np. „OC Skoda — ważne do 15.11.2026”, bez względnego „za 30 dni” zapisanego z wyprzedzeniem.
 
 **Kroki realizacji:**
 
@@ -1094,10 +1098,10 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
 
 #### Krok 8.2 - Przypomnienia dokumentów i odnowienie
 
-**Integracja Androida:** rozszerzamy `/api/reminders/schedule` o dokumenty, z tymi samymi odbiorcami, offsetami i godziną 09:00 Europe/Warsaw co job serwerowy. „Odnowiono”, zmiana daty i usunięcie aktualizują lokalne alarmy po synchronizacji. Testy obejmują domyślne przypomnienia, odnowienie i odebranie wcześniej zapisanego alarmu offline na APK. Test `job --now` pozostaje testem wysyłki z serwera, a nie dowodem działania lokalnego alarmu.
+**Integracja Androida:** rozszerzamy `/api/reminders/schedule` o dokumenty z odbiorcami, offsetami i godziną 09:00 Europe/Warsaw według shared. „Odnowiono”, zmiana daty i usunięcie aktualizują lokalne alarmy po synchronizacji. Testy obejmują domyślne przypomnienia, odnowienie i odebranie wcześniej zapisanego alarmu offline na APK. Czas w testach API wstrzykujemy do obliczeń; nie przywracamy joba ani flagi `--now`.
 
-- **Zakres:** domyślne przypomnienia typu ustawiane przy `POST`, gdy nie podano `reminders`. Przypomnienia w body dokumentu i `/api/reminders/mine` z `documentId`. Walidacja `audience` (`family`, `adults`, `owner`, `user`; domyślnie `adults`). `POST /api/documents/:id/renew` z przeliczeniem `next_fire_at`. `resolveRecipients` dla dokumentów (`owner` to posiadacz, a bez niego twórca), `buildReminderPayload` (np. "Za 30 dni wygasa: OC Skoda (15.11.2026)") i `documentUrl` w `shared`. Czas wysyłki 09:00 lokalnie.
-- **Gotowe, gdy:** testy: domyślne przypomnienia per typ, `renew` przelicza `next_fire_at` (`offset` podąża, `absolute` z przeszłości jest nieaktualne), job wysyła przypomnienia dokumentów (domyślnie do dorosłych, `owner` z awaryjnym twórcą), działa flaga `--now`. (+ `release:smoke`.)
+- **Zakres:** domyślne przypomnienia przy `POST`, gdy nie podano `reminders`. Przypomnienia w body dokumentu i `/api/reminders/mine` z `documentId`. Walidacja `audience` (`family`, `adults`, `owner`, `user`; domyślnie `adults`). `POST /api/documents/:id/renew` przelicza terminy i `next_fire_at`. `resolveRecipients`: `owner` to posiadacz albo twórca, reguły awaryjne z sekcji 2. Payload APK z bezwzględną datą ważności i `documentUrl` w shared. Alarm dla daty bez godziny o 09:00 lokalnie.
+- **Gotowe, gdy:** testy domyślnych przypomnień per typ, odnowienia (`offset` podąża, przeszłe `absolute` nieaktywne), odbiorców i izolacji rodzin w `/api/reminders/schedule` przechodzą. Snapshot zawiera terminy UTC odpowiadające 09:00 Europe/Warsaw także przez zmianę czasu; adapter po synchronizacji zmienia/anuluje alarmy. (+ `release:smoke`.)
 
 #### Krok 8.3 - UI: lista i formularz dokumentów
 
@@ -1106,8 +1110,8 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
 
 #### Krok 8.4 - UI: odnowienie, plakietka i domknięcie fazy
 
-- **Zakres:** akcja "Odnowiono" (nowa data ważności). Plakietka na pozycji "Więcej" w nawigacji, gdy jakiś dokument jest w stanie `expiring` albo `expired`. Trasa szczegółów dokumentu (adres z push). Sekcja "Moje przypomnienia" ("tylko ja").
-- **Gotowe, gdy:** wszystkie kryteria akceptacji fazy 8, w tym ręcznie na Androidzie: dokument z terminem za 31 dni i przypomnieniem 30 dni przed generuje push o 09:00 następnego dnia (job z `--now=<ISO>`). Punkty z sekcji 1.1 i `release:smoke`.
+- **Zakres:** akcja "Odnowiono" (nowa data ważności). Plakietka na "Więcej", gdy dokument jest `expiring` lub `expired`. Trasa szczegółów z alarmu APK i sekcja "Moje przypomnienia" ("tylko ja").
+- **Gotowe, gdy:** wszystkie kryteria fazy 8, w tym ręcznie na fizycznym Androidzie: dokument ważny za 31 dni z przypomnieniem 30 dni przed, zsynchronizowany online, generuje zapisany alarm o 09:00 Europe/Warsaw następnego dnia bez sieci i z zamkniętym interfejsem. Osobna próba po restarcie i pierwszym odblokowaniu, zapis rzeczywistych godzin/opóźnień i otwarcie właściwego dokumentu. Punkty z sekcji 1.1 i `release:smoke`.
 
 **Kryteria akceptacji:**
 
@@ -1117,7 +1121,7 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
   - statusy na granicy progu `expiring` dla każdego typu i w dniu wygaśnięcia;
   - dziecko dostaje 403 na zapisie;
   - izolacja rodzin.
-- Manualnie na Androidzie (lokalnie): dokument z terminem za 31 dni i przypomnieniem 30 dni przed generuje push następnego dnia o 09:00. Przy teście z przestawionym czasem wystarczy wywołać job z `--now=<ISO>` (flaga z fazy 3).
+- Manualnie na fizycznym Androidzie: dokument ważny za 31 dni, przypomnienie 30 dni przed, zapis online i alarm następnego dnia o 09:00 Europe/Warsaw offline przy zamkniętym interfejsie; drugi test po restarcie i odblokowaniu. Zapisz faktyczne daty, godziny i opóźnienia. Test sztucznego czasu w API nie zastępuje tych prób; nie ma joba Web Push.
 - Spełnione punkty z sekcji 1.1.
 
 **Poza zakresem:** skany i zdjęcia dokumentów, numery dokumentów, karta zdrowia, kontakty (zostają w roadmapie).
@@ -1140,5 +1144,5 @@ Konkurencja: Cozi, FamilyWall, TimeTree, OurHome, Skylight, Picniic, Maple. Kole
 8. **Powiadomienia o zmianach** dokonanych przez innych domowników, z ustawieniami per użytkownik.
    Dla APK oznacza to osobny etap natywnego push FCM: rejestrację tokenów per urządzenie, konfigurację Firebase i wysyłkę z backendu oraz odświeżanie harmonogramu przy zamkniętym interfejsie. Potrzebna jest natywna obsługa wiadomości i trwała praca synchronizacyjna; sam callback JavaScript pluginu nie wystarcza po zakończeniu procesu. Należy też zaplanować ponowienia i deduplikację, bez obietnicy natychmiastowego dostarczenia w Doze lub bez internetu. Nie jest to część fazy 4.
 9. **Wydatki/budżet domowy** (FamilyWall).
-10. **Wsparcie iOS**: instrukcja dodania do ekranu początkowego, testy push na iOS 16.4+.
+10. **Wsparcie iOS**: osobny etap natywnej aplikacji, dystrybucji i lokalnych powiadomień; bez przywracania PWA/Web Push.
 

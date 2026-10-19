@@ -1,7 +1,115 @@
-# Praca lokalna
+# Praca lokalna — strona WWW i APK
 
-**Aktualizacja 19.10.2026:** kroki 4.8-4.10 wycofują PWA. Bieżące zasady i testy
-opisuje sekcja „Wycofanie PWA” na końcu dokumentu; wcześniejsze instrukcje PWA są historyczne.
+Aktualne zasady po kroku 4.10 (19.10.2026). Starsze przebiegi i instrukcje
+zachowano w części „Historia realizacji”; opisy PWA i usuniętych poleceń Web Push
+w tej części nie są instrukcją dla obecnego wydania.
+
+## Uruchomienie i konfiguracja
+
+Wymagane: Node.js 22 lub 24 i npm. Wykonaj `npm ci`, skopiuj
+`apps/api/.env.example` do `apps/api/.env` i uruchom `npm run dev`.
+Strona jest pod `http://localhost:5173`, API pod 3000. Wariant produkcyjny:
+`npm run build` i `npm start`, razem na 3000. Nie uruchamiaj obu trybów naraz.
+`RODZINA_PUBLIC_URL` musi wskazywać port używanego interfejsu, żeby linki
+zaproszeń/resetu prowadziły do tej samej aplikacji. Po zmianie shared uruchom dev ponownie.
+
+Nie potrzeba VAPID. Nie ma `dev:cron`, `job:reminders` ani `vapid:generate`.
+Backup po buildzie: `npm run job:backup`. Domyślny katalog i 14 kopii opisuje
+`apps/api/.env.example`. Nie używaj lokalnej bazy jako danych produkcyjnych.
+
+## Kontrole wydania
+
+```sh
+npm run lint
+npm run format:check
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+npm run release:smoke
+npm run android:debug
+```
+
+Pierwsza konfiguracja Playwright: `npx playwright install chromium`.
+Testy działają wyłącznie headless (390 i 1280 px), z tymczasową bazą na porcie 3417. Port musi być wolny; `apps/api/.env` i dane lokalnej rodziny nie są używane.
+Regresja obejmuje logowanie dorosłego i dziecka, sesję, kalendarz/deep link,
+zaproszenie/reset, stronę pobierania APK z wydaniem i bez niego oraz aktualizator.
+Atrapa mostka sprawdza UI i synchronizację, a nie działanie systemu Androida.
+
+Android wymaga JDK 21, SDK 36 i Gradle Wrapper 8.14.3. Skrypty wykrywają lokalne
+narzędzia w `.android-tools`; w innym środowisku ustaw `JAVA_HOME`,
+`ANDROID_HOME` i opcjonalnie `GRADLE_USER_HOME`. Po buildzie, w katalogu `android/`:
+
+```powershell
+./gradlew.bat testDebugUnitTest lintDebug
+```
+
+Linux/macOS: `./gradlew testDebugUnitTest lintDebug`. Testy JVM i Android Lint
+nie wymagają telefonu; `connectedDebugAndroidTest` wymaga urządzenia/emulatora
+i nie zastępuje prób odbioru alarmu na fizycznym telefonie.
+Wynik debug: `android/app/build/outputs/apk/debug/app-debug.apk`, lokalny
+frontend w `assets/public/index.html`, bez manifestu PWA, Workbox i `sw.js`.
+Podpisywanie release, backup klucza i metadane opisuje DEPLOY.
+Debug nie aktualizuje instalacji podpisanej kluczem release.
+
+## Powrót ze starej PWA
+
+Build strony zawiera przejściowy `/sw.js`: przejmuje dawną rejestrację,
+anuluje subskrypcję, usuwa wyłącznie precache Workbox Rodziny i wyrejestrowuje się.
+Nie ma obsługi fetch ani push. Nowy frontend również sprząta stare rejestracje;
+nowa wizyta nie rejestruje workera. Sesja, localStorage i inne cache pozostają.
+Manifest zwraca 410 także wtedy, gdy stary plik pozostał na dysku.
+Nie usuwamy przejściowego SW w kolejnych wydaniach: użytkownik może wrócić
+po dłuższej przerwie. Starą ikonę PWA usuwa ręcznie; nie czyść danych witryny.
+
+Test `e2e/retire-pwa.spec.ts` instaluje stary SW w odrębnym kontekście,
+zapisuje stary interfejs w cache, zamyka kartę i otwiera ją ponownie.
+Najpierw dowodzi wyświetlenia starego interfejsu, potem jawnie wywołuje cykl
+aktualizacji SW bez uruchamiania nowego Reacta. Po przejęciu i ponownym wejściu
+sprawdza nową stronę, sesję, kalendarz, brak rejestracji i zachowane inne dane.
+To lokalny odpowiednik aktualizacji serwera; nie jest próbą wdrożonej domeny.
+
+## Próby po kroku 4.10 — fizyczny telefon i produkcja
+
+Właściciel potwierdził 19.10.2026, że wykona próby telefonu po kroku 4.10.
+Nie wykonano ich w ramach lokalnej regresji i nie uznajemy ich za zaliczone.
+Użyj dwóch podpisanych wydań, tego samego pakietu i klucza, bez czyszczenia danych.
+
+1. Zapisz model, wersję Androida, wersje APK przed/po aktualizacji i datę próby.
+   Sprawdź logowanie dorosłego i dziecka, zapis kalendarza oraz zachowanie sesji
+   po zakończeniu procesu. Sprawdź link zaproszenia/resetu w APK i bez APK.
+2. Pobierz podpisane APK ze strony, a potem zaktualizuj starsze wydanie z APK.
+   Sprawdź wykrycie, zgodę na instalację, anulowanie, ponowienie i zatwierdzenie,
+   nowy numer wersji, zachowaną sesję i wcześniej zapisany harmonogram.
+3. Udziel zgód na powiadomienia i dokładne alarmy. Dodaj alarm co najmniej
+   10 minut w przyszłości, zsynchronizuj online i zapisz termin UTC/lokalny,
+   liczbę alarmów oraz zakres zabezpieczenia offline. Wyłącz Wi-Fi i transmisję
+   komórkową, zamknij interfejs przez ostatnie aplikacje i zablokuj ekran.
+   Nie otwieraj APK przed oceną wyniku. Zapisz faktyczny odbiór i opóźnienie
+   (dla pojedynczego alarmu wymagane ≤60 s).
+4. Powtórz z nowym terminem po restarcie nadal offline i pierwszym odblokowaniu,
+   bez otwierania APK. Powiadomienie ma otworzyć właściwe wystąpienie i zapisany
+   podgląd; aktualne dane wymagają sieci. Sprawdź również zmianę strefy telefonu.
+5. Wróć online. Z drugiego urządzenia zmień/anuluj wystąpienie i podziel serię;
+   po synchronizacji nie może być starych ani podwójnych alarmów. Sprawdź
+   wylogowanie offline i zmianę konta, które czyszczą alarmy oraz dane poprzedniej osoby.
+   Zamknięte APK nie synchronizuje zdalnych zmian w tle.
+6. Po zleconym wdrożeniu wykonaj kontrolę ze starej PWA zgodnie z DEPLOY:
+   powrót online, aktualizacja workera, zamknięcie/ponowne otwarcie, sesja,
+   kalendarz, brak starego precache i manifest 410. Zapisz commit wdrożenia.
+
+Historyczny scenariusz z 18.10.2026 o 15:00 pozostaje niepotwierdzony.
+Nowej próbie przypisz rzeczywistą datę; nie zaliczaj wstecz starego terminu.
+Zgłoszenie OPPO dla `1.0.0-deploy.3` pozostaje otwarte do potwierdzenia
+odbioru na aktualnym mechanizmie alarmów. Rejestracja systemowa, mocki i JVM
+nie dowodzą wyświetlenia na telefonie. Wymuszone zatrzymanie, wyłączenie telefonu,
+brak zgód i ograniczenia producenta ograniczają alarmy; pełnego kalendarza offline nie ma.
+
+# Historia realizacji — wcześniejsze instrukcje i wyniki
+
+Datowane zapisy poniżej pozostają dowodem stanu z danej chwili. Wymagania
+utrzymywania PWA/Web Push są wycofane przez 4.8-4.10; bieżące polecenia i próby
+znajdują się powyżej. Wyniki 4.10 są zapisane na końcu dokumentu.
 
 ## Krok 2.5 — kalendarz, wydarzenia jednorazowe i szczegóły
 
@@ -1028,7 +1136,7 @@ nie zawiera. Brak nowych zmiennych API, cronów, migracji, uprawnień i zależno
 Aktualna wersja webowa jest zwykłą stroną. Nie generuje manifestu, nie rejestruje
 SW i nie uruchamia klienta Web Push. Powiadomienia na stronie pokazują informację
 o APK i jego pobieranie; ekran i baner lokalnych alarmów APK działają nadal.
-Poniższe instrukcje PWA dotyczą starszych wydań i zostaną uporządkowane w 4.10.
+Historyczne instrukcje PWA dotyczą starszych wydań; bieżąca procedura jest na początku dokumentu.
 W stanie 4.8 backend, VAPID i job/crony Web Push pozostawały do kroku 4.9.
 
 Test migracji uruchamiaj na buildzie produkcyjnym: `npm run build`, następnie
@@ -1110,3 +1218,63 @@ Wyniki lokalne:
   fizycznego telefonu. To pozostaje oddzielne od zaliczonych kontroli lokalnych.
   Instrukcja w DEPLOY wymaga zatrzymania starego crona przed podmianą paczki,
   usunięcia resztek joba po wdrożeniu nakładkowym i kopii sprzed migracji do odzyskiwania.
+
+# Krok 4.10 — końcowa regresja lokalna, 19.10.2026
+
+Zaktualizowano bieżące wymagania PLAN, README i instrukcje do strony WWW + APK.
+Oznaczone zapisy historyczne pozostają; przyszłe zadania i dokumenty rozszerzają
+harmonogram APK zamiast przywracać job Web Push. Nie implementowano modułów faz 5–8.
+DEPLOY opisuje zachowanie przejściowego SW i 410 manifestu w kolejnych wydaniach,
+przejście z 4.9 oraz kontrolę powracającej PWA po rzeczywistym wdrożeniu.
+
+## Kontrole i warunki „Gotowe, gdy”
+
+| Kontrola                      | Wynik lokalny                                                                                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lint, format:check, typecheck | Poprawne. Lint: dwa dotychczasowe ostrzeżenia Fast Refresh w `auth.tsx`.                                                                                                                                                                                |
+| Vitest                        | 361/361, 46 plików. Sesje, odbiorcy, czas, harmonogram, migracja 0013, backup i aktualizator APK pozostają pokryte.                                                                                                                                     |
+| Build WWW/API                 | Poprawny; dotychczasowe ostrzeżenie o dużym pliku JS.                                                                                                                                                                                                   |
+| Playwright headless           | 24/24, 390 i 1280 px. Logowanie dorosłego/dziecka, sesja, kalendarz, linki, zaproszenie/reset, pobieranie APK, nawigacja i synchronizacja przez atrapę mostka.                                                                                          |
+| Powrót ze starej PWA          | Nowa regresja w obu szerokościach: stary shell z cache po zamknięciu/otwarciu, niezależna aktualizacja SW, nowa strona z sesją i kalendarzem, ponowne otwarcie bez rejestracji. Zachowane localStorage i cache spoza PWA.                               |
+| Kryteria 4.8                  | Testy nowej wizyty, brak Web Push i rejestracji, sprzątanie przez frontend i samodzielny SW, 410 manifestu. Obejrzano zrzuty strony pobierania i ekranu alarmów z atrapą przy 390/1280 px; tekst i przyciski mieszczą się, długa treść jest przewijana. |
+| Kryteria 4.9                  | Testy startu bez VAPID, akceptacji starego `.env`, braku endpointów Web Push, migracji świeżej i istniejącej bazy bez zmiany wydarzeń, sesji i snapshotu APK. Zachowane odbiorcy, definicje i cron backupu.                                             |
+| Release smoke                 | Poprawny ZIP (39 plików), start serwera i backup bez VAPID, health/SPA, brak wydania APK jako 404 JSON, integralna kopia bazy bez subskrypcji. Przejściowy SW z `no-store`, manifest 410, brak joba wysyłki.                                            |
+| Debug Androida                | `npm run android:debug`: BUILD SUCCESSFUL. Kontrola archiwum: lokalny `assets/public/index.html`, bez `sw.js`, manifestu PWA i Workbox.                                                                                                                 |
+
+Pierwszy Vitest w piaskownicy miał błędy plików tymczasowych i testu zależności;
+pełne powtórzenie poza nią przeszło. Pierwsze przebiegi e2e, smoke i Androida
+nie postępowały w ograniczonym środowisku i zostały przerwane; powtórzenia poza
+piaskownicą przeszły. To ograniczenia środowiska, nie zaliczone próby testowe.
+Nie zmieniono kodu alarmów, kontraktu API ani sposobu podpisywania.
+
+Kontrole natywne: `testDebugUnitTest lintDebug` zakończone `BUILD SUCCESSFUL`.
+Gradle potwierdził aktualność wyników 8 testów JVM (`UP-TO-DATE`: 5 testów
+rejestracji alarmów i 3 transferu aktualizacji, bez błędów); Android Lint przeszedł.
+Nie uruchamiano testów instrumentacyjnych na urządzeniu.
+
+## Kryteria akceptacji fazy 4 — aktualny stan po wycofaniu PWA
+
+| Kryterium                                                                              | Dowód i pozostała weryfikacja                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lokalny frontend APK, API, sesja, strona i migracja starej PWA                         | Build, testy API i 24 e2e przechodzą. Sesja po zakończeniu procesu APK i migracja rzeczywistej instalacji po wdrożeniu wymagają potwierdzenia.                                                |
+| Alarm datowany 18.10.2026, 15:00, zapis przed 10:00, offline od 10:00, ≤60 s           | Niepotwierdzony. Właściciel wykona nową próbę po 4.10 z rzeczywistą datą; nie zaliczamy starego scenariusza wstecz.                                                                           |
+| Restart offline, edycja/anulowanie/podział serii bez duplikatów                        | Regresja API, adaptera i synchronizacji poprawna. Odbiór po restarcie fizycznego telefonu pozostaje niewykonany.                                                                              |
+| Europe/Warsaw, DST, inna strefa telefonu, bliskie terminy, limity i zgody              | Automatyczne testy czasu, harmonogramu i adaptera przechodzą; system i ograniczenia producenta wymagają prób telefonu.                                                                        |
+| Wylogowanie/zmiana konta, izolacja odbiorców, ostatnia synchronizacja i zakres offline | Testy API, adaptera i UI przechodzą. Czyszczenie na rzeczywistym APK pozostaje do sprawdzenia.                                                                                                |
+| Brak Web Push, zachowane dane i backup                                                 | Migracja 0013, testy starego `.env` i brak endpointów oraz smoke przechodzą; produkcyjny cron i migrację potwierdzamy po zleconym wdrożeniu.                                                  |
+| Pobieranie i aktualizacja APK, sesja/harmonogram, błędy sieci                          | Testy walidacji metadanych/URL, wersji, pobrania, uszkodzonej sumy i UI przechodzą. Instalator, dwa podpisane wydania i zachowanie alarmów na telefonie niepotwierdzone.                      |
+| Smoke i osobne artefakty WWW/API oraz APK                                              | Lokalnie zaliczone; procedury publikacji, przejściowego SW, manifestu i powrotu po migracji opisane w DEPLOY.                                                                                 |
+| Ręczny Actions z main, backup/restart/HTTP i zachowanie danych/APK                     | Istniejące testy deployu i publikacji przechodzą. Ten krok nie uruchamiał workflow, nie aktualizował produkcji ani nie publikował nowego APK; wyników 18.10 nie przenosimy na obecne wydanie. |
+
+## Gotowość do deployu — sekcja 1.1 PLAN
+
+- Konfiguracja: bez nowych zmiennych, obowiązują `apps/api/.env.example` i konfiguracja Androida. VAPID jest zbędne, stare dodatkowe zmienne nie blokują startu.
+- Cron: jedynie istniejący dzienny backup. Stary cron przypomnień musi zakończyć pracę przed podmianą paczki; gotowa linia backupu jest w DEPLOY.
+- Migracje: brak nowych w 4.10; istniejące 0000–0013 są w repo i paczce. Migracja 0013 usuwa wyłącznie subskrypcje; nie przepisano historii migracji.
+- Runtime: brak nowych zależności i kompilacji na hostingu. JDK/SDK/Gradle służą tylko budowaniu Androida lokalnie lub w Actions.
+- Paczka: `release:smoke` poprawny; `release.zip` aktualizuje WWW/API, APK jest osobnym plikiem i wymaga zatwierdzenia instalacji.
+- Hosting: bez stałego procesu w tle, WebSocketów, Dockera i Redisa. Przejściowy SW pozostaje dla wracających użytkowników; manifest jest blokowany przez API także po nakładkowym deployu.
+
+Krok 4.10 realizuje zakres lokalny. Zgodnie z odpowiedzią właściciela próby
+fizycznego telefonu nastąpią później; pełna akceptacja sprzętowa fazy 4 pozostaje
+otwarta. Wdrożenie tego wydania i publikacja APK wymagają osobnego polecenia.
