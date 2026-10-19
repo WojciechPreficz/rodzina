@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Badge, Button, Group, Loader, Modal, MultiSelect, Stack, Text, Title } from '@mantine/core';
+import { Alert, Box, Button, Group, Loader, Modal, Stack, Text, Title } from '@mantine/core';
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react';
 import { createViewDay, createViewMonthAgenda, createViewWeek } from '@schedule-x/calendar';
 import { createEventsServicePlugin } from '@schedule-x/events-service';
@@ -56,22 +56,39 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
 
   return (
     <Stack>
-      <MultiSelect
-        label={text.showOnly}
-        placeholder={text.allMembers}
-        data={members.map((member) => ({ value: member.id, label: member.displayName }))}
-        value={selected}
-        onChange={setSelected}
-        clearable
-        searchable
-      />
-      <Group gap="xs">
-        {members.map((member) => (
-          <Badge key={member.id} color={member.color} variant="dot">
-            {member.displayName}
-          </Badge>
-        ))}
-      </Group>
+      <Stack gap="xs">
+        <Text size="sm" fw={500} id="calendar-member-filter-label">
+          {text.showOnly}
+        </Text>
+        <Group gap="xs" role="group" aria-labelledby="calendar-member-filter-label">
+          {members.map((member) => (
+            <Button
+              key={member.id}
+              type="button"
+              color={member.color}
+              variant={selected.includes(member.id) ? 'light' : 'default'}
+              radius="xl"
+              size="compact-sm"
+              mih={36}
+              aria-pressed={selected.includes(member.id)}
+              leftSection={<Box aria-hidden="true" w={8} h={8} bg={member.color} style={{ borderRadius: '50%' }} />}
+              rightSection={selected.includes(member.id) ? <span aria-hidden="true">✓</span> : undefined}
+              onClick={() =>
+                setSelected((current) =>
+                  current.includes(member.id) ? current.filter((id) => id !== member.id) : [...current, member.id],
+                )
+              }
+            >
+              {member.displayName}
+            </Button>
+          ))}
+        </Group>
+        {selected.length === 0 && (
+          <Text size="xs" c="dimmed">
+            {text.allMembers}
+          </Text>
+        )}
+      </Stack>
       {occurrences.isPending && <Loader aria-label={text.loading} />}
       {occurrences.error && (
         <Alert color="red" role="alert">
