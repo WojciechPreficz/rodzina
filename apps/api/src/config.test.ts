@@ -1,39 +1,30 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
-import { testVapidEnvironment } from './config.test-utils.js';
 
-describe('VAPID configuration', () => {
-  it('accepts matching raw P-256 keys and a contact', () => {
-    expect(loadConfig(testVapidEnvironment).RODZINA_VAPID_PUBLIC_KEY).toBe(
-      testVapidEnvironment.RODZINA_VAPID_PUBLIC_KEY,
-    );
-    expect(loadConfig({ ...testVapidEnvironment, RODZINA_VAPID_SUBJECT: 'https://example.com/contact' })).toBeDefined();
+describe('configuration without Web Push', () => {
+  it.each(['development', 'test', 'production'])('starts in %s without VAPID', (NODE_ENV) => {
+    expect(loadConfig({ NODE_ENV }).NODE_ENV).toBe(NODE_ENV);
   });
-  it('requires all three variables, also in test mode', () => {
-    for (const key of Object.keys(testVapidEnvironment)) {
-      expect(() => loadConfig({ NODE_ENV: 'test', ...testVapidEnvironment, [key]: undefined })).toThrow();
-    }
-  });
-  it.each([
-    { RODZINA_VAPID_PUBLIC_KEY: 'invalid' },
-    { RODZINA_VAPID_PRIVATE_KEY: Buffer.alloc(32).toString('base64url') },
-    { RODZINA_VAPID_PRIVATE_KEY: Buffer.alloc(32, 1).toString('base64url') },
-    { RODZINA_VAPID_SUBJECT: 'http://example.com' },
-    { RODZINA_VAPID_SUBJECT: 'mailto:invalid' },
-  ])('rejects invalid keys and contacts: %j', (override) => {
-    expect(() => loadConfig({ ...testVapidEnvironment, ...override })).toThrow();
+  it('ignores obsolete variables from an existing environment file, even invalid or empty ones', () => {
+    expect(
+      loadConfig({
+        NODE_ENV: 'production',
+        RODZINA_VAPID_PUBLIC_KEY: 'obsolete',
+        RODZINA_VAPID_PRIVATE_KEY: '',
+        RODZINA_VAPID_SUBJECT: 'invalid contact',
+        RODZINA_OLD_SETTING: 'ignored',
+      }),
+    ).toEqual(loadConfig({ NODE_ENV: 'production' }));
   });
 });
 
 describe('backup configuration', () => {
   it('defaults to the local data directory and accepts a custom destination', () => {
-    expect(loadConfig(testVapidEnvironment).RODZINA_BACKUP_DIR).toBe('./apps/api/data/backups');
-    expect(loadConfig({ ...testVapidEnvironment, RODZINA_BACKUP_DIR: '/data/backups' }).RODZINA_BACKUP_DIR).toBe(
-      '/data/backups',
-    );
+    expect(loadConfig({}).RODZINA_BACKUP_DIR).toBe('./apps/api/data/backups');
+    expect(loadConfig({ RODZINA_BACKUP_DIR: '/data/backups' }).RODZINA_BACKUP_DIR).toBe('/data/backups');
   });
   it('rejects an empty destination', () => {
-    expect(() => loadConfig({ ...testVapidEnvironment, RODZINA_BACKUP_DIR: '  ' })).toThrow();
+    expect(() => loadConfig({ RODZINA_BACKUP_DIR: '  ' })).toThrow();
   });
 });

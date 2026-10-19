@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
-import { loadTestConfig } from './config.test-utils.js';
+import { loadConfig } from './config.js';
 
 describe('native cookie transport with unchanged browser security', () => {
   let database: ReturnType<typeof createDatabase>;
@@ -19,9 +19,9 @@ describe('native cookie transport with unchanged browser security', () => {
   const cookieOf = (response: { headers: Record<string, unknown> }) =>
     String(response.headers['set-cookie']).split(';')[0]!;
   beforeEach(async () => {
-    database = createDatabase(loadTestConfig({ RODZINA_DATABASE_PATH: ':memory:' }));
+    database = createDatabase(loadConfig({ RODZINA_DATABASE_PATH: ':memory:' }));
     migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
-    app = await buildApp(loadTestConfig({ RODZINA_ALLOW_REGISTRATION: 'true' }), database);
+    app = await buildApp(loadConfig({ RODZINA_ALLOW_REGISTRATION: 'true' }), database);
   });
   afterEach(async () => {
     await app.close();

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { expect, it } from 'vitest';
-import { loadTestConfig as loadConfig } from '../../config.test-utils.js';
+import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 

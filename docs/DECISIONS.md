@@ -454,3 +454,25 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   Nie deklarujemy obejścia wymuszonego zatrzymania ani wszystkich blokad OPPO.
   Wybór mechanizmu jest poprawką implementacji, a nie potwierdzoną diagnozą
   opóźnienia na fizycznym urządzeniu. Wymagany pozostaje test nowego APK.
+
+## 19.10.2026 — usunięcie serwerowego Web Push, krok 4.9
+
+- Usuwamy moduł `/api/push/*`, adapter i job wysyłki, generator VAPID,
+  `dev:cron`, schematy subskrypcji w shared oraz zależności `web-push` i jego typy.
+  Nie zastępujemy ich nowym transportem ani procesem w tle. Przypomnienia
+  wyświetla APK na podstawie istniejącego API harmonogramu.
+- Migracja `0013_drop_web_push.sql` wykonuje wyłącznie `DROP TABLE push_subscriptions`.
+  Nie zmieniamy wcześniejszych migracji ani definicji
+  `reminders`, w tym `next_fire_at` i `last_sent_at`. Zachowujemy kontrakty
+  starszego wspieranego APK, obliczenia czasu oraz `resolveRecipients`.
+- Usuwamy budowanie względnej treści powiadomienia używane tylko przez Web Push.
+  Harmonogram zachowuje własną treść z bezwzględną datą, stabilne klucze i URL.
+  Test porównuje pełny snapshot i dane przed migracją oraz po ponownym otwarciu
+  istniejącej bazy; dotychczasowa sesja nadal autoryzuje harmonogram.
+- Konfiguracja Zod ignoruje dawne dodatkowe zmienne `.env`, również puste lub
+  niepoprawne VAPID. Backup i jego dzienny cron pozostają. Przed wdrożeniem
+  właściciel wyłącza cron Web Push, czeka na koniec aktywnego joba i zabezpiecza
+  kopię bazy sprzed migracji poza dzienną rotacją. Powrót starego backendu
+  wymaga zgodnej bazy i konfiguracji; sam poprzedni ZIP nie odtwarza tabeli.
+- To implementacja lokalna. Nie wykonuje wdrożenia ani testów fizycznego telefonu;
+  końcowa regresja i porządkowanie dokumentacji całego produktu należą do 4.10.

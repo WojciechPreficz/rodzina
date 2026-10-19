@@ -20,7 +20,6 @@
     "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm run build --workspace @rodzina/shared && tsx watch --env-file=apps/api/.env apps/api/src/server.ts",
     "dev:web": "npm run dev --workspace @rodzina/web",
-    "dev:cron": "node scripts/dev-cron.mjs",
     "start": "node --env-file=apps/api/.env --input-type=module -e \"process.env.NODE_ENV = 'production'; process.env.RODZINA_ENV_FILE = 'apps/api/.env'; await import('./apps/api/server.cjs')\"",
     "job:backup": "node --env-file=apps/api/.env apps/api/dist/jobs/backup-db.js",
     "build": "npm run build --workspace @rodzina/shared && npm run build --workspace @rodzina/web && npm run build --workspace @rodzina/api",
@@ -33,9 +32,7 @@
     "db:generate": "drizzle-kit generate --config apps/api/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config apps/api/drizzle.config.ts",
     "release": "npm run build && node scripts/build-release.mjs",
-    "release:smoke": "node scripts/build-release.mjs && node scripts/smoke-release.mjs",
-    "vapid:generate": "node scripts/generate-vapid.mjs",
-    "job:reminders": "node --env-file=apps/api/.env apps/api/dist/jobs/send-reminders.js"
+    "release:smoke": "node scripts/build-release.mjs && node scripts/smoke-release.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.3",

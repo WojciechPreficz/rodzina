@@ -17,7 +17,7 @@ gotowy ZIP i poprawny smoke nie oznaczają zaliczenia pełnej weryfikacji. Póź
 
 ## 2. Zbudowanie i wgranie paczki
 
-Przed instalacją zatrzymaj lokalną aplikację (`npm run dev`, `npm run dev:api`, `npm start`), `npm run dev:cron` i testy w trybie watch. W każdym terminalu, w którym działają, użyj `Ctrl+C` i poczekaj na zakończenie procesu.
+Przed instalacją zatrzymaj lokalną aplikację (`npm run dev`, `npm run dev:api`, `npm start`) i testy w trybie watch. W każdym terminalu, w którym działają, użyj `Ctrl+C` i poczekaj na zakończenie procesu.
 
 Lokalnie, w katalogu repozytorium, uruchom kolejno:
 
@@ -30,7 +30,7 @@ npm run release
 npm run release:smoke
 ```
 
-`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, start serwera i oba joby na tymczasowej bazie. Wgraj `release.zip` do katalogu `~/rodzina/` i rozpakuj go. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
+`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, start serwera i backup na tymczasowej bazie bez VAPID. Wgraj `release.zip` do katalogu `~/rodzina/` i rozpakuj go. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
 
 ### Windows: `npm ci` kończy się `EPERM ... unlink ... argon2.win32-x64-msvc.node`
 
@@ -63,9 +63,6 @@ RODZINA_BACKUP_DIR=/home/<user>/rodzina-data/backups
 RODZINA_WEB_DIR=./public
 RODZINA_PUBLIC_URL=https://rodzina.<domena>
 RODZINA_ALLOW_REGISTRATION=true
-RODZINA_VAPID_PUBLIC_KEY=<klucz publiczny z generatora>
-RODZINA_VAPID_PRIVATE_KEY=<klucz prywatny z tej samej pary>
-RODZINA_VAPID_SUBJECT=mailto:admin@twoja-domena.pl
 ```
 
 Konfigurację odczytuje `server.cjs` przez `RODZINA_ENV_FILE` albo domyślnie `/home/<user>/rodzina-data/.env`. Nie umieszczaj `.env` w paczce ani repozytorium. Sesje są losowymi tokenami przechowywanymi w bazie jako hash; nie potrzeba sekretu podpisującego cookie.
@@ -95,43 +92,15 @@ Oczekiwana odpowiedź zawiera `ok: true` oraz `dbOk: true`. Zweryfikuj także st
 
 Passenger może usypiać proces; nie uruchamiaj schedulera w pamięci. Cała konfiguracja crona jest niezależna od zmiennych środowiskowych aplikacji, dlatego każde polecenie joba jawnie wczytuje `~/rodzina-data/.env`.
 
-Po kroku 3.5 dostępne są dwa docelowe joby: przypomnienia co 5 minut i backup raz dziennie.
+Od kroku 4.9 pozostaje tylko backup raz dziennie. Przypomnienia realizuje harmonogram APK.
 Techniczny job heartbeat został usunięty; nie dodawaj jego wpisu do crona.
 
-### Wysyłka przypomnień — krok 3.2
+### Wycofana wysyłka Web Push — krok 4.9
 
-Przed uruchomieniem serwera i jobów wygeneruj `npm run vapid:generate`. Wklej obydwa klucze
-do `.env` i ustaw `RODZINA_VAPID_SUBJECT` na kontakt administratora (`mailto:` albo HTTPS).
-Trzy zmienne są wymagane; walidacja sprawdza długości, format i zgodność pary P-256.
-Klucz prywatny pozostaje wyłącznie w `.env`; zachowaj tę samą parę przy aktualizacjach.
-Zmiana pary wymaga ponownej subskrypcji urządzeń. Generator używa kryptografii Node.
-
-Nowa migracja `0012_gigantic_maelstrom.sql` dodaje `push_subscriptions` z unikalnym endpointem
-i usuwaniem kaskadowym po usunięciu użytkownika. Serwer uruchamia migracje przed startem.
-Job zakłada już zmigrowaną bazę. `web-push` oraz jego zależności są pakietami JavaScript;
-nie wymagają nowych kompilacji natywnych na serwerze i trafiają do zależności paczki release.
-
-Docelowy wpis crona przypomnień (konfiguracja pierwszego wdrożenia; przy aktualizacji sprawdź istniejący wpis, nie dodawaj duplikatu):
-
-```cron
-*/5 * * * * cd /home/<user>/rodzina && /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/send-reminders.js >> /home/<user>/rodzina-data/logs/reminders.log 2>&1
-```
-
-Zastąp `<user>` loginem hostingu i zweryfikuj ścieżkę Node w nodevenv. Wpis nie wymaga
-aktywnego procesu Passengera. Rezerwacja wszystkich należnych przypomnień i zapis kolejnych
-terminów odbywają się w jednej transakcji SQLite `BEGIN IMMEDIATE`, przed wysyłką HTTP.
-Job pomija spóźnienia ponad 2 godziny; dla offsetów od dat bez godziny (baza 09:00) ponad
-12 godzin. Graniczne 2 i 12 godzin są jeszcze wysyłane. Spóźnione są również rezerwowane,
-a kolejne terminy cyklu obliczane względem czasu joba, bez nadrabiania wszystkich zaległych.
-Odpowiedzi 404/410 usuwają nieważną subskrypcję. Sukces zapisuje `last_success_at`.
-Inne błędy pozostawiają subskrypcję, nie cofają rezerwacji i dają niezerowy kod zakończenia.
-Logi JSON trafiają do stdout bez kluczy, endpointów ani treści powiadomień.
-
-Rezerwacja oznacza jedną próbę wysyłki. Awaria po jej zatwierdzeniu lub błąd dostawcy może
-spowodować pominięcie powiadomienia; job nie ponawia go automatycznie. Ten kompromis chroni
-przed podwójnymi próbami przy równoległym cronie. Nie gwarantuje dostarczenia przez dostawcę.
-Krok 3.2 nie dodaje jeszcze API subskrypcji ani obsługi push w service workerze (krok 3.3).
-Smoke generuje tymczasową parę VAPID i uruchamia z paczki job na pustej bazie, bez wysyłki.
+Job `send-reminders.js`, endpointy `/api/push/*` i VAPID zostały usunięte.
+Przed aktualizacją starej instalacji usuń jej cron przypomnień i poczekaj na
+zakończenie aktywnego przebiegu według procedury na końcu dokumentu. Nie dodawaj
+nowego crona przypomnień. Istniejące zmienne `RODZINA_VAPID_*` są ignorowane.
 
 ### Backup SQLite — krok 3.5
 
@@ -162,8 +131,8 @@ usuń jej stare pliki `-wal` i `-shm`, a wybraną kopię umieść pod `RODZINA_D
 Po restarcie sprawdź `/api/health` i dane rodziny.
 
 Krok nie dodaje migracji ani zależności runtime. Istniejące migracje, w tym historyczna
-tabela `job_runs`, pozostają bez zmian. `release:smoke` uruchamia oba joby z paczki
-i sprawdza integralność kopii oraz obecność tabel przypomnień i subskrypcji.
+tabela `job_runs`, pozostają bez zmian. `release:smoke` uruchamia backup z paczki bez VAPID
+i sprawdza integralność kopii, obecność przypomnień i brak tabeli subskrypcji.
 
 ## 6. Aktualizacja
 
@@ -180,7 +149,7 @@ API/PWA i Android mają osobne artefakty i terminy publikacji:
 | `latest.json`         | Informacja o najnowszym APK; publikowana po wgraniu i sprawdzeniu tego APK, od kroku 4.6.                                                                |
 
 1. Lokalnie wykonaj weryfikację i zbuduj ZIP według sekcji 2. Dla zmian wspólnego frontendu sprawdź także build Androida i właściwe scenariusze na telefonie. Sam `release:smoke` nie testuje APK.
-2. Zachowaj poprzedni ZIP i wykonaj backup produkcyjnej bazy jobem z sekcji 5. Zachowaj istniejącą konfigurację `.env`, klucze VAPID, bazę i crony.
+2. Zachowaj poprzedni ZIP i wykonaj backup produkcyjnej bazy jobem z sekcji 5. Zachowaj istniejącą konfigurację `.env`, bazę i cron backupu. Przy przejściu na 4.9 najpierw wykonaj procedurę wycofania Web Push na końcu dokumentu.
 3. Wgraj i rozpakuj sprawdzony ZIP w istniejącym `~/rodzina/`, aktualizując `server.cjs`, `dist/`, `public/`, `drizzle/` i produkcyjny `package.json`. Nie zastępuj produkcyjnej bazy lokalną. Wykonaj **Run NPM Install** i restart przez `tmp/restart.txt`.
 4. Sprawdź `/api/health`, logowanie, odczyt i zapis kalendarza w przeglądarce oraz w poprzedniej wspieranej wersji APK. Nowy backend musi nadal obsługiwać telefony, które nie zainstalowały aktualizacji.
 5. Jeżeli wydanie wymaga nowego APK, opublikuj je dopiero po zgodnym API według sekcji 7. Nie uruchamiaj ponownie konfiguracji pierwszego wdrożenia ani rejestracji rodziny.
@@ -777,10 +746,65 @@ są dostępne tylko w APK; strona nadal pozwala tworzyć i edytować ich definic
 - Migracja przeglądarki zachowuje sesję, localStorage i dane innych cache.
   Użytkownik może ręcznie odinstalować starą ikonę PWA. Sprzątanie rejestracji
   następuje po wizycie online lub aktualizacji workera przez przeglądarkę.
-- **Do kroku 4.9 pozostają wymagane VAPID, backend Web Push i dotychczasowy cron.**
-  Nie usuwaj jeszcze ich konfiguracji. Stare instalacje, które nie połączyły się
-  z nową wersją, mogą nadal odbierać Web Push. Backup działa bez zmian.
+- Stan przejściowy 4.8 wymagał VAPID i crona Web Push. Od 4.9 są usunięte;
+  przed podmianą paczki obowiązuje poniższa procedura. Backup pozostaje.
 - Weryfikacja wydania: zwykłe logowanie i kalendarz w przeglądarce, strona
   powiadomień z instrukcją APK, brak nowej rejestracji SW i manifestu, migracja
   wcześniejszej rejestracji oraz lokalne alarmy w APK. Build Androida nie zawiera
   przejściowego SW. Wdrożenie produkcyjne i test telefonu potwierdzamy osobno.
+
+### Usunięcie serwerowego Web Push — krok 4.9
+
+Ta procedura dotyczy aktualizacji istniejącej instalacji, także przy ręcznym
+uruchomieniu workflow Deploy. Implementacja lokalna nie zmienia produkcji.
+
+1. **Przed podmianą jakichkolwiek plików paczki** usuń lub wyłącz w cPanel wpis
+   crona wywołujący `dist/jobs/send-reminders.js` (dotychczas co 5 minut).
+   Zatrzymaj również lokalne `dev:cron`, jeżeli działa. Poczekaj, aż aktywne
+   procesy wysyłki zakończą pracę; sama edycja crontab ich nie zatrzymuje.
+   Pozostaw dzienny cron `backup-db.js` z sekcji 5.
+2. Zachowaj poprzedni ZIP, konfigurację `.env` (w tym stare VAPID na potrzeby
+   ewentualnego powrotu) i informacje o cronach. Wykonaj backup **przed migracją**,
+   jeszcze jobem poprzedniej paczki:
+
+   ```sh
+   cd /home/<user>/rodzina
+   /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env dist/jobs/backup-db.js
+   ```
+
+   Sprawdź sukces i integralność kopii. Zachowaj jej dodatkową kopię poza
+   dzienną rotacją, np. `rodzina-before-4.9.db`, z dostępem tylko konta aplikacji.
+   Kolejny backup tego samego dnia zastępuje plik dzienny, więc nie może to być
+   jedyna kopia sprzed migracji. Przy wdrożeniu ręcznym zatrzymaj Passenger
+   na czas podmiany; backup i kopię wykonaj po zakończeniu aktywnych zapisów.
+
+3. Wgraj sprawdzony ZIP i zainstaluj jego zależności produkcyjne według sekcji 6
+   lub uruchom ręcznie Deploy. Nie zastępuj danych, `.env`, pobrań APK ani logów.
+   Przy **nakładkowym rozpakowaniu** usuń pozostałe stare pliki
+   `dist/jobs/send-reminders.js` i `dist/jobs/send-reminders.js.map`. Nie usuwaj
+   `backup-db.js`, całego katalogu jobów ani historycznych migracji.
+   Workflow wymienia katalog `dist` ze stagingu, więc nie zachowuje tych resztek.
+4. Po restarcie migracja `0013_drop_web_push.sql` usuwa wyłącznie
+   `push_subscriptions`. Wydarzenia, sesje, definicje przypomnień i ich pola
+   `next_fire_at` / `last_sent_at` zostają. Harmonogram APK jest odczytem
+   niezależnym od tych historycznych pól wysyłki. Nie modyfikuj dziennika migracji.
+   Serwer i backup nie wymagają VAPID; stare dodatkowe zmienne `.env` są ignorowane.
+   Można je usunąć z czynnej konfiguracji po zachowaniu kopii do odzyskiwania.
+5. Sprawdź health, dotychczasową sesję, kalendarz oraz odczyt
+   `/api/reminders/schedule` w starszym wspieranym APK. Uwierzytelnione żądania
+   do dawnych `/api/push/*` mają zwracać 404, bez klucza publicznego i wysyłki.
+   Uruchom nowy `backup-db.js` bez VAPID i sprawdź log oraz plik kopii. Przejściowy
+   `/sw.js`, 410 manifestu i istniejące alarmy Androida pozostają obsługiwane.
+
+**Powrót do poprzedniej wersji:** stare API Web Push wymaga usuniętej tabeli,
+więc samo przywrócenie ZIP po migracji 0013 nie wystarcza. Nie cofaj automatycznie
+bazy ani nie usuwaj wpisów migracji. Zatrzymaj Passenger, cron backupu i wszystkie
+procesy korzystające z bazy; zachowaj osobną kopię aktualnej bazy wraz z jej stanem
+WAL oraz `.env`. Oceń utratę zmian od kopii sprzed aktualizacji przed odtworzeniem.
+Przywróć poprzedni ZIP i zgodną kopię bazy sprzed 0013 według sekcji 5
+(bez starych plików `-wal` / `-shm` przy odtwarzanej bazie), przywróć wymagane
+stare VAPID i zależności, następnie uruchom API i sprawdź health oraz dane.
+Wznów backup. Cron Web Push można przywrócić wyłącznie po świadomym powrocie do
+poprzedniego wydania i sprawdzeniu jego konfiguracji. Usuniętych subskrypcji nie
+odtworzy nowa paczka; stara PWA, która już wyrejestrowała workera, sama nie wróci
+do powiadomień. Nie obiecujemy odzyskania Web Push przez samo cofnięcie serwera.

@@ -4,11 +4,11 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
-import { loadTestConfig } from './config.test-utils.js';
+import { loadConfig } from './config.js';
 
 it('serves public immutable APK and uncached validated metadata; missing/malformed releases never become SPA', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'rodzina-downloads-'));
-  const config = loadTestConfig({
+  const config = loadConfig({
     RODZINA_DATABASE_PATH: ':memory:',
     RODZINA_ANDROID_DOWNLOAD_DIR: dir,
     RODZINA_PUBLIC_URL: 'https://rodzina.preficze.pl',

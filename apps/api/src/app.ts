@@ -27,8 +27,6 @@ import type { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
 import { registerEventRoutes } from './modules/events/routes.js';
 import { registerReminderRoutes } from './modules/reminders/routes.js';
-import { registerPushRoutes } from './modules/push/routes.js';
-import { createPushSender, type PushSender } from './modules/push/sender.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 
 type Database = ReturnType<typeof createDatabase>;
@@ -233,11 +231,7 @@ function sendError(reply: FastifyReply, status: number, code: string, message: s
   return reply.code(status).send({ error: { code, message } });
 }
 
-export async function buildApp(
-  config: AppConfig,
-  database: Database,
-  options: { pushSender?: PushSender } = {},
-): Promise<FastifyInstance> {
+export async function buildApp(config: AppConfig, database: Database): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: true,
     logger:
@@ -1206,7 +1200,6 @@ export async function buildApp(
       : [];
   });
   registerReminderRoutes(app, database);
-  registerPushRoutes(app, database, config, options.pushSender ?? createPushSender(config));
 
   if (config.NODE_ENV === 'production') {
     // Overlay deployments may leave the historical manifest on disk.

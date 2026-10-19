@@ -30,13 +30,15 @@ Dodano testy komponentów i adaptera w `apps/web/src/features/calendar/`, test `
 npm ci
 ```
 
-Skopiuj `apps/api/.env.example` do `apps/api/.env`. Uruchom `npm run vapid:generate` i wklej
-wygenerowaną parę do `RODZINA_VAPID_PUBLIC_KEY` i `RODZINA_VAPID_PRIVATE_KEY`; ustaw też kontakt
-`RODZINA_VAPID_SUBJECT` (mailto lub HTTPS). Od kroku 3.2 są wymagane także lokalnie.
+Skopiuj `apps/api/.env.example` do `apps/api/.env`. Od kroku 4.9 VAPID nie jest
+wymagane; dodatkowe stare zmienne są ignorowane.
 `npm run dev` uruchamia Fastify na porcie 3000 i Vite na 5173. Otwórz `http://localhost:5173`;
 wywołanie `/api/health` przechodzi przez proxy Vite do API.
 
-### Job przypomnień — krok 3.2
+### Job przypomnień — zapis historyczny kroku 3.2
+
+Od kroku 4.9 poniższe polecenia i testy Web Push są usunięte. Przypomnienia
+sprawdzamy przez `/api/reminders/schedule` i alarmy APK; backup działa nadal.
 
 Uruchom najpierw serwer, aby wykonał migracje bazy. Po buildzie `npm run job:reminders`
 jednorazowo rezerwuje i wysyła należne przypomnienia. Możesz nadpisać czas bez przestawiania
@@ -1027,7 +1029,7 @@ Aktualna wersja webowa jest zwykłą stroną. Nie generuje manifestu, nie rejest
 SW i nie uruchamia klienta Web Push. Powiadomienia na stronie pokazują informację
 o APK i jego pobieranie; ekran i baner lokalnych alarmów APK działają nadal.
 Poniższe instrukcje PWA dotyczą starszych wydań i zostaną uporządkowane w 4.10.
-Backend, VAPID i job/crony Web Push pozostają do kroku 4.9.
+W stanie 4.8 backend, VAPID i job/crony Web Push pozostawały do kroku 4.9.
 
 Test migracji uruchamiaj na buildzie produkcyjnym: `npm run build`, następnie
 `npm run test:e2e -- e2e/retire-pwa.spec.ts e2e/notifications.spec.ts e2e/local-alarms.spec.ts`.
@@ -1071,3 +1073,40 @@ Nie czyść wszystkich danych witryny — nie jest to część migracji.
   zależności nie zostały podniesione. Bez nowych zmiennych API, migracji i cronów.
 - Bez wdrożenia, podpisania nowego wydania produkcyjnego lub testu fizycznego
   telefonu. Dotychczasowe niepotwierdzone próby alarmów pozostają niepotwierdzone.
+
+## Usunięcie serwerowego Web Push — krok 4.9 (19.10.2026)
+
+API nie rejestruje `/api/push/*`. Usunięto adapter i job wysyłki, `dev:cron`,
+`job:reminders`, `vapid:generate`, schematy subskrypcji i zależności Web Push.
+`apps/api/.env.example` nie zawiera VAPID; można uruchomić serwer i backup bez
+tych kluczy. Stary `.env` z dodatkowymi, także niepoprawnymi zmiennymi działa.
+Przypomnienia tworzymy jak wcześniej; odbiorcy, obliczenia czasu i
+`/api/reminders/schedule` dla APK pozostają zgodne. Backup:
+`npm run job:backup` po buildzie, bez nowej konfiguracji i bez nowego crona.
+Historyczne instrukcje Web Push powyżej nie dotyczą obecnego wydania.
+
+Wyniki lokalne:
+
+- `npm test`: 361/361, 46 plików. Usunięto testy usuniętego Web Push i generatora;
+  testy odbiorców, harmonogramu, dat i backupu pozostają. Nowy test migracji
+  sprawdza świeżą bazę oraz istniejący plik po 0012 z subskrypcją, wydarzeniem,
+  uczestnikiem, wyjątkiem, przypomnieniami wspólnymi/osobistymi i sesją.
+  Po 0013 oraz powtórzeniu migracji dane są identyczne, znika tylko tabela
+  subskrypcji, snapshot zachowuje cały kontrakt, a stara sesja nadal działa.
+- `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run build`:
+  poprawne. Lint ma 2 dotychczasowe ostrzeżenia Fast Refresh w `auth.tsx`.
+- `npm run test:e2e`: 22/22, wyłącznie headless, 390 i 1280 px, bez generatora
+  VAPID w serwerze e2e. Zachowane testy sesji, kalendarza, linków, pobierania APK,
+  migracji starego SW i ekranu alarmów z atrapą mostka.
+- `npm run release:smoke`: poprawny start spakowanego serwera i CLI backupu
+  bez VAPID, integralna kopia z tabelą przypomnień bez `push_subscriptions`.
+  ZIP nie zawiera joba wysyłki, zachowuje przejściowy SW i 410 manifestu.
+- `npm run android:debug`: BUILD SUCCESSFUL, APK z lokalnym frontendem.
+  Nie zmieniano natywnego mechanizmu alarmów ani sesji APK.
+- Piaskownica blokowała tymczasowe pliki SQLite i połączenie z daemonem Gradle;
+  smoke i e2e nie postępowały. Pełne przebiegi poza nią przeszły. Pierwszy test
+  migracji wymagał poprawienia identyfikatorów fixture na UUID, zgodnie z kontraktem.
+- Nie wykonano aktualizacji serwera, publikacji podpisanego APK ani nowych prób
+  fizycznego telefonu. To pozostaje oddzielne od zaliczonych kontroli lokalnych.
+  Instrukcja w DEPLOY wymaga zatrzymania starego crona przed podmianą paczki,
+  usunięcia resztek joba po wdrożeniu nakładkowym i kopii sprzed migracji do odzyskiwania.

@@ -25,7 +25,7 @@ todos:
     status: completed
   - id: step4-9
     content: "Krok 4.9: usunięcie backendu Web Push, VAPID, joba i subskrypcji; zachowanie harmonogramu APK i backupu"
-    status: pending
+    status: completed
   - id: step4-10
     content: "Krok 4.10: końcowa regresja strony i APK, dokumentacja oraz procedura wdrożenia bez PWA"
     status: pending
@@ -818,6 +818,8 @@ rodzina/
 - **Gotowe, gdy:** lint, format:check, typecheck, testy, build, `release:smoke` i build debug Androida przechodzą. Testy obejmują nową wizytę bez rejestracji i żądań `/api/push/*`, migrację starej rejestracji/cache i samodzielną aktualizację starego workera, zachowanie sesji i danych spoza cache PWA, ekran strony przy 390 i 1280 px, brak manifestu i workera w APK oraz regresję ekranu alarmów lokalnych. Weryfikacja UI i wyniki są zapisane w DEVELOPMENT. Testy przeglądarkowe wyłącznie headless. Stan testów fizycznego telefonu raportujemy oddzielnie.
 
 #### Krok 4.9 - Usunięcie serwerowego Web Push
+
+**Stan 19.10.2026:** zrealizowany lokalnie. Przechodzą lint, format:check, typecheck, 361 testów Vitest, 22 testy Playwright headless, build, `release:smoke` bez VAPID i build debug Androida. Migracja 0013 usuwa tylko subskrypcje; test zachowuje dane, sesję i identyczny snapshot APK na istniejącej bazie. Procedura aktualizacji i powrotu jest w DEPLOY, wyniki w DEVELOPMENT. Bez wdrożenia na produkcję i nowego testu fizycznego telefonu; krok 4.10 pozostaje osobnym zadaniem.
 
 - **Zakres:** usunięcie `/api/push/*`, adaptera wysyłki, joba `send-reminders`, `dev:cron`, generatora VAPID, zależności `web-push` i jego typów. Usunięcie wymogu VAPID z konfiguracji serwera, testów, e2e i smoke; aktualizacja `.env.example`. Nowa migracja usuwa wyłącznie `push_subscriptions`, bez przepisywania historycznych migracji. Zachowujemy `reminders`, kontrakt ze starszym wspieranym APK, `resolveRecipients`, obliczenia czasu i `/api/reminders/schedule`. Usuwamy wyłącznie kod używany przez Web Push; backup i jego cron zostają.
 - **Gotowe, gdy:** serwer i backup startują bez VAPID; nowa i istniejąca baza przechodzą migracje bez utraty wydarzeń, przypomnień i sesji. Testy potwierdzają zgodność harmonogramu/odbiorców i brak endpointów Web Push. DEPLOY opisuje zatrzymanie starego crona **przed** podmianą paczki, sprzątnięcie pozostałego pliku joba po nakładkowym deployu, backup i powrót do poprzedniej wersji. Stary `.env` z dodatkowymi zmiennymi nie blokuje serwera. Przechodzą standardowe kontrole, `release:smoke` i build Androida. Bez zmiany produkcji w ramach implementacji.

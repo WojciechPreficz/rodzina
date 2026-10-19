@@ -3,7 +3,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
 import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
-import { loadTestConfig as loadConfig } from './config.test-utils.js';
+import { loadConfig } from './config.js';
 import { hashToken, SESSION_TTL_MS } from './auth.js';
 import * as schema from './db/schema.js';
 

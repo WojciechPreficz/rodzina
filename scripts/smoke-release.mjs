@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import webPush from 'web-push';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -43,8 +42,8 @@ async function run(command, args, options = {}) {
 try {
   const archive = new Uint8Array(await readFile(releaseFile));
   const entries = unzipSync(archive);
-  if (Object.keys(entries).some((name) => /^dist\/jobs\/heartbeat\./.test(name))) {
-    fail('paczka nadal zawiera usunięty job heartbeat.');
+  if (Object.keys(entries).some((name) => /^dist\/jobs\/(?:heartbeat|send-reminders)\./.test(name))) {
+    fail('paczka nadal zawiera usunięty job heartbeat lub send-reminders.');
   }
   for (const [name, contents] of Object.entries(entries)) {
     const destination = path.resolve(temporaryDirectory, name);
@@ -56,7 +55,6 @@ try {
 
   const port = 3000 + Math.floor(Math.random() * 10000);
   const envFile = path.join(temporaryDirectory, 'smoke.env');
-  const vapid = webPush.generateVAPIDKeys();
   await writeFile(
     envFile,
     [
@@ -68,9 +66,6 @@ try {
       'RODZINA_PUBLIC_URL=http://localhost',
       'RODZINA_ANDROID_DOWNLOAD_DIR=',
       'RODZINA_ALLOW_REGISTRATION=false',
-      `RODZINA_VAPID_PUBLIC_KEY=${vapid.publicKey}`,
-      `RODZINA_VAPID_PRIVATE_KEY=${vapid.privateKey}`,
-      'RODZINA_VAPID_SUBJECT=mailto:smoke@example.com',
       '',
     ].join('\n'),
   );
@@ -142,9 +137,6 @@ try {
     fail('serwer nie dostarczył skryptu wycofującego stare PWA bez cache.');
   }
 
-  await run(process.execPath, ['--env-file', envFile, 'dist/jobs/send-reminders.js', '--now=2026-10-16T10:00:00Z'], {
-    cwd: temporaryDirectory,
-  });
   const { default: Database } = await import('better-sqlite3');
   await run(process.execPath, ['--env-file', envFile, 'dist/jobs/backup-db.js'], { cwd: temporaryDirectory });
   const copies = await readdir(path.join(temporaryDirectory, 'backups'));
@@ -155,7 +147,8 @@ try {
   try {
     if (sqlite.pragma('integrity_check', { simple: true }) !== 'ok') fail('kopia bazy jest uszkodzona.');
     sqlite.prepare('SELECT id FROM reminders LIMIT 1').all();
-    sqlite.prepare('SELECT id FROM push_subscriptions LIMIT 1').all();
+    if (sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'push_subscriptions'").get())
+      fail('kopia nadal zawiera tabelę subskrypcji Web Push.');
   } finally {
     sqlite.close();
   }

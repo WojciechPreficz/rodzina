@@ -1,11 +1,11 @@
 import { expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
-import { loadTestConfig } from './config.test-utils.js';
+import { loadConfig } from './config.js';
 
 it('serves public JSON association only for configured APK certificate fingerprints', async () => {
   for (const fingerprint of ['', Array(32).fill('AB').join(':')]) {
-    const config = loadTestConfig({
+    const config = loadConfig({
       NODE_ENV: 'test',
       RODZINA_DATABASE_PATH: ':memory:',
       RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS: fingerprint,
@@ -37,10 +37,10 @@ it('serves public JSON association only for configured APK certificate fingerpri
   }
 });
 it('rejects malformed certificates and accepts multiple public SHA-256 fingerprints', () => {
-  expect(() => loadTestConfig({ RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS: 'placeholder' })).toThrow();
+  expect(() => loadConfig({ RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS: 'placeholder' })).toThrow();
   const fingerprint = Array(32).fill('ab').join(':');
   expect(
-    loadTestConfig({ RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS: `${fingerprint}, ${fingerprint}` })
+    loadConfig({ RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS: `${fingerprint}, ${fingerprint}` })
       .RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS,
   ).toEqual([fingerprint.toUpperCase(), fingerprint.toUpperCase()]);
 });

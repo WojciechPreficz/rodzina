@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../db/client.js';
-import { loadTestConfig } from '../config.test-utils.js';
+import { loadConfig } from '../config.js';
 import { backupDatabase } from './backup-db.js';
 
 describe('SQLite backup', () => {
@@ -12,7 +12,7 @@ describe('SQLite backup', () => {
   let database: ReturnType<typeof createDatabase>;
   const connections: ReturnType<typeof createDatabase>[] = [];
   const connect = (filename: string) => {
-    const connection = createDatabase(loadTestConfig({ RODZINA_DATABASE_PATH: filename }));
+    const connection = createDatabase(loadConfig({ RODZINA_DATABASE_PATH: filename }));
     connections.push(connection);
     return connection;
   };

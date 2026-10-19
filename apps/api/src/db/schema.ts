@@ -37,23 +37,6 @@ export const sessions = sqliteTable('sessions', {
   userAgent: text('user_agent'),
 });
 
-export const pushSubscriptions = sqliteTable(
-  'push_subscriptions',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    endpoint: text('endpoint').notNull().unique(),
-    p256dh: text('p256dh').notNull(),
-    auth: text('auth').notNull(),
-    userAgent: text('user_agent'),
-    createdAt: integer('created_at').notNull(),
-    lastSuccessAt: integer('last_success_at'),
-  },
-  (table) => [index('push_subscriptions_user_idx').on(table.userId)],
-);
-
 export const invitations = sqliteTable('invitations', {
   id: text('id').primaryKey(),
   familyId: text('family_id')

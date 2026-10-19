@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { localDateTimeToUtc, reminderScheduleSchema, type ReminderSchedule, type Reminder } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
 import { hashToken } from '../../auth.js';
-import { loadTestConfig as loadConfig } from '../../config.test-utils.js';
+import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 
@@ -106,6 +106,20 @@ describe('reminder schedule API', () => {
     expect((await schedule(outsider)).reminders).toHaveLength(1);
     expect((await app.inject({ method: 'GET', url: '/api/reminders/schedule' })).statusCode).toBe(401);
     expect((await request('GET', `/api/reminders/schedule?familyId=${familyId}`)).statusCode).toBe(400);
+  });
+
+  it('has no Web Push routes while keeping the APK schedule available', async () => {
+    for (const [method, url] of [
+      ['GET', '/api/push/public-key'],
+      ['GET', '/api/push/status'],
+      ['POST', '/api/push/subscriptions'],
+      ['DELETE', '/api/push/subscriptions'],
+      ['POST', '/api/push/test'],
+    ] as const) {
+      expect(app.hasRoute({ method, url })).toBe(false);
+      expect((await request(method, url, method === 'GET' ? undefined : {})).statusCode).toBe(404);
+    }
+    expect((await schedule()).reminders).toEqual([]);
   });
 
   it('uses current recipients and fallback adults after the creator is removed', async () => {
