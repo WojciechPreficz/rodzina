@@ -966,3 +966,54 @@ i Gradle wymagały ponowienia poza sandboxem po błędach plików tymczasowych
 lub zatrzymaniu na komunikacji lokalnej. Nie opublikowano aktualizacji ani
 podpisanego APK i nie zaliczono nowego testu sprzętowego. Wersja właściciela
 `1.0.0-deploy.2` nie zawiera tej poprawki.
+
+### Alarmy wybudzające po próbie deploy.3
+
+Właściciel potwierdził, że na `1.0.0-deploy.3`, przy włączonym automatycznym
+uruchamianiu, opóźnione powiadomienie pojawia się po otwarciu aplikacji także
+bez internetu. Poprawka statusu nie rozwiązała tego zachowania.
+
+Następna poprawka zastępuje rejestrację timerów pluginu przez natywne
+`AlarmManager.setAlarmClock`, z tym samym `PendingIntent` i odbiornikiem
+powiadomienia. Alarmy są jawne w Androidzie: system może pokazywać ikonę budzika
+i godzinę najbliższego terminu. Nie dodajemy ekranu pełnoekranowego ani usługi
+działającej stale. Odbiór powiadomienia i odtwarzanie po restarcie nie wymagają
+JavaScript ani połączenia z API.
+
+Stan „zapisany” wymaga zarówno zgodnego payloadu pluginu, jak i natywnego
+potwierdzenia rejestracji. Nowy zapis lub zmiana treści wymusza rejestrację
+we właściwym trybie. Trwałe potwierdzenia zawierają ID i SHA-256 fingerprintu,
+bez nowej kopii treści wydarzeń. Brak operacji systemowej odtwarza ją z payloadu
+pluginu. Częściowa awaria nie zapisuje potwierdzenia dla wadliwego alarmu.
+Anulowanie i wylogowanie wykorzystują ten sam identyfikator, więc usuwają
+również alarm wybudzający; wylogowanie usuwa także potwierdzenia rejestracji.
+
+Własny odbiornik obsługuje boot/odblokowanie, zmianę czasu/strefy, aktualizację
+APK i ponowne udzielenie zgody na dokładne alarmy. Zastępuje odbiornik odtwarzania
+pluginu, aby drugi odbiornik nie nadpisywał trybu rejestracji. Przetwarza wyłącznie
+przyszłe lokalne alarmy kalendarza. Nie odtwarza ponownie przeszłych powiadomień.
+
+Próba na telefonie po publikacji i aktualizacji:
+
+1. Otwórz APK raz po aktualizacji. Natywna część migruje przyszłe zapisane alarmy
+   do nowego trybu; dotychczasowe zgody i konto pozostają zachowane.
+2. Dodaj przypomnienie za co najmniej 10 minut i potwierdź jego termin oraz
+   zapis `1 z 1`. Przy kilku alarmach wcześniej ustawionych w innych aplikacjach
+   Android może pokazywać w systemie wcześniejszy alarm innej aplikacji.
+3. Wyłącz sieć, usuń APK z ostatnich aplikacji i zablokuj telefon. Zanotuj czas
+   odbioru i opóźnienie. W tej próbie nie otwieraj aplikacji do czasu oceny wyniku.
+4. Powtórz po restarcie i pierwszym odblokowaniu, nadal bez sieci. Sprawdź też
+   anulowanie, zmianę terminu i wylogowanie — bez starych ani podwójnych alarmów.
+
+Rejestracja systemowa nie potwierdza faktycznego wyświetlenia. Bez tej próby
+nie uznajemy problemu OPPO za rozwiązany. Pozostają ograniczenia wymuszonego
+zatrzymania, wyłączonego telefonu, cofniętych zgód i mechanizmów producenta.
+
+Weryfikacja lokalna: Vitest 445/445 w 49 plikach, w tym 57 testów powiadomień
+i sesji; 8/8 testów JVM (5 nowych testów rejestracji), Android Lint,
+`android:debug`, lint, format:check, typecheck, build i `release:smoke` przechodzą.
+Headless Playwright 2/2 przy 390 i 1280 px; obejrzano mobilny zrzut z opisem
+alarmów wybudzających. Sprawdzono wynikowy manifest APK: własny odbiornik
+odtwarzania, bez konkurencyjnego odbiornika pluginu. Nie wykonano publikacji
+ani fizycznego testu zamkniętego OPPO na tej implementacji; `deploy.3` jej
+nie zawiera. Brak nowych zmiennych API, cronów, migracji, uprawnień i zależności.

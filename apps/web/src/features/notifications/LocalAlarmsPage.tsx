@@ -132,6 +132,7 @@ export function LocalAlarmsPage() {
           </Text>
         )}
         <Text size="sm">{text.hint}</Text>
+        <Text size="sm">{text.systemAlarmHint}</Text>
         <Text size="sm" c="dimmed">
           {text.limitations}
         </Text>

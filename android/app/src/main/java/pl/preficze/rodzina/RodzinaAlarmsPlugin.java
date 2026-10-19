@@ -11,9 +11,48 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
+import org.json.JSONArray;
+import java.util.HashSet;
+import java.util.Set;
 
 @CapacitorPlugin(name = "RodzinaAlarms")
 public class RodzinaAlarmsPlugin extends Plugin {
+    @PluginMethod
+    public void reconcileSystem(PluginCall call) {
+        synchronized (AlarmStore.LOCK) {
+            try {
+                Set<Integer> forceIds = new HashSet<>();
+                JSONArray ids = call.getArray("forceIds");
+                if (ids == null || ids.length() > 400) throw new IllegalArgumentException();
+                for (int index = 0; index < ids.length(); index++) {
+                    long id = ids.getLong(index);
+                    if (id < 1 || id > Integer.MAX_VALUE) throw new IllegalArgumentException();
+                    forceIds.add((int) id);
+                }
+                SystemAlarmReconciler.Result applied = new SystemAlarmScheduler(getContext()).reconcile(forceIds);
+                JSObject result = new JSObject();
+                result.put("registeredIds", new JSONArray(applied.registeredIds()));
+                result.put("failedIds", new JSONArray(applied.failedIds()));
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("Nie udało się zarejestrować alarmów systemowych. Sprawdź zgodę na dokładne alarmy i ponów zapis.");
+            }
+        }
+    }
+
+    @PluginMethod
+    public void systemStatus(PluginCall call) {
+        synchronized (AlarmStore.LOCK) {
+            try {
+                JSObject result = new JSObject();
+                result.put("registeredIds", new JSONArray(new SystemAlarmScheduler(getContext()).registeredIds()));
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("Nie udało się sprawdzić rejestracji alarmów systemowych.");
+            }
+        }
+    }
+
     @PluginMethod
     public void runtimeStatus(PluginCall call) {
         ActivityManager manager = getContext().getSystemService(ActivityManager.class);

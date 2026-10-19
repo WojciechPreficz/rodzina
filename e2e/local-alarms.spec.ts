@@ -37,7 +37,7 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
     const pending = new Map<number, Record<string, unknown>>();
     const methods = {
       RodzinaApi: ['request', 'clearSession'],
-      RodzinaAlarms: ['read', 'write', 'runtimeStatus', 'openAppSettings'],
+      RodzinaAlarms: ['read', 'write', 'runtimeStatus', 'openAppSettings', 'reconcileSystem', 'systemStatus'],
       LocalNotifications: [
         'checkPermissions',
         'checkExactNotificationSetting',
@@ -65,6 +65,8 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
             return { status: response.status, body: await response.text() };
           }
           if (plugin === 'RodzinaAlarms') {
+            if (method === 'reconcileSystem') return { registeredIds: [...pending.keys()], failedIds: [] };
+            if (method === 'systemStatus') return { registeredIds: [...pending.keys()] };
             if (method === 'runtimeStatus') return { backgroundRestricted: false, manufacturer: 'OPPO' };
             if (method === 'openAppSettings') return {};
             if (method === 'read') return { value: saved, revision: 'test' };

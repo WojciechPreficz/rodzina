@@ -11,6 +11,8 @@ export const alarmStore = registerPlugin<{
   write(options: { account: string; value: string; revision: string }): Promise<void>;
   runtimeStatus(): Promise<{ backgroundRestricted: boolean; manufacturer: string }>;
   openAppSettings(): Promise<void>;
+  reconcileSystem(options: { forceIds: number[] }): Promise<{ registeredIds: number[]; failedIds: number[] }>;
+  systemStatus(): Promise<{ registeredIds: number[] }>;
 }>('RodzinaAlarms');
 export const channelId = 'calendar-reminders-v1';
 const spacing = 9 * 60_000;
@@ -92,7 +94,7 @@ type Dependencies = {
     | 'schedule'
     | 'removeAllDeliveredNotifications'
   >;
-  store: Pick<typeof alarmStore, 'read' | 'write' | 'runtimeStatus'>;
+  store: Pick<typeof alarmStore, 'read' | 'write' | 'runtimeStatus' | 'reconcileSystem' | 'systemStatus'>;
   fetch: () => Promise<unknown>;
   now: () => number;
 };
@@ -134,13 +136,16 @@ export function createLocalScheduler(deps: Dependencies) {
     all: Alarm[],
     pending: LocalNotificationSchema[],
     access: Awaited<ReturnType<typeof permissions>>,
+    registeredIds: number[],
     planningError?: string,
   ): ScheduleResult {
     const now = deps.now();
     const future = all.filter((alarm) => alarm.fireAt > now);
     const actual = new Map(pending.map((item) => [item.id, item]));
     const confirmed = future.filter(
-      (alarm) => actual.get(alarm.id)?.extra?.fingerprint === notification(alarm).extra?.fingerprint,
+      (alarm) =>
+        registeredIds.includes(alarm.id) &&
+        actual.get(alarm.id)?.extra?.fingerprint === notification(alarm).extra?.fingerprint,
     );
     const missing = future.find((alarm) => !confirmed.includes(alarm));
     const issues: ScheduleIssue[] = [];
@@ -149,7 +154,15 @@ export function createLocalScheduler(deps: Dependencies) {
     if (access.backgroundRestricted) issues.push('background');
     if (future.length > alarmLimit) issues.push('limit');
     if (missing) issues.push('missing');
-    if (actual.size !== confirmed.length) issues.push('unexpected');
+    if (
+      pending.some(
+        (item) =>
+          !future.some(
+            (alarm) => item.id === alarm.id && item.extra?.fingerprint === notification(alarm).extra?.fingerprint,
+          ),
+      )
+    )
+      issues.push('unexpected');
     if (data.snapshot.validUntil <= now) issues.push('expired');
     if (planningError) issues.push('planning');
     return {
@@ -195,18 +208,23 @@ export function createLocalScheduler(deps: Dependencies) {
       pending.filter((item) => !obsolete.some((old) => old.id === item.id)).map((item) => [item.id, item]),
     );
     let planningError: string | undefined;
+    const forceIds: number[] = [];
     for (const item of desired) {
       if (requestGeneration !== generation) throw new Error(text.sessionChanged);
       if (current.has(item.id)) continue;
+      forceIds.push(item.id);
       try {
         await deps.notifications.schedule({ notifications: [item] });
       } catch (failure) {
-        planningError ??= failure instanceof Error ? failure.message : text.error;
+        planningError ??= (failure instanceof Error ? failure.message : '') || text.error;
       }
     }
     const actual = await scheduled();
+    if (requestGeneration !== generation) throw new Error(text.sessionChanged);
+    const system = await deps.store.reconcileSystem({ forceIds });
+    if (system.failedIds.length) planningError ??= text.nativeRegistrationFailed;
     const after = await permissions();
-    const result = inspect(data, all, actual, after, planningError);
+    const result = inspect(data, all, actual, after, system.registeredIds, planningError);
     if (requestGeneration !== generation) throw new Error(text.sessionChanged);
     if (result.complete && downloaded) {
       data.lastSuccessfulAt = deps.now();
@@ -228,7 +246,7 @@ export function createLocalScheduler(deps: Dependencies) {
         if (!data) return undefined;
         const access = await permissions();
         const desired = buildAlarms(data.snapshot, data.ids, deps.now());
-        return inspect(data, desired, await scheduled(), access);
+        return inspect(data, desired, await scheduled(), access, (await deps.store.systemStatus()).registeredIds);
       });
     },
     sync(account: string) {

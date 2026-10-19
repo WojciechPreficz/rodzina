@@ -68,6 +68,10 @@ export const labels = {
     nextAlarm: 'Najbliższy zapisany alarm:',
     syncFailed: 'Nie udało się odświeżyć harmonogramu. Sprawdź szczegóły w powiadomieniach.',
     planningError: 'Android zgłosił błąd podczas zapisywania alarmu:',
+    nativeRegistrationFailed:
+      'Nie udało się zarejestrować części alarmów wybudzających telefon. Ponów zapis z urządzenia.',
+    systemAlarmHint:
+      'Przypomnienia są zapisywane jako systemowe alarmy wybudzające telefon. Android może pokazywać ikonę budzika i godzinę najbliższego alarmu. Powiadomienie nie wymaga otwierania aplikacji ani internetu.',
     issues: {
       display: 'Powiadomienia lub ich kanał są zablokowane w ustawieniach Androida.',
       exact: 'Brak zgody Androida na dokładne alarmy.',

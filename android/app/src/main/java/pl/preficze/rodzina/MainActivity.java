@@ -14,6 +14,13 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RodzinaLinksPlugin.class);
         registerPlugin(RodzinaUpdatesPlugin.class);
         super.onCreate(savedInstanceState);
+        synchronized (AlarmStore.LOCK) {
+            try {
+                new SystemAlarmScheduler(this).reconcile(java.util.Collections.emptySet());
+            } catch (Exception error) {
+                android.util.Log.w("RodzinaAlarms", "System alarm startup reconciliation failed");
+            }
+        }
         android.view.View content = findViewById(android.R.id.content);
         ViewCompat.setOnApplyWindowInsetsListener(content, (view, windowInsets) -> {
             Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());

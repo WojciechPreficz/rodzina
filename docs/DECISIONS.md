@@ -402,3 +402,33 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   przez system. Poprawienie statusu nie zalicza testu offline. Wymagany jest nowy
   test na telefonie po publikacji i instalacji poprawionego APK. Brak nowych
   zmiennych API, migracji, cronów, uprawnień i zależności runtime serwera.
+
+## 19.10.2026 — systemowe alarmy kalendarza po próbie APK deploy.3
+
+- Właściciel potwierdził włączone automatyczne uruchamianie OPPO i ponowił próbę
+  na APK `1.0.0-deploy.3`: powiadomienie pojawiło się po otwarciu aplikacji także
+  bez internetu. To wyklucza konieczność sieci dla zaobserwowanego opóźnionego
+  wyświetlenia, ale nie dowodzi konkretnej przyczyny blokady systemowej.
+- Zmieniamy rejestrację świadomie ustawionych, dokładnych przypomnień kalendarza
+  na `AlarmManager.setAlarmClock`. Zachowujemy ten sam `PendingIntent` odbiornika
+  pluginu i treść powiadomienia. Rejestracja zastępuje wcześniejszy alarm tego
+  samego identyfikatora; anulowanie pluginem usuwa także nowy alarm. Nie dodajemy
+  procesu w tle, FCM ani timerów JavaScript. Android może pokazywać ikonę budzika
+  i najbliższy termin — to jawny skutek funkcji przypomnień, opisany w UI.
+- Trwałe potwierdzenie rejestracji zawiera tylko ID i SHA-256 fingerprintu, bez nowej kopii
+  treści wydarzenia. Zgodność zapisu pluginu nie wystarcza do sukcesu: wymagamy
+  także udanej rejestracji natywnej. Błąd pozostawia brakujący alarm w statusie,
+  a ponowienie odtwarza brakujący token i rejestruje alarm ponownie. Ten zapis
+  nadal nie jest potwierdzeniem dostarczenia przez system.
+- Rodzina samodzielnie odtwarza przyszłe alarmy po restarcie/odblokowaniu,
+  aktualizacji APK, zmianie czasu i przyznaniu zgody na dokładne alarmy. Zastępuje
+  odbiornik odtwarzania pluginu, żeby równoległy odbiornik nie zmieniał ponownie
+  trybu planowania. Start natywnej aktywności uzgadnia zapis bez żądania do API.
+  Wylogowanie usuwa potwierdzenia razem z alarmami i danymi konta.
+- Dokumentacja Androida określa `setAlarmClock` jako mechanizm dla jawnych,
+  wrażliwych na czas alarmów użytkownika, z wybudzeniem z Doze i wymaganiem
+  obecnej już zgody `SCHEDULE_EXACT_ALARM`:
+  [AlarmManager](<https://developer.android.com/reference/android/app/AlarmManager#setAlarmClock(android.app.AlarmManager.AlarmClockInfo,%20android.app.PendingIntent)>).
+  Nie deklarujemy obejścia wymuszonego zatrzymania ani wszystkich blokad OPPO.
+  Wybór mechanizmu jest poprawką implementacji, a nie potwierdzoną diagnozą
+  opóźnienia na fizycznym urządzeniu. Wymagany pozostaje test nowego APK.

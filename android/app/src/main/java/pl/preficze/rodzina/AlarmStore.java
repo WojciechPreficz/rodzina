@@ -51,6 +51,7 @@ final class AlarmStore {
         context.getSystemService(NotificationManager.class).cancelAll();
         // cancelAll preserves delivered records; remove them too, including their saved contents.
         for (String id : storage.getSavedNotificationIds()) storage.deleteNotification(id);
+        new SystemAlarmScheduler(context).clearReceipts();
         commit(preferences.edit().clear().putString("revision", UUID.randomUUID().toString()));
     }
 

@@ -21,6 +21,7 @@ function fixture(items = [reminder('one')]) {
   let value: string | null = null;
   const pending = new Map<number, LocalNotificationSchema>();
   const delivered = new Map<number, LocalNotificationSchema>();
+  const systemIds = new Set<number>();
   const snapshot: ReminderSchedule = { ok: true, generatedAt: now, validUntil: now + 90 * 86400_000, reminders: items };
   const notifications = {
     listChannels: vi.fn(async () => ({ channels: [] })),
@@ -49,6 +50,14 @@ function fixture(items = [reminder('one')]) {
     }),
   };
   const store = {
+    reconcileSystem: vi.fn<
+      (options: { forceIds: number[] }) => Promise<{ registeredIds: number[]; failedIds: number[] }>
+    >(async () => {
+      systemIds.clear();
+      for (const id of pending.keys()) systemIds.add(id);
+      return { registeredIds: [...systemIds], failedIds: [] as number[] };
+    }),
+    systemStatus: vi.fn(async () => ({ registeredIds: [...systemIds] })),
     runtimeStatus: vi.fn(async () => ({ backgroundRestricted: false, manufacturer: 'test' })),
     read: vi.fn(async () => ({ value, revision: 'one' })),
     write: vi.fn(async (options: { value: string }) => {
@@ -57,7 +66,7 @@ function fixture(items = [reminder('one')]) {
   };
   const fetch = vi.fn(async (): Promise<unknown> => snapshot);
   const scheduler = createLocalScheduler({ notifications, store, fetch, now: () => now });
-  return { scheduler, notifications, store, fetch, pending, delivered, snapshot };
+  return { scheduler, notifications, store, fetch, pending, delivered, snapshot, systemIds };
 }
 
 it.each([0, 1])('ignores retained delivered notifications when checking %i future alarms', async (count) => {
@@ -93,6 +102,46 @@ it('retains the Android scheduling error and identifies the missing alarm', asyn
     issues: ['missing', 'planning'],
     planningError: 'AlarmManager failed',
   });
+});
+
+it('does not treat a stored payload as proof of native registration and repairs it on retry', async () => {
+  const f = fixture();
+  await f.scheduler.sync('family:user');
+  const id = [...f.pending.keys()][0]!;
+  f.systemIds.clear();
+  expect(await f.scheduler.status('family:user')).toMatchObject({
+    count: 0,
+    total: 1,
+    complete: false,
+    issues: ['missing'],
+  });
+  expect(await f.scheduler.retry('family:user')).toMatchObject({ count: 1, complete: true });
+  expect(f.notifications.schedule).toHaveBeenCalledTimes(1);
+  expect(f.store.reconcileSystem).toHaveBeenLastCalledWith({ forceIds: [] });
+  expect(f.systemIds.has(id)).toBe(true);
+});
+
+it('forces native registration after scheduling or changing the notification payload', async () => {
+  const f = fixture();
+  await f.scheduler.sync('family:user');
+  const ids = [...f.pending.keys()];
+  expect(f.store.reconcileSystem).toHaveBeenLastCalledWith({ forceIds: ids });
+  f.snapshot.reminders[0] = { ...reminder('one'), body: 'Updated' };
+  await f.scheduler.sync('family:user');
+  expect(f.store.reconcileSystem).toHaveBeenLastCalledWith({ forceIds: ids });
+});
+
+it('reports a native registration failure even when the plugin saved every notification', async () => {
+  const f = fixture();
+  f.store.reconcileSystem.mockImplementationOnce(async () => ({ registeredIds: [], failedIds: [...f.pending.keys()] }));
+  expect(await f.scheduler.sync('family:user')).toMatchObject({
+    count: 0,
+    total: 1,
+    complete: false,
+    issues: ['missing', 'planning'],
+  });
+  expect(f.pending.size).toBe(1);
+  expect(await f.scheduler.retry('family:user')).toMatchObject({ count: 1, complete: true });
 });
 
 it('allocates stable positive IDs and resolves hash collisions including wraparound', () => {
