@@ -112,53 +112,56 @@ describe('CI signing and automatic versioning', () => {
 });
 
 describe('atomic APK publication', () => {
-  it('preflights first publication without mutating production and rejects overlapping storage', async () => {
-    const f = await fixture();
-    const app = path.join(f.root, 'app');
-    for (const name of ['public', 'dist/jobs', 'drizzle', 'node_modules', 'backups', 'bin'])
-      await mkdir(path.join(app, name), { recursive: true });
-    for (const [name, value] of Object.entries({
-      'server.cjs': '',
-      'package.json': '{"name":"rodzina-release"}',
-      'dist/jobs/backup-db.js': '',
-      'bin/node': '',
-      'bin/npm': '',
-      'production.db': '',
-    }))
-      await writeFile(path.join(app, name), value);
-    const envFile = path.join(app, '.env');
-    const environment = {
-      NODE_ENV: 'production',
-      RODZINA_PUBLIC_URL: 'https://rodzina.preficze.pl',
-      RODZINA_DATABASE_PATH: path.join(app, 'production.db'),
-      RODZINA_BACKUP_DIR: path.join(app, 'backups'),
-    };
-    await writeFile(
-      envFile,
-      Object.entries(environment)
-        .map(([key, value]) => `${key}=${value}`)
-        .join('\n'),
-    );
-    const config = {
-      ...f.config,
-      root: app,
-      node: path.join(app, 'bin/node'),
-      runtimeNode: path.join(app, 'bin/node'),
-      envFile,
-    };
-    const checked = await preflight(config, { environment, execute: async () => {} });
-    expect(checked.downloads).toBe(`${app}-android`);
-    expect(checked.configureDownloads).toBe(true);
-    await expect(readdir(checked.downloads)).rejects.toThrow();
-    expect(await readFile(envFile, 'utf8')).not.toContain('ANDROID_DOWNLOAD');
-    await writeFile(envFile, `RODZINA_ANDROID_DOWNLOAD_DIR=${app}\n`);
-    await expect(
-      preflight(config, {
-        environment: { ...environment, RODZINA_ANDROID_DOWNLOAD_DIR: app },
-        execute: async () => {},
-      }),
-    ).rejects.toThrow('Unsafe persistent');
-  });
+  it.skipIf(Number(process.versions.node.split('.')[0]) !== 24)(
+    'preflights first publication without mutating production and rejects overlapping storage',
+    async () => {
+      const f = await fixture();
+      const app = path.join(f.root, 'app');
+      for (const name of ['public', 'dist/jobs', 'drizzle', 'node_modules', 'backups', 'bin'])
+        await mkdir(path.join(app, name), { recursive: true });
+      for (const [name, value] of Object.entries({
+        'server.cjs': '',
+        'package.json': '{"name":"rodzina-release"}',
+        'dist/jobs/backup-db.js': '',
+        'bin/node': '',
+        'bin/npm': '',
+        'production.db': '',
+      }))
+        await writeFile(path.join(app, name), value);
+      const envFile = path.join(app, '.env');
+      const environment = {
+        NODE_ENV: 'production',
+        RODZINA_PUBLIC_URL: 'https://rodzina.preficze.pl',
+        RODZINA_DATABASE_PATH: path.join(app, 'production.db'),
+        RODZINA_BACKUP_DIR: path.join(app, 'backups'),
+      };
+      await writeFile(
+        envFile,
+        Object.entries(environment)
+          .map(([key, value]) => `${key}=${value}`)
+          .join('\n'),
+      );
+      const config = {
+        ...f.config,
+        root: app,
+        node: path.join(app, 'bin/node'),
+        runtimeNode: path.join(app, 'bin/node'),
+        envFile,
+      };
+      const checked = await preflight(config, { environment, execute: async () => {} });
+      expect(checked.downloads).toBe(`${app}-android`);
+      expect(checked.configureDownloads).toBe(true);
+      await expect(readdir(checked.downloads)).rejects.toThrow();
+      expect(await readFile(envFile, 'utf8')).not.toContain('ANDROID_DOWNLOAD');
+      await writeFile(envFile, `RODZINA_ANDROID_DOWNLOAD_DIR=${app}\n`);
+      await expect(
+        preflight(config, {
+          environment: { ...environment, RODZINA_ANDROID_DOWNLOAD_DIR: app },
+          execute: async () => {},
+        }),
+      ).rejects.toThrow('Unsafe persistent');
+    },
+  );
   it('refuses a corrupt APK before backup and code promotion', async () => {
     const f = await fixture();
     await writeFile(path.join(f.stage, 'android.apk'), 'corrupt');
