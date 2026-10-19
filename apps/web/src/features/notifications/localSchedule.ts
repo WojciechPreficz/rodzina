@@ -9,6 +9,8 @@ export const alarmStore = registerPlugin<{
   preview(): Promise<{ value: string | null }>;
   read(options: { account: string }): Promise<{ value: string | null; revision: string }>;
   write(options: { account: string; value: string; revision: string }): Promise<void>;
+  runtimeStatus(): Promise<{ backgroundRestricted: boolean; manufacturer: string }>;
+  openAppSettings(): Promise<void>;
 }>('RodzinaAlarms');
 export const channelId = 'calendar-reminders-v1';
 const spacing = 9 * 60_000;
@@ -25,8 +27,13 @@ export type ScheduleResult = {
   validUntil: number;
   generatedAt: number;
   complete: boolean;
+  issues: ScheduleIssue[];
+  nextFireAt?: number | undefined;
+  planningError?: string | undefined;
   lastSuccessfulAt?: number | undefined;
 };
+export type ScheduleIssue =
+  'display' | 'exact' | 'background' | 'limit' | 'missing' | 'unexpected' | 'expired' | 'planning';
 
 export function hashAlarmKey(key: string) {
   let hash = 2166136261;
@@ -80,12 +87,12 @@ type Dependencies = {
     | 'checkExactNotificationSetting'
     | 'listChannels'
     | 'createChannel'
-    | 'getPending'
+    | 'getAll'
     | 'cancel'
     | 'schedule'
     | 'removeAllDeliveredNotifications'
   >;
-  store: Pick<typeof alarmStore, 'read' | 'write'>;
+  store: Pick<typeof alarmStore, 'read' | 'write' | 'runtimeStatus'>;
   fetch: () => Promise<unknown>;
   now: () => number;
 };
@@ -117,7 +124,45 @@ export function createLocalScheduler(deps: Dependencies) {
     const permission = await deps.notifications.checkPermissions();
     const exact = await deps.notifications.checkExactNotificationSetting();
     const channel = (await deps.notifications.listChannels()).channels.find((item) => item.id === channelId);
-    return { display: channel?.importance === 0 ? 'denied' : permission.display, exact: exact.exact_alarm };
+    const runtime = await deps.store.runtimeStatus();
+    return { display: channel?.importance === 0 ? 'denied' : permission.display, exact: exact.exact_alarm, ...runtime };
+  }
+  // getPending in plugin 8.3.1 also returns retained delivered notifications.
+  const scheduled = async () => (await deps.notifications.getAll({ state: 'SCHEDULED' })).notifications;
+  function inspect(
+    data: SavedSchedule,
+    all: Alarm[],
+    pending: LocalNotificationSchema[],
+    access: Awaited<ReturnType<typeof permissions>>,
+    planningError?: string,
+  ): ScheduleResult {
+    const now = deps.now();
+    const future = all.filter((alarm) => alarm.fireAt > now);
+    const actual = new Map(pending.map((item) => [item.id, item]));
+    const confirmed = future.filter(
+      (alarm) => actual.get(alarm.id)?.extra?.fingerprint === notification(alarm).extra?.fingerprint,
+    );
+    const missing = future.find((alarm) => !confirmed.includes(alarm));
+    const issues: ScheduleIssue[] = [];
+    if (access.display !== 'granted') issues.push('display');
+    if (access.exact !== 'granted') issues.push('exact');
+    if (access.backgroundRestricted) issues.push('background');
+    if (future.length > alarmLimit) issues.push('limit');
+    if (missing) issues.push('missing');
+    if (actual.size !== confirmed.length) issues.push('unexpected');
+    if (data.snapshot.validUntil <= now) issues.push('expired');
+    if (planningError) issues.push('planning');
+    return {
+      count: confirmed.length,
+      total: future.length,
+      generatedAt: data.snapshot.generatedAt,
+      validUntil: missing ? Math.min(data.snapshot.validUntil, missing.fireAt - 1) : data.snapshot.validUntil,
+      complete: issues.length === 0,
+      issues,
+      nextFireAt: confirmed[0]?.fireAt,
+      planningError,
+      lastSuccessfulAt: data.lastSuccessfulAt,
+    };
   }
   async function reconcile(
     account: string,
@@ -140,7 +185,7 @@ export function createLocalScheduler(deps: Dependencies) {
       visibility: 0,
       vibration: true,
     });
-    const pending = (await deps.notifications.getPending()).notifications;
+    const pending = await scheduled();
     const keep = new Map(desired.map((item) => [item.id, item]));
     const obsolete = pending.filter(
       (item) => !keep.has(item.id) || item.extra?.fingerprint !== keep.get(item.id)?.extra?.fingerprint,
@@ -149,40 +194,26 @@ export function createLocalScheduler(deps: Dependencies) {
     const current = new Map(
       pending.filter((item) => !obsolete.some((old) => old.id === item.id)).map((item) => [item.id, item]),
     );
-    let failed = false;
+    let planningError: string | undefined;
     for (const item of desired) {
       if (requestGeneration !== generation) throw new Error(text.sessionChanged);
       if (current.has(item.id)) continue;
       try {
         await deps.notifications.schedule({ notifications: [item] });
-      } catch {
-        failed = true;
+      } catch (failure) {
+        planningError ??= failure instanceof Error ? failure.message : text.error;
       }
     }
-    const actual = new Map((await deps.notifications.getPending()).notifications.map((item) => [item.id, item]));
-    const confirmed = desired.filter((item) => actual.get(item.id)?.extra?.fingerprint === item.extra?.fingerprint);
-    const missing = all.find((alarm) => !confirmed.some((item) => item.id === alarm.id));
+    const actual = await scheduled();
     const after = await permissions();
-    const complete =
-      !failed &&
-      !missing &&
-      actual.size === desired.length &&
-      after.display === 'granted' &&
-      after.exact === 'granted' &&
-      data.snapshot.validUntil > deps.now();
+    const result = inspect(data, all, actual, after, planningError);
     if (requestGeneration !== generation) throw new Error(text.sessionChanged);
-    if (complete && downloaded) {
+    if (result.complete && downloaded) {
       data.lastSuccessfulAt = deps.now();
       await deps.store.write({ account, value: JSON.stringify(data), revision });
+      result.lastSuccessfulAt = data.lastSuccessfulAt;
     }
-    return {
-      count: confirmed.length,
-      total: all.length,
-      generatedAt: data.snapshot.generatedAt,
-      validUntil: missing ? Math.min(data.snapshot.validUntil, missing.fireAt - 1) : data.snapshot.validUntil,
-      complete,
-      lastSuccessfulAt: data.lastSuccessfulAt,
-    };
+    return result;
   }
   return {
     permissions,
@@ -197,24 +228,7 @@ export function createLocalScheduler(deps: Dependencies) {
         if (!data) return undefined;
         const access = await permissions();
         const desired = buildAlarms(data.snapshot, data.ids, deps.now());
-        const actual = new Map((await deps.notifications.getPending()).notifications.map((item) => [item.id, item]));
-        const confirmed = desired.filter(
-          (alarm) => actual.get(alarm.id)?.extra?.fingerprint === notification(alarm).extra?.fingerprint,
-        );
-        const missing = desired.find((alarm) => !confirmed.includes(alarm));
-        return {
-          count: confirmed.length,
-          total: desired.length,
-          generatedAt: data.snapshot.generatedAt,
-          validUntil: missing ? Math.min(data.snapshot.validUntil, missing.fireAt - 1) : data.snapshot.validUntil,
-          lastSuccessfulAt: data.lastSuccessfulAt,
-          complete:
-            !missing &&
-            actual.size === desired.length &&
-            access.display === 'granted' &&
-            access.exact === 'granted' &&
-            data.snapshot.validUntil > deps.now(),
-        };
+        return inspect(data, desired, await scheduled(), access);
       });
     },
     sync(account: string) {
@@ -253,7 +267,7 @@ export function createLocalScheduler(deps: Dependencies) {
     clear() {
       generation += 1;
       return serial(async () => {
-        const { notifications } = await deps.notifications.getPending();
+        const notifications = await scheduled();
         if (notifications.length)
           await deps.notifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) });
         await deps.notifications.removeAllDeliveredNotifications();

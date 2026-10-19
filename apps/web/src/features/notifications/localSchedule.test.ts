@@ -20,13 +20,23 @@ function reminder(key: string, fireAt = now + 60_000): ScheduledReminder {
 function fixture(items = [reminder('one')]) {
   let value: string | null = null;
   const pending = new Map<number, LocalNotificationSchema>();
+  const delivered = new Map<number, LocalNotificationSchema>();
   const snapshot: ReminderSchedule = { ok: true, generatedAt: now, validUntil: now + 90 * 86400_000, reminders: items };
   const notifications = {
     listChannels: vi.fn(async () => ({ channels: [] })),
     checkPermissions: vi.fn(async () => ({ display: 'granted' as const })),
     checkExactNotificationSetting: vi.fn(async () => ({ exact_alarm: 'granted' as const })),
     createChannel: vi.fn(async () => undefined),
-    getPending: vi.fn(async () => ({ notifications: [...pending.values()] })),
+    // Plugin 8.3.1 getPending also includes retained, already-triggered records.
+    getPending: vi.fn(async () => ({ notifications: [...pending.values(), ...delivered.values()] })),
+    getAll: vi.fn(async (options?: { state?: 'SCHEDULED' | 'TRIGGERED' }) => ({
+      notifications:
+        options?.state === 'SCHEDULED'
+          ? [...pending.values()]
+          : options?.state === 'TRIGGERED'
+            ? [...delivered.values()]
+            : [...pending.values(), ...delivered.values()],
+    })),
     cancel: vi.fn(async ({ notifications }: { notifications: { id: number }[] }) => {
       notifications.forEach(({ id }) => pending.delete(id));
     }),
@@ -34,9 +44,12 @@ function fixture(items = [reminder('one')]) {
       notifications.forEach((item) => pending.set(item.id, item));
       return { notifications: notifications.map(({ id }) => ({ id })) };
     }),
-    removeAllDeliveredNotifications: vi.fn(async () => undefined),
+    removeAllDeliveredNotifications: vi.fn(async () => {
+      delivered.clear();
+    }),
   };
   const store = {
+    runtimeStatus: vi.fn(async () => ({ backgroundRestricted: false, manufacturer: 'test' })),
     read: vi.fn(async () => ({ value, revision: 'one' })),
     write: vi.fn(async (options: { value: string }) => {
       value = options.value;
@@ -44,8 +57,43 @@ function fixture(items = [reminder('one')]) {
   };
   const fetch = vi.fn(async (): Promise<unknown> => snapshot);
   const scheduler = createLocalScheduler({ notifications, store, fetch, now: () => now });
-  return { scheduler, notifications, store, fetch, pending, snapshot };
+  return { scheduler, notifications, store, fetch, pending, delivered, snapshot };
 }
+
+it.each([0, 1])('ignores retained delivered notifications when checking %i future alarms', async (count) => {
+  const f = fixture(count ? [reminder('future')] : []);
+  f.delivered.set(42, { id: 42, title: 'Old reminder', body: '', schedule: { at: new Date(now - 60000) } });
+  expect(await f.scheduler.sync('family:user')).toMatchObject({ complete: true, count, total: count });
+  expect(await f.scheduler.status('family:user')).toMatchObject({ complete: true, count, total: count });
+  expect(f.notifications.getAll).toHaveBeenCalledWith({ state: 'SCHEDULED' });
+  expect(f.notifications.cancel).not.toHaveBeenCalled();
+  expect(f.delivered.size).toBe(1);
+});
+
+it('reports background restrictions separately from granted notification and exact alarm permissions', async () => {
+  const f = fixture();
+  f.store.runtimeStatus.mockResolvedValue({ backgroundRestricted: true, manufacturer: 'OPPO' });
+  expect(await f.scheduler.sync('family:user')).toMatchObject({
+    complete: false,
+    count: 1,
+    total: 1,
+    issues: ['background'],
+    nextFireAt: now + 60000,
+  });
+  expect(await f.scheduler.status('family:user')).toMatchObject({ complete: false, issues: ['background'] });
+});
+
+it('retains the Android scheduling error and identifies the missing alarm', async () => {
+  const f = fixture();
+  f.notifications.schedule.mockRejectedValueOnce(new Error('AlarmManager failed'));
+  expect(await f.scheduler.sync('family:user')).toMatchObject({
+    complete: false,
+    count: 0,
+    total: 1,
+    issues: ['missing', 'planning'],
+    planningError: 'AlarmManager failed',
+  });
+});
 
 it('allocates stable positive IDs and resolves hash collisions including wraparound', () => {
   const ids = {};

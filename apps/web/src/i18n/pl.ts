@@ -45,8 +45,15 @@ export const labels = {
     invalidSnapshot: 'Nieprawidłowy lub nieaktualny harmonogram. Poprzednie alarmy zachowano.',
     empty: 'Brak zapisanego harmonogramu. Pobierz go przy włączonym internecie.',
     enable: 'Zezwól na powiadomienia',
+    displayGranted: 'Powiadomienia dozwolone',
     exact: 'Zezwól na dokładne alarmy',
+    exactGranted: 'Dokładne alarmy dozwolone',
     check: 'Sprawdź zgody po powrocie z ustawień',
+    appSettings: 'Ustawienia pracy w tle',
+    backgroundStatus: (restricted: boolean) =>
+      restricted
+        ? 'Praca w tle: ograniczona przez Androida. Zmień ustawienia baterii aplikacji.'
+        : 'Praca w tle: Android nie zgłasza ograniczenia. Producent telefonu może stosować dodatkowe blokady.',
     download: 'Pobierz i zapisz harmonogram',
     syncNow: 'Synchronizuj teraz',
     lastSync: 'Ostatnia udana synchronizacja:',
@@ -56,14 +63,32 @@ export const labels = {
     displayStatus: (allowed: boolean) => `Powiadomienia: ${allowed ? 'dozwolone' : 'brak zgody'}`,
     exactStatus: (allowed: boolean) => `Dokładne alarmy: ${allowed ? 'dozwolone' : 'brak zgody'}`,
     saved: (count: number, total: number) => `Zapisane alarmy systemowe: ${count} z ${total} grup.`,
+    noUpcoming:
+      'W pobranym harmonogramie nie ma przyszłych przypomnień dla Twojego konta. Sprawdź termin i odbiorców przypomnienia w wydarzeniu.',
+    nextAlarm: 'Najbliższy zapisany alarm:',
+    syncFailed: 'Nie udało się odświeżyć harmonogramu. Sprawdź szczegóły w powiadomieniach.',
+    planningError: 'Android zgłosił błąd podczas zapisywania alarmu:',
+    issues: {
+      display: 'Powiadomienia lub ich kanał są zablokowane w ustawieniach Androida.',
+      exact: 'Brak zgody Androida na dokładne alarmy.',
+      background:
+        'Android ogranicza pracę Rodziny w tle. Otwórz „Ustawienia pracy w tle” i usuń ograniczenie baterii aplikacji.',
+      limit: 'Przekroczono limit 400 grup alarmów. Część przypomnień nie została zapisana.',
+      missing: 'Nie wszystkie przyszłe przypomnienia są zapisane. Wybierz „Ponów zapis z urządzenia”.',
+      unexpected: 'W urządzeniu pozostały alarmy niezgodne z harmonogramem. Ponów synchronizację.',
+      expired: 'Zapisany harmonogram wygasł. Połącz się z internetem i zsynchronizuj go ponownie.',
+      planning: 'Nie udało się zapisać co najmniej jednego alarmu w Androidzie.',
+    },
     until: 'Zakres zabezpieczenia offline do:',
     generated: 'Harmonogram pobrany:',
     complete: 'Harmonogram zapisany.',
-    incomplete: 'Harmonogram nie jest w pełni zabezpieczony. Sprawdź zgody, limit i ponów zapis.',
+    incomplete: 'Harmonogram nie jest w pełni zabezpieczony.',
     error: 'Nie udało się zapisać lub sprawdzić alarmów. Spróbuj ponownie.',
     hint: 'Harmonogram odświeża się po zalogowaniu, zmianach, wznowieniu, odzyskaniu sieci i co 20 sekund w aktywnej aplikacji. Zmiany z serwera przy zamkniętym APK wymagają wznowienia i synchronizacji. Terminy oddalone o mniej niż 9 minut łączymy w jeden alarm o najwcześniejszej godzinie. Limit wynosi 400 grup.',
     limitations:
       'Po restarcie odblokuj telefon przynajmniej raz. Wymuszone zatrzymanie aplikacji, wyłączony telefon, cofnięte zgody, przestrzeń prywatna i ograniczenia baterii producenta mogą zablokować alarmy. Osobna PWA ma własne powiadomienia — wyłącz je na tym telefonie, jeśli używasz APK.',
+    oppoHint:
+      'Na telefonach OPPO sprawdź też Ustawienia → Aplikacje → Automatyczne uruchamianie → Rodzina. Ograniczenia działania w tle są niezależne od zgód na powiadomienia i dokładne alarmy.',
   },
   androidNotificationsPending:
     'Powiadomienia lokalne Androida będą dostępne po wdrożeniu kolejnych kroków fazy 4. Kalendarz wymaga połączenia z API.',

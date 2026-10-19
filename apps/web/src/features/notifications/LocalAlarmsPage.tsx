@@ -3,7 +3,7 @@ import { Alert, Button, Card, Stack, Text, Title } from '@mantine/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
-import { localScheduler } from './localSchedule.js';
+import { alarmStore, localScheduler } from './localSchedule.js';
 import { useLocalSchedule } from './scheduleSync.js';
 
 const text = labels.localAlarms;
@@ -41,30 +41,34 @@ export function LocalAlarmsPage() {
           <>
             <Text>{text.displayStatus(access.display === 'granted')}</Text>
             <Text>{text.exactStatus(access.exact === 'granted')}</Text>
+            <Text>{text.backgroundStatus(access.backgroundRestricted)}</Text>
           </>
         )}
         <Button
-          disabled={busy}
+          disabled={busy || access?.display === 'granted'}
           onClick={() =>
             void run(async () => {
               await LocalNotifications.requestPermissions();
             })
           }
         >
-          {text.enable}
+          {access?.display === 'granted' ? text.displayGranted : text.enable}
         </Button>
         <Button
-          disabled={busy}
+          disabled={busy || access?.exact === 'granted'}
           onClick={() =>
             void run(async () => {
               await LocalNotifications.changeExactNotificationSetting();
             })
           }
         >
-          {text.exact}
+          {access?.exact === 'granted' ? text.exactGranted : text.exact}
         </Button>
         <Button variant="subtle" disabled={busy} onClick={() => void run(check)}>
           {text.check}
+        </Button>
+        <Button variant="light" disabled={busy} onClick={() => void run(() => alarmStore.openAppSettings())}>
+          {text.appSettings}
         </Button>
         <Button
           loading={busy}
@@ -97,6 +101,20 @@ export function LocalAlarmsPage() {
           <Alert color={result.complete && !failure ? 'teal' : 'orange'} role="status">
             <Text>{result.complete && !failure ? text.complete : text.incomplete}</Text>
             <Text>{text.saved(result.count, result.total)}</Text>
+            {result.issues?.map((issue) => (
+              <Text key={issue}>{text.issues[issue]}</Text>
+            ))}
+            {result.planningError && (
+              <Text>
+                {text.planningError} {result.planningError}
+              </Text>
+            )}
+            {result.total === 0 && <Text>{text.noUpcoming}</Text>}
+            {result.nextFireAt !== undefined && (
+              <Text>
+                {text.nextAlarm} {date(result.nextFireAt)} (Europe/Warsaw)
+              </Text>
+            )}
             <Text>
               {text.generated} {date(result.generatedAt)}
             </Text>
@@ -117,6 +135,11 @@ export function LocalAlarmsPage() {
         <Text size="sm" c="dimmed">
           {text.limitations}
         </Text>
+        {access?.manufacturer?.toLowerCase() === 'oppo' && (
+          <Text size="sm" c="dimmed">
+            {text.oppoHint}
+          </Text>
+        )}
       </Stack>
     </Card>
   );

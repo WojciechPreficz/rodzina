@@ -10,10 +10,16 @@ function AndroidBanner() {
   const { user } = useMe();
   const { data } = useLocalSchedule(user ? `${user.familyId}:${user.id}` : '');
   if (data?.result?.complete && !data.error) return null;
+  const issue = data?.result?.issues?.[0];
+  const message = data?.error
+    ? labels.localAlarms.syncFailed
+    : issue
+      ? labels.localAlarms.issues[issue]
+      : labels.localAlarms.banner;
   return (
     <Alert color="yellow">
       <Stack gap="xs">
-        <Text>{labels.localAlarms.banner}</Text>
+        <Text>{message}</Text>
         <Button component={Link} to="/wiecej/powiadomienia" variant="light" style={{ alignSelf: 'flex-start' }}>
           {labels.notificationsUi.title}
         </Button>

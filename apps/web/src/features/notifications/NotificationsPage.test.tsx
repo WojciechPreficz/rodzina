@@ -8,7 +8,8 @@ import { NotificationBanner } from './NotificationBanner.js';
 
 const mocks = vi.hoisted(() => ({
   android: false,
-  schedule: undefined as undefined | { result?: { complete: boolean }; error?: string },
+  schedule: undefined as
+    undefined | { result?: { complete: boolean; issues?: ('background' | 'missing')[] }; error?: string },
   status: {
     data: undefined as
       | undefined
@@ -51,6 +52,21 @@ it('uses local alarm coverage for the Android banner without a Web Push subscrip
   mocks.schedule = { result: { complete: false } };
   show(<NotificationBanner />);
   expect(screen.getByRole('link', { name: 'Powiadomienia' })).toBeInTheDocument();
+});
+
+it('shows the actual Android coverage problem instead of asking to grant permissions again', () => {
+  mocks.android = true;
+  mocks.schedule = { result: { complete: false, issues: ['background'] } };
+  show(<NotificationBanner />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Android ogranicza pracę Rodziny w tle');
+  expect(screen.getByRole('alert')).not.toHaveTextContent('Sprawdź zgody i zsynchronizuj');
+});
+
+it('distinguishes a failed refresh from missing Android permissions', () => {
+  mocks.android = true;
+  mocks.schedule = { result: { complete: true }, error: 'offline' };
+  show(<NotificationBanner />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Nie udało się odświeżyć harmonogramu');
 });
 afterEach(() => {
   cleanup();

@@ -29,7 +29,7 @@ export function useLocalSchedule(account: string, automatic = false) {
       const abort = () => localScheduler.invalidate();
       signal.addEventListener('abort', abort, { once: true });
       try {
-        const access = await localScheduler.permissions();
+        let access = await localScheduler.permissions();
         signal.throwIfAborted();
         let error: string | undefined;
         let result;
@@ -40,6 +40,7 @@ export function useLocalSchedule(account: string, automatic = false) {
           error = failure instanceof Error ? failure.message : String(failure);
           result = await localScheduler.status(account);
         }
+        access = await localScheduler.permissions();
         signal.throwIfAborted();
         return { access, result, error };
       } finally {

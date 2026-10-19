@@ -909,3 +909,60 @@ gotowej binarki. Brak nowego procesu w tle, WebSocketów, Dockera i Redisa. Spra
 smoke paczki serwera oraz build Androida, APK publikuje się nadal osobno. Krok 4.7
 jest zaimplementowany lokalnie; pełna akceptacja fazy 4 pozostaje otwarta do czasu
 zapisania wyników powyższych prób sprzętowych i kontrolowanego deployu.
+
+## Diagnostyka alarmów offline po zgłoszeniu 19.10.2026
+
+Właściciel na OPPO Reno 5Z z Androidem 13 i APK `1.0.0-deploy.2` potwierdził obie
+zgody, dodał przyszłe przypomnienie i uzyskał `1 z 1`. Ekran nadal pokazywał
+niepełne zabezpieczenie i baner. Po wyłączeniu internetu i usunięciu APK z listy
+ostatnich przypomnienie nie pojawiło się o czasie. Powiadomienie zobaczył dopiero
+po wejściu do aplikacji i połączeniu z internetem. Nie ustalono źródła tego
+powiadomienia ani dokładnej przyczyny niedostarczenia lokalnego alarmu.
+
+W poprawionym ekranie:
+
+- `0 z 0` oznacza brak przyszłych wpisów w pobranym harmonogramie. Sprawdź termin,
+  przypomnienie na liście dodanych przypomnień wydarzenia oraz jego odbiorców.
+  Sprawdzenie po godzinie przypomnienia nie dowodzi, że wcześniej go nie zapisano.
+- Przy niepustym harmonogramie widnieje najbliższy zapisany termin w Europe/Warsaw.
+  Zapis nie potwierdza, że system już wyświetlił powiadomienie.
+- Stare powiadomienia nie wpływają na licznik i kompletność: odczyt korzysta
+  z `getAll({ state: 'SCHEDULED' })`, ponieważ `getPending()` pluginu 8.3.1 zwraca
+  także wcześniejsze rekordy.
+- Przy niepełnym zabezpieczeniu ekran i baner podają konkretną przyczynę: zgody,
+  ograniczenie tła, limit, brakujące lub niezgodne alarmy, wygaśnięcie bądź błąd
+  planowania. Przy błędzie pobrania baner informuje o nieudanym odświeżeniu.
+- Stan pracy w tle pochodzi z Androida (`isBackgroundRestricted`). „Android nie
+  zgłasza ograniczenia” nie oznacza braku dodatkowych mechanizmów producenta.
+  „Ustawienia pracy w tle” otwierają standardowy ekran informacji o Rodzinie,
+  gdzie użytkownik może przejść do ustawień baterii aplikacji.
+- OPPO pokazuje dodatkową wskazówkę: Ustawienia → Aplikacje → Automatyczne
+  uruchamianie → Rodzina. Ścieżka według [instrukcji OPPO](https://support.oppo.com/co/answer/?aid=neu119)
+  dotyczy ColorOS 12–13; nazwy w polskim systemie mogą się różnić.
+
+Próba sprzętowa po zainstalowaniu nowego APK:
+
+1. Sprawdź obie zgody, pracę w tle i automatyczne uruchamianie. Zapisz widoczną
+   wersję APK i ewentualne komunikaty błędów.
+2. Dodaj wydarzenie za co najmniej 10 minut z przypomnieniem w chwili rozpoczęcia
+   dla siebie albo całej rodziny. Potwierdź, że przypomnienie jest na liście
+   dodanych przypomnień i że najbliższy zapisany alarm ma oczekiwaną godzinę.
+3. Wyłącz sieć, usuń interfejs z listy ostatnich i zablokuj ekran. Zanotuj czas
+   odbioru i opóźnienie; nie używaj „Wymuś zatrzymanie”. Przy braku alarmu sprawdź
+   najpierw ponowne otwarcie APK nadal offline, a dopiero potem włączenie sieci.
+4. Przy spóźnionym powiadomieniu sprawdź aplikację źródłową w systemowych
+   informacjach o powiadomieniu. Osobna instalacja PWA nadal może dostawać Web Push.
+5. Powtórz test po restarcie i pierwszym odblokowaniu, nadal bez internetu.
+
+Testów komponentów, atrap mostka ani samego zbudowania APK nie traktujemy jako
+potwierdzenia dostarczenia offline na fizycznym OPPO.
+
+Weryfikacja lokalna poprawki: pełny Vitest 442/442 w 49 plikach (w tym 54 testy
+powiadomień i sesji), typecheck, lint (dwa dotychczasowe ostrzeżenia Fast Refresh),
+format:check, build i `release:smoke` przechodzą. Headless Playwright: 2/2 próby
+ekranu alarmów przy 390 i 1280 px; obejrzano oba zrzuty, bez przepełnienia w poziomie.
+`android:debug`, Android Lint i 3/3 testy JVM przechodzą. Vitest, Playwright
+i Gradle wymagały ponowienia poza sandboxem po błędach plików tymczasowych
+lub zatrzymaniu na komunikacji lokalnej. Nie opublikowano aktualizacji ani
+podpisanego APK i nie zaliczono nowego testu sprzętowego. Wersja właściciela
+`1.0.0-deploy.2` nie zawiera tej poprawki.

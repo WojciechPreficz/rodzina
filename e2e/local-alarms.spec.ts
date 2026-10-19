@@ -37,13 +37,13 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
     const pending = new Map<number, Record<string, unknown>>();
     const methods = {
       RodzinaApi: ['request', 'clearSession'],
-      RodzinaAlarms: ['read', 'write'],
+      RodzinaAlarms: ['read', 'write', 'runtimeStatus', 'openAppSettings'],
       LocalNotifications: [
         'checkPermissions',
         'checkExactNotificationSetting',
         'listChannels',
         'createChannel',
-        'getPending',
+        'getAll',
         'schedule',
         'cancel',
         'removeAllDeliveredNotifications',
@@ -65,6 +65,8 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
             return { status: response.status, body: await response.text() };
           }
           if (plugin === 'RodzinaAlarms') {
+            if (method === 'runtimeStatus') return { backgroundRestricted: false, manufacturer: 'OPPO' };
+            if (method === 'openAppSettings') return {};
             if (method === 'read') return { value: saved, revision: 'test' };
             saved = options.value as string;
             return {};
@@ -72,7 +74,7 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
           if (method === 'checkPermissions') return { display: 'granted' };
           if (method === 'checkExactNotificationSetting') return { exact_alarm: 'granted' };
           if (method === 'listChannels') return { channels: [] };
-          if (method === 'getPending') return { notifications: [...pending.values()] };
+          if (method === 'getAll') return { notifications: [...pending.values()] };
           if (method === 'schedule') {
             for (const item of options.notifications as { id: number }[]) pending.set(item.id, item);
           }
@@ -90,6 +92,9 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
   await page.getByRole('button', { name: 'Synchronizuj teraz' }).click();
   await expect(page.getByRole('status')).toContainText('Harmonogram zapisany.');
   await expect(page.getByRole('status')).toContainText('1 z 1');
+  await expect(page.getByRole('status')).toContainText('Najbliższy zapisany alarm:');
+  await expect(page.getByRole('button', { name: 'Powiadomienia dozwolone' })).toBeDisabled();
+  await expect(page.getByText(/Na telefonach OPPO/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('local-alarms.png'), fullPage: true });
   const alarms = () =>

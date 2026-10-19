@@ -371,3 +371,34 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   pobranego APK). Workflow nie publikuje APK, nie zmienia klucza i nie aktualizuje
   telefonu. Brak kontrolowanej próby na vh.pl i testów sprzętowych nie jest
   traktowany jako pełne zaliczenie kryteriów fazy.
+
+## 19.10.2026 — stan alarmów po zgłoszeniu z OPPO
+
+- Właściciel zgłosił na OPPO Reno 5Z, Android 13, APK `1.0.0-deploy.2` brak
+  przypomnienia offline po usunięciu aplikacji z listy ostatnich. Obie zgody były
+  dozwolone, ekran pokazywał `1 z 1`, ale także niepełne zabezpieczenie i baner.
+  Powiadomienie pojawiło się po otwarciu aplikacji i połączeniu z internetem.
+  To obserwacja użytkownika, bez logów systemowego alarmu i bez potwierdzenia,
+  czy spóźnione powiadomienie pochodziło z APK, czy z osobnej PWA.
+- Kod Androida pluginu `@capacitor/local-notifications` 8.3.1 potwierdza,
+  że `getPending()` zwraca również zachowane rekordy wcześniejszych powiadomień.
+  Zastępujemy ten odczyt `getAll({ state: 'SCHEDULED' })` przy uzgadnianiu,
+  sprawdzaniu i anulowaniu przyszłych alarmów. Stare powiadomienia nie mogą
+  powodować fałszywego ostrzeżenia przy `0 z 0` ani `1 z 1`. Regresja odtwarza
+  oba przypadki przed poprawką; nie zmieniamy algorytmu czasu ani transportu API.
+- Stan zawiera konkretne przyczyny niepełnego zabezpieczenia, najbliższy zapisany
+  termin oraz błąd planowania zamiast samej flagi. Baner podaje przyczynę,
+  a przyznane zgody mają potwierdzenie na nieaktywnych przyciskach.
+- Natywny mostek odczytuje `ActivityManager.isBackgroundRestricted()` i producenta
+  urządzenia. Zgłoszone ograniczenie tła wyklucza komunikat pełnego zabezpieczenia,
+  także przy zgodach i wszystkich zapisanych wpisach. Przycisk otwiera standardowe
+  ustawienia własnej aplikacji; nie zmienia ustawień bez użytkownika i nie dodaje
+  uprawnień. Brak zgłoszonej blokady nie wyklucza dodatkowych ograniczeń OPPO.
+- OPPO dla ColorOS 12–13 wskazuje automatyczne uruchamianie w Ustawienia →
+  Aplikacje → Automatyczne uruchamianie. To trop diagnostyczny, a nie potwierdzona
+  przyczyna zgłoszenia: [instrukcja producenta](https://support.oppo.com/co/answer/?aid=neu119).
+  Znaczenie systemowego ograniczenia opisuje [Android ActivityManager](<https://developer.android.com/reference/android/app/ActivityManager#isBackgroundRestricted()>).
+- Licznik nadal potwierdza wpisy w magazynie pluginu, nie rzeczywiste dostarczenie
+  przez system. Poprawienie statusu nie zalicza testu offline. Wymagany jest nowy
+  test na telefonie po publikacji i instalacji poprawionego APK. Brak nowych
+  zmiennych API, migracji, cronów, uprawnień i zależności runtime serwera.

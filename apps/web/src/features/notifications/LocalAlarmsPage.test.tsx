@@ -12,10 +12,11 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   exact: vi.fn(),
   status: vi.fn(),
+  settings: vi.fn(),
 }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => true }));
 vi.mock('../../auth.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
-vi.mock('./localSchedule.js', () => ({ localScheduler: mocks }));
+vi.mock('./localSchedule.js', () => ({ localScheduler: mocks, alarmStore: { openAppSettings: mocks.settings } }));
 vi.mock('@capacitor/local-notifications', () => ({
   LocalNotifications: { requestPermissions: mocks.request, changeExactNotificationSetting: mocks.exact },
 }));
@@ -90,4 +91,64 @@ it('keeps the previous successful timestamp visible after a failed synchronizati
   expect(await screen.findByRole('alert')).toHaveTextContent('offline');
   expect(screen.getByRole('status')).toHaveTextContent('Ostatnia udana synchronizacja: 17.10.2026, 10:00');
   expect(screen.getByRole('status')).not.toHaveTextContent('Harmonogram zapisany.');
+});
+
+it('confirms granted permissions on disabled buttons and shows the next saved alarm', async () => {
+  mocks.permissions.mockResolvedValue({
+    display: 'granted',
+    exact: 'granted',
+    backgroundRestricted: false,
+    manufacturer: 'OPPO',
+  });
+  mocks.sync.mockResolvedValue({
+    count: 1,
+    total: 1,
+    complete: true,
+    issues: [],
+    generatedAt: Date.UTC(2026, 9, 19, 10),
+    validUntil: Date.UTC(2026, 9, 20, 10),
+    nextFireAt: Date.UTC(2026, 9, 19, 11),
+  });
+  show();
+  expect(await screen.findByRole('button', { name: 'Powiadomienia dozwolone' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Dokładne alarmy dozwolone' })).toBeDisabled();
+  expect(screen.getByRole('status')).toHaveTextContent('Najbliższy zapisany alarm: 19.10.2026, 13:00');
+  expect(screen.getByText(/Na telefonach OPPO/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Ustawienia pracy w tle' }));
+  await waitFor(() => expect(mocks.settings).toHaveBeenCalledOnce());
+});
+
+it('explains a background restriction even when all expected alarms are saved', async () => {
+  mocks.permissions.mockResolvedValue({
+    display: 'granted',
+    exact: 'granted',
+    backgroundRestricted: true,
+    manufacturer: 'OPPO',
+  });
+  mocks.sync.mockResolvedValue({
+    count: 1,
+    total: 1,
+    complete: false,
+    issues: ['background'],
+    generatedAt: Date.now(),
+    validUntil: Date.now() + 60000,
+  });
+  show();
+  expect(await screen.findByRole('status')).toHaveTextContent('Android ogranicza pracę Rodziny w tle');
+  expect(screen.getByRole('status')).toHaveTextContent('1 z 1');
+  expect(screen.getByRole('status')).not.toHaveTextContent('Sprawdź zgody');
+});
+
+it('explains an empty future schedule without implying that an alarm will fire', async () => {
+  mocks.sync.mockResolvedValue({
+    count: 0,
+    total: 0,
+    complete: true,
+    issues: [],
+    generatedAt: Date.now(),
+    validUntil: Date.now() + 60000,
+  });
+  show();
+  expect(await screen.findByRole('status')).toHaveTextContent('nie ma przyszłych przypomnień dla Twojego konta');
+  expect(screen.queryByText(/Najbliższy zapisany alarm:/)).not.toBeInTheDocument();
 });
