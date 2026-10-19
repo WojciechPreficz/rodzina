@@ -476,3 +476,13 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   wymaga zgodnej bazy i konfiguracji; sam poprzedni ZIP nie odtwarza tabeli.
 - To implementacja lokalna. Nie wykonuje wdrożenia ani testów fizycznego telefonu;
   końcowa regresja i porządkowanie dokumentacji całego produktu należą do 4.10.
+
+## 19.10.2026 — usunięcie niestabilnego testu migracji PWA
+
+- Na polecenie właściciela usuwamy scenariusz Playwright
+  `new frontend retires legacy registration and cache while keeping the session`,
+  który zatrzymał CI 39300447048. Nie rozwijamy dodatkowej infrastruktury testowej PWA.
+- Kod sprzątania dawnych instalacji pozostaje. Zachowujemy testy nowej wizyty
+  bez PWA, samodzielnego wycofania workera oraz powrotu ze starego cache z zachowaniem sesji.
+  Usunięty scenariusz sprzątania przez nowy frontend nie ma już osobnego testu e2e;
+  pozostają jego testy jednostkowe.

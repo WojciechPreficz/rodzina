@@ -53,30 +53,6 @@ test('new visitors get a website without registering a service worker', async ({
   expect(manifest.status()).toBe(410);
 });
 
-test('new frontend retires legacy registration and cache while keeping the session', async ({
-  page,
-  baseURL,
-}, info) => {
-  const registered = await page.request.post('/api/auth/register-family', {
-    headers: { Origin: baseURL! },
-    data: {
-      familyName: 'Migracja',
-      displayName: 'Anna',
-      email: `retirement-${info.project.name}@example.com`,
-      password: 'password123',
-    },
-  });
-  expect(registered.ok()).toBe(true);
-  await installLegacyWorker(page);
-  await page.goto('/wiecej');
-  await expect(page.getByText('Anna · Migracja')).toBeVisible();
-  await expectRetired(page);
-  expect(await page.evaluate(async () => (await fetch('/old-ui')).text())).toContain('<div id="root"></div>');
-  expect((await page.request.get('/api/auth/me')).ok()).toBe(true);
-  await page.reload();
-  await expect(page.getByText('Anna · Migracja')).toBeVisible();
-});
-
 test('existing registration can retire itself without loading the new React frontend', async ({ page }) => {
   await installLegacyWorker(page);
   await page.evaluate(async () => {
