@@ -1,5 +1,27 @@
 # Decyzje
 
+## 19.10.2026 — wycofanie PWA, kroki 4.8-4.10
+
+- Na polecenie właściciela pozostają strona WWW i APK. Alarmy offline Androida
+  są kluczowe; nie utrzymujemy alternatywnej instalacji PWA ani Web Push.
+  Nowa sekcja PLAN ma pierwszeństwo przed wcześniejszymi decyzjami o PWA.
+- Krok 4.8 obejmuje kompletną zmianę frontendu i migrację starych rejestracji.
+  Samo usunięcie pliku SW pozostawiłoby stare instalacje bez ścieżki aktualizacji.
+  Dlatego `/sw.js` nadal dostarcza mały skrypt wyrejestrowujący, bez fetch/push,
+  z `no-store`. Nie rejestrujemy go przy nowych wizytach ani nie pakujemy do APK.
+  Frontend sprząta tylko root `/sw.js` i cache `workbox-precache-*` z sufiksem
+  własnego scope. Sesje, localStorage i cache o innych nazwach pozostają.
+- Deploy nakładkowy zachowuje stare pliki, dlatego historyczny manifest blokujemy
+  odpowiedzią 410 w API przed serwowaniem statycznym. `/sw.js` zostaje nadpisany
+  skryptem wycofującym. Ikony zachowujemy dla istniejących powiadomień i skrótów.
+- Usunięcie backendu Web Push, VAPID, joba/crona i tabeli subskrypcji należy do 4.9.
+  Krok 4.10 domyka dokumentację, regresję i procedurę produkcyjną. W każdym kroku
+  zachowujemy dane przypomnień, odbiorców, `/api/reminders/schedule` i alarmy APK.
+  Wycofanie PWA nie potwierdza naprawy ani działania alarmów fizycznego telefonu.
+- Wycofanie rejestracji i subskrypcji wymaga wizyty online lub aktualizacji SW
+  przez przeglądarkę. Nie usuwamy zdalnie starej ikony PWA z urządzenia.
+  Dokumentacja mechanizmu: [Chrome — wycofywanie service workera](https://developer.chrome.com/docs/workbox/remove-buggy-service-workers).
+
 ## Ręcznie uruchamiany deploy GitHub Actions — krok 4.7 (2026-10-16)
 
 - Na prośbę właściciela dodajemy krok 4.7 po dystrybucji APK z kroku 4.6 i przenosimy do niego domknięcie fazy 4.

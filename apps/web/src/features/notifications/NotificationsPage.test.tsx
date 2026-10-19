@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -10,63 +10,19 @@ const mocks = vi.hoisted(() => ({
   android: false,
   schedule: undefined as
     undefined | { result?: { complete: boolean; issues?: ('background' | 'missing')[] }; error?: string },
-  status: {
-    data: undefined as
-      | undefined
-      | { supported: boolean; permission: NotificationPermission; subscribed: boolean; hasReminders: boolean },
-    isPending: false,
-    error: null,
-  },
-  enable: { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null },
-  test: {
-    mutate: vi.fn(),
-    reset: vi.fn(),
-    isPending: false,
-    error: null,
-    data: undefined as undefined | { sent: number; failed: number; removed: number },
-  },
 }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => mocks.android }));
 vi.mock('../../auth.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
 vi.mock('./scheduleSync.js', () => ({ useLocalSchedule: () => ({ data: mocks.schedule }) }));
-vi.mock('./pushQueries.js', () => ({ usePushStatus: () => mocks.status, usePushActions: () => mocks }));
+vi.mock('../updates/AndroidUpdates.js', () => ({ AndroidDownload: () => <div>Pobieranie APK</div> }));
+vi.mock('./LocalAlarmsPage.js', () => ({ LocalAlarmsPage: () => <div>Alarmy Androida</div> }));
 beforeEach(() => {
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
   );
-  mocks.status.data = { supported: true, permission: 'default', subscribed: false, hasReminders: false };
-  mocks.test.data = undefined;
   mocks.android = false;
   mocks.schedule = undefined;
-  vi.clearAllMocks();
-});
-
-it('uses local alarm coverage for the Android banner without a Web Push subscription', () => {
-  mocks.android = true;
-  mocks.status.data = { supported: false, hasReminders: true, permission: 'default', subscribed: false };
-  mocks.schedule = { result: { complete: true } };
-  show(<NotificationBanner />);
-  expect(screen.queryByRole('link', { name: 'Powiadomienia' })).not.toBeInTheDocument();
-  cleanup();
-  mocks.schedule = { result: { complete: false } };
-  show(<NotificationBanner />);
-  expect(screen.getByRole('link', { name: 'Powiadomienia' })).toBeInTheDocument();
-});
-
-it('shows the actual Android coverage problem instead of asking to grant permissions again', () => {
-  mocks.android = true;
-  mocks.schedule = { result: { complete: false, issues: ['background'] } };
-  show(<NotificationBanner />);
-  expect(screen.getByRole('alert')).toHaveTextContent('Android ogranicza pracę Rodziny w tle');
-  expect(screen.getByRole('alert')).not.toHaveTextContent('Sprawdź zgody i zsynchronizuj');
-});
-
-it('distinguishes a failed refresh from missing Android permissions', () => {
-  mocks.android = true;
-  mocks.schedule = { result: { complete: true }, error: 'offline' };
-  show(<NotificationBanner />);
-  expect(screen.getByRole('alert')).toHaveTextContent('Nie udało się odświeżyć harmonogramu');
 });
 afterEach(() => {
   cleanup();
@@ -80,48 +36,41 @@ function show(element = <NotificationsPage />) {
   );
 }
 
-it.each([
-  [false, 'default', false, 'nie są obsługiwane'],
-  [true, 'denied', false, 'są zablokowane'],
-  [true, 'granted', true, 'są włączone'],
-  [true, 'granted', false, 'są wyłączone'],
-] as const)('shows device status %s %s %s', (supported, permission, subscribed, message) => {
-  mocks.status.data = { supported, permission, subscribed, hasReminders: false };
+it('explains that reminders require APK and offers the existing download component', () => {
   show();
-  expect(screen.getByRole('status')).toHaveTextContent(message);
-  expect(mocks.enable.mutate).not.toHaveBeenCalled();
-  if (!supported || permission === 'denied')
-    expect(screen.queryByRole('button', { name: 'Włącz powiadomienia' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Wyślij testowe' }) !== null).toBe(subscribed);
+  expect(screen.getByText('Przypomnienia są dostępne w aplikacji na Androida.')).toBeInTheDocument();
+  expect(screen.getByText('Pobieranie APK')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Włącz powiadomienia' })).not.toBeInTheDocument();
 });
-it('enables only after a click and shows Android instructions', () => {
+it('keeps the native alarm settings inside APK', () => {
+  mocks.android = true;
   show();
-  expect(screen.getByText(/Zainstaluj aplikację/)).toBeInTheDocument();
-  expect(mocks.enable.mutate).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Włącz powiadomienia' }));
-  expect(mocks.enable.mutate).toHaveBeenCalledOnce();
+  expect(screen.getByText('Alarmy Androida')).toBeInTheDocument();
+  expect(screen.queryByText('Pobieranie APK')).not.toBeInTheDocument();
 });
-it('sends a test on click and reports partial failure', () => {
-  mocks.status.data = { supported: true, permission: 'granted', subscribed: true, hasReminders: true };
-  mocks.test.data = { sent: 1, failed: 1, removed: 1 };
-  show();
-  fireEvent.click(screen.getByRole('button', { name: 'Wyślij testowe' }));
-  expect(mocks.test.mutate).toHaveBeenCalledOnce();
-  expect(screen.getByText(/Przekazano do usługi push: 1/)).toHaveTextContent('Błędy: 1. Wygasłe subskrypcje: 1.');
+it('does not show a browser push banner', () => {
+  show(<NotificationBanner />);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
-it.each([
-  [false, false, 'default', false],
-  [true, false, 'default', true],
-  [true, true, 'granted', false],
-  [true, true, 'denied', true],
-] as const)(
-  'shows banner for reminders=%s subscription=%s permission=%s',
-  (hasReminders, subscribed, permission, visible) => {
-    mocks.status.data = { supported: true, hasReminders, subscribed, permission };
-    show(<NotificationBanner />);
-    expect(screen.queryByText('Włącz powiadomienia, aby dostawać przypomnienia') !== null).toBe(visible);
-    if (visible)
-      expect(screen.getByRole('link', { name: 'Powiadomienia' })).toHaveAttribute('href', '/wiecej/powiadomienia');
-    expect(mocks.enable.mutate).not.toHaveBeenCalled();
-  },
-);
+it('uses local alarm coverage for the Android banner', () => {
+  mocks.android = true;
+  mocks.schedule = { result: { complete: true } };
+  show(<NotificationBanner />);
+  expect(screen.queryByRole('link', { name: 'Powiadomienia' })).not.toBeInTheDocument();
+  cleanup();
+  mocks.schedule = { result: { complete: false } };
+  show(<NotificationBanner />);
+  expect(screen.getByRole('link', { name: 'Powiadomienia' })).toBeInTheDocument();
+});
+it('shows the actual Android coverage problem', () => {
+  mocks.android = true;
+  mocks.schedule = { result: { complete: false, issues: ['background'] } };
+  show(<NotificationBanner />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Android ogranicza pracę Rodziny w tle');
+});
+it('distinguishes a failed refresh from missing Android permissions', () => {
+  mocks.android = true;
+  mocks.schedule = { result: { complete: true }, error: 'offline' };
+  show(<NotificationBanner />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Nie udało się odświeżyć harmonogramu');
+});

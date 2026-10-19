@@ -1,6 +1,10 @@
 # Rodzina
 
-Rodzinna aplikacja PWA do wspólnego organizowania codziennych spraw.
+Rodzinna aplikacja Android i strona WWW do wspólnego organizowania codziennych spraw.
+
+Przypomnienia offline są funkcją APK. Strona pozwala zarządzać danymi i pobrać
+aplikację Android. Wycofanie PWA jest podzielone na kroki 4.8-4.10 w `docs/PLAN.md`;
+starsze instrukcje PWA poniżej i w dokumentacji opisują poprzednie wydania.
 
 ## Lokalny start
 

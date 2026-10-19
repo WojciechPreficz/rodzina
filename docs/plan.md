@@ -1,6 +1,6 @@
 ---
-name: Rodzinna aplikacja Android i PWA
-overview: "Rodzinna aplikacja React + Fastify + SQLite. PWA i API działają na https://rodzina.preficze.pl (vh.pl). Po fazach 0-3 wykonano pierwszy deploy. Dalsze fazy: 4 Android, 5 zakupy, 6 obiady, 7 zadania, 8 dokumenty. Bez wydania open source."
+name: Rodzinna aplikacja Android i strona WWW
+overview: "Rodzinna aplikacja React + Fastify + SQLite. Docelowo strona WWW i APK, z przypomnieniami offline wyłącznie w APK. Faza 4 obejmuje wycofanie PWA w krokach 4.8-4.10 przed fazą 5. API i strona działają na https://rodzina.preficze.pl (vh.pl)."
 todos:
   - id: phase0
     content: "Faza 0: monorepo (web/api/shared), AGENTS.md, CI, manifest PWA, paczka release + lokalny smoke test, DEPLOY.md"
@@ -20,6 +20,15 @@ todos:
   - id: phase4
     content: "Faza 4: Android przez Capacitor, sesja i API, lokalny harmonogram, alarmy offline, podpisane APK i ręcznie uruchamiany deploy GitHub Actions"
     status: pending
+  - id: step4-8
+    content: "Krok 4.8: strona bez PWA i Web Push, wycofanie starego service workera, zachowanie APK"
+    status: completed
+  - id: step4-9
+    content: "Krok 4.9: usunięcie backendu Web Push, VAPID, joba i subskrypcji; zachowanie harmonogramu APK i backupu"
+    status: pending
+  - id: step4-10
+    content: "Krok 4.10: końcowa regresja strony i APK, dokumentacja oraz procedura wdrożenia bez PWA"
+    status: pending
   - id: phase5
     content: "Faza 5: współdzielona lista zakupów (z obsługą słabego zasięgu)"
     status: pending
@@ -35,7 +44,7 @@ todos:
 isProject: false
 ---
 
-# Rodzina - rodzinna aplikacja Android i PWA (plan projektu)
+# Rodzina - aplikacja Android i strona WWW (plan projektu)
 
 Ten dokument jest samowystarczalny i przeznaczony do przekazania agentowi AI lub nowemu kontrybutorowi. W fazie 0 trafia do repo jako `docs/PLAN.md`. Każda faza ma zakres, kryteria akceptacji i listę rzeczy poza zakresem.
 
@@ -43,7 +52,8 @@ Ten dokument jest samowystarczalny i przeznaczony do przekazania agentowi AI lub
 
 - **Produkt.** Aplikacja do zarządzania życiem rodzinnym. Rodzina ma jedno konto, a w nim wielu domowników.
 - **Widoczność.** Wydarzenia, zakupy, obiady i dokumenty widzi cała rodzina. Wyjątkiem są listy zadań (faza 7): widzi je właściciel i domownicy, którym je udostępnił.
-- **Platforma docelowa: aplikacja Android (APK przez Capacitor)** ze wspólnym interfejsem React. Wersja przeglądarkowa i PWA pozostają dostępne na telefonie i desktopie w Chrome. APK zawiera lokalny frontend, a nie tylko stronę ładowaną ze zdalnego adresu.
+- **Platformy docelowe: aplikacja Android (APK przez Capacitor) i zwykła strona WWW** ze wspólnym interfejsem React. Przypomnienia, w tym alarmy offline, są funkcją APK. Strona pozwala zarządzać danymi i pobrać APK. APK zawiera lokalny frontend, a nie tylko stronę ładowaną ze zdalnego adresu. Decyzja właściciela z 19.10.2026 wycofuje PWA i Web Push w krokach 4.8-4.10 przed fazą 5.
+- **Pierwszeństwo aktualnego zakresu:** opisy PWA, Web Push i ich kryteriów w fazach 0-4 oraz historycznego deployu dokumentują wcześniejszy projekt. Od kroku 4.8 obowiązuje sekcja „Wycofanie PWA” poniżej. Dla przyszłych faz 7-8 testujemy odbiorców i harmonogram APK zamiast usuniętej wysyłki Web Push i `job --now`; zachowujemy zasady prywatności, dat i uprawnień. Nie przywracamy PWA w kolejnych fazach.
 - **Hosting docelowy.** Współdzielony hosting cPanel w vh.pl, aplikacja pod subdomeną istniejącej domeny właściciela, przez HTTPS. Właściciel ma już na tym hostingu aplikację wdrożoną tą samą metodą (zip, aplikacja w cPanel, Phusion Passenger, SQLite w katalogu danych). Wzorzec deployu: [portfel/DEPLOY.md](https://github.com/WojciechPreficz/portfel/blob/main/DEPLOY.md). Wzorujemy się tylko na sposobie wdrożenia, nie na stacku.
 - **Kolejność: fazy 0-3 → pierwszy deploy (wykonany) → faza 4 (Android) → faza 5 (zakupy) → faza 6 (obiady) → faza 7 (zadania) → faza 8 (dokumenty).** Właściciel potwierdził 16.10.2026 działanie aplikacji pod https://rodzina.preficze.pl. Nie powtarzamy pierwszego deployu. Numeracja odpowiada kolejności prac; wykonane wdrożenie ma osobny zapis historyczny i kroki D.1-D.4. Dawny etap wydania open source usunięto. Funkcje rozwijamy i testujemy lokalnie, a sprawdzone aktualizacje serwera wdrażamy według `docs/DEPLOY.md`. Samo działanie strony nie zalicza niepotwierdzonych testów ani kryteriów wcześniejszych faz.
 - **Język.** UI wyłącznie po polsku. Kod, nazwy, komentarze i commity po angielsku. README i dokumentacja w `docs/` po polsku.
@@ -792,6 +802,32 @@ rodzina/
 **Poza zakresem:** wydanie open source, Docker/VPS, publikacja w Google Play, iOS, FCM i zdalne budzenie APK, pełna edycja kalendarza/zadań/dokumentów offline, implementacja modułów faz 5-8, gwarancja wykrycia zmiany uprawnień bez połączenia z serwerem.
 
 **Dokumentacja techniczna do implementacji:** [powiadomienia lokalne Capacitor](https://capacitorjs.com/docs/apis/local-notifications), [alarmy Androida](https://developer.android.com/develop/background-work/services/alarms), [linki aplikacji](https://capacitorjs.com/docs/guides/deep-links). Wersje i zachowanie pluginów sprawdzamy przy realizacji kroku; opis API nie zastępuje testów telefonu.
+
+---
+
+### Wycofanie PWA — kroki 4.8-4.10 przed fazą 5
+
+**Decyzja właściciela, 19.10.2026:** pozostają strona WWW i aplikacja APK. Kluczową funkcją są alarmy offline Androida; PWA nie spełnia tego wymagania. Ta sekcja zastępuje wcześniejsze wymagania utrzymywania PWA i Web Push, nie zmienia zakresu modułów faz 5-8 ani statusu testów fizycznego telefonu. Każdy krok to osobny czat i commit. Lokalna realizacja nie oznacza wdrożenia produkcyjnego.
+
+#### Krok 4.8 - Strona bez PWA i wycofanie istniejących instalacji
+
+**Stan 19.10.2026:** zrealizowany i sprawdzony lokalnie; 425 testów Vitest i 22 Playwright headless, build strony/API, smoke paczki i debug APK przechodzą. Zrzuty UI oceniono przy 390 i 1280 px. Nie wdrożono na produkcję ani nie potwierdzono nowego testu alarmu na fizycznym telefonie. Szczegóły w DEVELOPMENT.
+
+- **Zakres:** usunięcie `vite-plugin-pwa`, generowania manifestu i Workbox oraz klienta Web Push. Ekran powiadomień strony wyjaśnia, że przypomnienia wymagają APK, i korzysta z istniejącego pobierania Androida. Baner o zgodach pozostaje tylko w APK. Wspólne formularze nadal zapisują przypomnienia. Nowe wizyty nie rejestrują żadnego workera. Dotychczasowy `/sw.js` pozostaje jako skrypt przejściowy: przejmuje starego workera, anuluje subskrypcję, czyści wyłącznie precache Rodziny i wyrejestrowuje się; bez obsługi fetch i push. Nowy frontend również sprząta starą rejestrację. Nie usuwamy sesji, localStorage ani danych natywnych. Historyczny manifest zwraca 410, również jeśli plik pozostał po deployu nakładkowym. Skrypt przejściowy ma `Cache-Control: no-store` i nie trafia do APK.
+- **Granica:** backend Web Push, VAPID, tabela subskrypcji i cron pozostają do kroku 4.9. Zachowujemy kontrakt `/api/reminders/schedule`, odbiorców i alarmy natywne. Ikony starych powiadomień pozostają w okresie przejścia. Nie obiecujemy zdalnego usunięcia ikony wcześniej zainstalowanej PWA.
+- **Gotowe, gdy:** lint, format:check, typecheck, testy, build, `release:smoke` i build debug Androida przechodzą. Testy obejmują nową wizytę bez rejestracji i żądań `/api/push/*`, migrację starej rejestracji/cache i samodzielną aktualizację starego workera, zachowanie sesji i danych spoza cache PWA, ekran strony przy 390 i 1280 px, brak manifestu i workera w APK oraz regresję ekranu alarmów lokalnych. Weryfikacja UI i wyniki są zapisane w DEVELOPMENT. Testy przeglądarkowe wyłącznie headless. Stan testów fizycznego telefonu raportujemy oddzielnie.
+
+#### Krok 4.9 - Usunięcie serwerowego Web Push
+
+- **Zakres:** usunięcie `/api/push/*`, adaptera wysyłki, joba `send-reminders`, `dev:cron`, generatora VAPID, zależności `web-push` i jego typów. Usunięcie wymogu VAPID z konfiguracji serwera, testów, e2e i smoke; aktualizacja `.env.example`. Nowa migracja usuwa wyłącznie `push_subscriptions`, bez przepisywania historycznych migracji. Zachowujemy `reminders`, kontrakt ze starszym wspieranym APK, `resolveRecipients`, obliczenia czasu i `/api/reminders/schedule`. Usuwamy wyłącznie kod używany przez Web Push; backup i jego cron zostają.
+- **Gotowe, gdy:** serwer i backup startują bez VAPID; nowa i istniejąca baza przechodzą migracje bez utraty wydarzeń, przypomnień i sesji. Testy potwierdzają zgodność harmonogramu/odbiorców i brak endpointów Web Push. DEPLOY opisuje zatrzymanie starego crona **przed** podmianą paczki, sprzątnięcie pozostałego pliku joba po nakładkowym deployu, backup i powrót do poprzedniej wersji. Stary `.env` z dodatkowymi zmiennymi nie blokuje serwera. Przechodzą standardowe kontrole, `release:smoke` i build Androida. Bez zmiany produkcji w ramach implementacji.
+
+#### Krok 4.10 - Regresja i dokumentacja końcowego wydania
+
+- **Zakres:** aktualizacja bieżących wymagań PLAN, README, DEVELOPMENT i DEPLOY do strony + APK, zachowanie oznaczonych zapisów historycznych oraz zmiana wymagań przypomnień przyszłych modułów z joba na harmonogram APK. Regresja logowania, kalendarza, zaproszeń/resetu, pobierania i aktualizacji APK. Procedura wdrożenia zachowuje przejściowy `/sw.js` dla użytkowników wracających po dłuższej przerwie i blokuje stary manifest. Test powrotu ze starej PWA po wdrożeniu oraz testy APK na telefonie bez sieci, z zamkniętym interfejsem i po restarcie.
+- **Gotowe, gdy:** kryteria 4.8-4.9 i gotowości do deployu są spełnione; przechodzą pełne kontrole projektu, Playwright headless, `release:smoke`, build Androida i kontrole natywne. Wyniki telefonu i produkcji są potwierdzone osobno; ich brak nie oznacza sukcesu. Aktualizacja serwera i publikacja APK następują na polecenie właściciela według DEPLOY. Ten krok domyka rozszerzony zakres fazy 4.
+
+**Poza zakresem:** FCM, dodatkowa synchronizacja w tle, zmiana mechanizmu alarmów, pełny kalendarz offline, implementacja faz 5-8 i automatyczne odinstalowanie starej ikony PWA.
 
 ---
 

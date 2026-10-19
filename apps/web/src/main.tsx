@@ -8,6 +8,7 @@ import { createQueryClient } from './queryClient.js';
 import { router } from './router.js';
 import { isAndroid } from './platform.js';
 import { allowNavigation } from './nativeNavigation.js';
+import { retireLegacyPwa } from './retireLegacyPwa.js';
 import './native.css';
 
 const theme = createTheme({
@@ -36,5 +37,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 
 if (!isAndroid() && import.meta.env.MODE !== 'android' && 'serviceWorker' in navigator && import.meta.env.PROD) {
-  void navigator.serviceWorker.register('/sw.js');
+  void retireLegacyPwa().catch(() => {
+    /* Retry cleanup on the next visit without blocking the website. */
+  });
 }

@@ -127,19 +127,19 @@ try {
   }
 
   const manifestResponse = await fetch(`http://127.0.0.1:${port}/manifest.webmanifest`);
-  const manifest = await manifestResponse.json();
-  if (
-    !manifestResponse.ok ||
-    manifest.name !== 'Rodzina' ||
-    manifest.lang !== 'pl' ||
-    manifest.display !== 'standalone' ||
-    manifest.icons?.length !== 3
-  ) {
-    fail('manifest PWA nie zawiera wymaganych metadanych i ikon.');
-  }
+  if (manifestResponse.status !== 410 || /rel=["']manifest["']/.test(page))
+    fail('strona nadal udostępnia manifest PWA.');
+  if (Object.keys(entries).some((name) => name === 'public/manifest.webmanifest' || /^public\/workbox-/.test(name)))
+    fail('paczka nadal zawiera zasoby PWA.');
   const serviceWorkerResponse = await fetch(`http://127.0.0.1:${port}/sw.js`);
-  if (!serviceWorkerResponse.ok || !(await serviceWorkerResponse.text()).length) {
-    fail('serwer nie dostarczył service workera.');
+  const retirement = await serviceWorkerResponse.text();
+  if (
+    !serviceWorkerResponse.ok ||
+    serviceWorkerResponse.headers.get('cache-control') !== 'no-store' ||
+    !retirement.includes('self.registration.unregister()') ||
+    retirement.includes('showNotification')
+  ) {
+    fail('serwer nie dostarczył skryptu wycofującego stare PWA bez cache.');
   }
 
   await run(process.execPath, ['--env-file', envFile, 'dist/jobs/send-reminders.js', '--now=2026-10-16T10:00:00Z'], {

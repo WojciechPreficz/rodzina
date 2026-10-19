@@ -1,5 +1,8 @@
 # Wdrożenie i aktualizacje na cPanel vh.pl
 
+**Aktualizacja 19.10.2026:** wycofujemy PWA w krokach 4.8-4.10. Bieżące zasady
+przejścia ze starej instalacji opisuje sekcja „Wycofanie PWA” na końcu dokumentu.
+
 **Pierwsze wdrożenie wykonano po fazie 3; aplikacja działa pod https://rodzina.preficze.pl (potwierdzenie właściciela z 16.10.2026).** W planie jest to zapis historyczny z krokami D.1-D.4, bez numeru fazy. Dalsza kolejność to: faza 4 Android, 5 zakupy, 6 obiady, 7 zadania i 8 dokumenty. Funkcje rozwijamy i testujemy lokalnie, a serwer aktualizujemy sprawdzoną paczką release. Nie powtarzamy pierwszego wdrożenia ani zakładania istniejącej rodziny.
 
 Historyczny stan lokalnej weryfikacji z 16.10.2026, zapisany przed potwierdzeniem wdrożenia: `npm ci`, lint, typecheck, release (z buildem)
@@ -758,3 +761,26 @@ z `main`; trzeba zanotować SHA/URL oraz potwierdzić backup, restart, HTTP, dan
 rodziny i pobranie APK. Testu aktualizacji i alarmów na fizycznym telefonie
 nie zastępuje build. Nie powtarzamy tworzenia aplikacji, rodziny ani pierwszego
 wdrożenia. Pełna lista prób fazy 4 jest w `DEVELOPMENT.md`.
+
+## Wycofanie PWA — stan kroku 4.8 (19.10.2026)
+
+Aktualny zakres to zwykła strona WWW i APK. Poniższa dokumentacja starszych
+wydań zachowuje historyczne odniesienia do PWA. Przypomnienia w nowym interfejsie
+są dostępne tylko w APK; strona nadal pozwala tworzyć i edytować ich definicje.
+
+- Paczka serwera zawiera przejściowy `/sw.js` bez obsługi push i fetch. Nadpisuje
+  dotychczasowego workera i usuwa jego rejestrację, subskrypcję oraz wyłącznie
+  precache Rodziny. Nie usuwaj tego pliku przy publikacji — jest potrzebny osobom
+  powracającym po dłuższej przerwie. Nowy frontend go nie rejestruje.
+- `/sw.js` ma `Cache-Control: no-store`. `/manifest.webmanifest` zwraca 410,
+  również gdy stary manifest pozostał na dysku po nakładkowym wdrożeniu.
+- Migracja przeglądarki zachowuje sesję, localStorage i dane innych cache.
+  Użytkownik może ręcznie odinstalować starą ikonę PWA. Sprzątanie rejestracji
+  następuje po wizycie online lub aktualizacji workera przez przeglądarkę.
+- **Do kroku 4.9 pozostają wymagane VAPID, backend Web Push i dotychczasowy cron.**
+  Nie usuwaj jeszcze ich konfiguracji. Stare instalacje, które nie połączyły się
+  z nową wersją, mogą nadal odbierać Web Push. Backup działa bez zmian.
+- Weryfikacja wydania: zwykłe logowanie i kalendarz w przeglądarce, strona
+  powiadomień z instrukcją APK, brak nowej rejestracji SW i manifestu, migracja
+  wcześniejszej rejestracji oraz lokalne alarmy w APK. Build Androida nie zawiera
+  przejściowego SW. Wdrożenie produkcyjne i test telefonu potwierdzamy osobno.

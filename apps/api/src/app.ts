@@ -261,6 +261,7 @@ export async function buildApp(
     );
     if (request.url.startsWith('/api/') || request.url.startsWith('/downloads/android/latest.json'))
       reply.header('Cache-Control', 'no-store');
+    if (request.url.split('?')[0] === '/sw.js') reply.header('Cache-Control', 'no-store');
     if (config.NODE_ENV === 'production' && new URL(config.RODZINA_PUBLIC_URL).protocol === 'https:')
       reply.header('Strict-Transport-Security', 'max-age=31536000');
   });
@@ -1208,6 +1209,11 @@ export async function buildApp(
   registerPushRoutes(app, database, config, options.pushSender ?? createPushSender(config));
 
   if (config.NODE_ENV === 'production') {
+    // Overlay deployments may leave the historical manifest on disk.
+    app.get('/manifest.webmanifest', async (_request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      return reply.code(410).send({ error: { code: 'NOT_FOUND', message: 'Wersja PWA została wycofana.' } });
+    });
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', config.RODZINA_WEB_DIR);
     await app.register(fastifyStatic, { root, prefix: '/' });
     app.setNotFoundHandler((request, reply) => {

@@ -9,7 +9,7 @@ export const labels = {
     version: (version: string) => `Wersja Androida: ${version}`,
     download: 'Pobierz aplikację na Androida',
     instructions:
-      'Otwórz pobrany plik APK i zezwól przeglądarce na instalację z tego źródła. Następnie zatwierdź instalację w Androidzie. To osobna aplikacja, niezależna od instalacji PWA.',
+      'Otwórz pobrany plik APK i zezwól przeglądarce na instalację z tego źródła. Następnie zatwierdź instalację w Androidzie.',
     unavailable: 'Wydanie Androida jest obecnie niedostępne.',
     checking: 'Sprawdzanie dostępności aplikacji Android…',
     available: 'Dostępna nowa wersja',
@@ -90,7 +90,7 @@ export const labels = {
     error: 'Nie udało się zapisać lub sprawdzić alarmów. Spróbuj ponownie.',
     hint: 'Harmonogram odświeża się po zalogowaniu, zmianach, wznowieniu, odzyskaniu sieci i co 20 sekund w aktywnej aplikacji. Zmiany z serwera przy zamkniętym APK wymagają wznowienia i synchronizacji. Terminy oddalone o mniej niż 9 minut łączymy w jeden alarm o najwcześniejszej godzinie. Limit wynosi 400 grup.',
     limitations:
-      'Po restarcie odblokuj telefon przynajmniej raz. Wymuszone zatrzymanie aplikacji, wyłączony telefon, cofnięte zgody, przestrzeń prywatna i ograniczenia baterii producenta mogą zablokować alarmy. Osobna PWA ma własne powiadomienia — wyłącz je na tym telefonie, jeśli używasz APK.',
+      'Po restarcie odblokuj telefon przynajmniej raz. Wymuszone zatrzymanie aplikacji, wyłączony telefon, cofnięte zgody, przestrzeń prywatna i ograniczenia baterii producenta mogą zablokować alarmy.',
     oppoHint:
       'Na telefonach OPPO sprawdź też Ustawienia → Aplikacje → Automatyczne uruchamianie → Rodzina. Ograniczenia działania w tle są niezależne od zgód na powiadomienia i dokładne alarmy.',
   },
@@ -104,26 +104,9 @@ export const labels = {
   family: 'Rodzina',
   notificationsUi: {
     title: 'Powiadomienia',
-    loading: 'Sprawdzanie powiadomień…',
-    unsupported:
-      'Powiadomienia nie są obsługiwane w tej przeglądarce. Otwórz aplikację w Chrome przez HTTPS lub localhost.',
-    blocked:
-      'Powiadomienia są zablokowane. Zezwól na nie w ustawieniach witryny w Chrome, a następnie wróć do aplikacji.',
-    enabled: 'Powiadomienia są włączone na tym urządzeniu.',
-    disabled: 'Powiadomienia są wyłączone na tym urządzeniu.',
-    enable: 'Włącz powiadomienia',
-    test: 'Wyślij testowe',
-    dismissed: 'Zgoda nie została udzielona. Możesz spróbować ponownie.',
-    workerUnavailable:
-      'Aplikacja przygotowuje powiadomienia. Odśwież stronę i spróbuj ponownie. Lokalnie użyj builda produkcyjnego na porcie 3000.',
-    banner: 'Włącz powiadomienia, aby dostawać przypomnienia',
-    installTitle: 'Instalacja na Androidzie',
-    install:
-      'Otwórz aplikację w Chrome, rozwiń menu ⋮ i wybierz „Zainstaluj aplikację” lub „Dodaj do ekranu głównego”. Potem otwórz Rodzinę z ikony i włącz powiadomienia.',
-    systemHint:
-      'Zezwól Chrome na powiadomienia także w ustawieniach systemu. Tryb „Nie przeszkadzać” może je ukrywać. Test jest wysyłany na wszystkie Twoje zapisane urządzenia.',
-    testResult: (sent: number, failed: number, removed: number) =>
-      `Przekazano do usługi push: ${sent}. Błędy: ${failed}. Wygasłe subskrypcje: ${removed}. Sprawdź powiadomienia systemowe.`,
+    androidOnly: 'Przypomnienia są dostępne w aplikacji na Androida.',
+    offlineHint:
+      'Zainstaluj APK, zezwól na powiadomienia i dokładne alarmy oraz zsynchronizuj harmonogram. Zapisane alarmy mogą działać bez internetu. Strona służy do przeglądania i zarządzania danymi.',
   },
   welcomeTitle: 'Witamy w Rodzinie',
   welcomeSubtitle: 'Zarządzaj domem, wydarzeniami i zadaniami w jednym miejscu.',

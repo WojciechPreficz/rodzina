@@ -10,7 +10,6 @@ vi.mock('@capacitor/core', () => ({
 }));
 import { apiFetch, ApiRequestError } from './api.js';
 import { clearNativeSession, invalidateSessionRequests } from './platform.js';
-import { supportsPush } from './features/notifications/pushClient.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined) },
 }));
@@ -31,10 +30,9 @@ describe('Android API transport', () => {
       expect(request).toHaveBeenLastCalledWith({ path, method: 'POST', body: '{"title":"Basen"}' });
     }
     expect(fetch).not.toHaveBeenCalled();
-    expect(supportsPush()).toBe(false);
   });
 
-  it('keeps browser fetch credentials and does not use the bridge for PWA', async () => {
+  it('keeps browser fetch credentials and does not use the bridge for the website', async () => {
     getPlatform.mockReturnValue('web');
     const fetch = vi.fn().mockResolvedValue({ ok: true, text: async () => '{"ok":true}' });
     vi.stubGlobal('fetch', fetch);

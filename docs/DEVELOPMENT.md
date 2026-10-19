@@ -1,5 +1,8 @@
 # Praca lokalna
 
+**Aktualizacja 19.10.2026:** kroki 4.8-4.10 wycofują PWA. Bieżące zasady i testy
+opisuje sekcja „Wycofanie PWA” na końcu dokumentu; wcześniejsze instrukcje PWA są historyczne.
+
 ## Krok 2.5 — kalendarz, wydarzenia jednorazowe i szczegóły
 
 `/kalendarz` (oraz `/`) pokazuje Schedule-X: domyślnie agendę miesiąca, dodatkowo tydzień i dzień. Język to polski, tydzień zaczyna się w poniedziałek, a godziny odpowiadają strefie rodziny. Filtr „Pokaż tylko” wybiera uczestników; pusty filtr pokazuje wszystkie wydarzenia, także bez uczestników. Dane odświeżają się co 20 sekund i przy powrocie do karty.
@@ -1017,3 +1020,54 @@ alarmów wybudzających. Sprawdzono wynikowy manifest APK: własny odbiornik
 odtwarzania, bez konkurencyjnego odbiornika pluginu. Nie wykonano publikacji
 ani fizycznego testu zamkniętego OPPO na tej implementacji; `deploy.3` jej
 nie zawiera. Brak nowych zmiennych API, cronów, migracji, uprawnień i zależności.
+
+## Wycofanie PWA — krok 4.8 (19.10.2026)
+
+Aktualna wersja webowa jest zwykłą stroną. Nie generuje manifestu, nie rejestruje
+SW i nie uruchamia klienta Web Push. Powiadomienia na stronie pokazują informację
+o APK i jego pobieranie; ekran i baner lokalnych alarmów APK działają nadal.
+Poniższe instrukcje PWA dotyczą starszych wydań i zostaną uporządkowane w 4.10.
+Backend, VAPID i job/crony Web Push pozostają do kroku 4.9.
+
+Test migracji uruchamiaj na buildzie produkcyjnym: `npm run build`, następnie
+`npm run test:e2e -- e2e/retire-pwa.spec.ts e2e/notifications.spec.ts e2e/local-alarms.spec.ts`.
+Playwright działa headless przy 390 i 1280 px. Test migracji jako jedyny włącza
+service workery i tworzy starą rejestrację oraz cache w odrębnym kontekście.
+Sprawdza sprzątanie przez nowy frontend i niezależną aktualizację starego SW,
+zachowanie sesji, localStorage i cache spoza PWA oraz nową wizytę bez rejestracji.
+Test ekranu APK korzysta z atrapy mostka, więc nie potwierdza dostarczenia alarmu.
+`release:smoke` sprawdza także 410 manifestu i przejściowy SW z `no-store`.
+
+Przy ręcznej próbie istniejącej PWA otwórz ją online, zamknij i ponownie otwórz.
+Sprawdź w Chrome brak rejestracji `/sw.js`, brak precache Workbox Rodziny,
+zachowaną sesję i dostęp do kalendarza. Ikonę starej instalacji usuń ręcznie.
+Nie czyść wszystkich danych witryny — nie jest to część migracji.
+
+### Wyniki kroku 4.8 — 19.10.2026
+
+- `npm run lint`: bez błędów, 2 istniejące ostrzeżenia Fast Refresh w `auth.tsx`.
+  `npm run typecheck`, `npm run format:check` i `npm run build`: poprawne.
+- `npm test`: 49 plików, 425 testów poprawnych. Pierwszy przebieg w piaskownicy
+  miał błędy ENOENT plików tymczasowych Vitest oraz kontroli dowiązań;
+  pełny przebieg poza piaskownicą przeszedł.
+- `npm run test:e2e`: 22/22, wyłącznie headless, szerokości 390 i 1280 px.
+  Migracja zachowuje sesję, localStorage i cache `family-data`; nowa wizyta nie
+  rejestruje SW; stara rejestracja aktualizuje się także bez nowego frontendu.
+  Sprawdzono logowanie, kalendarz, linki, pobieranie APK i ekran alarmów z atrapą
+  mostka. Zrzuty `android-reminders-published.png` oceniono wizualnie w obu
+  szerokościach: tekst i przycisk mieszczą się, nawigacja jest dostępna.
+- Test migracji wykrył, że samo `unregister()` zostawia starego workera przy
+  otwartej karcie. Frontend najpierw aktualizuje starego SW i czeka na przejęcie
+  przez skrypt wycofujący, a potem sprząta. Błąd aktualizacji zachowuje stary
+  cache do ponowienia. Regresja sprawdza także żądanie po usunięciu cache.
+- `npm run release:smoke`: poprawny ZIP, health i SPA, 410 manifestu,
+  przejściowy SW z `no-store`, zachowane job Web Push i backup. Wymagana była
+  praca poza piaskownicą z instalacją zależności w katalogu tymczasowym.
+- `npm run android:debug`: BUILD SUCCESSFUL. Pierwszy przebieg w piaskownicy
+  nie mógł połączyć się z daemonem Gradle; powtórzenie poza nią przeszło.
+  Kontrola zawartości APK potwierdziła lokalny `assets/public/index.html` oraz
+  brak `sw.js`, manifestu PWA i Workbox. Nie zmieniono kodu natywnych alarmów.
+- Usunięcie `vite-plugin-pwa` usunęło 258 zbędnych pakietów; wersje pozostałych
+  zależności nie zostały podniesione. Bez nowych zmiennych API, migracji i cronów.
+- Bez wdrożenia, podpisania nowego wydania produkcyjnego lub testu fizycznego
+  telefonu. Dotychczasowe niepotwierdzone próby alarmów pozostają niepotwierdzone.

@@ -1,6 +1,7 @@
 import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
+import type { Plugin } from 'vite';
 
 export default defineConfig(({ mode }) => ({
   build: { outDir: mode === 'android' ? 'dist-android' : 'dist' },
@@ -9,32 +10,17 @@ export default defineConfig(({ mode }) => ({
     ...(mode === 'android'
       ? []
       : [
-          VitePWA({
-            strategies: 'injectManifest',
-            srcDir: 'src',
-            filename: 'sw.ts',
-            injectRegister: false,
-            injectManifest: { globIgnores: ['**/downloads/**', '**/*.apk'] },
-            manifest: {
-              name: 'Rodzina',
-              short_name: 'Rodzina',
-              lang: 'pl',
-              display: 'standalone',
-              start_url: '/',
-              theme_color: '#426b53',
-              background_color: '#f6f7f2',
-              icons: [
-                { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-                { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-                {
-                  src: '/icons/icon-maskable-512.png',
-                  sizes: '512x512',
-                  type: 'image/png',
-                  purpose: 'maskable',
-                },
-              ],
+          {
+            name: 'retire-legacy-pwa',
+            generateBundle() {
+              // Keep the old URL available for browsers updating an existing worker.
+              this.emitFile({
+                type: 'asset',
+                fileName: 'sw.js',
+                source: readFileSync(new URL('./legacy-sw.js', import.meta.url), 'utf8'),
+              });
             },
-          }),
+          } satisfies Plugin,
         ]),
   ],
   server: {

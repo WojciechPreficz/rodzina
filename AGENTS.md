@@ -6,12 +6,13 @@
 - Realizuj dokładnie jedną wskazaną fazę naraz. Nie implementuj elementów z sekcji „Poza zakresem” ani z kolejnych faz.
 - Kolejność prac: fazy 0-3, pierwszy deploy (wykonany: https://rodzina.preficze.pl), faza 4 (Android i przypomnienia offline), faza 5 (zakupy), faza 6 (obiady), faza 7 (zadania), faza 8 (dokumenty). Nie planujemy wydania open source. Pierwszy deploy ma osobne historyczne kroki D.1-D.4; nie powtarzaj go.
 - Funkcje rozwijamy i testujemy lokalnie. Istniejący serwer aktualizujemy sprawdzoną paczką release według `docs/DEPLOY.md`; APK budujemy, podpisujemy i aktualizujemy osobno.
+- Przed fazą 5 wykonujemy kroki 4.8-4.10 wycofania PWA. Docelowo zostają zwykła strona WWW i APK; przypomnienia działają w APK. Starsze wymagania PWA/Web Push ustępują sekcji „Wycofanie PWA” w planie. Zachowujemy API harmonogramu, logikę odbiorców, dane przypomnień i alarmy Androida.
 - Interfejs użytkownika oraz dokumentacja w `docs/` są po polsku. Kod, nazwy, komentarze i commity są po angielsku.
 
 ## Stack
 
 - Node.js 22 lub 24, npm workspaces.
-- `apps/web`: React, TypeScript, Vite, Mantine i `vite-plugin-pwa`.
+- `apps/web`: React, TypeScript, Vite i Mantine; wspólny interfejs strony i APK.
 - `apps/api`: Fastify, TypeScript, Drizzle ORM i `better-sqlite3`.
 - `packages/shared`: współdzielone typy i schematy.
 - Testy: Vitest; testy przeglądarkowe Playwright, jeśli pojawią się w późniejszej fazie, uruchamiaj wyłącznie headless.

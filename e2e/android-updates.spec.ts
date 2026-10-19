@@ -77,4 +77,9 @@ test('browser displays a published same-domain HTTPS release and instructions', 
   await expect(page.getByText('Wersja Androida: 1.0.1')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('android-more-published.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.goto('https://rodzina.preficze.pl/wiecej/powiadomienia');
+  await expect(page.getByText('Przypomnienia są dostępne w aplikacji na Androida.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Pobierz aplikację na Androida' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('android-reminders-published.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
