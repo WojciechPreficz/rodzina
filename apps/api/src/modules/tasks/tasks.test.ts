@@ -4,8 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { and, eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { TaskList } from '@rodzina/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { taskResponseSchema, tasksResponseSchema, type Task, type TaskList } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
 import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
@@ -43,7 +43,7 @@ describe('task lists API', () => {
       .values({
         id: hashToken(token),
         userId: id,
-        expiresAt: Date.now() + 86400000,
+        expiresAt: Date.UTC(2100, 0, 1),
         createdAt,
       })
       .run();
@@ -112,8 +112,247 @@ describe('task lists API', () => {
     outsider = actor(family(), 'admin', 5);
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app?.close();
     database?.sqlite.close();
+  });
+
+  async function addTask(listId: string, data: Record<string, unknown> = {}, user = owner): Promise<Task> {
+    const response = await request('POST', `${base}/${listId}/tasks`, { title: 'Zadanie', ...data }, user);
+    expect(response.statusCode, response.body).toBe(201);
+    return taskResponseSchema.parse(response.json()).task;
+  }
+  async function readTasks(url: string, user = owner) {
+    const response = await request('GET', url, undefined, user);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    return tasksResponseSchema.parse(response.json()).tasks;
+  }
+  const taskUrl = (id: string) => `/api/tasks/${id}`;
+
+  it('supports task CRUD by owners and shared members including children, with stable ordering and counts', async () => {
+    const list = await create([member.id, child.id]);
+    expect(list.openTaskCount).toBe(0);
+    const first = await addTask(list.id, { title: '  Pierwsze  ', notes: '  Notatka  ' });
+    const second = await addTask(list.id, { dueDate: '2028-05-01', dueTime: '12:30', assigneeId: owner.id }, child);
+    expect(first).toMatchObject({
+      title: 'Pierwsze',
+      notes: 'Notatka',
+      dueDate: null,
+      dueTime: null,
+      assigneeId: null,
+      isDone: false,
+      doneAt: null,
+      doneBy: null,
+      createdBy: owner.id,
+      position: 0,
+    });
+    expect(second).toMatchObject({ position: 1, createdBy: child.id, assigneeId: owner.id });
+    expect((await lists()).find((row) => row.id === list.id)?.openTaskCount).toBe(2);
+    expect((await lists(member)).find((row) => row.id === list.id)?.openTaskCount).toBe(2);
+    const update = await request(
+      'PATCH',
+      taskUrl(second.id),
+      {
+        title: 'Zmienione',
+        notes: null,
+        dueDate: null,
+        dueTime: null,
+        assigneeId: member.id,
+        position: 0,
+      },
+      member,
+    );
+    expect(update.statusCode, update.body).toBe(200);
+    expect(update.json().task).toMatchObject({
+      title: 'Zmienione',
+      notes: null,
+      dueDate: null,
+      dueTime: null,
+      assigneeId: member.id,
+    });
+    await request('PATCH', taskUrl(first.id), { position: 2 });
+    expect((await readTasks(`${base}/${list.id}/tasks`)).map((row) => row.id)).toEqual([second.id, first.id]);
+    expect((await request('DELETE', taskUrl(first.id), {}, child)).json()).toEqual({ ok: true, deleted: true });
+    expect((await lists()).find((row) => row.id === list.id)?.openTaskCount).toBe(1);
+    expect((await request('PATCH', taskUrl(first.id), { title: 'Nie ma' })).statusCode).toBe(404);
+    expect((await request('DELETE', taskUrl(first.id))).statusCode).toBe(404);
+  });
+
+  it('records the completing actor and time only on transition, filters status, and clears completion on reopen', async () => {
+    const now = Date.parse('2028-05-01T10:00:00Z');
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const list = await create([member.id]);
+    const first = await addTask(list.id);
+    const second = await addTask(list.id);
+    const done = await request('PATCH', taskUrl(first.id), { isDone: true }, member);
+    expect(done.statusCode, done.body).toBe(200);
+    expect(done.json().task).toMatchObject({ isDone: true, doneBy: member.id, doneAt: now });
+    vi.mocked(Date.now).mockReturnValue(now + 60000);
+    await request('PATCH', taskUrl(first.id), { isDone: true });
+    await request('PATCH', taskUrl(first.id), { notes: 'Gotowe' });
+    expect((await readTasks(`${base}/${list.id}/tasks?status=done`))[0]).toMatchObject({
+      doneBy: member.id,
+      doneAt: now,
+    });
+    expect((await readTasks(`${base}/${list.id}/tasks`)).map((row) => row.id)).toEqual([second.id]);
+    expect((await readTasks(`${base}/${list.id}/tasks?status=open`)).map((row) => row.id)).toEqual([second.id]);
+    expect(await readTasks(`${base}/${list.id}/tasks?status=all`)).toHaveLength(2);
+    expect((await lists()).find((row) => row.id === list.id)?.openTaskCount).toBe(1);
+    const reopened = await request('PATCH', taskUrl(first.id), { isDone: false });
+    expect(reopened.json().task).toMatchObject({ isDone: false, doneBy: null, doneAt: null });
+    expect(await readTasks(`${base}/${list.id}/tasks?status=done`)).toEqual([]);
+    expect((await lists()).find((row) => row.id === list.id)?.openTaskCount).toBe(2);
+  });
+
+  it('rejects assignees outside the list atomically and accepts all list participants or null', async () => {
+    const list = await create([child.id]);
+    const task = await addTask(list.id, { assigneeId: child.id });
+    for (const assigneeId of [admin.id, member.id, outsider.id, crypto.randomUUID()]) {
+      const createResponse = await request('POST', `${base}/${list.id}/tasks`, { title: 'Błędne', assigneeId });
+      expect(createResponse.statusCode).toBe(400);
+      const update = await request('PATCH', taskUrl(task.id), { title: 'Błędne', assigneeId, isDone: true });
+      expect(update.statusCode).toBe(400);
+      expect(await readTasks(`${base}/${list.id}/tasks?status=all`)).toEqual([task]);
+    }
+    for (const assigneeId of [owner.id, child.id, null]) {
+      const response = await request('PATCH', taskUrl(task.id), { assigneeId }, child);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().task.assigneeId).toBe(assigneeId);
+    }
+  });
+
+  it('hides tasks and list task actions from nonmembers, including admins and other families', async () => {
+    const list = await create();
+    const task = await addTask(list.id);
+    for (const user of [admin, member, child, outsider]) {
+      for (const [method, url, data] of [
+        ['GET', `${base}/${list.id}/tasks`, undefined],
+        ['POST', `${base}/${list.id}/tasks`, { title: 'Nie wolno' }],
+        ['PATCH', taskUrl(task.id), { title: 'Nie wolno' }],
+        ['DELETE', taskUrl(task.id), {}],
+      ] as const) {
+        const hidden = await request(method, url, data, user);
+        const absentUrl = url.replace(list.id, crypto.randomUUID()).replace(task.id, crypto.randomUUID());
+        const absent = await request(method, absentUrl, data, user);
+        expect(hidden.statusCode, hidden.body).toBe(404);
+        expect(hidden.json()).toEqual(absent.json());
+      }
+      expect(await readTasks('/api/tasks/today', user)).toEqual([]);
+    }
+    expect(await readTasks(`${base}/${list.id}/tasks`)).toEqual([task]);
+  });
+
+  it('revokes task access immediately on leaving or removing sharing and clears stale assignments', async () => {
+    for (const leave of [true, false]) {
+      const list = await create([member.id]);
+      const task = await addTask(list.id, { assigneeId: member.id, dueDate: '2020-01-01' }, member);
+      if (leave) await request('POST', `${base}/${list.id}/leave`, {}, member);
+      else await request('PATCH', `${base}/${list.id}`, { memberIds: [] });
+      expect((await request('GET', `${base}/${list.id}/tasks`, undefined, member)).statusCode).toBe(404);
+      expect((await request('PATCH', taskUrl(task.id), { isDone: true }, member)).statusCode).toBe(404);
+      expect((await request('DELETE', taskUrl(task.id), {}, member)).statusCode).toBe(404);
+      expect(await readTasks('/api/tasks/today', member)).toEqual([]);
+      expect((await readTasks(`${base}/${list.id}/tasks`))[0]).toMatchObject({
+        assigneeId: null,
+        createdBy: member.id,
+      });
+    }
+  });
+
+  it.each([
+    ['Europe/Warsaw', '2028-05-01T22:30:00Z', '2028-05-02'],
+    ['America/Los_Angeles', '2028-05-02T01:30:00Z', '2028-05-01'],
+  ])(
+    'uses family timezone %s for today across all accessible lists, excluding done, undated and hidden tasks',
+    async (timezone, now, today) => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.parse(now));
+      database.db.update(schema.families).set({ timezone }).where(eq(schema.families.id, familyId)).run();
+      const ownList = await defaultList();
+      const shared = await create([owner.id], member);
+      const privateList = await create([], member);
+      const foreign = await create([], outsider);
+      const overdue = await addTask(ownList.id, { dueDate: '2028-04-01' });
+      const due = await addTask(shared.id, { dueDate: today, dueTime: '23:59', assigneeId: member.id }, member);
+      await addTask(ownList.id, { dueDate: '2028-05-03' });
+      await addTask(ownList.id);
+      const done = await addTask(ownList.id, { dueDate: today });
+      await request('PATCH', taskUrl(done.id), { isDone: true });
+      await addTask(privateList.id, { dueDate: today }, member);
+      await addTask(foreign.id, { dueDate: today }, outsider);
+      expect((await readTasks('/api/tasks/today')).map((row) => row.id)).toEqual([overdue.id, due.id]);
+      expect(await readTasks('/api/tasks/today', admin)).toEqual([]);
+    },
+  );
+
+  it('rejects malformed task requests and server-managed fields without changing data', async () => {
+    const list = await create();
+    const task = await addTask(list.id, { dueDate: '2028-05-01', dueTime: '12:00' });
+    for (const data of [
+      { title: '' },
+      { title: '  ' },
+      { title: 'x'.repeat(201) },
+      { title: 3 },
+      { notes: 'x'.repeat(10001) },
+      { dueDate: '2028-02-30' },
+      { dueTime: '24:00' },
+      { assigneeId: 'bad' },
+      { createdBy: member.id },
+      { doneBy: member.id },
+      { doneAt: 1 },
+      { listId: list.id },
+      { familyId },
+      { reminders: [] },
+    ]) {
+      expect((await request('POST', `${base}/${list.id}/tasks`, { title: 'Nowe', ...data })).statusCode).toBe(400);
+      expect((await request('PATCH', taskUrl(task.id), data)).statusCode).toBe(400);
+    }
+    for (const data of [
+      {},
+      { position: -1 },
+      { position: 0.5 },
+      { position: 2147483648 },
+      { isDone: 'true' },
+      { dueDate: null },
+    ])
+      expect((await request('PATCH', taskUrl(task.id), data)).statusCode).toBe(400);
+    expect((await request('POST', `${base}/${list.id}/tasks`, { title: 'Nowe', dueTime: '12:00' })).statusCode).toBe(
+      400,
+    );
+    expect((await request('GET', `${base}/${list.id}/tasks?status=bad`)).statusCode).toBe(400);
+    expect((await request('GET', `${base}/${list.id}/tasks?status=open&status=done`)).statusCode).toBe(400);
+    expect((await request('GET', `${base}/bad/tasks`)).statusCode).toBe(400);
+    expect((await request('PATCH', '/api/tasks/bad', { title: 'Nowe' })).statusCode).toBe(400);
+    expect((await request('DELETE', '/api/tasks/bad')).statusCode).toBe(400);
+    expect(await readTasks(`${base}/${list.id}/tasks?status=all`)).toEqual([task]);
+  });
+
+  it('requires a session for every task endpoint', async () => {
+    const id = crypto.randomUUID();
+    for (const [method, url] of [
+      ['GET', `${base}/${id}/tasks`],
+      ['POST', `${base}/${id}/tasks`],
+      ['PATCH', taskUrl(id)],
+      ['DELETE', taskUrl(id)],
+      ['GET', '/api/tasks/today'],
+    ] as const)
+      expect((await request(method, url, { title: 'Zadanie' }, { id: '', cookie: '' })).statusCode).toBe(401);
+  });
+
+  it('preserves task data with nullable user references when the completing member is deleted', async () => {
+    const list = await create([member.id]);
+    const task = await addTask(list.id, { assigneeId: member.id }, member);
+    await request('PATCH', taskUrl(task.id), { isDone: true }, member);
+    expect((await request('DELETE', `/api/members/${member.id}`, {}, admin)).statusCode).toBe(200);
+    expect((await readTasks(`${base}/${list.id}/tasks?status=done`))[0]).toMatchObject({
+      id: task.id,
+      createdBy: null,
+      assigneeId: null,
+      doneBy: null,
+      isDone: true,
+      doneAt: expect.any(Number),
+    });
+    expect(database.sqlite.pragma('foreign_key_check')).toEqual([]);
   });
 
   it('requires a session on every endpoint', async () => {

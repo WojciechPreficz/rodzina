@@ -752,3 +752,31 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   Model SQL zakupów pozostaje bez zmian. Migracja 0016 dodaje wyłącznie trzy
   tabele zadań i ich indeksy. Bez nowych zmiennych środowiskowych, cronów,
   zależności runtime i zmian frontendu lub APK.
+
+## 20.10.2026 — CRUD zadań i widok na dziś (krok 7.2, #13)
+
+- Kontynuujemy fazę 7 na polecenie właściciela. Krok dodaje wyłącznie API zadań
+  i liczniki, bez interfejsu z 7.4–7.5 i przypomnień z 7.3. Istniejący model
+  z migracji 0016 zapewnia `ON DELETE SET NULL` dla autora, wykonawcy i osoby
+  przypisanej; nowa migracja nie jest potrzebna.
+- Odczyt zadań listy domyślnie używa `status=open`; `done` zwraca wykonane,
+  a `all` wszystkie. Kolejność to pozycja, czas utworzenia i ID. Nowe zadanie
+  dostaje kolejną pozycję. `openTaskCount` w odpowiedzi listy liczy jej wszystkie
+  otwarte zadania, także bez terminu, niezależnie od przypisania.
+- „Na dziś” obejmuje wyłącznie otwarte zadania z datą terminu nie późniejszą
+  niż bieżąca data w strefie rodziny, ze wszystkich list dostępnych użytkownikowi.
+  Godzina nie wyklucza zadań zaplanowanych na później tego samego dnia. Zadania
+  bez terminu nie wchodzą do wyniku. Kolejność: data, godzina (brak przed
+  wskazaną godziną), pozycja, czas utworzenia i ID. Wynik zawiera `listId`,
+  ale nie ujawnia danych z cudzych prywatnych list, także administratorowi.
+- Właściciel i członkowie, w tym dzieci, mogą wykonywać cały CRUD zadań.
+  Przypisanie ograniczamy do właściciela i aktualnych członków listy. Każda
+  mutacja sprawdza dostęp i zapisuje dane w jednej transakcji. Dane zarządzane
+  przez serwer i nieobsługiwane pola są odrzucane. Godzina wymaga daty;
+  usunięcie terminu z godziną wymaga podania obu pól jako `null`.
+- Przejście na wykonane zapisuje aktualnego użytkownika i czas UTC w ms.
+  Ponowienie `isDone=true` zachowuje pierwotnego wykonawcę i czas; odznaczenie
+  zeruje oba pola. Nie obsługujemy jeszcze przypomnień zadań.
+- Testy obejmują CRUD, liczniki, filtry, granice dnia w dwóch strefach,
+  prywatność i izolację rodzin, cofnięcie dostępu, przypisania oraz zachowanie
+  zadań po usunięciu domownika. Bez nowych zmiennych, cronów i zależności.

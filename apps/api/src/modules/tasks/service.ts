@@ -1,4 +1,4 @@
-import type { CreateTaskList, PatchTaskList } from '@rodzina/shared';
+import type { CreateTask, CreateTaskList, PatchTask, PatchTaskList, TaskStatus } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { createTaskListRepository } from './repository.js';
 
@@ -30,7 +30,57 @@ export function createTaskListService(database: DatabaseConnection) {
       throw new TaskListError(400, 'VALIDATION_ERROR', 'Listę można udostępnić tylko domownikom tej rodziny.');
     return ids.filter((id) => id !== ownerId);
   }
+  function getTask(familyId: string, actorId: string, id: string) {
+    const task = repository.findTask(familyId, actorId, id);
+    if (!task) throw new TaskListError(404, 'NOT_FOUND', 'Zadanie nie istnieje.');
+    return task;
+  }
+  function validateAssignee(list: { ownerId: string; memberIds: string[] }, assigneeId: string | null | undefined) {
+    if (assigneeId && assigneeId !== list.ownerId && !list.memberIds.includes(assigneeId))
+      throw new TaskListError(
+        400,
+        'VALIDATION_ERROR',
+        'Zadanie można przypisać tylko właścicielowi lub członkowi listy.',
+      );
+  }
   return {
+    listTasks(familyId: string, actorId: string, listId: string, status: TaskStatus) {
+      getList(familyId, actorId, listId);
+      return repository.listTasks(listId, status);
+    },
+    createTask(familyId: string, actorId: string, listId: string, data: CreateTask) {
+      return transaction(() => {
+        const list = getList(familyId, actorId, listId);
+        validateAssignee(list, data.assigneeId);
+        return repository.createTask(listId, actorId, data);
+      });
+    },
+    updateTask(familyId: string, actorId: string, id: string, data: PatchTask) {
+      return transaction(() => {
+        const task = getTask(familyId, actorId, id);
+        const list = getList(familyId, actorId, task.listId);
+        const merged = { ...task, ...data };
+        validateAssignee(list, merged.assigneeId);
+        if (merged.dueTime && !merged.dueDate)
+          throw new TaskListError(400, 'VALIDATION_ERROR', 'Godzina wymaga daty terminu.');
+        return repository.updateTask(task, actorId, data);
+      });
+    },
+    removeTask(familyId: string, actorId: string, id: string) {
+      transaction(() => {
+        getTask(familyId, actorId, id);
+        repository.removeTask(id);
+      });
+    },
+    todayTasks(familyId: string, actorId: string) {
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: repository.timezone(familyId),
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(Date.now());
+      return repository.todayTasks(familyId, actorId, today);
+    },
     canAccessList(familyId: string, actorId: string, id: string) {
       return !!repository.findAccessibleList(familyId, actorId, id);
     },

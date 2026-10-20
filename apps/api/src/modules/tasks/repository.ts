@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
-import { and, asc, eq, inArray, max, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, lte, max, or, sql } from 'drizzle-orm';
+import type { CreateTask, PatchTask, TaskStatus } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { taskListMembers, taskLists, tasks, users } from '../../db/schema.js';
+import { families, taskListMembers, taskLists, tasks, users } from '../../db/schema.js';
 
 export function createTaskListRepository(database: DatabaseConnection) {
   const db = database.db;
@@ -27,7 +28,12 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .map((row) => row.userId);
   }
   function serialize(list: typeof taskLists.$inferSelect) {
-    return { ...list, memberIds: members(list.id) };
+    const openTaskCount = db
+      .select({ value: count() })
+      .from(tasks)
+      .where(and(eq(tasks.listId, list.id), eq(tasks.isDone, false)))
+      .get()!.value;
+    return { ...list, memberIds: members(list.id), openTaskCount };
   }
   function findAccessibleList(familyId: string, actorId: string, id: string) {
     const list = db
@@ -150,6 +156,74 @@ export function createTaskListRepository(database: DatabaseConnection) {
         .run();
     }
   }
+  function listTasks(listId: string, status: TaskStatus) {
+    return db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.listId, listId), status === 'all' ? undefined : eq(tasks.isDone, status === 'done')))
+      .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+      .all();
+  }
+  function findTask(familyId: string, actorId: string, id: string) {
+    return db
+      .select({ task: tasks })
+      .from(tasks)
+      .innerJoin(taskLists, eq(tasks.listId, taskLists.id))
+      .where(and(eq(tasks.id, id), accessFilter(familyId, actorId)))
+      .get()?.task;
+  }
+  function createTask(listId: string, actorId: string, data: CreateTask) {
+    const now = Date.now();
+    const position = Math.min(
+      (db
+        .select({ value: max(tasks.position) })
+        .from(tasks)
+        .where(eq(tasks.listId, listId))
+        .get()?.value ?? -1) + 1,
+      2147483647,
+    );
+    return db
+      .insert(tasks)
+      .values({
+        ...data,
+        id: crypto.randomUUID(),
+        listId,
+        position,
+        createdBy: actorId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+  }
+  function updateTask(task: typeof tasks.$inferSelect, actorId: string, data: PatchTask) {
+    const now = Date.now();
+    const completion =
+      data.isDone === undefined || data.isDone === task.isDone
+        ? {}
+        : data.isDone
+          ? { doneBy: actorId, doneAt: now }
+          : { doneBy: null, doneAt: null };
+    return db
+      .update(tasks)
+      .set({ ...data, ...completion, updatedAt: now })
+      .where(eq(tasks.id, task.id))
+      .returning()
+      .get()!;
+  }
+  function removeTask(id: string) {
+    db.delete(tasks).where(eq(tasks.id, id)).run();
+  }
+  function todayTasks(familyId: string, actorId: string, today: string) {
+    return db
+      .select({ task: tasks })
+      .from(tasks)
+      .innerJoin(taskLists, eq(tasks.listId, taskLists.id))
+      .where(and(accessFilter(familyId, actorId), eq(tasks.isDone, false), lte(tasks.dueDate, today)))
+      .orderBy(asc(tasks.dueDate), asc(tasks.dueTime), asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+      .all()
+      .map(({ task }) => task);
+  }
   return {
     findAccessibleList,
     ensureDefault,
@@ -160,5 +234,12 @@ export function createTaskListRepository(database: DatabaseConnection) {
     removeList,
     setMembers,
     prepareMemberRemoval,
+    listTasks,
+    findTask,
+    createTask,
+    updateTask,
+    removeTask,
+    todayTasks,
+    timezone: (familyId: string) => db.select().from(families).where(eq(families.id, familyId)).get()!.timezone,
   };
 }
