@@ -212,3 +212,17 @@ export const shoppingHistory = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.familyId, table.nameNormalized] })],
 );
+
+export const shoppingOperations = sqliteTable(
+  'shopping_operations',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    id: text('id').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    response: text('response').notNull(),
+    status: integer('status').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.id] })],
+);

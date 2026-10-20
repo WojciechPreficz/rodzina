@@ -1,102 +1,78 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useMutationState, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { useMe } from '../../auth.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
-import { changeShopping, listShoppingItems, listShoppingLists, type ShoppingChange } from './shoppingApi.js';
+import { listShoppingItems, listShoppingLists, type ShoppingChange } from './shoppingApi.js';
+import { enqueueShopping, type QueuedShoppingChange } from './shoppingOffline.js';
+import { applyShoppingChange, shoppingKey } from './shoppingOptimistic.js';
 
 export function useShopping(selected: string | null) {
   const { user, family } = useMe();
   const client = useQueryClient();
-  const key = ['shopping', family?.id, user?.id];
-  const listsKey = [...key, 'lists'];
+  const account = { familyId: family!.id, userId: user!.id };
+  const key = shoppingKey(account);
+  const online = useSyncExternalStore(onlineManager.subscribe, () => onlineManager.isOnline());
+  const changes = useMutationState({
+    filters: { mutationKey: key, status: 'pending' },
+    select: (mutation) => mutation.state.variables as QueuedShoppingChange,
+  });
+  const failures = useMutationState({
+    filters: { mutationKey: key, status: 'error' },
+    select: (mutation) => mutation.state.error,
+  });
   const refresh = {
     refetchInterval: () => (client.isMutating({ mutationKey: key }) ? (false as const) : SYNC_INTERVAL_MS),
     refetchOnWindowFocus: () => (client.isMutating({ mutationKey: key }) === 0 ? ('always' as const) : false),
     refetchOnReconnect: () => (client.isMutating({ mutationKey: key }) === 0 ? ('always' as const) : false),
   };
-  const lists = useQuery({ queryKey: listsKey, queryFn: ({ signal }) => listShoppingLists(signal), ...refresh });
-  const active = lists.data?.find((list) => list.id === selected) ?? lists.data?.[0];
-  const listId = active?.id;
-  const itemsKey = [...key, 'items', listId];
-  const items = useQuery({
-    queryKey: itemsKey,
-    queryFn: ({ signal }) => listShoppingItems(listId!, signal),
-    enabled: !!listId,
+  const lists = useQuery({
+    queryKey: [...key, 'lists'],
+    queryFn: ({ signal }) => listShoppingLists(signal),
     ...refresh,
   });
-  const mutation = useMutation({
-    mutationKey: key,
-    mutationFn: changeShopping,
-    onMutate: async (change: ShoppingChange) => {
-      await client.cancelQueries({ queryKey: key });
-      const previous = client.getQueriesData<ShoppingList[] | ShoppingItem[]>({ queryKey: key });
-      const now = Date.now();
-      const metadata = { createdBy: user!.id, createdAt: now, updatedAt: now };
-      if (change.type === 'createList') {
-        client.setQueryData<ShoppingList[]>(listsKey, (old = []) => [
-          ...old,
-          { ...metadata, id: change.id, familyId: family!.id, name: change.name, position: old.length },
-        ]);
-      } else if (change.type === 'renameList' || change.type === 'deleteList') {
-        client.setQueryData<ShoppingList[]>(listsKey, (old = []) =>
-          change.type === 'deleteList'
-            ? old.filter((list) => list.id !== change.id)
-            : old.map((list) => (list.id === change.id ? { ...list, name: change.name, updatedAt: now } : list)),
-        );
-      } else {
-        client.setQueryData<ShoppingItem[]>([...key, 'items', change.listId], (old = []) => {
-          switch (change.type) {
-            case 'add':
-              return [
-                ...old,
-                {
-                  ...metadata,
-                  ...change.data,
-                  category: change.data.category ?? 'other',
-                  quantity: change.data.quantity ?? null,
-                  id: change.id,
-                  listId: change.listId,
-                  isChecked: false,
-                  checkedBy: null,
-                  checkedAt: null,
-                  position: old.length,
-                },
-              ];
-            case 'remove':
-              return old.filter((item) => item.id !== change.id);
-            case 'clear':
-              return old.filter((item) => !item.isChecked);
-            case 'edit':
-              return old.map((item) => {
-                if (item.id !== change.id) return item;
-                const checked = change.data.isChecked;
-                return {
-                  ...item,
-                  name: change.data.name ?? item.name,
-                  quantity: change.data.quantity === undefined ? item.quantity : change.data.quantity,
-                  category: change.data.category ?? item.category,
-                  position: change.data.position ?? item.position,
-                  isChecked: change.data.isChecked ?? item.isChecked,
-                  updatedAt: now,
-                  ...(checked === undefined || checked === item.isChecked
-                    ? {}
-                    : { checkedBy: checked ? user!.id : null, checkedAt: checked ? now : null }),
-                };
-              });
-          }
-        });
-      }
-      return { previous };
+  // Keep server data separate from pending changes: rejecting one write must
+  // never roll back later offline edits, and refetches cannot overwrite them.
+  const projected = new Map(
+    client.getQueriesData({ queryKey: key }).map(([queryKey, data]) => [JSON.stringify(queryKey), data]),
+  );
+  const optimistic = {
+    setQueryData: (queryKey: readonly unknown[], update: (old: unknown) => unknown) => {
+      const hash = JSON.stringify(queryKey);
+      const value = update(projected.get(hash));
+      projected.set(hash, value);
+      return value;
     },
-    onError: (_error, _change, context) => {
-      // A cleared cache belongs to a logged-out or different account.
-      context?.previous.forEach(([queryKey, data]) => {
-        if (!client.getQueryState(queryKey)) return;
-        if (data === undefined) client.removeQueries({ queryKey, exact: true });
-        else client.setQueryData(queryKey, data);
-      });
-    },
-    onSettled: () => client.invalidateQueries({ queryKey: key }),
+  } as Pick<QueryClient, 'setQueryData'>;
+  for (const entry of changes) applyShoppingChange(optimistic, account, entry.change, entry.submittedAt);
+  const visibleLists = projected.get(JSON.stringify([...key, 'lists'])) as ShoppingList[] | undefined;
+  const active = visibleLists?.find((list) => list.id === selected) ?? visibleLists?.[0];
+  const listId = active?.id;
+  const items = useQuery({
+    queryKey: [...key, 'items', listId],
+    queryFn: ({ signal }) => listShoppingItems(listId!, signal),
+    enabled: !!listId && !changes.some(({ change }) => change.type === 'createList' && change.id === listId),
+    ...refresh,
   });
-  return { lists, items, mutation, active };
+  const visibleItems = (projected.get(JSON.stringify([...key, 'items', listId])) ??
+    (changes.some(({ change }) => change.type === 'createList' && change.id === listId) ? [] : undefined)) as
+    ShoppingItem[] | undefined;
+  return {
+    lists: { ...lists, data: visibleLists, isPending: !visibleLists && lists.isPending },
+    items: { ...items, data: visibleItems ?? items.data, isPending: !visibleItems && items.isPending },
+    // Acceptance is local. Network completion is reported separately and must
+    // not block the next checkbox or leave a quick-add dialog open offline.
+    queueChange: async (change: ShoppingChange) => {
+      void enqueueShopping(client, account, change).catch(() => {});
+    },
+    active,
+    online,
+    pendingCount: changes.length,
+    syncError: failures.at(-1)?.message,
+    dismissSyncError: () =>
+      client
+        .getMutationCache()
+        .findAll({ mutationKey: key, status: 'error' })
+        .forEach((mutation) => client.getMutationCache().remove(mutation)),
+  };
 }

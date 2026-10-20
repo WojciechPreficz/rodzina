@@ -575,3 +575,41 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   i kolejki offline. Obsługa słabego zasięgu i odtwarzanie po zamknięciu procesu
   pozostają wyłącznie krokiem 5.3. Debug APK i atrapa mostka sprawdzają build
   i ścieżkę transportu Androida; nie stanowią próby na fizycznym telefonie.
+
+## 20.10.2026 — trwałe zakupy offline (krok 5.3)
+
+- Utrwalamy wyłącznie zapytania zakupów, oczekujące mutacje i minimalny kontekst
+  konta. Nie zapisujemy hasła, tokenu sesji, adresu e-mail ani kodu dołączenia.
+  Cache i dziennik są przypisane do pary rodzina/użytkownik. Błąd sieci przy starcie
+  pozwala otworzyć zapisane zakupy; 401/403 usuwa dane lokalne. Przed wznowieniem
+  zapisu sprawdzamy aktualne `/auth/me`, a parametr `actorId` chroni sam zapis
+  również przed zmianą ciasteczka między sprawdzeniem sesji a wysłaniem mutacji.
+- `@tanstack/query-sync-storage-persister` zapisuje cache w localStorage.
+  Każda oczekująca operacja ma ponadto osobny trwały wpis, aby karty przeglądarki
+  nie nadpisywały swoich kolejek. Przed przyjęciem akcji zapis jest synchroniczny;
+  brak miejsca blokuje jej wysłanie i pokazuje błąd. Po sukcesie najpierw zapisujemy
+  potwierdzony cache, potem usuwamy wpis dziennika. Odtwarzamy także żądania będące
+  w toku przy zakończeniu procesu; funkcje mutacji rejestrujemy przed hydratacją.
+  Nie usuwamy oczekujących zmian z powodu wieku ani nie wysyłamy ich w zamkniętym APK.
+- Jedna kolejka konta wykonuje mutacje kolejno (`scope`), w trybie `offlineFirst`.
+  Powrót sieci wznawia mutacje; błędy transportu, 429 i 5xx ponawiamy. Trwałe
+  odrzucenie, np. brak uprawnień lub usunięta lista, wycofuje wyłącznie tę operację
+  z widoku i pokazuje błąd, który można zamknąć. Widok jest projekcją danych
+  serwera i oczekującej kolejki; nie przywracamy starych snapshotów nad późniejszymi
+  zmianami. Oczekiwanie na sieć nie blokuje formularzy ani kolejnych checkboxów.
+- Mutacje mają UUID `operationId`; przy tworzeniu jest to również identyfikator
+  nowej listy lub pozycji. Dzięki temu kolejna akcja offline może odwołać się do
+  nowego zasobu bez tymczasowych mapowań ID. Migracja 0015 dodaje
+  `shopping_operations`: wynik i zmiana danych są zapisane w tej samej transakcji
+  SQLite. Powtórzenie tej samej operacji zwraca poprzednią odpowiedź, bez ponownego
+  zwiększenia historii czy wyczyszczenia później odhaczonych produktów. Inna treść
+  dla tego samego UUID zwraca 409. Klucz obejmuje użytkownika, a fingerprint także
+  rodzinę i rolę. Dotychczasowe żądania bez parametrów zachowują swój kontrakt.
+- Wylogowanie, utrata sesji i jawna zmiana konta usuwają snapshot, dziennik oraz
+  cache w pamięci. Opóźnione odpowiedzi nie odbudowują poprzedniego konta.
+  Wylogowanie WWW bez sieci zapisuje znacznik do zakończenia sesji serwerowej
+  przed kolejnym `/auth/me`; samo ciasteczko HttpOnly można unieważnić dopiero
+  po odzyskaniu połączenia. W APK poświadczenia czyści istniejący natywny adapter.
+- Zwykła strona korzysta offline z już otwartego interfejsu; ponowne uruchomienie
+  bez sieci dotyczy lokalnego frontendu APK. Nie przywracamy PWA. Brak nowych
+  zmiennych środowiskowych, cronów, zależności serwerowych i usług w tle.

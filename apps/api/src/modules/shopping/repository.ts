@@ -17,7 +17,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
       .where(and(eq(shoppingLists.familyId, familyId), eq(shoppingLists.id, id)))
       .get();
   }
-  function createList(familyId: string, actorId: string, data: CreateShoppingList) {
+  function createList(familyId: string, actorId: string, data: CreateShoppingList, id?: string) {
     return db.transaction(
       () => {
         const position = Math.min(
@@ -33,7 +33,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
           .insert(shoppingLists)
           .values({
             ...data,
-            id: crypto.randomUUID(),
+            id: id ?? crypto.randomUUID(),
             familyId,
             position,
             createdBy: actorId,
@@ -90,7 +90,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
       .orderBy(asc(shoppingItems.isChecked), asc(shoppingItems.position), asc(shoppingItems.id))
       .all();
   }
-  function createItem(familyId: string, listId: string, actorId: string, data: CreateShoppingItem) {
+  function createItem(familyId: string, listId: string, actorId: string, data: CreateShoppingItem, id?: string) {
     return db.transaction(
       () => {
         // Guard the parent inside the same transaction as the insert and history update.
@@ -115,7 +115,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
           .insert(shoppingItems)
           .values({
             ...data,
-            id: crypto.randomUUID(),
+            id: id ?? crypto.randomUUID(),
             listId,
             category,
             quantity: data.quantity || null,

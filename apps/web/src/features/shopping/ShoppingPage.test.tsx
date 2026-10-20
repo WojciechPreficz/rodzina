@@ -1,10 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
-import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { ShoppingPage } from './ShoppingPage.js';
+import { configureShoppingMutations } from './shoppingOffline.js';
 
 const session = vi.hoisted(() => ({
   user: { id: 'adult', role: 'member', displayName: 'Ania' },
@@ -44,11 +45,11 @@ function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>
   let items = [...initial];
   let lists = [list];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
+    const url = String(input).split('?')[0]!;
     const method = init?.method ?? 'GET';
     let body: unknown;
     const data = init?.body ? JSON.parse(String(init.body)) : {};
-    if (url.includes('/suggestions?')) body = { suggestions: [{ name: 'Mleko', category: 'dairy' }] };
+    if (url.includes('/suggestions')) body = { suggestions: [{ name: 'Mleko', category: 'dairy' }] };
     else if (url === '/api/shopping/lists' && method === 'GET') body = { lists };
     else if (url === '/api/shopping/lists' && method === 'POST') {
       lists = [...lists, { ...list, id: 'second', name: data.name }];
@@ -74,6 +75,7 @@ function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>
   });
   vi.stubGlobal('fetch', fetchMock);
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  configureShoppingMutations(client, { familyId: session.family.id, userId: session.user.id });
   render(
     <QueryClientProvider client={client}>
       <MantineProvider env="test">
@@ -111,6 +113,7 @@ describe('shopping UI', () => {
     focusManager.setFocused(undefined);
     cleanup();
     client?.clear();
+    onlineManager.setOnline(true);
     vi.unstubAllGlobals();
   });
 
@@ -125,7 +128,7 @@ describe('shopping UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/shopping/lists/list/items',
+        expect.stringContaining('/api/shopping/lists/list/items?operationId='),
         expect.objectContaining({ method: 'POST', body: JSON.stringify({ name, quantity }) }),
       ),
     );
@@ -143,7 +146,7 @@ describe('shopping UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/shopping/lists/list/items',
+        expect.stringContaining('/api/shopping/lists/list/items?operationId='),
         expect.objectContaining({ body: JSON.stringify({ name: 'Mleko', quantity: '2l', category: 'dairy' }) }),
       ),
     );
@@ -187,7 +190,7 @@ describe('shopping UI', () => {
     expect(screen.getByRole('checkbox', { name: 'Kupione: Mleko' })).toBeChecked();
     finish({
       ok: false,
-      status: 500,
+      status: 400,
       text: async () => JSON.stringify({ error: { message: 'Błąd zapisu' } }),
     } as Response);
     expect(await screen.findByRole('alert')).toHaveTextContent('Błąd zapisu');
@@ -199,7 +202,7 @@ describe('shopping UI', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Wyczyść kupione' }));
     const modal = await screen.findByRole('dialog');
     expect(modal).toHaveTextContent('Usunąć wszystkie kupione produkty');
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/clear-checked'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/clear-checked'))).toBe(false);
     fireEvent.click(within(modal).getByRole('button', { name: 'Usuń' }));
     expect(await screen.findByText('Lista jest pusta. Dodaj pierwszy produkt.')).toBeInTheDocument();
   });
@@ -214,7 +217,7 @@ describe('shopping UI', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/shopping/items/milk',
+        expect.stringContaining('/api/shopping/items/milk?operationId='),
         expect.objectContaining({ body: JSON.stringify({ name: 'Kefir', quantity: '1l', category: 'dairy' }) }),
       ),
     );
@@ -232,5 +235,23 @@ describe('shopping UI', () => {
     fireEvent.change(await screen.findByRole('textbox', { name: /^Nazwa listy/ }), { target: { value: 'Spożywcze' } });
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zapisz' }));
     expect(await screen.findByRole('tab', { name: 'Spożywcze' })).toBeInTheDocument();
+  });
+
+  it('creates a list, adds and checks a product offline without blocking the next action', async () => {
+    const fetchMock = setup();
+    await screen.findByRole('article', { name: 'Mleko' });
+    onlineManager.setOnline(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj listę' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: /^Nazwa listy/ }), { target: { value: 'Offline' } });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zapisz' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Offline' }));
+    const field = screen.getByRole('textbox', { name: 'Dodaj produkt' });
+    expect(field).toBeEnabled();
+    fireEvent.change(field, { target: { value: 'Chleb 2 szt' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Kupione: Chleb' }));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Kupione: Chleb' })).toBeChecked());
+    expect(client.isMutating()).toBe(3);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method && init.method !== 'GET')).toHaveLength(0);
   });
 });

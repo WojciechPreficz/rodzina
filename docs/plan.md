@@ -318,6 +318,7 @@ rodzina/
 - `shopping_lists`: id, family_id, name, position, created_by, created_at, updated_at
 - `shopping_items`: id, list_id, name, quantity (text), category, is_checked, checked_by, checked_at, position, created_by, created_at, updated_at
 - `shopping_history`: family_id, name_normalized, display_name, category, use_count, last_used_at (do podpowiedzi)
+- `shopping_operations`: user_id, id, fingerprint, response, status (atomowe ponawianie zapisów zakupów po utracie odpowiedzi; migracja 0015, krok 5.3)
 - `meals`: id, family_id, date, slot (`dinner`, enum rozszerzalny), title, notes, created_by, updated_at
 - `meal_ingredients`: id, meal_id, name, quantity
 - `task_lists` (faza 7): id, family_id, owner_id, name, is_default, position, created_at, updated_at
@@ -913,6 +914,13 @@ w DEVELOPMENT, decyzje UI w DECISIONS. Trwała kolejka offline pozostaje krokiem
 - **Gotowe, gdy:** test parsera i komponentu dodawania, ukrywanie akcji niedostępnych dla dziecka. Ręcznie: odhaczenie w jednym kontekście przeglądarki jest widoczne w drugim po maksymalnie 20 s.
 
 #### Krok 5.3 - Słaby zasięg i domknięcie fazy
+
+**Stan 20.10.2026:** zaimplementowano trwały cache i dziennik mutacji zakupów,
+odtwarzanie konta i kolejki po ponownym uruchomieniu lokalnego frontendu,
+wznawianie po powrocie sieci oraz czyszczenie przy wylogowaniu. Migracja 0015
+zabezpiecza ponawianie żądań przed podwójnym zapisem. Wyniki i otwarte próby
+akceptacyjne są w DEVELOPMENT. Nie potwierdzono jeszcze próby zamknięcia procesu
+i synchronizacji na fizycznym telefonie; faza nie jest oznaczona jako zamknięta.
 
 Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache są trwałe, przypisane do konta i odtwarzane po zamknięciu procesu. Powrót sieci w aktywnej aplikacji wznawia mutacje, a wylogowanie usuwa dane poprzedniej osoby. Nie zakładamy, że sam `networkMode` zapisuje kolejkę na dysku; wymagane są serializacja, funkcje odtwarzania mutacji i test przerwanego procesu. Bez wymogu wysyłania kolejki przy zamkniętym APK.
 

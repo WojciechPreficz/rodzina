@@ -1,7 +1,15 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
-import { apiFetch, sanitizeNextPath } from './api.js';
+import { apiFetch, ApiRequestError, sanitizeNextPath } from './api.js';
+import {
+  clearShoppingStorage,
+  stopShoppingPersistence,
+  readShoppingSession,
+  restoreShopping,
+  SHOPPING_STORAGE_KEY,
+  PENDING_LOGOUT_KEY,
+} from './features/shopping/shoppingOffline.js';
 import { clearNativeSession, invalidateSessionRequests, isAndroid } from './platform.js';
 import { ScheduleSync } from './features/notifications/scheduleSync.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
@@ -37,6 +45,16 @@ export type AuthState = {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+function pendingWebLogout(value?: boolean) {
+  try {
+    if (value === true) localStorage.setItem(PENDING_LOGOUT_KEY, 'yes');
+    if (value === false) localStorage.removeItem(PENDING_LOGOUT_KEY);
+    return !!localStorage.getItem(PENDING_LOGOUT_KEY);
+  } catch {
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children?: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [family, setFamily] = useState<Family | null>(null);
@@ -44,49 +62,86 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   const queryClient = useContext(QueryClientContext);
   const generation = useRef(0);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const requestGeneration = generation.current;
     try {
+      if (!isAndroid() && pendingWebLogout()) {
+        await apiFetch('/api/auth/logout', { method: 'POST' });
+        pendingWebLogout(false);
+      }
       const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/me');
+      if (requestGeneration !== generation.current) return;
+      if (queryClient) await restoreShopping(queryClient, response);
       if (requestGeneration !== generation.current) return;
       setUser(response.user);
       setFamily(response.family);
-    } catch {
+    } catch (error) {
       if (requestGeneration !== generation.current) return;
-      setUser(null);
-      setFamily(null);
+      const cached =
+        error instanceof ApiRequestError && [401, 403].includes(error.status) ? undefined : readShoppingSession();
+      if (cached && queryClient) {
+        await restoreShopping(queryClient, cached);
+        if (requestGeneration !== generation.current) return;
+        setUser(cached.user);
+        setFamily(cached.family);
+      } else {
+        clearShoppingStorage(queryClient);
+        setUser(null);
+        setFamily(null);
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [queryClient]);
 
   useEffect(() => {
     void refresh();
-  }, []);
+    return () => {
+      if (queryClient) stopShoppingPersistence(queryClient);
+    };
+  }, [queryClient, refresh]);
 
+  const userId = user?.id;
   useEffect(() => {
-    const onSessionLost = () => {
+    const loseSession = (removeStored: boolean) => {
       if (isAndroid()) localScheduler.invalidate();
       generation.current += 1;
+      if (removeStored) clearShoppingStorage(queryClient);
+      else if (queryClient) stopShoppingPersistence(queryClient);
       queryClient?.clear();
       setUser(null);
       setFamily(null);
       setIsLoading(false);
     };
+    const onSessionLost = () => loseSession(true);
     window.addEventListener('rodzina:session-lost', onSessionLost);
-    return () => window.removeEventListener('rodzina:session-lost', onSessionLost);
-  }, [queryClient]);
+    const onStorage = (event: StorageEvent) => {
+      if (
+        event.key === SHOPPING_STORAGE_KEY &&
+        (!event.newValue || (userId && readShoppingSession()?.user.id !== userId))
+      )
+        loseSession(false);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('rodzina:session-lost', onSessionLost);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [queryClient, userId]);
 
   const logout = async () => {
     if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
+    clearShoppingStorage(queryClient);
+    if (!isAndroid()) pendingWebLogout(true);
     await queryClient?.cancelQueries();
     queryClient?.clear();
     try {
       await apiFetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' });
+      pendingWebLogout(false);
     } catch (error) {
-      if (!isAndroid()) throw error;
+      if (!isAndroid() && error instanceof ApiRequestError) throw error;
     } finally {
       await clearNativeSession();
       setUser(null);
@@ -98,7 +153,10 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
+    pendingWebLogout(false);
+    clearShoppingStorage(queryClient);
     queryClient?.clear();
+    if (queryClient) void restoreShopping(queryClient, { user: nextUser, family: nextFamily });
     setUser(nextUser);
     setFamily(nextFamily);
     setIsLoading(false);

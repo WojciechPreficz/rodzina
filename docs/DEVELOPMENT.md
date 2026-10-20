@@ -1412,3 +1412,43 @@ kontrola paczki należy do 5.3. Nie wdrażano serwera ani nowego APK.
 Trwały cache, kolejka offline i próba odtwarzania po zamknięciu procesu zakupów
 pozostają zakresem 5.3. Build i atrapa mostka nie zastępują weryfikacji zakupów
 w zainstalowanym APK na fizycznym telefonie.
+
+## Krok 5.3 — trwałe zakupy offline (20.10.2026)
+
+Zaimplementowano zapis cache zakupów i osobnych wpisów oczekujących operacji
+w localStorage. Kolejka jest przypisana do konta, wykonywana kolejno i odtwarzana
+przed otwarciem zakupów. Zapis przed wysłaniem obejmuje też operacje będące w toku
+w chwili zamknięcia procesu. Połączenie w aktywnym interfejsie wznawia wysyłkę.
+Baner offline i licznik oczekujących zmian pokazują stan; brak miejsca blokuje
+przyjęcie nowej akcji. Błędy uprawnień i walidacji nie cofają późniejszych zmian.
+Wylogowanie i zmiana konta usuwają zapisane zakupy. API z migracją 0015 ponawia
+zapisy atomowo, bez duplikatów pozycji i historii. Szczegóły są w DECISIONS.
+
+| Kryterium                   | Weryfikacja lokalna                                                                                                                                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Odtwarzanie kolejki i cache | Testy nowych instancji QueryClient: przerwanie procesu offline i w trakcie żądania, zachowanie UUID, kolejność zapisów i odtworzenie funkcji mutacji.                                                                                                |
+| Izolacja i błędy            | Testy wylogowania, zmiany i wygaśnięcia sesji, startu APK offline, dwóch kart oraz braku miejsca w localStorage. Przed zapisem sprawdzana jest sesja; API odrzuca inne `actorId`.                                                                    |
+| Dodawanie zależnych zasobów | Test komponentu tworzy listę, dodaje produkt i odhacza go offline. Test API sprawdza odwołania do UUID utworzonej listy i pozycji.                                                                                                                   |
+| Idempotencja API            | Powtórzenie tworzenia zachowuje jeden produkt i jeden wpis użycia historii; ponowne czyszczenie nie usuwa późniejszych zakupów. Konflikt UUID daje 409. Błąd zapisu odpowiedzi wycofuje produkt i historię.                                          |
+| 3 odhaczenia + 1 produkt    | Playwright headless odcina sieć przez kontekst Chromium, odhacza trzy produkty i dodaje „masło 2 szt”. Po ponownym otwarciu frontendu z odciętym API stan i cztery operacje są zachowane. Po odzyskaniu sieci drugi kontekst widzi wszystkie zmiany. |
+| UI 390 i 1280 px            | Obejrzano zrzuty offline i po odtworzeniu, sprawdzono brak poziomego przewijania. Testy obejmują wcześniejszy CRUD, dzieci, transport natywny i odświeżanie między domownikami.                                                                      |
+| APK i paczka                | Lokalny debug APK: `BUILD SUCCESSFUL`. `release:smoke` przechodzi z migracją 0015, startem serwera, health/SPA, przejściowym SW, blokadą manifestu i backupem.                                                                                       |
+
+Lokalnie sprawdzono **49 testów w 6 plikach** zakupów, kolejki, sesji natywnej
+i regresji autoryzacji. Po końcowej poprawce zmiany konta między kartami
+ponowiono 11 testów cyklu sesji i trwałości kolejki. Typecheck oraz lint zmienionych plików przechodzą;
+pozostają dwa istniejące ostrzeżenia Fast Refresh w auth. Build WWW/API i kontrola
+formatowania zmienionych plików przechodzą. Zestaw headless zakupów obejmuje
+sześć scenariuszy w obu szerokościach; po poprawce otwierania menu APK ponowiono
+wyłącznie nieudaną próbę desktopu. Wyniki pełnego CI dla końcowego commita należy
+odczytać w GitHub Actions, zgodnie z sekcją 1.2 PLAN.
+
+Test ponownego otwarcia strony w headless symuluje dostępność plików frontendu
+z APK, zostawiając API bez sieci. Nie jest testem systemowego zamknięcia procesu
+Androida. **Pozostaje fizyczny telefon:** otworzyć zakupy online, odciąć sieć,
+odhaczyć trzy pozycje i dodać jedną, zakończyć proces, uruchomić APK nadal offline,
+potwierdzić stan, przywrócić sieć i sprawdzić drugi kontekst oraz wylogowanie.
+Nie zaliczono ręcznej próby DevTools wykonywanej przez właściciela; jej scenariusz
+jest pokryty automatycznie przez Chromium. Faza 5 pozostaje otwarta do wymaganej
+akceptacji ręcznej i sukcesu CI końcowego commita. Serwera i opublikowanego APK
+nie aktualizowano. Logi oraz zrzuty lokalne są w ignorowanym `.android-tools/step53-*`.

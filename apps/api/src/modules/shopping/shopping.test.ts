@@ -95,6 +95,71 @@ describe('shopping API', () => {
     expect(database.db.select().from(schema.shoppingLists).all()).toHaveLength(1);
   });
 
+  it('replays offline creates exactly once, including history and IDs for dependent writes', async () => {
+    const parent = await list();
+    const operation = crypto.randomUUID();
+    expect(
+      (
+        await request('POST', `${base}/lists?operationId=${crypto.randomUUID()}&actorId=${child.id}`, {
+          name: 'Wrong account',
+        })
+      ).statusCode,
+    ).toBe(401);
+    const url = `${base}/lists/${parent.id}/items?operationId=${operation}`;
+    const first = await request('POST', url, { name: 'Mleko' });
+    expect(first.statusCode, first.body).toBe(201);
+    expect(first.json().item.id).toBe(operation);
+    const second = await request('POST', url, { name: 'Mleko' });
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toEqual(first.json());
+    expect(database.db.select().from(schema.shoppingItems).all()).toHaveLength(1);
+    expect(database.db.select().from(schema.shoppingHistory).get()?.useCount).toBe(1);
+    expect((await request('POST', url, { name: 'Kefir' })).statusCode).toBe(409);
+    expect(
+      (
+        await request('PATCH', `${base}/items/${operation}?operationId=${crypto.randomUUID()}`, { isChecked: true })
+      ).json().item.isChecked,
+    ).toBe(true);
+    const listId = crypto.randomUUID();
+    expect((await request('POST', `${base}/lists?operationId=${listId}`, { name: 'Sklep' })).json().list.id).toBe(
+      listId,
+    );
+    expect(
+      (await request('POST', `${base}/lists/${listId}/items?operationId=${crypto.randomUUID()}`, { name: 'Chleb' }))
+        .statusCode,
+    ).toBe(201);
+  });
+
+  it('does not repeat a clear after a lost response or bypass permissions and family isolation', async () => {
+    const parent = await list();
+    const first = await add(parent.id);
+    await request('PATCH', `${base}/items/${first.id}`, { isChecked: true });
+    const operation = crypto.randomUUID();
+    const url = `${base}/lists/${parent.id}/clear-checked?operationId=${operation}`;
+    const cleared = await request('POST', url);
+    expect(cleared.json().deletedCount).toBe(1);
+    const later = await add(parent.id, { name: 'Chleb' });
+    await request('PATCH', `${base}/items/${later.id}`, { isChecked: true });
+    expect((await request('POST', url)).json()).toEqual(cleared.json());
+    expect(database.db.select().from(schema.shoppingItems).get()?.id).toBe(later.id);
+    expect((await request('POST', url, {}, child)).statusCode).toBe(403);
+    expect((await request('POST', url, {}, outsider)).statusCode).toBe(404);
+    expect((await request('POST', `${base}/lists?operationId=invalid`, { name: 'X' })).statusCode).toBe(400);
+  });
+
+  it('rolls back the write if recording its replay response fails', async () => {
+    const parent = await list();
+    database.sqlite.exec(
+      "CREATE TRIGGER fail_operation BEFORE INSERT ON shopping_operations BEGIN SELECT RAISE(ABORT, 'test'); END",
+    );
+    const result = await request('POST', `${base}/lists/${parent.id}/items?operationId=${crypto.randomUUID()}`, {
+      name: 'Mleko',
+    });
+    expect(result.statusCode).toBe(500);
+    expect(database.db.select().from(schema.shoppingItems).all()).toHaveLength(0);
+    expect(database.db.select().from(schema.shoppingHistory).all()).toHaveLength(0);
+  });
+
   it('supports named lists, partial edits, ordering and cascading deletion for adults', async () => {
     const first = await list();
     const created = await request('POST', `${base}/lists`, { name: '  Drogeria  ' }, member);

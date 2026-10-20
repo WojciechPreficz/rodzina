@@ -8,6 +8,7 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => ({ request, clearSession }),
 }));
 import { AuthProvider, useMe, type AuthUser, type Family } from './auth.js';
+import { restoreShopping, stopShoppingPersistence, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingOffline.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined), invalidate: vi.fn() },
 }));
@@ -35,6 +36,7 @@ function Harness() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  localStorage.clear();
 });
 function mount() {
   const client = new QueryClient();
@@ -51,6 +53,45 @@ function mount() {
 }
 
 describe('native session lifecycle', () => {
+  it('drops its own session after an account change in another tab without deleting that new account', async () => {
+    request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
+    mount();
+    await screen.findByText('Anna');
+    const other = new QueryClient();
+    restoreShopping(other, { ...session, user: { ...session.user, id: 'other' } });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    stopShoppingPersistence(other);
+    other.clear();
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: SHOPPING_STORAGE_KEY, newValue: localStorage.getItem(SHOPPING_STORAGE_KEY) }),
+    );
+    await screen.findByText('logged out');
+    expect(JSON.parse(localStorage.getItem(SHOPPING_STORAGE_KEY)!).session.user.id).toBe('other');
+  });
+
+  it('restores the shopping account after a cold offline start', async () => {
+    const previous = new QueryClient();
+    restoreShopping(previous, session);
+    previous.setQueryData(['shopping', 'family', 'adult', 'lists'], []);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    stopShoppingPersistence(previous);
+    previous.clear();
+    request.mockRejectedValueOnce(new Error('offline'));
+    mount();
+    await screen.findByText('Anna');
+  });
+
+  it('discards offline data when the server rejects an expired session', async () => {
+    const previous = new QueryClient();
+    restoreShopping(previous, session);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    stopShoppingPersistence(previous);
+    previous.clear();
+    request.mockResolvedValueOnce({ status: 401, body: '{}' });
+    mount();
+    await screen.findByText('logged out');
+    expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).toBeNull();
+  });
   it('clears credentials and cached data when logging out offline', async () => {
     request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
     const client = mount();

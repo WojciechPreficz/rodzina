@@ -34,7 +34,8 @@ type Dialog =
 export function ShoppingPage() {
   const { user } = useMe();
   const [selected, setSelected] = useState<string | null>(null);
-  const { lists, items, mutation, active } = useShopping(selected);
+  const { lists, items, queueChange, active, online, pendingCount, syncError, dismissSyncError } =
+    useShopping(selected);
   const members = useMembersQuery();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,14 +43,21 @@ export function ShoppingPage() {
   const run = async (change: ShoppingChange) => {
     setError(null);
     try {
-      await mutation.mutateAsync(change);
+      await queueChange(change);
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t.failed);
       return false;
     }
   };
-  if (lists.isPending) return <Text role="status">{t.loading}</Text>;
+  if (lists.isPending)
+    return online ? (
+      <Text role="status">{t.loading}</Text>
+    ) : (
+      <Alert color="yellow" role="status">
+        {t.noOfflineCache}
+      </Alert>
+    );
   if (!lists.data)
     return (
       <Alert color="red">
@@ -64,13 +72,16 @@ export function ShoppingPage() {
     [...values].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
   const row = (item: ShoppingItem) => {
     const editable = adult || item.createdBy === user?.id;
-    const buyer = members.data?.find((member) => member.id === item.checkedBy)?.displayName;
+    const buyer =
+      item.checkedBy === user?.id
+        ? user.displayName
+        : members.data?.find((member) => member.id === item.checkedBy)?.displayName;
     return (
       <Paper key={item.id} p="sm" withBorder component="article" aria-label={item.name}>
         <Group wrap="nowrap" align="flex-start">
           <Checkbox
             checked={item.isChecked}
-            disabled={mutation.isPending}
+
             mt={3}
             aria-label={t.check(item.name)}
             onChange={() =>
@@ -95,7 +106,7 @@ export function ShoppingPage() {
           {editable && (
             <Menu position="bottom-end">
               <Menu.Target>
-                <Button variant="subtle" px="sm" aria-label={t.actions(item.name)} disabled={mutation.isPending}>
+                <Button variant="subtle" px="sm" aria-label={t.actions(item.name)}>
                   •••
                 </Button>
               </Menu.Target>
@@ -116,11 +127,22 @@ export function ShoppingPage() {
       <Group justify="space-between">
         <Title order={1}>{t.title}</Title>
         {adult && (
-          <Button variant="light" disabled={mutation.isPending} onClick={() => setDialog({ type: 'createList' })}>
+          <Button variant="light" onClick={() => setDialog({ type: 'createList' })}>
             {t.addList}
           </Button>
         )}
       </Group>
+      {!online && (
+        <Alert color="yellow" role="status">
+          {t.offline}
+        </Alert>
+      )}
+      {online && pendingCount > 0 && <Text role="status">{t.syncing(pendingCount)}</Text>}
+      {syncError && syncError !== error && (
+        <Alert color="red" role="alert" withCloseButton onClose={dismissSyncError}>
+          {syncError}
+        </Alert>
+      )}
       {error && (
         <Alert color="red" role="alert" withCloseButton onClose={() => setError(null)}>
           {error}
@@ -146,7 +168,7 @@ export function ShoppingPage() {
             <Tabs.Tab
               key={list.id}
               value={list.id}
-              disabled={mutation.isPending}
+
               style={{ flexShrink: 0, maxWidth: 220, overflow: 'hidden', overflowWrap: 'anywhere' }}
             >
               {list.name}
@@ -161,7 +183,7 @@ export function ShoppingPage() {
               <Button
                 size="xs"
                 variant="subtle"
-                disabled={mutation.isPending}
+
                 onClick={() => setDialog({ type: 'renameList', list: active })}
               >
                 {t.renameList}
@@ -170,7 +192,7 @@ export function ShoppingPage() {
                 size="xs"
                 variant="subtle"
                 color="red"
-                disabled={mutation.isPending}
+
                 onClick={() => setDialog({ type: 'deleteList', list: active })}
               >
                 {t.deleteList}
@@ -179,7 +201,7 @@ export function ShoppingPage() {
           )}
           <QuickAdd
             key={active.id}
-            pending={mutation.isPending || items.isPending}
+            pending={items.isPending}
             onAdd={(data) => run({ type: 'add', listId: active.id, id: crypto.randomUUID(), data })}
           />
           {items.isPending ? (
@@ -209,7 +231,7 @@ export function ShoppingPage() {
                     size="xs"
                     variant="light"
                     color="red"
-                    disabled={mutation.isPending}
+
                     onClick={() => setDialog({ type: 'clear', listId: active.id })}
                   >
                     {t.clear}
@@ -225,7 +247,6 @@ export function ShoppingPage() {
         <ShoppingDialog
           dialog={dialog}
           error={error}
-          pending={mutation.isPending}
           close={() => {
             setDialog(null);
             setError(null);
@@ -242,13 +263,11 @@ export function ShoppingPage() {
 function ShoppingDialog({
   dialog,
   error,
-  pending,
   close,
   save,
 }: {
   dialog: Dialog;
   error: string | null;
-  pending: boolean;
   close: () => void;
   save: (change: ShoppingChange) => Promise<void>;
 }) {
@@ -271,7 +290,6 @@ function ShoppingDialog({
               : t.remove;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (pending) return;
     let change: ShoppingChange;
     if (editingList) {
       if (!name.trim() || name.trim().length > 200) {
@@ -296,13 +314,7 @@ function ShoppingDialog({
     void save(change);
   };
   return (
-    <Modal
-      opened
-      onClose={pending ? () => {} : close}
-      title={title}
-      closeOnClickOutside={!pending}
-      closeOnEscape={!pending}
-    >
+    <Modal opened onClose={close} title={title}>
       <form onSubmit={submit}>
         <Stack>
           {editingList || dialog.type === 'edit' ? (
@@ -312,7 +324,6 @@ function ShoppingDialog({
               onChange={(event) => setName(event.currentTarget.value)}
               maxLength={200}
               required
-              disabled={pending}
             />
           ) : (
             <Text>
@@ -330,7 +341,6 @@ function ShoppingDialog({
                 value={quantity}
                 onChange={(event) => setQuantity(event.currentTarget.value)}
                 maxLength={100}
-                disabled={pending}
               />
               <Select
                 label={t.category}
@@ -338,7 +348,6 @@ function ShoppingDialog({
                 value={category}
                 onChange={(value) => setCategory(value ?? 'other')}
                 allowDeselect={false}
-                disabled={pending}
               />
             </>
           )}
@@ -349,10 +358,10 @@ function ShoppingDialog({
             </Alert>
           )}
           <Group justify="flex-end">
-            <Button variant="default" disabled={pending} onClick={close}>
+            <Button variant="default" onClick={close}>
               {t.cancel}
             </Button>
-            <Button type="submit" loading={pending} color={editingList || dialog.type === 'edit' ? 'blue' : 'red'}>
+            <Button type="submit" color={editingList || dialog.type === 'edit' ? 'blue' : 'red'}>
               {editingList || dialog.type === 'edit' ? t.save : t.remove}
             </Button>
           </Group>

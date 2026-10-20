@@ -64,7 +64,7 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
   }
 
   if (!response.ok) {
-    if (isAndroid() && response.status === 401) {
+    if (response.status === 401) {
       invalidateSessionRequests();
       window.dispatchEvent(new Event('rodzina:session-lost'));
     }

@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider, createTheme } from '@mantine/core';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClientProvider } from '@tanstack/react-query';
 import '@mantine/core/styles.css';
 import { RouterProvider } from 'react-router/dom';
 import { createQueryClient } from './queryClient.js';
@@ -17,6 +17,7 @@ const theme = createTheme({
 });
 
 const queryClient = createQueryClient();
+onlineManager.setOnline(navigator.onLine);
 router.getBlocker('forms', () => !allowNavigation());
 router.subscribe((state) => {
   const blocker = state.blockers.get('forms');

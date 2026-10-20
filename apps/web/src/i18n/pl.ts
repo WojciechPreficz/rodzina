@@ -1,5 +1,8 @@
 export const labels = {
   shoppingUi: {
+    noOfflineCache: 'Brak zakupów zapisanych na tym urządzeniu. Połącz się z internetem, aby wczytać listy.',
+    offline: 'Jesteś offline - zmiany zostaną wysłane po odzyskaniu połączenia',
+    syncing: (count: number) => `Zmiany oczekujące na wysłanie: ${count}`,
     title: 'Zakupy',
     lists: 'Listy zakupów',
     addList: 'Dodaj listę',

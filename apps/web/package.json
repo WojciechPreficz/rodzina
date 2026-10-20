@@ -18,6 +18,8 @@
     "@schedule-x/events-service": "^4.9.1",
     "@schedule-x/react": "^4.1.0",
     "@schedule-x/theme-default": "^4.9.1",
+    "@tanstack/query-persist-client-core": "^5.104.1",
+    "@tanstack/query-sync-storage-persister": "^5.104.1",
     "@tanstack/react-query": "^5.104.1",
     "@vitejs/plugin-react": "^4.7.0",
     "react": "^19.1.1",

@@ -34,9 +34,9 @@ export function createShoppingService(database: DatabaseConnection) {
   }
   return {
     listLists: repository.listLists,
-    createList(familyId: string, actorId: string, role: FamilyRole, data: CreateShoppingList) {
+    createList(familyId: string, actorId: string, role: FamilyRole, data: CreateShoppingList, id?: string) {
       requireAdult(role);
-      return repository.createList(familyId, actorId, data);
+      return repository.createList(familyId, actorId, data, id);
     },
     updateList(familyId: string, id: string, role: FamilyRole, data: PatchShoppingList) {
       getList(familyId, id);
@@ -54,9 +54,9 @@ export function createShoppingService(database: DatabaseConnection) {
       getList(familyId, listId);
       return repository.listItems(familyId, listId);
     },
-    createItem(familyId: string, listId: string, actorId: string, data: CreateShoppingItem) {
+    createItem(familyId: string, listId: string, actorId: string, data: CreateShoppingItem, id?: string) {
       getList(familyId, listId);
-      const item = repository.createItem(familyId, listId, actorId, data);
+      const item = repository.createItem(familyId, listId, actorId, data, id);
       if (!item) throw new ShoppingError(404, 'NOT_FOUND', 'Lista zakupów nie istnieje.');
       return item;
     },

@@ -33,27 +33,29 @@ export async function shoppingSuggestions(q: string, signal: AbortSignal) {
   ).suggestions;
 }
 
-export async function changeShopping(change: ShoppingChange) {
+export async function changeShopping(change: ShoppingChange, operationId?: string, actorId?: string) {
+  const send = (path: string, init: RequestInit) =>
+    apiFetch(path + (operationId ? `?operationId=${operationId}${actorId ? `&actorId=${actorId}` : ''}` : ''), init);
   switch (change.type) {
     case 'createList':
-      return apiFetch('/api/shopping/lists', { method: 'POST', body: JSON.stringify({ name: change.name }) });
+      return send('/api/shopping/lists', { method: 'POST', body: JSON.stringify({ name: change.name }) });
     case 'renameList':
-      return apiFetch(`/api/shopping/lists/${change.id}`, {
+      return send(`/api/shopping/lists/${change.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ name: change.name }),
       });
     case 'deleteList':
-      return apiFetch(`/api/shopping/lists/${change.id}`, { method: 'DELETE' });
+      return send(`/api/shopping/lists/${change.id}`, { method: 'DELETE' });
     case 'add':
-      return apiFetch(`/api/shopping/lists/${change.listId}/items`, {
+      return send(`/api/shopping/lists/${change.listId}/items`, {
         method: 'POST',
         body: JSON.stringify(change.data),
       });
     case 'edit':
-      return apiFetch(`/api/shopping/items/${change.id}`, { method: 'PATCH', body: JSON.stringify(change.data) });
+      return send(`/api/shopping/items/${change.id}`, { method: 'PATCH', body: JSON.stringify(change.data) });
     case 'remove':
-      return apiFetch(`/api/shopping/items/${change.id}`, { method: 'DELETE' });
+      return send(`/api/shopping/items/${change.id}`, { method: 'DELETE' });
     case 'clear':
-      return apiFetch(`/api/shopping/lists/${change.listId}/clear-checked`, { method: 'POST' });
+      return send(`/api/shopping/lists/${change.listId}/clear-checked`, { method: 'POST' });
   }
 }

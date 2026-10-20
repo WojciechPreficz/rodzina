@@ -1,5 +1,29 @@
 # Wdrożenie i aktualizacje na cPanel vh.pl
 
+**Zakupy offline, krok 5.3 (20.10.2026):** wydanie dodaje migrację
+`0015_shopping_operations.sql`. Tabela `shopping_operations` przechowuje odpowiedzi
+zapisów według użytkownika i identyfikatora operacji; zapis danych i odpowiedzi
+jest jedną transakcją. Backup obejmuje również tę tabelę. Nie usuwaj jej wpisów
+przy zwykłym porządkowaniu bazy: telefon może ponowić operację po długiej przerwie.
+Usunięcie użytkownika usuwa jego wpisy przez FK. Wymagany jest standardowy backup
+przed aktualizacją; migracja nie zmienia dotychczasowych zakupów, sesji ani alarmów.
+
+Najpierw zaktualizuj API/WWW, następnie osobno APK według dotychczasowej procedury.
+Starsze APK korzystają z dotychczasowych endpointów bez parametrów operacji.
+Nowy klient wysyła `operationId` oraz oczekiwane `actorId`; nie instaluj go przed
+aktualizacją API, ponieważ stare API nie zapewnia trwałego ponawiania zapisów.
+Nowe zależności TanStack są pakowane do frontendu i nie wymagają kompilacji ani
+instalacji na hostingu. Brak nowych zmiennych środowiskowych, cronów i usług w tle.
+
+Cache, kontekst użytkownika bez poświadczeń i dziennik zakupów są w localStorage
+danego profilu WWW lub WebView APK; wylogowanie usuwa je. Dane nie mają limitu wieku,
+który usuwałby niewysłane zakupy. Powrót sieci w aktywnej aplikacji wznawia kolejkę.
+APK uruchamia lokalny frontend również offline; zwykła strona wymaga sieci do
+pierwszego załadowania swoich plików. Nie przywracamy service workera ani PWA.
+Wylogowanie WWW bez sieci zostawia wyłącznie znacznik oczekującego zakończenia
+sesji serwerowej; przy następnym uruchomieniu jest ono wykonywane przed `/auth/me`.
+Ten krok nie uruchamia deployu ani nie publikuje APK.
+
 **API zakupów, krok 5.1 (19.10.2026):** aktualizacja zawiera migrację
 `0014_shopping.sql`, która dodaje `shopping_lists`, `shopping_items`
 i `shopping_history`. Migracja uruchamia się przy starcie API; nie zmienia
