@@ -72,8 +72,10 @@ test('website uses a left sidebar on desktop and a right drawer on phones', asyn
   await expect(page.getByRole('heading', { name: 'Wersja aplikacji' })).toBeVisible();
   if (phone) {
     await openNavigation(page);
+    await expect(page.getByRole('dialog', { name: 'Menu Rodziny' })).toBeVisible();
     await page.setViewportSize({ width: 1280, height: 800 });
-    await expect(page.getByRole('dialog')).not.toBeVisible();
+    // The drawer keeps its navigation mounted until the exit transition finishes.
+    await expect(page.getByRole('dialog', { name: 'Menu Rodziny' })).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Nawigacja główna' })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole('navigation', { name: 'Nawigacja główna' })).toHaveCount(0);
