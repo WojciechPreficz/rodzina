@@ -17,11 +17,13 @@ export function ReminderList({
   timezone,
   onRemove,
   pending = false,
+  task = false,
 }: {
   value: readonly ReminderItem[];
   timezone: string;
   onRemove?: (index: number) => void;
   pending?: boolean;
+  task?: boolean;
 }) {
   return (
     <Stack gap="xs">
@@ -34,7 +36,13 @@ export function ReminderList({
         <Group key={index} justify="space-between" wrap="wrap">
           <Stack gap={2} style={{ minWidth: 0 }}>
             <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
-              {describeReminder(reminder, timezone)} · {text.reminderAudiences[reminder.audience]}
+              {task && reminder.type === 'offset' && reminder.offsetValue === 0
+                ? labels.tasksUi.onDueDate
+                : describeReminder(reminder, timezone)}{' '}
+              ·{' '}
+              {task && reminder.audience === 'owner'
+                ? labels.tasksUi.reminderOwner
+                : text.reminderAudiences[reminder.audience]}
             </Text>
             {reminder.type === 'absolute' && (reminder.nextFireAt === null || reminder.remindAt <= Date.now()) && (
               <Badge color="orange">{text.reminderStale}</Badge>
@@ -56,12 +64,14 @@ export function ReminderPicker({
   audiences = eventReminderAudiences,
   defaultAudience = 'participants',
   pending = false,
+  task = false,
   onAdd,
 }: {
   timezone?: string;
   audiences?: readonly Reminder['audience'][];
   defaultAudience?: Reminder['audience'];
   pending?: boolean;
+  task?: boolean;
   onAdd: (reminder: ReminderInput) => void | Promise<void>;
 }) {
   const [mode, setMode] = useState('0');
@@ -72,18 +82,19 @@ export function ReminderPicker({
   const [time, setTime] = useState('09:00');
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const selectedAudience = audiences.includes(audience) ? audience : defaultAudience;
   async function add() {
     setError(null);
     let reminder: ReminderInput;
     try {
       if (mode === 'absolute') {
         if (!calendarDateSchema.safeParse(date).success) throw new RangeError();
-        reminder = { type: 'absolute', remindAt: localDateTimeToUtc(date, time, timezone), audience };
+        reminder = { type: 'absolute', remindAt: localDateTimeToUtc(date, time, timezone), audience: selectedAudience };
       } else if (mode === 'custom') {
         if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 10000) throw new RangeError();
-        reminder = { type: 'offset', offsetValue: value, offsetUnit: unit, audience };
+        reminder = { type: 'offset', offsetValue: value, offsetUnit: unit, audience: selectedAudience };
       } else {
-        reminder = { type: 'offset', ...presets[Number(mode)]!, audience };
+        reminder = { type: 'offset', ...presets[Number(mode)]!, audience: selectedAudience };
       }
     } catch {
       setError(text.reminderInvalid);
@@ -106,7 +117,12 @@ export function ReminderPicker({
         allowDeselect={false}
         disabled={pending || adding}
         data={[
-          ...text.reminderPresets.map((label, index) => ({ value: String(index), label })),
+          ...(task
+            ? [
+                { value: '0', label: labels.tasksUi.onDueDate },
+                { value: '3', label: text.reminderPresets[3] },
+              ]
+            : text.reminderPresets.map((label, index) => ({ value: String(index), label }))),
           { value: 'custom', label: text.reminderCustom },
           { value: 'absolute', label: text.reminderAbsolute },
         ]}
@@ -153,10 +169,13 @@ export function ReminderPicker({
       )}
       <Select
         label={text.reminderAudience}
-        value={audience}
+        value={selectedAudience}
         allowDeselect={false}
         disabled={pending || adding}
-        data={audiences.map((value) => ({ value, label: text.reminderAudiences[value] }))}
+        data={audiences.map((value) => ({
+          value,
+          label: task && value === 'owner' ? labels.tasksUi.reminderOwner : text.reminderAudiences[value],
+        }))}
         onChange={(next) => {
           const selected = audiences.find((value) => value === next);
           if (selected) setAudience(selected);

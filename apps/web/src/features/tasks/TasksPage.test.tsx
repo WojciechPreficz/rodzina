@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import type { Task, TaskList } from '@rodzina/shared';
 import { TasksPage } from './TasksPage.js';
+import { TodayTasks } from './TodayTasks.js';
 import { isTaskOverdue } from './taskRules.js';
 import { reportTransportFailure } from '../../connectivity.js';
 
@@ -47,17 +48,25 @@ const task: Task = {
   updatedAt: 1,
 };
 let client: QueryClient;
-function setup(path = '/zadania/list', initial = [task], failPatch = false) {
+function setup(
+  path = '/zadania/list',
+  initial = [task],
+  failPatch = false,
+  override?: (url: string, method: string, data: Record<string, unknown>) => object | Response | undefined,
+) {
   let items = [...initial];
   let lists = [{ ...list, id: 'second', name: 'Remont', isDefault: false, memberIds: ['other'] }, list];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
     const data = init?.body ? JSON.parse(String(init.body)) : {};
+    const custom = override?.(url, method, data);
+    if (custom) return custom instanceof Response ? custom : new Response(JSON.stringify({ ok: true, ...custom }));
     if (failPatch && method === 'PATCH')
       return new Response(JSON.stringify({ error: { message: 'Nie udało się zapisać.' } }), { status: 500 });
     let body: object;
-    if (url === '/api/tasks/lists' && method === 'GET') body = { lists };
+    if (url.startsWith('/api/reminders/mine')) body = { reminders: [] };
+    else if (url === '/api/tasks/lists' && method === 'GET') body = { lists };
     else if (url === '/api/tasks/lists' && method === 'POST') {
       const created = { ...list, id: 'new-list', name: data.name, isDefault: false };
       lists = [...lists, created];
@@ -82,6 +91,7 @@ function setup(path = '/zadania/list', initial = [task], failPatch = false) {
       <MantineProvider env="test">
         <MemoryRouter initialEntries={[path]}>
           <Routes>
+            <Route path="/" element={<TodayTasks />} />
             <Route path="/zadania" element={<TasksPage />} />
             <Route path="/zadania/:listId" element={<TasksPage />} />
           </Routes>
@@ -182,6 +192,7 @@ describe('tasks UI', () => {
   it('opens a task URL, limits assignment to list members and clears both deadline fields without touching reminders', async () => {
     const fetchMock = setup('/zadania/list?zadanie=task', [{ ...task, dueTime: '16:45' }]);
     const dialog = await screen.findByRole('dialog', { name: 'Edytuj zadanie' });
+    await within(dialog).findByLabelText('Notatka');
     expect(within(dialog).getByLabelText('Notatka')).toHaveValue('Biała');
     fireEvent.click(within(dialog).getByRole('textbox', { name: 'Osoba przypisana' }));
     expect(screen.getByRole('option', { name: 'Ania' })).toBeInTheDocument();
@@ -211,6 +222,106 @@ describe('tasks UI', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('aktualnego dostępu online');
   });
+  it('lets the owner rename and share a default list but never offers deletion', async () => {
+    const fetchMock = setup();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ustawienia listy' }));
+    expect(screen.queryByRole('button', { name: 'Usuń listę' })).not.toBeInTheDocument();
+    fireEvent.change(await screen.findByRole('textbox', { name: /^Nazwa listy/ }), { target: { value: 'Nowa nazwa' } });
+    fireEvent.click(screen.getByRole('textbox', { name: 'Udostępnij domownikom' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Bartek' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/tasks/lists/list',
+        expect.objectContaining({ method: 'PATCH', body: '{"name":"Nowa nazwa","memberIds":["other"]}' }),
+      ),
+    );
+  });
+  it('offers leaving to a member without owner settings', async () => {
+    const fetchMock = setup('/zadania/list', [task], false, (url, method) =>
+      url === '/api/tasks/lists' && method === 'GET'
+        ? { lists: [{ ...list, ownerId: 'other', memberIds: [session.user.id] }] }
+        : undefined,
+    );
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Opuść listę' }));
+    expect(screen.queryByRole('button', { name: 'Ustawienia listy' })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/tasks/lists/list/leave',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+  });
+  it('hides an open task when the next list poll reports revoked access', async () => {
+    let revoked = false;
+    setup('/zadania/list?zadanie=task', [task], false, (url, method) =>
+      revoked && url === '/api/tasks/lists' && method === 'GET' ? { lists: [] } : undefined,
+    );
+    await screen.findByLabelText('Notatka');
+    revoked = true;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['tasks'] });
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByText(task.title)).not.toBeInTheDocument();
+    expect(await screen.findByText('Lista jest niedostępna lub nie masz do niej dostępu.')).toBeInTheDocument();
+  });
+  it('uses task presets and limits the audience on a private list', async () => {
+    const fetchMock = setup('/zadania/list?zadanie=task');
+    fireEvent.click(await screen.findByRole('textbox', { name: 'Kiedy przypomnieć' }));
+    expect(screen.getByRole('option', { name: 'W dniu terminu' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '15 minut przed' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'W dniu terminu' }));
+    fireEvent.click(screen.getByRole('textbox', { name: 'Odbiorcy' }));
+    expect(screen.queryByRole('option', { name: 'Wszyscy na liście' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Cała rodzina' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Osoba przypisana lub właściciel listy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj przypomnienie' }));
+    await screen.findByText(/W dniu terminu · Osoba/);
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/tasks/task',
+        expect.objectContaining({
+          body: expect.stringContaining(
+            '"reminders":[{"type":"offset","offsetValue":0,"offsetUnit":"minute","audience":"owner"}]',
+          ),
+        }),
+      ),
+    );
+  });
+  it('retries personal reminders after a partial failure without creating the task twice', async () => {
+    let attempts = 0;
+    const fetchMock = setup('/zadania/list', [], false, (url, method) => {
+      if (url === '/api/reminders/mine' && method === 'POST') {
+        attempts++;
+        return attempts === 1
+          ? new Response(JSON.stringify({ error: { message: 'Spróbuj ponownie.' } }), { status: 500 })
+          : { reminder: { id: 'personal' } };
+      }
+      return undefined;
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Dodaj zadanie ze szczegółami' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: /^Tytuł/ }), { target: { value: 'Nowe zadanie' } });
+    fireEvent.change(screen.getByLabelText('Termin'), { target: { value: '2030-01-01' } });
+    fireEvent.click(screen.getByRole('textbox', { name: 'Odbiorcy' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Tylko ja' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj przypomnienie' }));
+    await screen.findByText(/W dniu terminu · Tylko ja/);
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await screen.findByText(/Zadanie zapisano, ale nie wszystkie/);
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(
+      fetchMock.mock.calls.filter(([url, init]) => url === '/api/tasks/lists/list/tasks' && init?.method === 'POST'),
+    ).toHaveLength(1);
+    expect(attempts).toBe(2);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/reminders/mine',
+      expect.objectContaining({ body: '{"taskId":"new-task","type":"offset","offsetValue":0,"offsetUnit":"minute"}' }),
+    );
+  });
   it('does not request private data before confirming the account', () => {
     session.familyConfirmed = false;
     const fetchMock = setup();
@@ -226,9 +337,32 @@ describe('tasks UI', () => {
     await act(async () => {
       await client.invalidateQueries({ queryKey: ['tasks'] });
     });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.queryByText(task.title)).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('Nie znaleziono listy.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nie znaleziono listy.');
+  });
+});
+
+describe('today tasks card', () => {
+  it('links visible due tasks to their online details and hides them offline', async () => {
+    setup('/');
+    const link = await screen.findByRole('link', { name: task.title });
+    expect(link).toHaveAttribute('href', '/zadania/list?zadanie=task');
+    expect(screen.getByText(/po terminie/)).toBeInTheDocument();
+    act(() => onlineManager.setOnline(false));
+    expect(screen.queryByText(task.title)).not.toBeInTheDocument();
+    expect(screen.getByText('Połącz się z internetem, aby zobaczyć dzisiejsze zadania.')).toBeInTheDocument();
+  });
+  it('replaces removed tasks with the empty state on refresh', async () => {
+    let removed = false;
+    setup('/', [task], false, (url) => (url === '/api/tasks/today' ? { tasks: removed ? [] : [task] } : undefined));
+    await screen.findByText(task.title);
+    removed = true;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['tasks'] });
+    });
+    expect(await screen.findByText('Na dziś wszystko zrobione.')).toBeInTheDocument();
+    expect(screen.queryByText(task.title)).not.toBeInTheDocument();
   });
 });
 

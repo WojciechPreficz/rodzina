@@ -20,6 +20,7 @@ import { memberCalendars, monthRange, todayInTimezone, toScheduleX } from './toS
 import { EventForm } from './EventForm.js';
 import { DistantEvents } from './DistantEvents.js';
 import { NotificationBanner } from '../notifications/NotificationBanner.js';
+import { TodayTasks } from '../tasks/TodayTasks.js';
 
 const text = labels.calendarUi;
 
@@ -182,6 +183,7 @@ export function CalendarPage() {
   return (
     <Stack>
       <Title order={2}>{labels.calendar}</Title>
+      <TodayTasks />
       {members.error && (
         <Alert color="red" role="alert">
           {members.error.message}

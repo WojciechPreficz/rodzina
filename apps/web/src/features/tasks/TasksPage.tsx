@@ -24,6 +24,7 @@ import { allowNavigation } from '../../nativeNavigation.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import type { Member } from '../family/familyApi.js';
 import { TaskForm } from './TaskForm.js';
+import { TaskListSettings } from './TaskListSettings.js';
 import { useTasks } from './taskQueries.js';
 import { isTaskOverdue } from './taskRules.js';
 
@@ -63,6 +64,7 @@ function TaskListPage() {
   const [addingList, setAddingList] = useState(false);
   const [listName, setListName] = useState('');
   const [addingTask, setAddingTask] = useState(false);
+  const [settingsOpened, setSettingsOpened] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
   const [doneOpened, setDoneOpened] = useState(false);
   const [actionError, setActionError] = useState<string>();
@@ -203,9 +205,38 @@ function TaskListPage() {
       {listId && !active && <Alert color="red">{t.unavailable}</Alert>}
       {active && (
         <Stack key={active.id}>
-          <Title order={3} style={{ overflowWrap: 'anywhere' }}>
-            {active.name}
-          </Title>
+          <Group justify="space-between">
+            <Title order={3} style={{ overflowWrap: 'anywhere' }}>
+              {active.name}
+            </Title>
+            {active.ownerId === user?.id ? (
+              <Button
+                variant="default"
+                onClick={() => {
+                  data.updateList.reset();
+                  data.removeList.reset();
+                  setSettingsOpened(true);
+                }}
+              >
+                {t.settings}
+              </Button>
+            ) : (
+              <Button
+                variant="subtle"
+                color="red"
+                loading={data.leaveList.isPending}
+                onClick={() => {
+                  if (window.confirm(t.leaveListConfirm))
+                    void run(async () => {
+                      await data.leaveList.mutateAsync();
+                      void navigate('/zadania');
+                    });
+                }}
+              >
+                {t.leaveList}
+              </Button>
+            )}
+          </Group>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -301,6 +332,33 @@ function TaskListPage() {
         </form>
       </Modal>
       <Modal
+        opened={settingsOpened && !!active && active.ownerId === user?.id}
+        onClose={() => {
+          if (allowNavigation()) setSettingsOpened(false);
+        }}
+        title={t.settings}
+      >
+        {settingsOpened && active && active.ownerId === user?.id && (
+          <TaskListSettings
+            key={active.id}
+            list={active}
+            members={members}
+            pending={data.updateList.isPending || data.removeList.isPending || membersQuery.isPending}
+            error={data.updateList.error?.message ?? data.removeList.error?.message ?? membersQuery.error?.message}
+            onSave={async (input) => {
+              await data.updateList.mutateAsync(input);
+            }}
+            onDelete={async () => {
+              await data.removeList.mutateAsync();
+              void navigate('/zadania');
+            }}
+            onCancel={() => {
+              if (allowNavigation()) setSettingsOpened(false);
+            }}
+          />
+        )}
+      </Modal>
+      <Modal
         opened={!!active && (addingTask || !!editedTask)}
         onClose={closeTask}
         title={editedTask ? t.editTask : t.addTask}
@@ -310,12 +368,13 @@ function TaskListPage() {
             key={`${active.id}:${editedTask?.id ?? 'new'}`}
             task={editedTask}
             members={listMembers}
+            shared={active.memberIds.length > 0}
             pending={data.create.isPending || data.update.isPending || data.remove.isPending}
             error={(editedTask ? data.update.error : data.create.error)?.message}
             onCancel={closeTask}
-            onSave={async (input) => {
-              if (editedTask) await data.update.mutateAsync({ id: editedTask.id, data: input });
-              else await data.create.mutateAsync(input);
+            onSave={async (input, id) => {
+              if (id) return data.update.mutateAsync({ id, data: input });
+              return data.create.mutateAsync(input);
             }}
           />
         )}

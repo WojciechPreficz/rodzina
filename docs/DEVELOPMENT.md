@@ -1715,3 +1715,78 @@ Na polecenie właściciela zmiana trafia do lokalnego commita na `main` bez push
 Stan: **zweryfikowane lokalnie, oczekuje na CI**, z otwartymi próbami ręcznymi.
 CI dla końcowego commita nie uruchomi się do czasu wysłania zmian; nie oznaczamy
 kroku jako w pełni gotowego ani nie wykonujemy deployu.
+
+## Udostępnianie list, przypomnienia i karta zadań (7.5, #16)
+
+Właściciel otwiera „Ustawienia listy”, zmienia nazwę i wybiera domowników
+(również dla listy domyślnej). Może usunąć listę niedomyślną wraz z zadaniami
+po potwierdzeniu. Członek widzi wyłącznie „Opuść listę”. Odczyty list i zadań
+odświeżają się co 20 s; cofnięcie dostępu zamyka także otwarte szczegóły.
+
+Formularz używa wspólnego `ReminderPicker`, z presetami „W dniu terminu”,
+„1 dzień przed”, własnym wyprzedzeniem i konkretną datą. Odbiorcy to osoba
+przypisana lub właściciel listy, członkowie listy udostępnionej albo „Tylko ja”.
+Bez godziny alarm w dniu terminu przypada na 09:00 w strefie rodziny.
+Wspólne przypomnienia zapisuje API zadania, a osobiste `/api/reminders/mine`.
+Anulowanie formularza nie zapisuje przypomnień. Przy częściowym błędzie zapis
+można ponowić bez ponownego tworzenia zadania ani już zapisanych przypomnień.
+Usunięcie terminu wstrzymuje istniejące alarmy. Nie zmieniamy nieedytowanych
+przypomnień podczas zapisu pozostałych pól.
+
+Karta „Dziś do zrobienia” na górze kalendarza pokazuje otwarte zadania na dziś
+i zaległe ze wszystkich dostępnych list, z odnośnikami do szczegółów.
+Po utracie sieci lub potwierdzenia konta nie pokazuje prywatnych danych,
+także wcześniej pobranych. Błąd odświeżenia również ukrywa poprzednie dane.
+W tym checkoutcie Obiady pozostają ekranem zastępczym; nie ma jeszcze karty
+„Dziś na obiad”, obok której można umieścić zadania. Krok 7.5 nie implementuje
+modułu z fazy 6.
+
+Weryfikacja kryteriów fazy 7:
+
+| Kryterium                                                                                                                                             | Dowód / stan                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 404 dla osób spoza listy, także administratora; 403 dla członka przy zarządzaniu listą; ochrona listy domyślnej; izolacja rodzin                      | Regresja `apps/api/src/modules/tasks/tasks.test.ts` oraz testy istniejących list.                                                                                                                                                           |
+| Odhaczenie anuluje przypomnienia, odznaczenie przelicza termin; odbiorca przypisany lub właściciel                                                    | Regresja `apps/api/src/modules/reminders/task-reminders.test.ts`.                                                                                                                                                                           |
+| Opuszczenie/cofnięcie dostępu usuwa także osobiste alarmy ze snapshotu; brak awaryjnych odbiorców; ogólny payload i usunięcie danych przy wylogowaniu | Regresja testów przypomnień API oraz `localSchedule.test.ts` i `scheduleSync.test.tsx`; nie jest to próba fizycznego alarmu.                                                                                                                |
+| Odrzucenie odbiorców `family` i `adults`                                                                                                              | Testy API przypomnień; UI nie udostępnia tych opcji dla zadań.                                                                                                                                                                              |
+| UI ustawień, odbiorców, ponowienia zapisu, karty i prywatności                                                                                        | `TasksPage.test.tsx`; headless scenariusze `e2e/tasks-sharing.spec.ts` i regresja `e2e/tasks.spec.ts`. Wyniki końcowe poniżej.                                                                                                              |
+| Ręczne udostępnienie/cofnięcie w dwóch sesjach do 20 s, Chrome przy 390 i 1280 px, wspólny frontend w uruchomionym APK                                | Pozostaje do potwierdzenia interaktywnie. Testy headless i atrapa transportu Androida nie zastępują tej próby.                                                                                                                              |
+| Gotowość do deployu (1.1)                                                                                                                             | Bez nowych zmiennych, cronów, migracji i zależności runtime. Nie zmieniamy konfiguracji hostingu, pakowania ani zgodności API. `release:smoke` pozostaje obowiązkową bramką CI, zgodnie z 1.2 nie powtarzamy go lokalnie dla tej zmiany UI. |
+
+Próba na telefonie: otworzyć ustawienia listy, udostępnić ją drugiej osobie,
+sprawdzić pojawienie i zniknięcie do 20 s po cofnięciu dostępu, także przy
+otwartym formularzu zadania. Zapisać przypomnienie dla osoby przypisanej,
+członków i „Tylko ja”, następnie odhaczyć zadanie i opuścić listę; po
+synchronizacji alarmy muszą odpowiadać aktualnemu snapshotowi. Sprawdzić
+przycisk Wstecz, klawiaturę i wejście z alarmu. Odciąć sieć: formularz i karta
+nie mogą ujawniać szczegółów. Przyszły ogólny alarm powinien zadziałać offline
+zgodnie z wcześniejszą checklistą Androida. Zapisać model, wersję APK i wynik.
+Odczyt urządzeń ADB poza sandboxem nie został zatwierdzony, więc nie wykonano
+instalacji ani próby na fizycznym telefonie.
+
+Decyzja właściciela w tym kroku: agent kończy wyłącznie kontrole lokalne;
+próby interaktywne i sprawdzenie końcowego CI wykonuje właściciel. Nie zaliczamy
+ich na podstawie headless, buildu APK ani wcześniejszych przebiegów.
+
+Wyniki końcowe kontroli lokalnych (20.10.2026):
+
+- Vitest: **150/150**, 18 plików — UI zadań i kalendarza, API zadań,
+  przypomnienia zadań oraz synchronizacja i adapter lokalnych alarmów.
+- Playwright: **10/10**, Chromium headless przy **390 i 1280 px**,
+  WWW i atrapa transportu Androida. Udostępnienie i cofnięcie dostępu
+  sprawdzono przez rzeczywiste odświeżanie co 20 s w dwóch sesjach.
+  Testy obejmują też opuszczenie i usunięcie listy, wspólne i osobiste
+  przypomnienia (z ponownym odczytem i usunięciem), kartę kalendarza,
+  CRUD, odhaczanie, brak dostępu i ukrywanie szczegółów offline.
+- Lint zmienionych plików, Prettier, `npm run typecheck`, build WWW/API
+  i debug APK z końcowym frontendem: **poprawne**. Przejrzano zrzuty
+  ustawień, przypomnień i karty w obu szerokościach; bez przepełnienia.
+- Sandbox blokował pliki tymczasowe Vitest, start serwera e2e i połączenie
+  Gradle. Udane przebiegi wykonano poza sandboxem. Pełne logi znajdują się
+  w ignorowanych `.android-tools/step75-*`, zrzuty w `test-results/`.
+
+Stan: **zweryfikowane lokalnie, oczekuje na CI**, z próbami interaktywnymi
+pozostawionymi właścicielowi. Na jego polecenie zmiany zapisujemy w lokalnym
+commicie, bez pusha, uruchomienia CI i deployu.
+Pełne zamknięcie fazy wymaga jeszcze potwierdzenia tych prób i sukcesu CI
+dla końcowego commita, w tym `release:smoke` i kontroli natywnych Androida.

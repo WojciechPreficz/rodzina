@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateTask, CreateTaskList, PatchTask, Task, TaskList } from '@rodzina/shared';
+import type { CreateTask, CreateTaskList, PatchTask, PatchTaskList, Task, TaskList } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { useMe } from '../../auth.js';
 import { isOffline, useOffline } from '../../connectivity.js';
@@ -51,6 +51,18 @@ export function useTasks(listId?: string) {
     mutationFn: async (data: CreateTaskList) =>
       (await write<{ list: TaskList }>('/api/tasks/lists', 'POST', data)).list,
   });
+  const updateList = useMutation({
+    ...mutationOptions,
+    mutationFn: (data: PatchTaskList) => write(`/api/tasks/lists/${encodeURIComponent(listId!)}`, 'PATCH', data),
+  });
+  const removeList = useMutation({
+    ...mutationOptions,
+    mutationFn: () => write(`/api/tasks/lists/${encodeURIComponent(listId!)}`, 'DELETE', undefined),
+  });
+  const leaveList = useMutation({
+    ...mutationOptions,
+    mutationFn: () => write(`/api/tasks/lists/${encodeURIComponent(listId!)}/leave`, 'POST', undefined),
+  });
   const create = useMutation({
     ...mutationOptions,
     mutationFn: async (data: CreateTask) =>
@@ -65,5 +77,18 @@ export function useTasks(listId?: string) {
     ...mutationOptions,
     mutationFn: (id: string) => write(`/api/tasks/${encodeURIComponent(id)}`, 'DELETE', undefined),
   });
-  return { lists, tasks, active, enabled, offline, createList, create, update, remove };
+  return {
+    lists,
+    tasks,
+    active,
+    enabled,
+    offline,
+    createList,
+    updateList,
+    removeList,
+    leaveList,
+    create,
+    update,
+    remove,
+  };
 }
