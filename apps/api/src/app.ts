@@ -8,11 +8,11 @@ import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
 import {
   generateJoinCode,
-  getOriginHost,
   hashPassword,
   hashPin,
   hashToken,
   isJsonMutation,
+  isTrustedMutationSource,
   isValidPassword,
   isValidPin,
   normalizeEmail,
@@ -270,13 +270,8 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       return;
     }
 
-    if (isJsonMutation(request.method) && request.headers.origin) {
-      const originHost = getOriginHost(request.headers.origin);
-      const requestHost = request.headers['x-forwarded-host'] ?? request.headers.host;
-
-      if (!requestHost || !originHost || originHost !== requestHost) {
-        return sendError(reply, 403, 'FORBIDDEN', 'Żądanie pochodzi z niezweryfikowanego źródła.');
-      }
+    if (isJsonMutation(request.method) && !isTrustedMutationSource(request.headers)) {
+      return sendError(reply, 403, 'FORBIDDEN', 'Żądanie pochodzi z niezweryfikowanego źródła.');
     }
 
     if (isPublicApiRequest(request.method, request.url)) {

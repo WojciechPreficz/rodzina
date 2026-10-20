@@ -1,5 +1,21 @@
 # Decyzje
 
+## 20.10.2026 — wymagane źródło mutacji API (CSRF)
+
+- Mutacje POST/PUT/PATCH/DELETE pod `/api/` wymagają nagłówka `Origin`,
+  a wyłącznie przy jego braku dopuszczają `Referer`. Brak obu, błędny URL
+  lub obcy host zwracają 403 `FORBIDDEN` z dotychczasowym komunikatem.
+  Obecny, lecz niepoprawny `Origin` nie pozwala przejść na poprawny `Referer`.
+- Czysta funkcja `isTrustedMutationSource` porównuje host źródła z
+  `x-forwarded-host ?? host`, zachowując dotychczasową semantykę hosta i portu.
+  GET i żądania spoza `/api/` zachowują dotychczasowe działanie. Ochrona nie
+  polega wyłącznie na `SameSite=Lax` ciasteczka sesji.
+- Potwierdzono w kodzie `RodzinaApiPlugin.java`, że klient Androida dodaje
+  `Origin` do mutacji; nie wymaga zmiany. Testy API używają wspólnego helpera
+  nagłówków w poprawianych wywołaniach. Mutacje e2e już wysyłają `Origin`;
+  `smoke-release.mjs` i skrypty deployu wykonują tylko odczyty HTTP.
+- Bez nowych zależności runtime, migracji, konfiguracji i zadań crona.
+
 ## 20.10.2026 — zadania offline (7.6)
 
 - Na polecenie właściciela rozszerzamy zadania o podgląd i edycję offline,

@@ -25,6 +25,14 @@
 - `npm run db:generate` — generowanie migracji Drizzle.
 - `npm start` — lokalny build produkcyjny na porcie 3000; wymaga `apps/api/.env`.
 
+## Uruchamianie testów i zapis logów
+
+- Uruchamiaj testy bezpośrednio przez `npm test`, `npm run test:e2e` lub `npm run release:smoke`, z argumentami potrzebnymi do sprawdzenia zmiany.
+- Korzystaj z zapisanych zgód dla tych prefiksów. Gdy wymagana jest zgoda na wykonanie poza sandboxem, proponuj odpowiedni prefiks npm, zamiast całego jednorazowego polecenia.
+- Nie opakowuj tych komend w dodatkowe `pwsh -Command` ani nie doklejaj przekierowań, zmiennych i kolejnych instrukcji PowerShell do zatwierdzanego polecenia.
+- Jeśli potrzebny jest zapis pełnych logów, podsumowanie lub obsługa kodu wyjścia, korzystaj ze stałego skryptu projektu, a w razie jego braku dodaj skrypt Node `.mjs` zgodny z konwencjami projektu. Zachowuj kod wyjścia testów i zapisuj logi poza repozytorium lub w ignorowanym katalogu roboczym.
+- Te instrukcje nie nadają uprawnień ani nie zastępują wymaganej zgody środowiska wykonawczego.
+
 ## Weryfikacja i zakończenie kroku
 
 - Podczas pracy uruchamiaj testy zmienianej funkcji i powiązanych modułów. Przed wysłaniem zmian sprawdź lint i formatowanie zmienionych plików oraz `npm run typecheck` dla zmian kodu, typów lub konfiguracji wpływającej na kompilację. Zmiany wyłącznie dokumentacyjne wymagają lokalnie przeglądu treści, diffu i formatowania, bez testów aplikacji.

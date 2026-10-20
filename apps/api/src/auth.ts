@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { IncomingHttpHeaders } from 'node:http';
 import { hash as hashArgon2, verify as verifyArgon2 } from '@node-rs/argon2';
 
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 60;
@@ -59,4 +60,11 @@ export function getOriginHost(origin: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+export function isTrustedMutationSource(headers: IncomingHttpHeaders): boolean {
+  const sourceHost = getOriginHost(headers.origin ?? headers.referer);
+  const requestHost = headers['x-forwarded-host'] ?? headers.host;
+
+  return Boolean(requestHost && sourceHost && sourceHost === requestHost);
 }

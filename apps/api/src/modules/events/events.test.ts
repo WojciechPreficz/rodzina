@@ -11,6 +11,7 @@ import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
+import { trustedMutationHeaders } from '../../test-helpers.js';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
 const single = { kind: 'single', title: 'Basen', startDate: '2026-10-13', startTime: '17:00', durationMinutes: 60 };
@@ -57,8 +58,7 @@ describe('events API', () => {
       url,
       headers: {
         cookie: user.cookie,
-        origin: 'http://localhost:3000',
-        host: 'localhost:3000',
+        ...trustedMutationHeaders(),
         'content-type': 'application/json',
       },
       ...(body === undefined ? {} : { payload: JSON.stringify(body) }),
@@ -304,7 +304,10 @@ describe('events API', () => {
     ]) {
       expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
     }
-    expect((await app.inject({ method: 'POST', url: '/api/events', payload: single })).statusCode).toBe(401);
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/events', headers: trustedMutationHeaders(), payload: single }))
+        .statusCode,
+    ).toBe(401);
     expect(
       (
         await app.inject({
