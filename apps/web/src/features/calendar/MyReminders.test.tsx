@@ -6,12 +6,24 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CalendarEvent } from '@rodzina/shared';
 import { MyReminders } from './MyReminders.js';
 import { apiFetch } from '../../api.js';
+import { calendarStore } from './calendarOffline.js';
+import { reportTransportFailure } from '../../connectivity.js';
 
-vi.mock('../../api.js', () => ({ apiFetch: vi.fn() }));
+vi.mock('../../api.js', async (original) => ({
+  ...(await original<typeof import('../../api.js')>()),
+  apiFetch: vi.fn(),
+}));
 vi.mock('../../auth.js', () => ({
-  useMe: () => ({ user: { id: 'child', role: 'child' }, family: { id: 'family', timezone: 'Europe/Warsaw' } }),
+  useMe: () => ({
+    familyConfirmed: true,
+    user: { id: 'child', role: 'child' },
+    family: { id: 'family', timezone: 'Europe/Warsaw' },
+  }),
 }));
 beforeEach(() => {
+  calendarStore.clear();
+  calendarStore.activate('family:child');
+  reportTransportFailure(false);
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),

@@ -28,6 +28,8 @@ import { reportTransportFailure } from './connectivity.js';
 import { listMembers } from './features/family/familyApi.js';
 import { SYNC_INTERVAL_MS } from './queryClient.js';
 import { Alert } from '@mantine/core';
+import { calendarStore } from './features/calendar/calendarOffline.js';
+import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
 
 export type AuthRole = 'admin' | 'member' | 'child';
 
@@ -94,6 +96,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       const saved = readOfflineData();
       const cached = saved?.session ?? readShoppingSession();
       if (cached) {
+        calendarStore.activate(accountId(cached));
         if (queryClient) {
           restoreShopping(queryClient, cached);
           if (saved) restoreOfflineData(queryClient, saved);
@@ -114,6 +117,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/me');
       if (!current()) return;
       if (currentSession.current && accountId(currentSession.current) !== accountId(response)) {
+        calendarStore.clear();
         clearShoppingStorage(queryClient);
         clearOfflineData();
         queryClient?.clear();
@@ -121,6 +125,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
         setFamilyConfirmed(false);
       }
       currentSession.current = response;
+      calendarStore.activate(accountId(response));
       if (queryClient) restoreShopping(queryClient, response);
       setUser(response.user);
       setFamily(response.family);
@@ -157,6 +162,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
         generation.current += 1;
         invalidateSessionRequests();
         clearOfflineData();
+        calendarStore.clear();
         clearShoppingStorage(queryClient);
         queryClient?.clear();
         currentSession.current = undefined;
@@ -197,6 +203,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   const identity = user && family ? `${family.id}:${user.id}` : undefined;
   useEffect(() => {
     const loseSession = (removeStored: boolean) => {
+      calendarStore.clear(removeStored);
       if (isAndroid()) localScheduler.invalidate();
       generation.current += 1;
       if (removeStored) {
@@ -233,6 +240,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   }, [queryClient, identity]);
 
   const logout = async () => {
+    calendarStore.clear();
     if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
@@ -259,6 +267,8 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   };
 
   const setSession = (nextUser: AuthUser, nextFamily: Family) => {
+    calendarStore.clear();
+    calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
     if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
@@ -292,6 +302,9 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   return (
     <AuthContext.Provider value={value}>
       {queryClient && <ScheduleSync account={user ? `${user.familyId}:${user.id}` : ''} />}
+      {queryClient && family && familyConfirmed && familySyncedAt && (
+        <CalendarPrefetch confirmedAt={familySyncedAt} timezone={family.timezone} />
+      )}
       {!user && storageIssue && <Alert color="red">{storageIssue}</Alert>}
       {children ?? <Outlet />}
     </AuthContext.Provider>

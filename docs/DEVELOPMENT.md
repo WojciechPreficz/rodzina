@@ -1492,3 +1492,59 @@ wersję Androida/APK i wynik. Nadal otwarte są wskazane wcześniej próby 5.3.
 Stan: **zweryfikowane lokalnie, oczekuje na CI**, z powyższymi brakami prób
 ręcznych. Nie wdrażano serwera ani nowego APK. Kalendarz offline (5.5) pozostaje
 osobnym krokiem; faza 5 nie jest zamknięta.
+
+## Krok 5.5 — kalendarz offline tylko do odczytu (20.10.2026)
+
+Po potwierdzeniu konta pobieramy bieżący miesiąc i sąsiednie, także przy otwartej
+innej zakładce. Osobny snapshot kalendarza zachowuje wystąpienia, pełne szczegóły,
+odległe terminy i osobiste przypomnienia. Odtwarzanie używa konta z kroku 5.4;
+format rodziny i niewysłane zakupy pozostają zachowane. Limit wynosi 12 ostatnio
+używanych miesięcy; zapis nie wygasa ze starości. Każde żądanie obejmuje mniej
+niż 62 dni, a szczegóły pobieramy z maksymalnie czterema żądaniami jednocześnie.
+
+| Kryterium        | Wynik lokalny                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cache i zakresy  | Testy odtworzenia po restarcie, zakresów dnia/tygodnia/miesiąca, pustych/częściowych/brakujących danych, limitu 12 miesięcy, okien 62 dni, odległych terminów, szczegółów, wyjątków serii i zmiany czasu w Europe/Warsaw.                                                                                                                                                                                      |
+| Izolacja i błędy | Testy zmiany konta, spóźnionych odpowiedzi, błędów transportu, uszkodzonej/pełnej/niedostępnej pamięci i odpowiedzi 401/403/404. Testy sesji i rodziny obejmują również wylogowanie offline i zachowanie kolejki zakupów.                                                                                                                                                                                      |
+| Tylko odczyt     | Testy blokad tworzenia, edycji i usuwania bez kolejkowania mutacji, wszystkich zakresów serii, otwartych formularzy trzech rodzajów wydarzeń i przypomnień. Zapisane osobiste przypomnienia pozostają widoczne; ich zmiana jest zablokowana.                                                                                                                                                                   |
+| Vitest           | Kalendarz: 61/61 w 11 plikach; API zakupów i parser: 29/29 w 3 plikach. Powiązana regresja rodziny, sesji, zakupów i powiadomień: 90 pozostałych testów. Jeden timeout formularza podczas równoległych buildów usunięto przez ponowienie kalendarza z limitem 15 s i dwoma workerami; bez zmian globalnej konfiguracji testów. Po końcowej blokadzie ręcznego odświeżania przypomnień ponowiono ich 2/2 testy. |
+| UI 390/1280 px   | Playwright headless obejmuje WWW i atrapę transportu APK, odtworzenie bez wcześniejszego wejścia w szczegóły, przejście offline/online, lokalne filtry i dostępne widoki, blokady, nawigację Rodzina–Kalendarz–Zakupy, zmianę/usunięcie wydarzenia przez drugą sesję i zachowanie kolejki zakupów. Obejrzano zrzuty obu szerokości; brak poziomego przewijania. Końcowy wynik przebiegu podano poniżej.        |
+| Kontrole         | Typecheck oraz lint i formatowanie zmienionych plików przechodzą; lint ma tylko dwa wcześniejsze ostrzeżenia Fast Refresh w auth. Build WWW/API i debug APK zakończone sukcesem.                                                                                                                                                                                                                               |
+
+Playwright zakończył sukcesem 18 różnych scenariuszy przy 390 i 1280 px:
+końcowy przebieg poprawionych scenariuszy kalendarza 6/6 oraz 12 pozostałych
+scenariuszy kalendarza, Rodziny i Zakupów z rozszerzonej regresji. Nie powtarzano
+ponownie udanych prób Rodziny i Zakupów po zmianach wyłącznie selektorów testowych
+oraz blokady ręcznego odświeżania osobistych przypomnień. Końcowe debug APK
+zawiera również tę blokadę; build zakończył się `BUILD SUCCESSFUL`.
+
+Pierwsze rozszerzone scenariusze Playwright wymagały poprawienia selektora
+„Dzień”, który pasował również do „Tydzień”, oraz uwzględnienia, że Schedule-X
+na 390 px udostępnia dzień i miesiąc, a tydzień na 1280 px. Test ponownego
+logowania unieważnia teraz sesję na serwerze: samo usunięcie ciasteczek mogło
+zostać wyprzedzone przez odpowiedź rozpoczętego pobierania w tle. Nie zmienia to
+zachowania sesji aplikacji. Logi są w `.android-tools/step55-*`, zrzuty
+w ignorowanym `test-results/`. Playwright i Gradle wymagały uruchomienia poza
+piaskownicą ze względu na połączenia z lokalnym serwerem/daemonem.
+
+**Otwarte próby:** interaktywna próba UI w Chrome oraz fizyczny telefon.
+Nie uzyskano zgody na ADB poza piaskownicą; atrapa transportu i build nie zaliczają
+próby sprzętu. Na telefonie należy zsynchronizować konto, włączyć tryb samolotowy,
+zamknąć proces i uruchomić APK. Sprawdzić Rodzinę, Kalendarz i Zakupy, pełne
+szczegóły, link z powiadomienia, zakres bez cache, blokady wszystkich zapisów
+i działanie wcześniej zapisanego alarmu. Po powrocie sieci potwierdzić zmianę
+i usunięcie wydarzenia na drugim urządzeniu. Zapisać model, wersję Androida/APK
+i wynik. Otwarte próby 5.3 oraz 5.4 pozostają niezaliczone.
+
+Kryteria fazy 5: istniejące CRUD/izolacja/podpowiedzi/clear-checked i parser
+zakupów są objęte testami API/shared; Playwright sprawdza trzy odhaczenia
+i dodanie produktu offline, odtworzenie kolejki oraz synchronizację drugiej
+sesji do 20 s. Próby ręczne i fizycznego telefonu pozostają otwarte.
+Gotowość do deployu (1.1): brak nowych zmiennych, cronów, migracji i zależności
+runtime; brak nowych usług w tle; kontrakt API pozostaje zgodny ze starszym APK.
+Procedurę osobnej aktualizacji WWW/APK opisuje DEPLOY. Pełne CI, w tym
+`release:smoke`, testy JVM i Android Lint dla końcowego commita, pozostaje
+wymagane według sekcji 1.2 planu. Nie wykonywano deployu ani publikacji APK.
+
+Stan: **zweryfikowane lokalnie, oczekuje na CI**, z powyższymi brakami prób
+ręcznych. Krok 5.5 i rozszerzona faza 5 nie są oznaczone jako zamknięte.

@@ -28,6 +28,7 @@ import { RecurrenceFields } from './RecurrenceFields.js';
 import type { Member } from '../family/familyApi.js';
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
+import { isOffline, useOffline } from '../../connectivity.js';
 
 const text = labels.calendarUi;
 
@@ -38,6 +39,7 @@ export function EventForm({
   members,
   initialDate,
   pending,
+  readOnly = false,
   onSave,
   onCancel,
 }: {
@@ -47,10 +49,13 @@ export function EventForm({
   members: Member[];
   initialDate: string;
   pending: boolean;
+  readOnly?: boolean;
   onSave: (data: EventData) => Promise<void>;
   onCancel: () => void;
 }) {
   const eventKind = event?.kind ?? kind;
+  const offline = useOffline();
+  const blocked = readOnly || offline;
   const navigation = useFormNavigation();
   const [precision, setPrecision] = useState<'day' | 'month'>(event?.datePrecision ?? 'day');
   const monthly = eventKind === 'distant' && precision === 'month';
@@ -80,6 +85,7 @@ export function EventForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (blocked || isOffline()) return;
     const next = {
       title: title.trim() ? undefined : text.titleRequired,
       date: calendarDateSchema.safeParse(date).success ? undefined : text.dateInvalid,
@@ -165,6 +171,7 @@ export function EventForm({
       }}
     >
       <Stack>
+        {blocked && <Text size="sm">Dostępne po połączeniu z internetem</Text>}
         {error && (
           <Alert color="red" role="alert">
             {error}
@@ -288,7 +295,7 @@ export function EventForm({
             <ReminderList
               value={reminders}
               timezone="Europe/Warsaw"
-              pending={pending}
+              pending={pending || blocked}
               onRemove={(index) => {
                 setReminders((current) => current.filter((_, i) => i !== index));
                 setRemindersChanged(true);
@@ -296,7 +303,7 @@ export function EventForm({
               }}
             />
             <ReminderPicker
-              pending={pending || reminders.length >= 100}
+              pending={pending || blocked || reminders.length >= 100}
               onAdd={(reminder) => {
                 setReminders((current) => [...current, reminder]);
                 navigation.changed();
@@ -312,7 +319,7 @@ export function EventForm({
           <Button variant="default" onClick={onCancel} disabled={pending}>
             {labels.cancel}
           </Button>
-          <Button type="submit" loading={pending}>
+          <Button type="submit" loading={pending} disabled={blocked}>
             {labels.save}
           </Button>
         </Group>

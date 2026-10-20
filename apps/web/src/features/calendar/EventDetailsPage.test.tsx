@@ -1,5 +1,6 @@
 import { MantineProvider } from '@mantine/core';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -24,6 +25,8 @@ vi.mock('../../auth.js', () => ({
 vi.mock('../family/familyQueries.js', () => ({ useMembersQuery: () => ({ data: [], error: null }) }));
 vi.mock('./MyReminders.js', () => ({ MyReminders: () => <div>Moje przypomnienia</div> }));
 vi.mock('./calendarQueries.js', () => ({
+  useCalendarReadOnly: () => !onlineManager.isOnline(),
+  calendarOnlineHint: 'Dostępne po połączeniu z internetem',
   useEvent: () => ({ data: state.event, isPending: false, error: state.error }),
   useCalendarMutations: () => ({
     update: { isPending: false, mutateAsync: state.update },
@@ -85,11 +88,27 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  onlineManager.setOnline(true);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('event details', () => {
+  it.each(['Edytuj', 'Usuń wydarzenie'])(
+    'blocks every series scope after losing connectivity in the %s dialog',
+    (action) => {
+      state.role = 'member';
+      state.event = { ...event, kind: 'recurring', rrule: 'FREQ=DAILY;COUNT=3' };
+      show('2026-10-13');
+      fireEvent.click(screen.getByRole('button', { name: action }));
+      act(() => onlineManager.setOnline(false));
+      for (const name of ['Tylko to', 'To i następne', 'Wszystkie']) {
+        expect(screen.getByRole('button', { name })).toBeDisabled();
+      }
+      expect(state.update).not.toHaveBeenCalled();
+      expect(state.remove).not.toHaveBeenCalled();
+    },
+  );
   it('edits only occurrence fields while retaining the original date in the request', async () => {
     state.role = 'member';
     state.event = { ...event, kind: 'recurring', rrule: 'FREQ=DAILY;COUNT=3' };

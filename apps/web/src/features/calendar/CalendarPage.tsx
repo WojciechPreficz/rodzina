@@ -13,7 +13,9 @@ import { allowNavigation } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import type { Member } from '../family/familyApi.js';
-import { useCalendarMutations, useOccurrences } from './calendarQueries.js';
+import { calendarOnlineHint, useCalendarReadOnly, useCalendarMutations, useOccurrences } from './calendarQueries.js';
+import { CalendarOfflineNotice } from './CalendarOfflineNotice.js';
+import { useOffline } from '../../connectivity.js';
 import { memberCalendars, monthRange, todayInTimezone, toScheduleX } from './toScheduleX.js';
 import { EventForm } from './EventForm.js';
 import { DistantEvents } from './DistantEvents.js';
@@ -31,6 +33,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
   const [ready, setReady] = useState(false);
   const [eventsService] = useState(() => createEventsServicePlugin());
   const occurrences = useOccurrences(range);
+  const readOnly = useCalendarReadOnly();
   const { create } = useCalendarMutations();
   const calendar = useCalendarApp({
     views: [createViewMonthAgenda(), createViewWeek(), createViewDay()],
@@ -56,6 +59,8 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
 
   return (
     <Stack>
+      <CalendarOfflineNotice syncedAt={occurrences.syncedAt} />
+      <NotificationBanner />
       <Stack gap="xs">
         <Text size="sm" fw={500} id="calendar-member-filter-label">
           {text.showOnly}
@@ -89,7 +94,13 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
           </Text>
         )}
       </Stack>
-      {occurrences.isPending && <Loader aria-label={text.loading} />}
+      {occurrences.isFetching && occurrences.coverage === 'missing' && <Loader aria-label={text.loading} />}
+      {occurrences.coverage && occurrences.coverage !== 'complete' && (
+        <Alert color="yellow">
+          {occurrences.coverage === 'partial' && 'Zapisane dane są częściowe. '}
+          Ten zakres nie został zapisany offline. Połącz się z internetem, aby go pobrać.
+        </Alert>
+      )}
       {occurrences.error && (
         <Alert color="red" role="alert">
           {occurrences.error.message}
@@ -105,10 +116,21 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
       <div className="family-calendar">
         <ScheduleXCalendar calendarApp={calendar} />
       </div>
-      {occurrences.data && !occurrences.error && toScheduleX(occurrences.data, timezone, selected).length === 0 && (
-        <Text c="dimmed">{text.noEvents}</Text>
+      {occurrences.coverage === 'complete' &&
+        !occurrences.error &&
+        toScheduleX(occurrences.data, timezone, selected).length === 0 && <Text c="dimmed">{text.noEvents}</Text>}
+      {readOnly && (
+        <Text size="sm" c="dimmed">
+          {calendarOnlineHint}
+        </Text>
       )}
-      <Button className="calendar-add" aria-label={text.add} onClick={() => setOpened(true)}>
+      <Button
+        className="calendar-add"
+        aria-label={text.add}
+        disabled={readOnly}
+        title={readOnly ? calendarOnlineHint : undefined}
+        onClick={() => setOpened(true)}
+      >
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 4v16M4 12h16" stroke="currentColor" strokeWidth="3" />
         </svg>
@@ -126,7 +148,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
         {kind === null ? (
           <Stack>
             {(['single', 'recurring', 'distant'] as const).map((mode) => (
-              <Button key={mode} variant="light" onClick={() => setKind(mode)}>
+              <Button key={mode} variant="light" disabled={readOnly} onClick={() => setKind(mode)}>
                 {text.modeNames[mode]}
               </Button>
             ))}
@@ -137,6 +159,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
             members={members}
             initialDate={date}
             pending={create.isPending}
+            readOnly={readOnly}
             onCancel={() => {
               if (allowNavigation()) setKind(null);
             }}
@@ -155,10 +178,10 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
 export function CalendarPage() {
   const { family } = useMe();
   const members = useMembersQuery();
+  const offline = useOffline();
   return (
     <Stack>
       <Title order={2}>{labels.calendar}</Title>
-      <NotificationBanner />
       {members.error && (
         <Alert color="red" role="alert">
           {members.error.message}
@@ -171,7 +194,11 @@ export function CalendarPage() {
           </Button>
         </Alert>
       )}
-      {members.isPending && <Loader aria-label={text.loading} />}
+      {!members.data && <CalendarOfflineNotice />}
+      {!members.data && offline && (
+        <Text>Brak danych kalendarza zapisanych na tym urządzeniu. Połącz się z internetem, aby je pobrać.</Text>
+      )}
+      {members.isPending && !offline && <Loader aria-label={text.loading} />}
       {family && members.data && (
         <CalendarView
           key={JSON.stringify(members.data.map((m) => [m.id, m.displayName, m.color]))}

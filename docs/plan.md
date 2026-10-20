@@ -869,7 +869,8 @@ rodzina/
 zanim rozpoczniemy fazę 6. Krok 5.3 zachowuje pierwotne kryteria zakupów i otwarte
 próby telefonu; rozszerzenie ich nie zalicza. Dla rozszerzonej fazy ostatnim krokiem
 w rozumieniu sekcji 1.2 jest 5.5, z regresją zakupów oraz kryteriami 5.4–5.5.
-Krok 5.4 ma implementację opisaną poniżej; krok 5.5 pozostaje planem.
+Kroki 5.4 i 5.5 mają implementacje opisane poniżej; pozostają otwarte próby
+ręczne i fizycznego telefonu oraz końcowa weryfikacja CI.
 
 **Endpointy:**
 
@@ -956,7 +957,7 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
 odtwarzanie konta, blokady zmian offline i odświeżanie po powrocie sieci/wznowieniu.
 Migracja zachowuje cache i niewysłane zakupy. Wyniki kontroli oraz otwarte próby
 fizycznego telefonu są w DEVELOPMENT. Krok pozostaje otwarty do tych prób
-i sukcesu CI końcowego commita; nie rozpoczęto kroku 5.5.
+i sukcesu CI końcowego commita. Implementację 5.5 opisano osobno poniżej.
 
 **Cel:** po wcześniejszej synchronizacji domownicy i kod rodziny są widoczni
 także po uruchomieniu APK bez internetu. Wejście do Rodziny nie wymaga
@@ -1009,6 +1010,12 @@ wcześniejszego otwarcia tej zakładki w bieżącym procesie aplikacji.
   Wyniki zapisujemy w DEVELOPMENT; kontrole i CI według sekcji 1.2.
 
 #### Krok 5.5 - Kalendarz offline tylko do odczytu
+
+**Stan 20.10.2026:** zaimplementowano wersjonowany cache zakresów, szczegółów,
+osobistych przypomnień i odległych terminów, pobieranie po potwierdzeniu konta,
+lokalne widoki/filtry, blokady wszystkich zapisów oraz odświeżanie po powrocie
+sieci. Wyniki i ograniczenia weryfikacji są w DEVELOPMENT. Nie zaliczono prób
+fizycznego telefonu ani końcowego CI; krok i faza pozostają otwarte.
 
 **Zależność:** ukończony krok 5.4 zapewnia trwałych domowników, strefę czasową,
 izolację kont i wspólny stan połączenia. Nie odtwarzamy kalendarza z harmonogramu

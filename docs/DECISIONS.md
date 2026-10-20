@@ -679,3 +679,31 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
 - Błąd odczytu lub zapisu pamięci jest widoczny; nie deklarujemy trwałego zapisu
   po błędzie. Kalendarz nie otrzymuje jeszcze cache wydarzeń ani blokad z 5.5.
   Bez nowych endpointów, migracji, zmiennych, cronów i zależności serwera.
+
+## 20.10.2026 — trwały podgląd kalendarza (krok 5.5)
+
+- Kalendarz ma osobny wersjonowany snapshot `rodzina:calendar:v1`, przypisany
+  do pary rodzina/użytkownik. Nie zmienia formatów rodziny ani niewysłanych zakupów.
+  Odtwarzamy go razem z kontem przed próbą połączenia; walidacja schematu odrzuca
+  uszkodzone dane i inną tożsamość. Generacja konta odrzuca spóźnione odpowiedzi.
+- Zapisujemy kanoniczne miesięczne okna z siedmioma dniami zapasu po obu stronach,
+  zawsze poniżej 62 dni na żądanie. Odczyt dnia, tygodnia i miesiąca oraz filtry
+  korzystają z lokalnych wystąpień, niezależnie od klucza Schedule-X. Pełne dane
+  wydarzeń i osobiste przypomnienia pobieramy z maksymalnie czterema równoległymi
+  żądaniami; ID są deduplikowane w obrębie pobrania. Limit 12 ostatnio używanych
+  miesięcy usuwa niepowiązane szczegóły. Odległe terminy mają osobny wykaz.
+- Kompletność, czas pobrania i znacznik potrzeby odświeżenia są metadanymi zakresu.
+  Sam zapis szczegółów nie potwierdza pobrania jego miesiąca. Nowe kompletne
+  odpowiedzi zastępują również puste i usunięte wystąpienia we wspólnej części
+  okien. Brak pokrycia nie oznacza pustego kalendarza. Cache nie wygasa ze starości.
+- Po potwierdzeniu sesji pobieramy bieżący miesiąc i sąsiednie także poza zakładką
+  Kalendarz. Powrót sieci/wznowienie przez istniejący mechanizm auth odświeża
+  aktywne zapytania i oznacza pozostałe zakresy do pobrania przy otwarciu.
+  404 usuwa szczegóły i unieważnia powiązane zakresy; 401/403 odczytu kończy
+  lokalny dostęp bez podglądu cofniętych danych. Zwykły błąd mutacji uprawnień
+  zachowuje dotychczasową obsługę API.
+- Wszystkie mutacje kalendarza i przypomnień działają bez kolejki i ponawiania,
+  z kontrolą połączenia także bezpośrednio przed wysłaniem. Utrata sieci blokuje
+  również otwarte formularze. Link wydarzenia używa najpierw pełnego cache,
+  a `OfflineReminder` pozostaje awaryjnym podglądem APK. Odczyt i synchronizacja
+  tego cache nie wywołują planowania ani anulowania alarmów systemowych.

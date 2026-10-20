@@ -92,6 +92,8 @@ test('creates a single event and opens its deep link after reload and login', as
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Wizyta u lekarza' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // Revoke the server session too: background preview requests may still refresh its cookie.
+  await page.request.post('/api/auth/logout', { headers: { Origin: baseURL! } });
   await page.context().clearCookies();
   await page.goto(detailsUrl);
   await expect(page).toHaveURL(/\/login\?next=/);

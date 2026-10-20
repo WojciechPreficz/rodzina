@@ -5,9 +5,11 @@ import { labels } from '../../i18n/pl.js';
 import { useDistantEvents } from './calendarQueries.js';
 import { todayInTimezone } from './toScheduleX.js';
 import { distantCountdown } from './distantCountdown.js';
+import { useOffline } from '../../connectivity.js';
 
 export function DistantEvents({ timezone, selected }: { timezone: string; selected: string[] }) {
   const query = useDistantEvents();
+  const offline = useOffline();
   const text = labels.calendarUi;
   const today = todayInTimezone(timezone);
   const events = query.data?.filter(
@@ -16,7 +18,8 @@ export function DistantEvents({ timezone, selected }: { timezone: string; select
   return (
     <Stack>
       <Title order={3}>{text.distantTitle}</Title>
-      {query.isPending && <Loader aria-label={text.loading} />}
+      {query.isPending && !offline && !query.data && <Loader aria-label={text.loading} />}
+      {offline && !query.data && <Text>Odległe terminy nie zostały zapisane offline.</Text>}
       {query.error && (
         <Alert color="red" role="alert">
           {query.error.message}

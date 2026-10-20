@@ -1,5 +1,15 @@
 # Wdrożenie i aktualizacje na cPanel vh.pl
 
+**Podgląd offline, kroki 5.4–5.5 (20.10.2026):** cache rodziny i kalendarza
+jest zapisany lokalnie, osobno od kolejki zakupów i harmonogramu alarmów.
+Zmiana wymaga aktualizacji WWW oraz osobnego zbudowania i opublikowania APK,
+według istniejącej procedury. Nie dodaje migracji, konfiguracji, cronów,
+zależności runtime serwera ani zmian kontraktu API. Starsze APK pozostają zgodne.
+Po aktualizacji klienta potrzebne jest pierwsze pobranie online; wylogowanie,
+zmiana konta i potwierdzona utrata dostępu usuwają podgląd. Brak miejsca na
+urządzeniu jest zgłaszany w UI. Kalendarz i Rodzina nie mają kolejki zapisów.
+Wyniki i otwarte próby telefonu opisuje DEVELOPMENT. Sam commit nie wdraża wydania.
+
 **Zakupy offline, krok 5.3 (20.10.2026):** wydanie dodaje migrację
 `0015_shopping_operations.sql`. Tabela `shopping_operations` przechowuje odpowiedzi
 zapisów według użytkownika i identyfikatora operacji; zapis danych i odpowiedzi

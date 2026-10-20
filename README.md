@@ -30,6 +30,12 @@ APK zawiera lokalny frontend. Po synchronizacji może wyświetlać zapisane alar
 bez internetu, do terminu zabezpieczenia widocznego w „Powiadomieniach”.
 Zmiany z innych urządzeń docierają po kolejnej synchronizacji; zamknięte APK
 nie pobiera ich w tle. Nie ma pełnej edycji kalendarza offline.
+Po wcześniejszym pobraniu APK pokazuje też domowników, kod rodziny i kalendarz
+tylko do odczytu, z pełnymi szczegółami zapisanych wydarzeń. Kalendarz zachowuje
+bieżący miesiąc i sąsiednie oraz otwarte online zakresy (maksymalnie 12 miesięcy).
+Baner pokazuje czas pobrania, a niezapisany zakres ma osobny komunikat.
+Zakupy zachowują swoją kolejkę zmian offline. Zwykła strona obsługuje utratę sieci
+w otwartym interfejsie; ponowny start bez internetu dotyczy lokalnego frontendu APK.
 Próby alarmów i instalatora na fizycznym telefonie wymagają osobnego potwierdzenia.
 
 Build testowy: `npm run android:debug` (JDK 21 i Android SDK 36).

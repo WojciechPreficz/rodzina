@@ -19,7 +19,10 @@ vi.mock('../family/familyQueries.js', () => ({
 }));
 vi.mock('@schedule-x/react', () => ({ useCalendarApp: () => ({}), ScheduleXCalendar: () => <div /> }));
 vi.mock('./calendarQueries.js', () => ({
+  useCalendarReadOnly: () => false,
+  calendarOnlineHint: 'Dostępne po połączeniu z internetem',
   useOccurrences: () => ({
+    coverage: 'complete',
     data: [
       {
         eventId: 'event-1',

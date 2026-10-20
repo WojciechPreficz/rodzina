@@ -15,7 +15,9 @@ import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import { EventForm } from './EventForm.js';
-import { useCalendarMutations, useEvent } from './calendarQueries.js';
+import { calendarOnlineHint, useCalendarReadOnly, useCalendarMutations, useEvent } from './calendarQueries.js';
+import { CalendarOfflineNotice } from './CalendarOfflineNotice.js';
+import { useOffline } from '../../connectivity.js';
 import { canEditEvent, getEventOccurrence } from './calendarRules.js';
 import { ReminderList } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';
@@ -31,6 +33,8 @@ export function EventDetailsPage() {
   const [search] = useSearchParams();
   const { user, family } = useMe();
   const query = useEvent(eventId);
+  const offline = useOffline();
+  const readOnly = useCalendarReadOnly();
   const members = useMembersQuery();
   const { update, remove } = useCalendarMutations();
   const [editing, setEditing] = useState(false);
@@ -43,12 +47,22 @@ export function EventDetailsPage() {
     </Button>
   );
   if (!user || !family) return <Loader aria-label={text.loading} />;
-  if (isAndroid() && (query.isPaused || (query.error && !(query.error instanceof ApiRequestError))))
-    return <OfflineReminder />;
-  if (query.isPending) return <Loader aria-label={text.loading} />;
-  if (query.error)
+  if (!query.data && offline && !(query.error instanceof ApiRequestError))
     return (
       <Stack>
+        <CalendarOfflineNotice />
+        <Text>Brak szczegółów tego wydarzenia zapisanych offline. Połącz się z internetem, aby je pobrać.</Text>
+        {isAndroid() ? <OfflineReminder /> : back}
+      </Stack>
+    );
+  if (query.isPending && !query.data) return <Loader aria-label={text.loading} />;
+  if (
+    query.error &&
+    (!query.data || (query.error instanceof ApiRequestError && [401, 403, 404].includes(query.error.status)))
+  )
+    return (
+      <Stack>
+        <CalendarOfflineNotice syncedAt={query.syncedAt} />
         {query.error instanceof ApiRequestError && [403, 404].includes(query.error.status) ? (
           <Text role="status">{query.error.status === 403 ? labels.androidNavigation.denied : text.missing}</Text>
         ) : (
@@ -66,11 +80,20 @@ export function EventDetailsPage() {
         {back}
       </Stack>
     );
+  if (!query.data)
+    return (
+      <Stack>
+        <CalendarOfflineNotice />
+        <Text>Brak szczegółów tego wydarzenia zapisanych offline.</Text>
+        {back}
+      </Stack>
+    );
   const event = query.data;
   const occurrence = getEventOccurrence(event, search.get('data'), family.timezone);
   if (!occurrence)
     return (
       <Stack>
+        <CalendarOfflineNotice syncedAt={query.syncedAt} />
         <Text role="status">{text.missing}</Text>
         {back}
       </Stack>
@@ -130,6 +153,8 @@ export function EventDetailsPage() {
   }
   return (
     <Stack>
+      <CalendarOfflineNotice syncedAt={query.syncedAt} />
+      {query.error && <Alert color="red">{query.error.message}</Alert>}
       {back}
       <Title order={2}>{title}</Title>
       {wizard && <Text c="dimmed">{describeRecurrence(wizard)}</Text>}
@@ -172,6 +197,7 @@ export function EventDetailsPage() {
       <MyReminders key={event.id} event={event} />
       {editable && (
         <>
+          {readOnly && <Text size="sm">{calendarOnlineHint}</Text>}
           {remove.error && (
             <Alert color="red" role="alert">
               {remove.error.message}
@@ -186,7 +212,7 @@ export function EventDetailsPage() {
                   setEditing(true);
                 }
               }}
-              disabled={!members.data}
+              disabled={readOnly || !members.data}
             >
               {labels.edit}
             </Button>
@@ -194,6 +220,7 @@ export function EventDetailsPage() {
               color="red"
               variant="light"
               loading={remove.isPending}
+              disabled={readOnly}
               onClick={() => {
                 if (event.kind === 'recurring') setScopeAction('delete');
                 else void deleteWithScope('all');
@@ -223,7 +250,7 @@ export function EventDetailsPage() {
                 <Button
                   key={option}
                   variant="light"
-                  disabled={remove.isPending}
+                  disabled={readOnly || remove.isPending}
                   onClick={() => {
                     if (scopeAction === 'delete') void deleteWithScope(option);
                     else {
@@ -252,6 +279,7 @@ export function EventDetailsPage() {
               members={members.data ?? []}
               initialDate={event.startDate}
               pending={update.isPending}
+              readOnly={readOnly}
               onCancel={() => {
                 if (allowNavigation()) setEditing(false);
               }}

@@ -1,6 +1,6 @@
 import { Alert, Button, Loader, Stack, Title } from '@mantine/core';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CalendarEvent, CreateMyReminder, Reminder } from '@rodzina/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { CalendarEvent, CreateMyReminder } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
@@ -8,17 +8,27 @@ import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { calendarOnlineHint, useCalendarOnlineMutation, useCalendarReadOnly } from './calendarQueries.js';
+import { isOffline, useOffline } from '../../connectivity.js';
+import { fetchPersonal } from './calendarSync.js';
+import { useCalendarSnapshot } from './calendarOffline.js';
 
 const text = labels.calendarUi;
 export function MyReminders({ event }: { event: CalendarEvent }) {
   const { user, family } = useMe();
   const client = useQueryClient();
-  const key = ['my-reminders', family?.id, user?.id, event.id];
+  const readOnly = useCalendarReadOnly();
+  const offline = useOffline();
+  const snapshot = useCalendarSnapshot();
+  const key = ['calendar', family?.id, user?.id, 'my-reminders', event.id];
   const query = useQuery({
     queryKey: key,
-    queryFn: async () =>
-      (await apiFetch<{ reminders: Reminder[] }>(`/api/reminders/mine?${new URLSearchParams({ eventId: event.id })}`))
-        .reminders,
+    queryFn: () => {
+      if (readOnly || isOffline()) throw new Error(calendarOnlineHint);
+      return fetchPersonal(event.id);
+    },
+    enabled: !readOnly,
+    retry: false,
     refetchInterval: SYNC_INTERVAL_MS,
     refetchOnWindowFocus: 'always',
   });
@@ -26,20 +36,22 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
     await refreshLocalSchedule(client);
     await client.invalidateQueries({ queryKey: key });
   };
-  const create = useMutation({
-    mutationFn: (data: CreateMyReminder) =>
-      apiFetch('/api/reminders/mine', { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: sync,
-  });
-  const remove = useMutation({
-    mutationFn: (id: string) => apiFetch(`/api/reminders/mine/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-    onSuccess: sync,
-  });
+  const create = useCalendarOnlineMutation(
+    (data: CreateMyReminder) => apiFetch('/api/reminders/mine', { method: 'POST', body: JSON.stringify(data) }),
+    sync,
+  );
+  const remove = useCalendarOnlineMutation(
+    (id: string) => apiFetch(`/api/reminders/mine/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    sync,
+  );
   const pending = create.isPending || remove.isPending;
+  const reminders =
+    snapshot.account === `${family?.id}:${user?.id}` ? (snapshot.personal[event.id] ?? query.data) : query.data;
   return (
     <Stack>
       <Title order={3}>{text.myReminders}</Title>
-      {query.isPending && <Loader aria-label={text.loading} />}
+      {query.isPending && !offline && !reminders && <Loader aria-label={text.loading} />}
+      {offline && !reminders && <Alert color="yellow">Osobiste przypomnienia nie zostały zapisane offline.</Alert>}
       {query.error && (
         <Alert color="red" role="alert">
           {query.error.message}
@@ -57,13 +69,13 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
           {remove.error.message}
         </Alert>
       )}
-      {query.data && (
+      {reminders && (
         <ReminderList
-          value={query.data.map((r) => ({ ...reminderInput(r), nextFireAt: r.nextFireAt }))}
+          value={reminders.map((r) => ({ ...reminderInput(r), nextFireAt: r.nextFireAt }))}
           timezone={family?.timezone ?? 'Europe/Warsaw'}
-          pending={pending}
+          pending={pending || readOnly}
           onRemove={(index) => {
-            void remove.mutateAsync(query.data[index]!.id).catch(() => {});
+            void remove.mutateAsync(reminders[index]!.id).catch(() => {});
           }}
         />
       )}
@@ -71,7 +83,7 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
         timezone={family?.timezone ?? 'Europe/Warsaw'}
         audiences={['user']}
         defaultAudience="user"
-        pending={pending || query.isPending || Boolean(query.error)}
+        pending={readOnly || pending || (!reminders && query.isPending) || Boolean(query.error)}
         onAdd={async (reminder) => {
           const data: CreateMyReminder =
             reminder.type === 'absolute'
