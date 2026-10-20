@@ -377,7 +377,7 @@ export const labels = {
     date: 'Data',
     time: 'Godzina',
     optionalTime: 'Godzina (opcjonalnie)',
-    duration: 'Czas trwania (minuty)',
+    duration: 'Czas trwania (min)',
     titleRequired: 'Podaj tytuł.',
     dateInvalid: 'Podaj poprawną datę.',
     timeInvalid: 'Podaj godzinę i czas trwania od 1 do 525600 minut.',

@@ -260,6 +260,7 @@ export function EventForm({
             {hasTime && (
               <NumberInput
                 label={text.duration}
+                styles={{ label: { whiteSpace: 'nowrap' } }}
                 required
                 min={1}
                 max={525600}
