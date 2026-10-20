@@ -65,14 +65,16 @@ export function RegisterPage() {
             <TextInput
               label={labels.familyName}
               aria-label={labels.familyName}
+              placeholder={labels.familyNameExample}
               value={form.familyName}
               onChange={(event) => onChange('familyName', event.currentTarget.value)}
               error={fieldErrors.familyName}
               required
             />
             <TextInput
-              label={labels.displayName}
-              aria-label={labels.displayName}
+              label={labels.yourName}
+              aria-label={labels.yourName}
+              autoComplete="given-name"
               value={form.displayName}
               onChange={(event) => onChange('displayName', event.currentTarget.value)}
               error={fieldErrors.displayName}

@@ -282,8 +282,8 @@ export function InvitationPage() {
               <form onSubmit={accept} noValidate>
                 <Stack>
                   <TextInput
-                    label={labels.displayName}
-                    autoComplete="name"
+                    label={labels.yourName}
+                    autoComplete="given-name"
                     required
                     value={form.displayName}
                     error={fieldErrors.displayName}

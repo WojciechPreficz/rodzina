@@ -97,7 +97,7 @@ test('returning legacy PWA leaves its cached shell and reopens the website with 
   await expectRetired(returning);
   await returning.reload();
   await openNavigation(returning);
-  await expect(returning.getByText('Anna · Powrót z PWA')).toBeVisible();
+  await expect(returning.locator('.app-navigation').getByText('Anna', { exact: true })).toBeVisible();
   await returning.getByRole('link', { name: 'Kalendarz', exact: true }).click();
   await expect(returning.getByRole('button', { name: 'Dodaj wydarzenie' })).toBeVisible();
   await expect(returning.locator('link[rel="manifest"]')).toHaveCount(0);

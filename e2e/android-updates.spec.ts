@@ -24,7 +24,7 @@ test('login and More show release availability without broken downloads at both 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.goto('/register');
   await page.getByLabel('Nazwa rodziny', { exact: true }).fill('Aktualizacje');
-  await page.getByLabel('Imię i nazwisko', { exact: true }).fill('Anna');
+  await page.getByLabel('Twoje imię', { exact: true }).fill('Anna');
   await page.getByLabel('E-mail', { exact: true }).fill(`updates-${testInfo.project.name}@example.com`);
   await page.getByLabel('Hasło', { exact: true }).fill('password123');
   await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();

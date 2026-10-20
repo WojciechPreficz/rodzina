@@ -18,6 +18,10 @@ test('website uses a left sidebar on desktop and a right drawer on phones', asyn
   const phone = info.project.name === 'phone';
   await page.goto('/');
   const navigation = await openNavigation(page);
+  const accountMenu = page.locator('.app-navigation:visible');
+  await expect(accountMenu.getByText('Anna', { exact: true })).toBeVisible();
+  await expect(accountMenu.getByText('Administrator', { exact: true })).toBeVisible();
+  await expect(accountMenu.getByText('Menu Rodziny', { exact: true })).toHaveCount(0);
   const links = navigation.getByRole('link');
   await expect(links).toHaveText(['Kalendarz', 'Zakupy', 'Obiady', 'Rodzina', 'Powiadomienia', 'Wersja aplikacji']);
   await expect(links.first()).toHaveAttribute('aria-current', 'page');
@@ -129,6 +133,9 @@ test('APK uses the same right drawer and native Back closes it before leaving th
   await openNavigation(page);
   const dialog = page.getByRole('dialog', { name: 'Menu Rodziny' });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Anna', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('Administrator', { exact: true })).toBeVisible();
+  await expect(dialog.locator('.app-navigation').getByText('Menu Rodziny', { exact: true })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('android-menu.png'), fullPage: true });
   await page.evaluate(() => (window as unknown as { nativeBack: () => void }).nativeBack());
   await expect(dialog).not.toBeVisible();

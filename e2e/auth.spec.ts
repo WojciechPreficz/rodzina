@@ -20,8 +20,11 @@ test('registers, joins through an invitation, logs in a child and resets a passw
   try {
     await page.goto('/');
     await page.getByRole('link', { name: 'Załóż rodzinę' }).click();
+    await expect(page.getByLabel('Nazwa rodziny', { exact: true })).toHaveAttribute('placeholder', 'Nasz dom');
+    await page.screenshot({ path: testInfo.outputPath('registration.png'), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByLabel('Nazwa rodziny', { exact: true }).fill(`Rodzina ${suffix}`);
-    await page.getByLabel('Imię i nazwisko', { exact: true }).fill('Anna');
+    await page.getByLabel('Twoje imię', { exact: true }).fill('Anna');
     await page.getByLabel('E-mail', { exact: true }).fill(`anna-${suffix}@example.com`);
     await page.getByLabel('Hasło', { exact: true }).fill('password123');
     await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
@@ -36,21 +39,21 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await expect(memberPage.getByText(`Rodzina ${suffix}`, { exact: true })).toBeVisible();
     await memberPage.screenshot({ path: testInfo.outputPath('invitation.png'), fullPage: true });
     expect(await memberPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await memberPage.getByRole('textbox', { name: /Imię i nazwisko/ }).fill('Piotr');
+    await memberPage.getByRole('textbox', { name: /Twoje imię/ }).fill('Piotr');
     await memberPage.getByRole('textbox', { name: /E-mail/ }).fill(`piotr-${suffix}@example.com`);
     await memberPage.getByLabel(/^Hasło/).fill('password123');
     await memberPage.getByRole('button', { name: 'Dołącz do rodziny' }).click();
     await expect(memberPage.locator('.mantine-AppShell-header')).toBeVisible();
     for (const current of [page, memberPage]) {
       await current.goto('/wiecej/rodzina');
-      await expect(current.getByText(/^Anna(?: \(Ty\))?$/)).toBeVisible();
-      await expect(current.getByText(/^Piotr(?: \(Ty\))?$/)).toBeVisible();
+      await expect(current.getByRole('main').getByText(/^Anna(?: \(Ty\))?$/)).toBeVisible();
+      await expect(current.getByRole('main').getByText(/^Piotr(?: \(Ty\))?$/)).toBeVisible();
       expect(await current.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     }
 
     await page.getByRole('button', { name: 'Dodaj dziecko', exact: true }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: /Imię i nazwisko/ }).fill('Zosia');
+    await dialog.getByRole('textbox', { name: /^Imię/ }).fill('Zosia');
     await dialog.getByLabel(/^PIN/).fill('1234');
     await dialog.getByRole('button', { name: 'Dodaj dziecko' }).click();
     await expect(dialog).not.toBeVisible();

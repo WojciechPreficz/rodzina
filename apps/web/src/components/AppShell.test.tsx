@@ -68,7 +68,9 @@ describe('AppShell', () => {
         .map((link) => link.textContent),
     ).toEqual(['Kalendarz', 'Zakupy', 'Obiady', 'Rodzina', 'Powiadomienia', 'Wersja aplikacji']);
     expect(within(navigation).getByRole('link', { name: 'Kalendarz' })).toHaveAttribute('aria-current', 'page');
-    expect(await screen.findByText('Anna · Test')).toBeInTheDocument();
+    expect(await screen.findByText('Anna')).toBeInTheDocument();
+    expect(screen.getByText('Administrator')).toBeInTheDocument();
+    expect(screen.queryByText(/Test/)).not.toBeInTheDocument();
   });
 
   it.each(['/kalendarz/wydarzenie/event-1', '/wiecej/rodzina', '/wiecej/powiadomienia'])(
@@ -80,7 +82,7 @@ describe('AppShell', () => {
         .querySelectorAll('[aria-current="page"]');
       expect(links).toHaveLength(1);
       expect(links[0]).toHaveAttribute('href', path.startsWith('/kalendarz') ? '/kalendarz' : path);
-      await screen.findByText('Anna · Test');
+      await screen.findByText('Anna');
     },
   );
 
@@ -103,7 +105,7 @@ describe('AppShell', () => {
 
   it('protects dirty forms before logging out and calls logout after approval', async () => {
     renderShell();
-    await screen.findByText('Anna · Test');
+    await screen.findByText('Anna');
     const remove = addNavigationGuard(() => false);
     fireEvent.click(screen.getByRole('button', { name: 'Wyloguj się' }));
     expect(fetch).not.toHaveBeenCalledWith('/api/auth/logout', expect.anything());
@@ -189,7 +191,7 @@ describe('AppShell', () => {
       </MantineProvider>,
     );
     fireEvent.change(screen.getByLabelText('Nazwa rodziny'), { target: { value: 'Kowalscy' } });
-    fireEvent.change(screen.getByLabelText('Imię i nazwisko'), { target: { value: 'Anna' } });
+    fireEvent.change(screen.getByLabelText('Twoje imię'), { target: { value: 'Anna' } });
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'anna@example.com' } });
     fireEvent.change(screen.getByLabelText('Hasło'), { target: { value: 'password123' } });
     fireEvent.click(screen.getByRole('button', { name: 'Utwórz rodzinę' }));

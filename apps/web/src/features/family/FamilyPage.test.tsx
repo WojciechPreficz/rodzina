@@ -131,7 +131,7 @@ describe('FamilyPage', () => {
     renderFamilyPage();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Edytuj: Zosia' }));
-    expect(await screen.findByRole('textbox', { name: /Imię i nazwisko/ })).toHaveValue('Zosia');
+    expect(await screen.findByRole('textbox', { name: /Imię/ })).toHaveValue('Zosia');
     expect(screen.getByRole('radiogroup', { name: 'Kolor' })).toBeInTheDocument();
     expect(screen.queryByText('Rola')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Nowy PIN')).not.toBeInTheDocument();
@@ -158,7 +158,7 @@ describe('FamilyPage', () => {
     renderFamilyPage();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Dodaj dziecko' }));
-    fireEvent.change(await screen.findByLabelText(/Imię i nazwisko/), { target: { value: 'Kuba' } });
+    fireEvent.change(await screen.findByLabelText(/Imię/), { target: { value: 'Kuba' } });
     fireEvent.change(screen.getByLabelText(/^PIN/), { target: { value: '1234' } });
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Dodaj dziecko' }));
 

@@ -119,7 +119,7 @@ describe('joining and child authentication', () => {
     const submit = await screen.findByRole('button', { name: 'Dołącz do rodziny' });
     fireEvent.click(submit);
     expect(screen.getByText('Imię musi mieć co najmniej 2 znaki.')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('textbox', { name: /Imię i nazwisko/ }), { target: { value: 'Piotr' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /Twoje imię/ }), { target: { value: 'Piotr' } });
     fireEvent.change(screen.getByRole('textbox', { name: /E-mail/ }), { target: { value: 'piotr@example.com' } });
     fireEvent.change(screen.getByLabelText(/^Hasło/), { target: { value: 'password123' } });
     fireEvent.click(submit);

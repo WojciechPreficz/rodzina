@@ -59,7 +59,7 @@ function NavigationIcon({ path }: { path: string }) {
 }
 
 export function AppShell({ children }: { children?: ReactNode }) {
-  const { user, family, logout } = useMe();
+  const { user, logout } = useMe();
   const location = useLocation();
   const wide = useMediaQuery('(min-width: 48em)');
   const native = isAndroid();
@@ -99,7 +99,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
         {user && (
           <div>
             <Text size="sm" fw={600}>
-              {user.displayName} · {family?.name ?? labels.family}
+              {user.displayName}
             </Text>
             <Text size="xs" c="dimmed">
               {labels.roles[user.role]}

@@ -707,3 +707,16 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   również otwarte formularze. Link wydarzenia używa najpierw pełnego cache,
   a `OfflineReminder` pozostaje awaryjnym podglądem APK. Odczyt i synchronizacja
   tego cache nie wywołują planowania ani anulowania alarmów systemowych.
+
+## 20.10.2026 — imiona domowników i nazwa rodziny
+
+- Rejestracja i przyjęcie zaproszenia pytają o „Twoje imię”, a dodawanie
+  i edycja domownika o „Imię”. Nazwisko nie jest wymagane; istniejące pole
+  `displayName` i jego walidacja pozostają zgodne ze starszym APK.
+- Nazwa rodziny pozostaje osobnym wymaganym polem. Przykład „Nasz dom”
+  pokazuje, że może to być wspólna nazwa, niezależna od nazwisk
+  domowników. Nazwę rodziny nadal pokazujemy i edytujemy na ekranie Rodzina.
+- Stopka menu WWW i APK pokazuje nazwę użytkownika oraz jego rolę, bez nazwy
+  rodziny, aby uniknąć powtórzeń takich jak „Wojciech Preficz · Preficz”.
+  Zapisanych nazw użytkowników nie skracamy automatycznie; można je zmienić
+  w edycji domownika. Bez migracji danych i zmian API.
