@@ -32,6 +32,12 @@ todos:
   - id: phase5
     content: "Faza 5: współdzielona lista zakupów (z obsługą słabego zasięgu)"
     status: pending
+  - id: step5-4
+    content: "Krok 5.4: trwały podgląd rodziny offline, domownicy i kod rodziny, blokada zmian"
+    status: pending
+  - id: step5-5
+    content: "Krok 5.5: kalendarz offline tylko do odczytu, baner i odświeżanie po powrocie sieci"
+    status: pending
   - id: phase6
     content: "Faza 6: tygodniowy plan obiadów z dodawaniem składników do listy zakupów"
     status: pending
@@ -58,6 +64,7 @@ Ten dokument jest samowystarczalny i przeznaczony do przekazania agentowi AI lub
 - **Kolejność: fazy 0-3 → pierwszy deploy (wykonany) → faza 4 (Android) → faza 5 (zakupy) → faza 6 (obiady) → faza 7 (zadania) → faza 8 (dokumenty).** Właściciel potwierdził 16.10.2026 działanie aplikacji pod https://rodzina.preficze.pl. Nie powtarzamy pierwszego deployu. Numeracja odpowiada kolejności prac; wykonane wdrożenie ma osobny zapis historyczny i kroki D.1-D.4. Dawny etap wydania open source usunięto. Funkcje rozwijamy i sprawdzamy lokalnie w zakresie zmiany, pełną weryfikację końcową wykonuje CI według sekcji 1.2, a sprawdzone aktualizacje serwera wdrażamy według `docs/DEPLOY.md`. Samo działanie strony nie zalicza niepotwierdzonych testów ani kryteriów wcześniejszych faz.
 - **Język.** UI wyłącznie po polsku. Kod, nazwy, komentarze i commity po angielsku. README i dokumentacja w `docs/` po polsku.
 - **Nawigacja (decyzja właściciela 19.10.2026):** strona WWW od 768 px ma stałe pionowe menu po lewej (240 px). Węższa strona i APK mają hamburger w prawym górnym rogu oraz panel wysuwany z prawej z pozycjami jedna pod drugą. Wspólna kolejność: Kalendarz, Zakupy, Obiady, Rodzina, Powiadomienia, Wersja aplikacji; dane konta i wylogowanie są na dole menu. Nie ma dolnego paska ani pozycji „Więcej”; dotychczasowe adresy `/wiecej`, `/wiecej/rodzina` i `/wiecej/powiadomienia` pozostają zgodne. Ten zapis zastępuje wcześniejsze wymagania dolnej nawigacji i „Więcej” także w opisach przyszłych faz. Zadania i Dokumenty dodajemy dopiero w odpowiednich fazach jako bezpośrednie pozycje menu; przyszłą plakietkę dokumentów umieszczamy przy Dokumentach.
+- **Podgląd offline (decyzja właściciela 20.10.2026):** po zakupach dodajemy kroki 5.4 (Rodzina) i 5.5 (Kalendarz), przed fazą 6. Oba ekrany pokazują zapisane dane oraz baner offline; kalendarz pozostaje tylko do odczytu, a rodzina zachowuje listę domowników i ostatni znany kod dołączenia. Nie dodajemy kolejki zmian tych modułów. Szczegóły i granice cache opisano przy krokach 5.4–5.5; ten zapis rozszerza wcześniejsze ograniczenie podglądu offline do zakupów i harmonogramu APK.
 - **Zasada pracy.** Agent realizuje **jeden krok jednej fazy naraz** (fazy 1-8 są podzielone na kroki, sekcja 1.2; faza 0 jest realizowana w całości). Fazę kończy dopiero wtedy, gdy wszystkie kroki są gotowe, wszystkie kryteria akceptacji są spełnione oraz pełne CI dla końcowego commita przechodzi zgodnie z sekcją 1.2. Każdą decyzję, której plan nie rozstrzyga, zapisuje w `docs/DECISIONS.md` (data, decyzja, powód).
 - **Zakres lektury.** Przed pracą czytamy aktualny kontekst i zasady z sekcji 1, 1.1 i 1.2 oraz opis bieżącej fazy i kroku. Decyzje, konwencje, model danych z sekcji 2-5 i pozostałe dokumenty doczytujemy w zakresie zmiany i jej zależności. Nie ma obowiązku czytania całego planu w każdym czacie ani ponownego wczytywania niezmienionych treści już przeczytanych. Zapisy historyczne i przyszłe fazy służą jako odniesienie, gdy są potrzebne.
 
@@ -858,6 +865,12 @@ rodzina/
 
 **Cel:** wspólna lista, której używa się w sklepie, także przy słabym zasięgu.
 
+**Rozszerzenie planu, 20.10.2026:** po kroku 5.3 wykonujemy osobno 5.4 i 5.5,
+zanim rozpoczniemy fazę 6. Krok 5.3 zachowuje pierwotne kryteria zakupów i otwarte
+próby telefonu; rozszerzenie ich nie zalicza. Dla rozszerzonej fazy ostatnim krokiem
+w rozumieniu sekcji 1.2 jest 5.5, z regresją zakupów oraz kryteriami 5.4–5.5.
+Poniższe dwa kroki są planem, bez wykonanej implementacji.
+
 **Endpointy:**
 
 - Listy: `GET/POST /api/shopping/lists`, `PATCH/DELETE /api/shopping/lists/:id`. Przy pierwszym wejściu powstaje domyślna lista "Zakupy".
@@ -936,6 +949,134 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
 - Spełnione punkty z sekcji 1.1.
 
 **Poza zakresem:** ceny i budżet, skanowanie kodów, sortowanie według układu sklepu.
+
+#### Krok 5.4 - Rodzina offline i wspólny zapis danych do podglądu
+
+**Cel:** po wcześniejszej synchronizacji domownicy i kod rodziny są widoczni
+także po uruchomieniu APK bez internetu. Wejście do Rodziny nie wymaga
+wcześniejszego otwarcia tej zakładki w bieżącym procesie aplikacji.
+
+- **Zakres danych:** po potwierdzeniu sesji online pobieramy domowników, zapisujemy
+  ich identyfikatory, nazwy, kolory i role oraz minimalny kontekst konta, nazwę
+  rodziny, strefę czasową i kod dołączenia. Nie utrwalamy adresów e-mail, PIN-ów,
+  haseł, tokenów sesji ani linków zaproszeń/resetu. Kod dołączenia jest świadomym
+  rozszerzeniem danych lokalnych: obecny snapshot zakupów zapisuje `joinCode: ''`.
+  Pokazujemy ostatni zsynchronizowany kod z informacją, że mógł się zmienić.
+- **Trwałość i izolacja:** zapis jest wersjonowany i przypisany do pary
+  rodzina/użytkownik. Klucze zapytań domowników również uwzględniają tę parę
+  (obecne `['family', 'members']` nie wystarcza). Wspólny moduł zapisu/odtwarzania
+  współpracuje z `AuthProvider`; migracja zachowuje istniejący cache, sesję
+  i dziennik niewysłanych zakupów. Stary snapshot bez kodu/domowników wymaga
+  pierwszego połączenia online, bez pokazywania pustego kodu jako poprawnego.
+- **UI:** bezpośrednio pod nagłówkiem, przed kartami, widoczny jest żółty baner
+  w stylu zakupów: „Jesteś offline — pokazujemy ostatnio zapisane dane. Zmiany
+  wymagają połączenia z internetem.” Dodajemy czas ostatniego udanego pobrania.
+  Baner pozostaje widoczny także przy braku cache. Wtedy zamiast nieskończonego
+  loadera pokazujemy „Brak danych rodziny zapisanych na tym urządzeniu. Połącz
+  się z internetem, aby je pobrać.”
+- **Akcje:** offline przyciski „Dodaj dziecko”, „Utwórz zaproszenie” i wygenerowania
+  nowego kodu pozostają widoczne dla uprawnionych osób, ale są nieaktywne.
+  Rodzina jest w całości tylko do odczytu: blokujemy także edycję/usuwanie
+  domownika, zmianę PIN-u/roli i generowanie resetu hasła. Wyjaśnienie przy akcjach
+  brzmi „Dostępne po połączeniu z internetem”. Uprawnienia nadal decydują
+  o widoczności; nie ujawniamy dziecku akcji administratora. Utrata sieci przy
+  otwartym formularzu blokuje zapis; nie tworzymy oczekującej mutacji.
+- **Sieć i błędy:** wspólne wykrywanie korzysta z istniejącego `onlineManager`
+  i błędów transportu, także gdy urządzenie deklaruje połączenie, lecz API jest
+  nieosiągalne. Sam status online nie potwierdza udanej synchronizacji. Błędy
+  HTTP serwera pokazujemy zgodnie z ich znaczeniem. Powrót sieci/wznowienie APK
+  odświeża sesję, domowników i kod, zachowując zapisany widok podczas pobierania.
+  Nie nadpisujemy danych pustą wartością po błędzie i nie zapisujemy danych starego
+  konta z opóźnionej odpowiedzi.
+- **Usuwanie danych:** wylogowanie (również offline), zmiana konta i potwierdzona
+  utrata sesji/dostępu usuwają odpowiedni cache w pamięci i na dysku. Brak sieci
+  nie oznacza utraty sesji. Niedostępna pamięć, uszkodzony zapis lub brak miejsca
+  dają czytelny komunikat; nie deklarujemy zapisania danych, gdy zapis się nie udał.
+- **Gotowe, gdy:** testy zapisu i komponentów obejmują zimny start APK z cache,
+  brak cache, migrację ze snapshotu zakupów, kod rodziny, wszystkie blokady,
+  zmianę konta, wylogowanie offline, 401/403, spóźnione odpowiedzi, błąd pamięci
+  i powrót sieci. Regresja potwierdza zachowanie niewysłanych zakupów. Playwright
+  headless sprawdza Rodzinę przy 390 i 1280 px, utratę sieci oraz odświeżenie kodu
+  zmienionego na drugim urządzeniu. Ręcznie sprawdzamy te widoki i na fizycznym
+  telefonie: wcześniejsza synchronizacja, tryb samolotowy, zamknięcie procesu,
+  ponowne uruchomienie, widoczni domownicy i kod, nieaktywne akcje, powrót sieci.
+  Wyniki zapisujemy w DEVELOPMENT; kontrole i CI według sekcji 1.2.
+
+#### Krok 5.5 - Kalendarz offline tylko do odczytu
+
+**Zależność:** ukończony krok 5.4 zapewnia trwałych domowników, strefę czasową,
+izolację kont i wspólny stan połączenia. Nie odtwarzamy kalendarza z harmonogramu
+alarmów Androida, bo obejmuje on tylko dane potrzebne przypomnieniom.
+
+- **Zakres cache:** po potwierdzeniu sesji online pobieramy wystąpienia bieżącego
+  miesiąca oraz w tle poprzedniego i następnego; uwzględniamy dni sąsiednich
+  miesięcy widoczne w siatce. Każde żądanie `/api/occurrences` respektuje limit
+  62 dni. Zapisujemy również kolejne zakresy faktycznie otwarte online, odległe
+  terminy i pełne szczegóły wydarzeń z pobranych zakresów (unikalne ID), aby
+  kliknięcie wydarzenia offline otwierało jego zapisany podgląd bez wcześniejszej
+  wizyty w szczegółach. Pobieranie szczegółów ma ograniczoną współbieżność.
+- **Granice podglądu:** utrwalamy zakresy dat, potwierdzenie ich kompletności
+  i czas ostatniego udanego pobrania osobno od danych. Dzień/tydzień/miesiąc oraz
+  filtry domowników działają lokalnie dla zapisanych zakresów, niezależnie od
+  dokładnego klucza zapytania Schedule-X. Brak pokrycia pokazuje „Ten zakres nie
+  został zapisany offline. Połącz się z internetem, aby go pobrać.”; częściowy
+  cache jest oznaczony, a brak cache nigdy nie oznacza „Brak wydarzeń”.
+  Prawidłowo pobrany pusty zakres nadal oznacza brak wydarzeń. Zachowujemy
+  najwyżej 12 ostatnio używanych zakresów miesięcznych i powiązane szczegóły,
+  bez automatycznego kasowania ostatniego podglądu tylko z powodu wieku danych.
+- **UI:** baner offline jest u góry zakładki i szczegółów, przed treścią:
+  „Jesteś offline — kalendarz jest dostępny tylko do odczytu. Pokazujemy ostatnio
+  zapisane dane.” Pokazujemy czas pobrania wyświetlanego zakresu. Zapisane dane
+  pozostają widoczne przy nieudanym odświeżeniu; nie blokujemy całego kalendarza
+  loaderem zapytania wstrzymanego offline. Brak szczegółów konkretnego wydarzenia
+  ma własny komunikat i powrót do kalendarza. Wejście z powiadomienia korzysta
+  najpierw z cache wydarzenia; dotychczasowy minimalny `OfflineReminder` pozostaje
+  awaryjnym podglądem, gdy pełnych danych nie zapisano.
+- **Tylko odczyt:** blokujemy „+”, tworzenie wszystkich rodzajów wydarzeń,
+  edycję/usuwanie (także zakresy serii) i dodawanie/usuwanie przypomnień wspólnych
+  oraz osobistych. Odczyt zapisanych przypomnień jest dozwolony; osobiste dane
+  są przypisane do użytkownika. Blokady obejmują otwarte wcześniej formularze
+  i wykonanie mutacji, aby akcja nie została automatycznie wysłana później.
+  Istniejące alarmy systemowe działają nadal według zapisanego harmonogramu.
+- **Synchronizacja:** powrót sieci/wznowienie APK po weryfikacji sesji odświeża
+  aktywny zakres, domowników, odległe terminy i szczegóły; pozostałe zapisane
+  zakresy oznaczamy do ponownego pobrania. Zmiany/usunięcia z innego urządzenia
+  zastępują stary podgląd po udanym pobraniu. 404 wydarzenia usuwa jego zapisane
+  szczegóły i unieważnia zakresy, które je zawierały; 401/403 obsługujemy zgodnie
+  z utratą sesji/dostępu, bez awaryjnego pokazywania cofniętych danych.
+  Cache odczytu nie planuje ani nie anuluje alarmów; ich aktualizacja pozostaje
+  zadaniem istniejącego synchronizatora harmonogramu.
+- **Gotowe, gdy:** testy cache i komponentów obejmują odtworzenie po restarcie,
+  widoki i filtry, pokrycie częściowe/puste/brakujące, limity cache i żądań,
+  szczegóły oraz odległe terminy, serie z wyjątkami, strefę Europe/Warsaw i zmianę
+  czasu, wszystkie blokady mutacji, błąd transportu/pamięci, 401/403/404 i zmianę
+  konta. Testy Playwright headless przy 390 i 1280 px obejmują przejście
+  online → offline → online, obie zakładki i regresję zakupów. Ręczne próby UI
+  oraz fizyczny telefon potwierdzają zimny start w trybie samolotowym, nawigację
+  Rodzina ↔ Kalendarz ↔ Zakupy, szczegóły i link powiadomienia, blokady zapisów,
+  zachowanie alarmu offline oraz odświeżenie zmian/usunięć z drugiego urządzenia.
+  Wyniki w DEVELOPMENT, kontrole i końcowe CI według sekcji 1.2; otwartych prób
+  kroku 5.3 nie oznaczamy jako zaliczonych. Wymagania sekcji 1.1 nadal obowiązują.
+
+**Wspólne ograniczenia 5.4–5.5:** dostęp offline wymaga wcześniejszego udanego
+pobrania i zachowanego zapisu na urządzeniu. Kod i wydarzenia są ostatnim znanym
+stanem; urządzenie bez sieci nie wykryje zdalnych zmian ani cofnięcia dostępu.
+APK uruchamia lokalny frontend bez internetu. Zwykła strona obsługuje utratę
+sieci w otwartej aplikacji; nie przywracamy PWA ani gwarancji zimnego startu WWW.
+Nie przewidujemy nowych endpointów, migracji, cronów ani zależności runtime
+serwera. Aktualizacja strony i APK odbywa się osobno według istniejącej procedury,
+po oddzielnym poleceniu wdrożenia.
+
+**Poza zakresem 5.4–5.5:** tworzenie, edycja i usuwanie wydarzeń offline, kolejka
+zmian kalendarza/rodziny, synchronizacja w zamkniętym APK oraz pełna kopia całej
+historii i wszystkich przyszłych wydarzeń. Samo dodawanie wydarzeń jednorazowych
+offline ma średni do dużego nakład pracy: wymaga trwałego dziennika i lokalnego
+podglądu oczekujących zapisów, idempotencji `POST /api/events` (obecnie serwer
+nadaje nowe ID przy każdym utworzeniu), weryfikacji uczestników i sesji po powrocie
+sieci, obsługi odrzuconych zapisów oraz uzgodnienia alarmów przed synchronizacją
+i po niej. Kolejkę zakupów można wykorzystać jako wzorzec, ale nie przenieść
+bezpośrednio. Serie, wyjątki i edycja konfliktujących danych dodatkowo zwiększają
+zakres. Obecna decyzja to wyłącznie odczyt; zapisy offline wymagają osobnego planu.
 
 ---
 

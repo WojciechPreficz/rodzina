@@ -613,3 +613,38 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
 - Zwykła strona korzysta offline z już otwartego interfejsu; ponowne uruchomienie
   bez sieci dotyczy lokalnego frontendu APK. Nie przywracamy PWA. Brak nowych
   zmiennych środowiskowych, cronów, zależności serwerowych i usług w tle.
+
+## 20.10.2026 — plan podglądu rodziny i kalendarza offline (5.4–5.5)
+
+- Na prośbę właściciela rozszerzamy fazę 5 przed fazą 6 o dwa osobne kroki:
+  5.4 — rodzina i wspólny zapis danych do podglądu, 5.5 — kalendarz tylko do
+  odczytu. Jest to plan, bez implementacji i bez zaliczenia otwartych prób 5.3.
+  Dla rozszerzonej fazy końcowym krokiem jest 5.5. Dotychczasowe wyłączenie pełnej
+  edycji kalendarza offline pozostaje aktualne.
+- Rozpoznana przyczyna: trwały zapis obejmuje obecnie tylko klucze zakupów,
+  a sesja odzyskana ze snapshotu ma pusty `joinCode`. Kalendarz zależy od
+  niezapisanej listy domowników i zakresów wystąpień. Samo zapamiętanie konta
+  lub lokalnych alarmów nie zapewnia podglądu tych ekranów po restarcie.
+- Rodzina zachowuje domowników oraz ostatni znany kod dołączenia. To świadomy
+  wyjątek od wcześniejszej decyzji 5.3 o niezapisywaniu kodu: nowy, wersjonowany
+  cache przypisujemy do rodziny i użytkownika, czyścimy przy wylogowaniu/zmianie
+  konta i utracie sesji/dostępu. Nadal nie zapisujemy haseł, PIN-ów, e-maili,
+  tokenów sesji ani linków zaproszeń/resetu. Migracja zachowuje niewysłane zakupy.
+- Obie zakładki otrzymują baner offline w stylu zakupów, czas pobrania oraz
+  komunikaty braku cache. Treść nie zapowiada wysłania zmian, bo nie dodajemy
+  kolejki tych modułów. W Rodzinie blokujemy dodanie dziecka, zaproszenia,
+  wygenerowanie kodu oraz pozostałe zmiany. Kalendarz blokuje wszystkie zapisy,
+  w tym przypomnienia, także z formularzy otwartych przed utratą sieci.
+- Kalendarz zapisuje trzy miesiące wokół bieżącego i zakresy otwarte online
+  (limit 12 ostatnio używanych zakresów miesięcznych), szczegóły ich wydarzeń
+  oraz odległe terminy. Zakres i kompletność cache są jawne; niezapisany okres
+  nie udaje pustego kalendarza. Wykorzystujemy istniejące API z limitem 62 dni
+  na zapytanie. Harmonogram alarmów pozostaje odrębnym mechanizmem.
+- Tworzenie wydarzeń offline oceniamy jako wyraźnie większy zakres niż odczyt:
+  nawet wydarzenia jednorazowe wymagają trwałej kolejki, idempotencji API,
+  obsługi odrzucenia zapisu i ustalenia zachowania przypomnień. Serie i edycja
+  dokładają kolejne przypadki. Na teraz planujemy tylko odczyt; ewentualne zapisy
+  wymagają osobnego planu i polecenia właściciela.
+- Szczegółowe kryteria, próby 390/1280 px, headless, restartu fizycznego APK,
+  synchronizacji i regresji zakupów są w krokach 5.4–5.5 planu. Nie przywracamy
+  PWA, nie dodajemy synchronizacji przy zamkniętym APK ani zmian serwera.
