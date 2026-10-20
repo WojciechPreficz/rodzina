@@ -31,7 +31,15 @@ test('website uses a left sidebar on desktop and a right drawer on phones', asyn
   await expect(accountMenu.getByText('Administrator', { exact: true })).toBeVisible();
   await expect(accountMenu.getByText('Menu Rodziny', { exact: true })).toHaveCount(0);
   const links = navigation.getByRole('link');
-  await expect(links).toHaveText(['Kalendarz', 'Zakupy', 'Obiady', 'Rodzina', 'Powiadomienia', 'Wersja aplikacji']);
+  await expect(links).toHaveText([
+    'Kalendarz',
+    'Zadania',
+    'Zakupy',
+    'Obiady',
+    'Rodzina',
+    'Powiadomienia',
+    'Wersja aplikacji',
+  ]);
   await expect(links.first()).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.mantine-AppShell-footer')).toHaveCount(0);
   const boxes = await links.evaluateAll((items) =>

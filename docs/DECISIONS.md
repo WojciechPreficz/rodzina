@@ -809,3 +809,28 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
 - `taskUrl(listId, taskId)` przygotowuje adres `/zadania/:listId?zadanie=:taskId`.
   Ekran i obsługa otwierania szczegółów należą do 7.4, formularz przypomnień do
   7.5. Ten krok nie udostępnia prywatnych szczegółów zadania offline.
+
+## 20.10.2026 — zakładka Zadania (7.4, #15)
+
+- Dodajemy Zadania po Kalendarzu w aktualnym bocznym menu WWW i prawym panelu
+  telefonu/APK. Zapis kroku 7.4 o dolnej nawigacji ustępuje decyzji z sekcji 1
+  planu. Nie przywracamy dolnego paska ani nagłówka powtarzającego tytuł ekranu.
+- `/zadania` pokazuje dostępne listy, z własną domyślną listą na początku.
+  `/zadania/:listId` otwiera zadania listy, a parametr `zadanie` formularz
+  wskazanego zadania, również z lokalnego powiadomienia APK. Lista i zadania
+  odświeżają się co 20 s, po wznowieniu i odzyskaniu połączenia. Zapis zmiany
+  odświeża także harmonogram APK, aby wykonanie lub zmiana terminu aktualizowały
+  istniejące alarmy.
+- Zadania pozostają modułem online. Nie utrwalamy prywatnych list ani szczegółów
+  w zapisie offline Rodziny/Kalendarza/Zakupów. Utrata połączenia ukrywa widok
+  i formularz; ponowne wejście lub odzyskanie sieci wymaga świeżego odczytu API.
+  Błąd dostępu usuwa szczegóły z widoku. Ogólny alarm offline zachowuje reguły 7.3.
+- Wszyscy uprawnieni członkowie, w tym dzieci, mogą tworzyć listy i zadania,
+  edytować, odhaczać, ponownie otwierać i usuwać zadania. Przypisanie ograniczamy
+  do właściciela i członków bieżącej listy. Sekcja „Zrobione” jest początkowo
+  zwinięta. Termin bez godziny staje się przeterminowany następnego dnia
+  w strefie rodziny, a termin z godziną po wskazanej chwili.
+- Formularz nie wysyła pola `reminders`, więc zachowuje istniejące przypomnienia.
+  Wyczyszczenie daty wysyła również `dueTime=null`. Udostępnianie i zarządzanie
+  listą, formularz przypomnień oraz karta kalendarza pozostają w 7.5.
+  Bez zmian API, migracji, zmiennych, cronów i zależności runtime.

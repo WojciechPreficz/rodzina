@@ -15,6 +15,7 @@ import { NotificationsPage } from './features/notifications/NotificationsPage.js
 import { NativeNavigation } from './nativeNavigation.js';
 import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
 import { ShoppingPage } from './features/shopping/ShoppingPage.js';
+import { TasksPage } from './features/tasks/TasksPage.js';
 
 export const router = createBrowserRouter([
   {
@@ -52,6 +53,8 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <CalendarPage /> },
               { path: 'kalendarz', element: <CalendarPage /> },
+              { path: 'zadania', element: <TasksPage /> },
+              { path: 'zadania/:listId', element: <TasksPage /> },
               { path: 'zakupy', element: <ShoppingPage /> },
               { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
               { path: 'wiecej', element: <MorePage /> },

@@ -47,6 +47,10 @@ it('rejects external URLs, backslashes, encoded escapes and control characters i
   expect(sanitizeNextPath(url)).toBe(url);
   expect(notificationPath(url)).toBe(url);
   expect(notificationPath('/wiecej')).toBeNull();
+  expect(notificationPath('/zadania/list-1?zadanie=task-1')).toBe('/zadania/list-1?zadanie=task-1');
+  for (const path of ['/zadania/list-1', '/zadania/list-1?zadanie=', '/zadania/list-1?zadanie=task-1&evil=1']) {
+    expect(notificationPath(path)).toBeNull();
+  }
 });
 it('only accepts invitation and reset HTTPS links on the configured domain', () => {
   for (const kind of ['zaproszenie', 'reset-hasla']) {

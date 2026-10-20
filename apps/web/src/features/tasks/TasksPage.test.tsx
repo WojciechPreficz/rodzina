@@ -1,0 +1,244 @@
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MantineProvider } from '@mantine/core';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import type { Task, TaskList } from '@rodzina/shared';
+import { TasksPage } from './TasksPage.js';
+import { isTaskOverdue } from './taskRules.js';
+import { reportTransportFailure } from '../../connectivity.js';
+
+const session = vi.hoisted(() => ({
+  user: { id: '10000000-0000-4000-8000-000000000001', displayName: 'Ania', role: 'child', color: '#1C7ED6' },
+  family: { id: 'family', timezone: 'Europe/Warsaw' },
+  familyConfirmed: true,
+}));
+vi.mock('../../auth.js', () => ({ useMe: () => session }));
+vi.mock('../family/familyQueries.js', () => ({
+  useMembersQuery: () => ({ data: [session.user, { id: 'other', displayName: 'Bartek', color: '#2F9E44' }] }),
+}));
+const list: TaskList = {
+  id: 'list',
+  familyId: 'family',
+  ownerId: session.user.id,
+  name: 'Moje zadania',
+  isDefault: true,
+  memberIds: [],
+  openTaskCount: 1,
+  position: 0,
+  createdAt: 1,
+  updatedAt: 1,
+};
+const task: Task = {
+  id: 'task',
+  listId: list.id,
+  title: 'Kupić farbę',
+  notes: 'Biała',
+  dueDate: '2020-01-01',
+  dueTime: null,
+  assigneeId: session.user.id,
+  isDone: false,
+  doneAt: null,
+  doneBy: null,
+  position: 0,
+  createdBy: session.user.id,
+  createdAt: 1,
+  updatedAt: 1,
+};
+let client: QueryClient;
+function setup(path = '/zadania/list', initial = [task], failPatch = false) {
+  let items = [...initial];
+  let lists = [{ ...list, id: 'second', name: 'Remont', isDefault: false, memberIds: ['other'] }, list];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? 'GET';
+    const data = init?.body ? JSON.parse(String(init.body)) : {};
+    if (failPatch && method === 'PATCH')
+      return new Response(JSON.stringify({ error: { message: 'Nie udało się zapisać.' } }), { status: 500 });
+    let body: object;
+    if (url === '/api/tasks/lists' && method === 'GET') body = { lists };
+    else if (url === '/api/tasks/lists' && method === 'POST') {
+      const created = { ...list, id: 'new-list', name: data.name, isDefault: false };
+      lists = [...lists, created];
+      body = { list: created };
+    } else if (method === 'POST') {
+      const created = { ...task, ...data, id: 'new-task' };
+      items = [...items, created];
+      body = { task: created };
+    } else if (method === 'PATCH') {
+      items = items.map((item) => (item.id === 'task' ? { ...item, ...data } : item));
+      body = { task: items[0] };
+    } else if (method === 'DELETE') {
+      items = [];
+      body = { deleted: true };
+    } else body = { tasks: items };
+    return new Response(JSON.stringify({ ok: true, ...body }));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MantineProvider env="test">
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/zadania" element={<TasksPage />} />
+            <Route path="/zadania/:listId" element={<TasksPage />} />
+          </Routes>
+        </MemoryRouter>
+      </MantineProvider>
+    </QueryClientProvider>,
+  );
+  return fetchMock;
+}
+beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+  reportTransportFailure(false);
+  session.familyConfirmed = true;
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((media: string) => ({
+      media,
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    })),
+  );
+});
+afterEach(() => {
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  cleanup();
+  client?.clear();
+  onlineManager.setOnline(true);
+  reportTransportFailure(false);
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe('tasks UI', () => {
+  it('sorts the default list first and shows member avatars only on shared lists', async () => {
+    setup('/zadania');
+    const navigation = await screen.findByRole('navigation', { name: 'Listy zadań' });
+    expect(
+      within(navigation)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Moje zadania', 'Remont']);
+    expect(within(navigation).getByLabelText('Bartek')).toBeInTheDocument();
+    expect(within(navigation).getAllByLabelText('Ania')).toHaveLength(1);
+  });
+  it('allows children to check and reopen tasks in the collapsed done section', async () => {
+    const fetchMock = setup();
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Zrobione: Kupić farbę' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Zrobione (1)' })).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(screen.queryByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Zrobione (1)' }));
+    const checkbox = await screen.findByRole('checkbox', { name: 'Zrobione: Kupić farbę' });
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Zrobione (0)' })).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tasks/task',
+      expect.objectContaining({ method: 'PATCH', body: '{"isDone":false}' }),
+    );
+  });
+  it('marks an overdue deadline in red and shows the assignee', async () => {
+    setup();
+    const article = await screen.findByRole('article', { name: task.title });
+    const deadline = within(article).getByText(/po terminie/);
+    expect(deadline).toHaveStyle({ color: 'var(--mantine-color-red-text)' });
+    expect(within(article).getByLabelText('Ania')).toBeInTheDocument();
+  });
+  it('keeps the unchecked task on a rejected write and offers the server error', async () => {
+    setup('/zadania/list', [task], true);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Zrobione: Kupić farbę' }));
+    expect(await screen.findByText('Nie udało się zapisać.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
+  });
+  it('quick-adds a trimmed title and keeps the form clear after success', async () => {
+    const fetchMock = setup('/zadania/list', []);
+    const input = await screen.findByRole('textbox', { name: 'Dodaj zadanie' });
+    fireEvent.change(input, { target: { value: '  Odebrać paczkę  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj' }));
+    expect(await screen.findByRole('article', { name: 'Odebrać paczkę' })).toBeInTheDocument();
+    expect(input).toHaveValue('');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tasks/lists/list/tasks',
+      expect.objectContaining({ method: 'POST', body: '{"title":"Odebrać paczkę"}' }),
+    );
+  });
+  it('opens a task URL, limits assignment to list members and clears both deadline fields without touching reminders', async () => {
+    const fetchMock = setup('/zadania/list?zadanie=task', [{ ...task, dueTime: '16:45' }]);
+    const dialog = await screen.findByRole('dialog', { name: 'Edytuj zadanie' });
+    expect(within(dialog).getByLabelText('Notatka')).toHaveValue('Biała');
+    fireEvent.click(within(dialog).getByRole('textbox', { name: 'Osoba przypisana' }));
+    expect(screen.getByRole('option', { name: 'Ania' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Bartek' })).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /^Tytuł/ }), { target: { value: 'Nowy tytuł' } });
+    fireEvent.change(within(dialog).getByLabelText('Termin'), { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tasks/task',
+      expect.objectContaining({
+        body: JSON.stringify({
+          title: 'Nowy tytuł',
+          notes: 'Biała',
+          dueDate: null,
+          dueTime: null,
+          assigneeId: session.user.id,
+        }),
+      }),
+    );
+  });
+  it('hides already loaded private content and its dialog when going offline', async () => {
+    setup('/zadania/list?zadanie=task');
+    await screen.findByRole('dialog');
+    act(() => onlineManager.setOnline(false));
+    expect(screen.queryByText(task.title)).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('aktualnego dostępu online');
+  });
+  it('does not request private data before confirming the account', () => {
+    session.familyConfirmed = false;
+    const fetchMock = setup();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Potwierdzanie');
+  });
+  it('hides cached details when a later access check is rejected', async () => {
+    const fetchMock = setup('/zadania/list?zadanie=task');
+    await screen.findByRole('dialog');
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ error: { message: 'Nie znaleziono listy.' } }), { status: 404 }),
+    );
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['tasks'] });
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText(task.title)).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Nie znaleziono listy.');
+  });
+});
+
+it('evaluates date-only and timed deadlines in the family timezone, excluding completed and undated tasks', () => {
+  const now = Date.parse('2026-10-20T00:30:00Z');
+  expect(isTaskOverdue({ ...task, dueDate: '2026-10-19' }, 'Europe/Warsaw', now)).toBe(true);
+  expect(isTaskOverdue({ ...task, dueDate: '2026-10-20' }, 'Europe/Warsaw', now)).toBe(false);
+  expect(isTaskOverdue({ ...task, dueDate: '2026-10-20', dueTime: '02:00' }, 'Europe/Warsaw', now)).toBe(true);
+  expect(isTaskOverdue({ ...task, dueDate: '2026-10-20', dueTime: '03:00' }, 'Europe/Warsaw', now)).toBe(false);
+  expect(isTaskOverdue({ ...task, dueDate: '2026-10-19' }, 'America/Los_Angeles', now)).toBe(false);
+  expect(isTaskOverdue({ ...task, isDone: true }, 'Europe/Warsaw', now)).toBe(false);
+  expect(isTaskOverdue({ ...task, dueDate: null }, 'Europe/Warsaw', now)).toBe(false);
+});

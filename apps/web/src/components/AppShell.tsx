@@ -10,6 +10,7 @@ import { AndroidUpdateNotice } from '../features/updates/AndroidUpdates.js';
 
 const navigation = [
   { label: labels.calendar, to: '/kalendarz', icon: 'M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z' },
+  { label: labels.tasksUi.title, to: '/zadania', icon: 'm4 6 2 2 4-4m-6 12 2 2 4-4M13 6h7M13 16h7' },
   { label: labels.shopping, to: '/zakupy', icon: 'M3 3h2l3 12h11l2-8H6M9 20h.01M18 20h.01' },
   { label: labels.meals, to: '/obiady', icon: 'M4 3v6a3 3 0 0 0 6 0V3M7 3v18M20 21V3c-4 2-5 8 0 9' },
   {
@@ -69,7 +70,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
       <Stack component="nav" aria-label={labels.navigation.main} gap={4}>
         {navigation.map(({ label, to, icon }, index) => (
           <div key={to}>
-            {index === 3 && <Divider my="sm" />}
+            {index === 4 && <Divider my="sm" />}
             <NavLink
               component={Link}
               to={to}

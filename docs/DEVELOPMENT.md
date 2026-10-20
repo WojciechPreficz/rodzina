@@ -1657,3 +1657,61 @@ podpisanego APK. Brak nowych zmiennych i cronów; migracja znajduje się w repo
 i paczce. Na etapie przygotowania commita: **zweryfikowane lokalnie, oczekuje
 na CI**, z otwartą próbą telefonu. Wynik CI dla końcowego commita raportujemy
 osobno; nie oznaczamy kroku jako w pełni gotowego bez brakującej próby.
+
+## Zakładka Zadania (7.4, #15)
+
+Menu WWW i APK zawiera Zadania po Kalendarzu. `/zadania` pokazuje listy
+z własną „Moje zadania” na początku, licznikami otwartych zadań i awatarami
+na listach udostępnionych. Nową listę można utworzyć także jako dziecko.
+`/zadania/:listId` zawiera szybkie dodawanie, formularz szczegółów, checkboxy,
+terminy w strefie rodziny i początkowo zwiniętą sekcję „Zrobione”. Kliknięcie
+tytułu albo wejście przez `?zadanie=:taskId` otwiera edycję. Ten sam adres
+z ogólnego alarmu APK przechodzi przez istniejącą kontrolę sesji i aktualny
+odczyt API. Formularz obejmuje tytuł, notatkę, datę, opcjonalną godzinę
+i przypisanie do właściciela lub członka listy. Usunięcie zadania wymaga
+potwierdzenia; zarządzanie listą i formularz przypomnień pozostają w 7.5.
+
+Odczyty odświeżają się co 20 s oraz po powrocie do aplikacji/odzyskaniu sieci.
+Zapis odświeża dane i harmonogram lokalnych alarmów APK. Zadania nie mają
+kolejki offline ani trwałego cache szczegółów. Offline ukrywa widok i formularz;
+powrót sieci ponownie weryfikuje dostęp przed pokazaniem treści. Błędy listy
+lub zadań nie pozostawiają w widoku wcześniejszych prywatnych szczegółów.
+
+Weryfikacja lokalna 20.10.2026:
+
+- Vitest: 24/24 testy UI zadań, menu i nawigacji natywnej oraz 80/80 testów
+  regresji API zadań, przypomnień i synchronizacji. UI obejmuje checkbox
+  i ponowne otwarcie zadania (także dziecka), przeterminowanie, zwijanie
+  „Zrobione”, szybkie dodawanie, formularz, ograniczenie przypisań,
+  zachowanie po błędzie zapisu, utracie dostępu i połączenia.
+- Playwright headless: 6/6 scenariuszy zadań na 390 i 1280 px, zarówno przez
+  transport WWW, jak i atrapę mostka Androida. Sprawdzono dodanie, edycję
+  i odhaczenie w „Moje zadania”, ponowne otwarcie wykonanych, bezpośredni link,
+  odczyt zmiany z API w następnym cyklu 20 s, tworzenie listy i zadania
+  ze szczegółami, usuwanie, brak dostępu, znikanie prywatnej treści offline
+  i jej ponowny odczyt po odzyskaniu sieci. Przejrzano zrzuty listy/formularza
+  w obu szerokościach; nie ma poziomego przepełnienia ani kolizji z hamburgerem.
+  Regresja nawigacji: 4/4 scenariusze WWW i APK przy 390 i 1280 px.
+- Lint bez ostrzeżeń, formatowanie zmienionych plików, `npm run typecheck`
+  i build aplikacji przechodzą. Debug APK z aktualnym wspólnym frontendem:
+  `BUILD SUCCESSFUL`. Brak zmian API, migracji, konfiguracji startowej,
+  pakowania, zmiennych, cronów i zależności runtime; lokalny `release:smoke`
+  nie jest wymagany dla tego kroku UI. Pozostaje bramką istniejącego CI.
+- Sandbox blokował pliki tymczasowe Vitest, lokalny serwer Playwright i połączenie
+  z demonem Gradle; udane przebiegi tych narzędzi wykonano poza sandboxem.
+  Pełne logi: ignorowane `.android-tools/step74-*`; zrzuty do przeglądu:
+  `.android-tools/step74-ui-preview/`.
+
+**Otwarte próby:** interaktywna weryfikacja w Chrome i fizyczny telefon.
+Testy headless i przegląd zrzutów nie zastępują tych prób. Sprawdzenie urządzeń
+ADB poza sandboxem zostało odrzucone; nie wykonano instalacji ani uruchomienia
+APK na urządzeniu. Na telefonie należy otworzyć Zadania, dodać/odhaczyć/edytować
+zadanie, sprawdzić formularz z klawiaturą i przyciskiem Wstecz oraz otwarcie
+zadania z ogólnego alarmu. Po wyłączeniu sieci szczegóły muszą zniknąć,
+a po odzyskaniu sieci wymagać aktualnego dostępu. Dotychczasowe otwarte próby
+alarmów pozostają niepotwierdzone.
+
+Na polecenie właściciela zmiana trafia do lokalnego commita na `main` bez pusha.
+Stan: **zweryfikowane lokalnie, oczekuje na CI**, z otwartymi próbami ręcznymi.
+CI dla końcowego commita nie uruchomi się do czasu wysłania zmian; nie oznaczamy
+kroku jako w pełni gotowego ani nie wykonujemy deployu.
