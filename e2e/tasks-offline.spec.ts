@@ -68,10 +68,11 @@ for (const native of [false, true]) {
       await expect(form.getByRole('button', { name: 'Dodaj przypomnienie' })).toBeDisabled();
       await form.getByLabel('Notatka').fill('Zapisana na urządzeniu');
       await form.getByLabel('Termin', { exact: true }).fill('2020-01-01');
-      await form.evaluate(async () => {
-        await Promise.all(document.getAnimations().map((animation) => animation.finished));
+      await page.screenshot({
+        path: info.outputPath(`task-offline-form-${native}.png`),
+        fullPage: true,
+        animations: 'disabled',
       });
-      await page.screenshot({ path: info.outputPath(`task-offline-form-${native}.png`), fullPage: true });
       await form.getByRole('button', { name: 'Zapisz', exact: true }).click();
       await expect(form).toHaveCount(0);
       await page.getByRole('article', { name: 'Do usunięcia', exact: true }).getByRole('link').click();

@@ -6,7 +6,6 @@ import { focusManager, onlineManager, useQuery, useQueryClient, type QueryClient
 import { isAndroid } from '../../platform.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { localScheduler } from './localSchedule.js';
-import { isOffline } from '../../connectivity.js';
 
 export const scheduleKey = ['local-schedule'];
 
@@ -42,7 +41,7 @@ export function useLocalSchedule(account: string, automatic = false) {
           } catch {
             /* The first sync has no saved schedule. */
           }
-          result = isOffline() ? await localScheduler.retry(account) : await localScheduler.sync(account);
+          result = onlineManager.isOnline() ? await localScheduler.sync(account) : await localScheduler.retry(account);
         } catch (failure) {
           signal.throwIfAborted();
           error = failure instanceof Error ? failure.message : String(failure);

@@ -21,11 +21,11 @@ export function LocalAlarmsPage() {
   const check = async () => {
     await query.refetch();
   };
-  async function run(action: () => Promise<void>) {
+  async function run(action?: () => Promise<void>) {
     setBusy(true);
     setError('');
     try {
-      await action();
+      await action?.();
       await check();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : text.error);
@@ -64,21 +64,13 @@ export function LocalAlarmsPage() {
         >
           {access?.exact === 'granted' ? text.exactGranted : text.exact}
         </Button>
-        <Button variant="subtle" disabled={busy} onClick={() => void run(check)}>
+        <Button variant="subtle" disabled={busy} onClick={() => void run()}>
           {text.check}
         </Button>
         <Button variant="light" disabled={busy} onClick={() => void run(() => alarmStore.openAppSettings())}>
           {text.appSettings}
         </Button>
-        <Button
-          loading={busy}
-          disabled={!account}
-          onClick={() =>
-            void run(async () => {
-              await check();
-            })
-          }
-        >
+        <Button loading={busy} disabled={!account} onClick={() => void run()}>
           {text.syncNow}
         </Button>
         <Button

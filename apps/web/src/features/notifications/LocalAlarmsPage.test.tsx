@@ -44,6 +44,22 @@ function show() {
   );
 }
 
+it.each(['Synchronizuj teraz', 'Sprawdź zgody po powrocie z ustawień'])(
+  'refreshes only once when clicking %s',
+  async (name) => {
+    mocks.sync.mockResolvedValue(undefined);
+    show();
+    await screen.findByText('Powiadomienia: brak zgody');
+    await waitFor(() => expect(mocks.sync).toHaveBeenCalledOnce());
+    mocks.sync.mockClear();
+    mocks.sync.mockRejectedValue(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('offline');
+    await waitFor(() => expect(screen.getByRole('button', { name })).toBeEnabled());
+    expect(mocks.sync).toHaveBeenCalledOnce();
+  },
+);
+
 it('checks permissions without prompting and asks only on explicit clicks', async () => {
   show();
   await screen.findByText('Powiadomienia: brak zgody');
