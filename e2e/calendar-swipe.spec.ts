@@ -20,13 +20,16 @@ test('navigates calendar periods with touch while preserving taps and vertical s
   await expect(input).toBeVisible();
   const client = await page.context().newCDPSession(page);
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: true });
-  const gesture = async (dx: number, dy = 0) => {
-    const surface = calendar.locator('.sx__month-agenda-wrapper, .sx__time-grid-day').first();
+  const gesture = async (
+    dx: number,
+    dy = 0,
+    surface = calendar.locator('.sx__month-agenda-wrapper, .sx__time-grid-day').first(),
+  ) => {
     await surface.scrollIntoViewIfNeeded();
     const box = await surface.boundingBox();
     if (!box) throw new Error('Calendar surface missing');
     const x = box.x + box.width / 2;
-    const y = Math.max(box.y, 0) + 50;
+    const y = Math.max(box.y, 0) + Math.min(50, box.height / 2);
     await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
     for (let i = 1; i <= 6; i++) {
       await client.send('Input.dispatchTouchEvent', {
@@ -44,6 +47,25 @@ test('navigates calendar periods with touch while preserving taps and vertical s
     for (const view of ['Miesiąc', 'Tydzień', 'Dzień']) {
       await calendar.getByRole('button', { name: 'Wybierz widok', exact: true }).click();
       await calendar.getByRole('button', { name: `Wybierz widok ${view}`, exact: true }).click();
+      const viewSelector =
+        view === 'Dzień'
+          ? '.sx__time-grid-day'
+          : view === 'Tydzień'
+            ? '.sx__week-agenda-wrapper'
+            : '.sx__month-agenda-wrapper:not(.sx__week-agenda-wrapper)';
+      await expect(calendar.locator(viewSelector).first()).toBeVisible();
+      if (view !== 'Dzień') {
+        const beforeTap = await input.inputValue();
+        const day = calendar
+          .locator('.sx__month-agenda-day:not(.sx__month-agenda-day--active):not(.is-leading-or-trailing)')
+          .first();
+        const label = await day.getAttribute('aria-label');
+        await gesture(0, 0, day);
+        await expect(input).not.toHaveValue(beforeTap);
+        await expect(calendar.getByRole('button', { name: label!, exact: true })).toHaveClass(
+          /sx__month-agenda-day--active/,
+        );
+      }
       const before = await input.inputValue();
       await gesture(-100);
       await expect(input).not.toHaveValue(before);
@@ -51,7 +73,8 @@ test('navigates calendar periods with touch while preserving taps and vertical s
       await expect(input).toHaveValue(before);
       await gesture(0, -80);
       await expect(input).toHaveValue(before);
-      await gesture(-15);
+      // A short movement can synthesize a tap, so keep it on the already selected day.
+      await gesture(-15, 0, calendar.locator('.sx__month-agenda-day--active, .sx__time-grid-day').first());
       await expect(input).toHaveValue(before);
       await page.screenshot({ path: testInfo.outputPath(`calendar-${view}.png`) });
     }
