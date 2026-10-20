@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -11,24 +11,27 @@ const session = { user: { id: 'c1', displayName: 'Zosia', role: 'child' }, famil
 function response(payload: object, status = 200) {
   return { ok: status < 400, status, text: async () => JSON.stringify(payload) } as Response;
 }
-function renderPage(path: string) {
+async function renderPage(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <MantineProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <AuthProvider>
-            <Routes>
-              <Route path="/login-child" element={<ChildLoginPage />} />
-              <Route path="/zaproszenie/:token" element={<InvitationPage />} />
-              <Route path="/reset-hasla/:token" element={<ResetPasswordPage />} />
-              <Route path="/zakupy" element={<div>Child destination</div>} />
-              <Route path="/" element={<div>Family destination</div>} />
-            </Routes>
-          </AuthProvider>
-        </MemoryRouter>
-      </MantineProvider>
-    </QueryClientProvider>,
+  // Finish the initial session check before submitting requests from the page.
+  await act(async () =>
+    render(
+      <QueryClientProvider client={client}>
+        <MantineProvider>
+          <MemoryRouter initialEntries={[path]}>
+            <AuthProvider>
+              <Routes>
+                <Route path="/login-child" element={<ChildLoginPage />} />
+                <Route path="/zaproszenie/:token" element={<InvitationPage />} />
+                <Route path="/reset-hasla/:token" element={<ResetPasswordPage />} />
+                <Route path="/zakupy" element={<div>Child destination</div>} />
+                <Route path="/" element={<div>Family destination</div>} />
+              </Routes>
+            </AuthProvider>
+          </MemoryRouter>
+        </MantineProvider>
+      </QueryClientProvider>,
+    ),
   );
   return client;
 }
@@ -63,7 +66,7 @@ describe('joining and child authentication', () => {
       return response({ error: { message: 'Brak sesji.' } }, 401);
     });
     vi.stubGlobal('fetch', fetchMock);
-    renderPage('/login-child?next=%2Fzakupy');
+    await renderPage('/login-child?next=%2Fzakupy');
     fireEvent.change(screen.getByRole('textbox', { name: /Kod rodziny/ }), { target: { value: 'abc234' } });
     fireEvent.click(screen.getByRole('button', { name: 'Pokaż profile' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Zosia' }));
@@ -86,7 +89,7 @@ describe('joining and child authentication', () => {
       'fetch',
       vi.fn(async () => response({ error: { message: 'Nie znaleziono rodziny.' } }, 404)),
     );
-    renderPage('/login-child');
+    await renderPage('/login-child');
     fireEvent.change(screen.getByRole('textbox', { name: /Kod rodziny/ }), { target: { value: 'ABC234' } });
     fireEvent.click(screen.getByRole('button', { name: 'Pokaż profile' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Nie znaleziono rodziny.');
@@ -99,7 +102,7 @@ describe('joining and child authentication', () => {
         'fetch',
         vi.fn(async () => response({ error: { message } }, 410)),
       );
-      renderPage('/zaproszenie/invalid');
+      await renderPage('/zaproszenie/invalid');
       expect(await screen.findByRole('alert')).toHaveTextContent(message);
       expect(screen.queryByRole('button', { name: 'Dołącz do rodziny' })).not.toBeInTheDocument();
     },
@@ -112,7 +115,7 @@ describe('joining and child authentication', () => {
       return response({ error: { message: 'Brak sesji.' } }, 401);
     });
     vi.stubGlobal('fetch', fetchMock);
-    renderPage('/zaproszenie/invite-token');
+    await renderPage('/zaproszenie/invite-token');
     const submit = await screen.findByRole('button', { name: 'Dołącz do rodziny' });
     fireEvent.click(submit);
     expect(screen.getByText('Imię musi mieć co najmniej 2 znaki.')).toBeInTheDocument();
@@ -138,7 +141,7 @@ describe('joining and child authentication', () => {
       return response({ error: { message: 'Brak sesji.' } }, 401);
     });
     vi.stubGlobal('fetch', fetchMock);
-    renderPage('/reset-hasla/reset-token');
+    await renderPage('/reset-hasla/reset-token');
     fireEvent.change(screen.getByLabelText(/^Nowe hasło/), { target: { value: 'password123' } });
     fireEvent.change(screen.getByLabelText(/^Powtórz hasło/), { target: { value: 'different123' } });
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
