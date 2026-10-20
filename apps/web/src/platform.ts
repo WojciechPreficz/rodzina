@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 export const isAndroid = () => Capacitor.getPlatform() === 'android';
 let sessionGeneration = 0;
+export const getSessionGeneration = () => sessionGeneration;
 
 export function invalidateSessionRequests() {
   sessionGeneration += 1;
@@ -43,6 +44,7 @@ export async function nativeRequest(input: string, init: RequestInit) {
     method: init.method ?? 'GET',
     ...(typeof init.body === 'string' ? { body: init.body } : {}),
   });
+  if (generation !== sessionGeneration) throw new DOMException('Session changed', 'AbortError');
   if (result.status === 401 || (result.status === 403 && url.pathname === '/api/reminders/schedule')) {
     const { localScheduler } = await import('./features/notifications/localSchedule.js');
     // Do not await: this request can itself be inside the scheduler queue.

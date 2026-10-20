@@ -869,7 +869,7 @@ rodzina/
 zanim rozpoczniemy fazę 6. Krok 5.3 zachowuje pierwotne kryteria zakupów i otwarte
 próby telefonu; rozszerzenie ich nie zalicza. Dla rozszerzonej fazy ostatnim krokiem
 w rozumieniu sekcji 1.2 jest 5.5, z regresją zakupów oraz kryteriami 5.4–5.5.
-Poniższe dwa kroki są planem, bez wykonanej implementacji.
+Krok 5.4 ma implementację opisaną poniżej; krok 5.5 pozostaje planem.
 
 **Endpointy:**
 
@@ -951,6 +951,12 @@ Od etapu Android kryteria offline zakupów obejmują także APK: kolejka i cache
 **Poza zakresem:** ceny i budżet, skanowanie kodów, sortowanie według układu sklepu.
 
 #### Krok 5.4 - Rodzina offline i wspólny zapis danych do podglądu
+
+**Stan 20.10.2026:** zaimplementowano trwały zapis domowników i kodu rodziny,
+odtwarzanie konta, blokady zmian offline i odświeżanie po powrocie sieci/wznowieniu.
+Migracja zachowuje cache i niewysłane zakupy. Wyniki kontroli oraz otwarte próby
+fizycznego telefonu są w DEVELOPMENT. Krok pozostaje otwarty do tych prób
+i sukcesu CI końcowego commita; nie rozpoczęto kroku 5.5.
 
 **Cel:** po wcześniejszej synchronizacji domownicy i kod rodziny są widoczni
 także po uruchomieniu APK bez internetu. Wejście do Rodziny nie wymaga

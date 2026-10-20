@@ -1452,3 +1452,43 @@ Nie zaliczono ręcznej próby DevTools wykonywanej przez właściciela; jej scen
 jest pokryty automatycznie przez Chromium. Faza 5 pozostaje otwarta do wymaganej
 akceptacji ręcznej i sukcesu CI końcowego commita. Serwera i opublikowanego APK
 nie aktualizowano. Logi oraz zrzuty lokalne są w ignorowanym `.android-tools/step53-*`.
+
+## Krok 5.4 — rodzina offline (20.10.2026)
+
+Rodzina korzysta ze wspólnego, wersjonowanego zapisu minimalnego konta,
+domowników i kodu dołączenia. Pobieranie zaczyna się po potwierdzeniu sesji,
+także gdy otwarto inną zakładkę. Zimny start APK odtwarza zapis przed próbą
+połączenia. Stary snapshot zakupów pozwala odzyskać konto i kolejkę, ale wymaga
+pierwszego połączenia do pobrania kodu/domowników. Szczegóły formatu i migracji
+są w DECISIONS. Na zwykłej stronie testujemy utratę sieci w otwartym interfejsie;
+nie gwarantujemy zimnego startu WWW i nie przywracamy PWA.
+
+| Kryterium           | Wynik lokalny                                                                                                                                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trwałość i izolacja | Testy zapisu i transportu APK: zimny start, kod, brak danych, stary snapshot, zachowanie niewysłanych zakupów, zmiana konta, 401/403 i wylogowanie offline. Spóźnione odpowiedzi domowników i 401 poprzedniego konta nie odbudowują ani nie usuwają nowego konta.       |
+| Błędy i sieć        | Testy nieosiągalnego API przy statusie online, HTTP 500, pełnej/niedostępnej pamięci i uszkodzonego zapisu. Powrót sieci i wznowienie odświeżają dane, zachowując poprzedni widok podczas pobierania.                                                                   |
+| Tylko odczyt        | Testy wszystkich widocznych akcji administratora i ukrycia ich dla dziecka. Formularze dodawania oraz edycji dorosłego/dziecka blokują zapis, usunięcie, reset, PIN i rolę po utracie sieci. Nie powstaje kolejka rodziny.                                              |
+| UI 390 i 1280 px    | Playwright headless: 4/4 scenariusze rodziny, w tym zimny start przez atrapę transportu APK. Obejrzano zrzuty WWW/APK offline i po odzyskaniu sieci; brak poziomego przewijania. Druga sesja obraca kod, a powrót sieci pokazuje i zapisuje nowy kod.                   |
+| Regresja zakupów    | Playwright 6/6: transport APK, CRUD i uprawnienia, synchronizacja dwóch domowników, 3 odhaczenia + 1 produkt offline, ponowne otwarcie frontendu oraz wysyłka kolejki do drugiego kontekstu.                                                                            |
+| Kontrole kodu       | Typecheck, lint i formatowanie zmienionych plików; lint ma jedynie dwa wcześniejsze ostrzeżenia Fast Refresh w auth. Regresja Vitest 83/83 w 16 plikach; po dodaniu pięciu przypadków ponowiono rozszerzony plik rodziny: 18/18. Łącznie obejmuje to 88 różnych testów. |
+| Build i APK         | Build WWW/API i debug APK zakończone sukcesem. Testy wspólnego UI przez atrapę mostka sprawdzają transport, nie system Androida ani rzeczywiste zamknięcie jego procesu.                                                                                                |
+
+Vitest w domyślnym trybie w piaskownicy zgłaszał brak plików tymczasowych;
+rozszerzona regresja przeszła w piaskownicy z `--pool=threads`. Playwright
+i Gradle wymagały wykonania poza piaskownicą ze względu na połączenia z lokalnym
+serwerem/daemonem. Logi są w `.android-tools/step54-*`, a zrzuty
+w `test-results/family-offline-*` (katalogi ignorowane). Pełne kontrole CI,
+w tym serwerowy smoke, pozostają bramką końcowego commita według sekcji 1.2 PLAN.
+
+**Próby niezaliczone:** ręczna interaktywna próba Chrome/DevTools oraz fizyczny
+telefon. Oglądanie zrzutów headless nie zastępuje tych prób. Sprawdzenie urządzeń
+przez ADB wymagało wyjścia poza piaskownicę, na co nie uzyskano zgody. Na telefonie
+należy: zsynchronizować konto bez otwierania Rodziny, włączyć tryb samolotowy,
+zamknąć proces, uruchomić APK i wejść do Rodziny. Potwierdzić domowników, ostatni
+kod i czas pobrania, żółty baner oraz nieaktywne akcje; po przywróceniu sieci
+potwierdzić aktualizację kodu zmienionego w drugiej sesji. Zapisać model telefonu,
+wersję Androida/APK i wynik. Nadal otwarte są wskazane wcześniej próby 5.3.
+
+Stan: **zweryfikowane lokalnie, oczekuje na CI**, z powyższymi brakami prób
+ręcznych. Nie wdrażano serwera ani nowego APK. Kalendarz offline (5.5) pozostaje
+osobnym krokiem; faza 5 nie jest zamknięta.

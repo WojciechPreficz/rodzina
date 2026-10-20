@@ -18,6 +18,7 @@ import { LinkActions } from './LinkActions.js';
 import { MEMBER_COLORS, type Member, type MemberUpdate } from './familyApi.js';
 import { useCreateChild, useCreatePasswordResetLink, useDeleteMember, useUpdateMember } from './familyQueries.js';
 import { errorMessage, validateDisplayName, validatePin } from './familyRules.js';
+import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';
 
 const swatchStyle = { cursor: 'pointer' };
 const selectedSwatchStyle = { cursor: 'pointer', outline: '2px solid var(--mantine-color-dark-6)', outlineOffset: 2 };
@@ -80,6 +81,7 @@ function PinField({
 }
 
 export function AddChildModal({ onClose }: { onClose: () => void }) {
+  const readOnly = useFamilyReadOnly();
   const [displayName, setDisplayName] = useState('');
   const [pin, setPin] = useState('');
   const [color, setColor] = useState<string>(MEMBER_COLORS[0]);
@@ -88,6 +90,7 @@ export function AddChildModal({ onClose }: { onClose: () => void }) {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (readOnly) return;
     const nextErrors = { displayName: validateDisplayName(displayName), pin: validatePin(pin) };
     setFieldErrors(nextErrors);
     if (nextErrors.displayName || nextErrors.pin) {
@@ -101,21 +104,26 @@ export function AddChildModal({ onClose }: { onClose: () => void }) {
     <Modal opened onClose={onClose} title={labels.addChild} centered>
       <form onSubmit={onSubmit} noValidate>
         <Stack gap="sm">
-          <TextInput
-            label={labels.displayName}
-            value={displayName}
-            error={fieldErrors.displayName}
-            onChange={(event) => setDisplayName(event.currentTarget.value)}
-            required
-          />
-          <PinField
-            label={labels.pin}
-            description={labels.pinHint}
-            value={pin}
-            error={fieldErrors.pin}
-            onChange={setPin}
-          />
-          <ColorField value={color} onChange={setColor} />
+          {readOnly && <Text size="sm">{onlineActionHint}</Text>}
+          <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+            <Stack gap="sm">
+              <TextInput
+                label={labels.displayName}
+                value={displayName}
+                error={fieldErrors.displayName}
+                onChange={(event) => setDisplayName(event.currentTarget.value)}
+                required
+              />
+              <PinField
+                label={labels.pin}
+                description={labels.pinHint}
+                value={pin}
+                error={fieldErrors.pin}
+                onChange={setPin}
+              />
+              <ColorField value={color} onChange={setColor} />
+            </Stack>
+          </fieldset>
           {createMutation.error ? (
             <Alert color="red">{errorMessage(createMutation.error, labels.saveError)}</Alert>
           ) : null}
@@ -123,7 +131,7 @@ export function AddChildModal({ onClose }: { onClose: () => void }) {
             <Button variant="default" onClick={onClose}>
               {labels.cancel}
             </Button>
-            <Button type="submit" loading={createMutation.isPending}>
+            <Button type="submit" disabled={readOnly} loading={createMutation.isPending}>
               {labels.addChild}
             </Button>
           </Group>
@@ -140,6 +148,7 @@ type EditMemberModalProps = {
 };
 
 export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps) {
+  const readOnly = useFamilyReadOnly();
   const isAdmin = actor.role === 'admin';
   const isSelf = actor.id === member.id;
   const isChildMember = member.role === 'child';
@@ -159,6 +168,7 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (readOnly) return;
     const nextErrors = { displayName: validateDisplayName(displayName), pin: pin ? validatePin(pin) : '' };
     setFieldErrors(nextErrors);
     if (nextErrors.displayName || nextErrors.pin) {
@@ -197,37 +207,42 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
     <Modal opened onClose={onClose} title={`${labels.edit}: ${member.displayName}`} centered>
       <form onSubmit={onSubmit} noValidate>
         <Stack gap="sm">
-          <TextInput
-            label={labels.displayName}
-            value={displayName}
-            error={fieldErrors.displayName}
-            onChange={(event) => setDisplayName(event.currentTarget.value)}
-            required
-          />
-          <ColorField value={color} onChange={setColor} />
+          {readOnly && <Text size="sm">{onlineActionHint}</Text>}
+          <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+            <Stack gap="sm">
+              <TextInput
+                label={labels.displayName}
+                value={displayName}
+                error={fieldErrors.displayName}
+                onChange={(event) => setDisplayName(event.currentTarget.value)}
+                required
+              />
+              <ColorField value={color} onChange={setColor} />
 
-          {isAdmin && !isChildMember ? (
-            <Radio.Group
-              label={labels.role}
-              value={role}
-              onChange={(value) => setRole(value === 'admin' ? 'admin' : 'member')}
-            >
-              <Group gap="md" mt={4}>
-                <Radio value="member" label={labels.roles.member} />
-                <Radio value="admin" label={labels.roles.admin} />
-              </Group>
-            </Radio.Group>
-          ) : null}
+              {isAdmin && !isChildMember ? (
+                <Radio.Group
+                  label={labels.role}
+                  value={role}
+                  onChange={(value) => setRole(value === 'admin' ? 'admin' : 'member')}
+                >
+                  <Group gap="md" mt={4}>
+                    <Radio value="member" label={labels.roles.member} />
+                    <Radio value="admin" label={labels.roles.admin} />
+                  </Group>
+                </Radio.Group>
+              ) : null}
 
-          {isAdmin && isChildMember ? (
-            <PinField
-              label={labels.newPin}
-              description={labels.newPinHint}
-              value={pin}
-              error={fieldErrors.pin}
-              onChange={setPin}
-            />
-          ) : null}
+              {isAdmin && isChildMember ? (
+                <PinField
+                  label={labels.newPin}
+                  description={labels.newPinHint}
+                  value={pin}
+                  error={fieldErrors.pin}
+                  onChange={setPin}
+                />
+              ) : null}
+            </Stack>
+          </fieldset>
 
           {mutationError ? <Alert color="red">{errorMessage(mutationError, labels.saveError)}</Alert> : null}
 
@@ -235,21 +250,22 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
             <Button variant="default" onClick={onClose}>
               {labels.cancel}
             </Button>
-            <Button type="submit" loading={updateMutation.isPending} disabled={deleteMutation.isPending}>
+            <Button type="submit" loading={updateMutation.isPending} disabled={readOnly || deleteMutation.isPending}>
               {labels.save}
             </Button>
           </Group>
 
-          {isAdmin && member.email !== null ? (
+          {isAdmin && member.role !== 'child' ? (
             <Stack gap="xs">
               <Button
+                disabled={readOnly}
                 variant="light"
                 onClick={() => resetLinkMutation.mutate(member.id)}
                 loading={resetLinkMutation.isPending}
               >
                 {labels.passwordResetLink}
               </Button>
-              {resetLinkMutation.data ? (
+              {resetLinkMutation.data && !readOnly ? (
                 <LinkActions link={resetLinkMutation.data} shareTitle={labels.passwordResetShareTitle} />
               ) : null}
             </Stack>
@@ -261,7 +277,7 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
               variant="light"
               onClick={onDelete}
               loading={deleteMutation.isPending}
-              disabled={isSubmitting}
+              disabled={readOnly || isSubmitting}
             >
               {labels.deleteMember}
             </Button>

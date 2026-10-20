@@ -8,10 +8,14 @@ import { AddChildModal, EditMemberModal } from './MemberDialogs.js';
 import type { Member } from './familyApi.js';
 import { useCreateInvitation, useMembersQuery, useRotateJoinCode } from './familyQueries.js';
 import { canEditProfile, errorMessage, isFamilyAdmin } from './familyRules.js';
+import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';
+import { useOffline } from '../../connectivity.js';
+import { useOfflineStorageIssue } from '../../offlineData.js';
 
 function InviteCard() {
   const [role, setRole] = useState<'admin' | 'member'>('member');
   const invitation = useCreateInvitation();
+  const readOnly = useFamilyReadOnly();
 
   return (
     <Card withBorder radius="lg" p="lg">
@@ -21,6 +25,7 @@ function InviteCard() {
           {labels.inviteHint}
         </Text>
         <Radio.Group
+          readOnly={readOnly}
           label={labels.role}
           value={role}
           onChange={(value) => {
@@ -34,12 +39,24 @@ function InviteCard() {
           </Group>
         </Radio.Group>
         <Group>
-          <Button onClick={() => invitation.mutate(role)} loading={invitation.isPending}>
+          <Button
+            disabled={readOnly}
+            title={readOnly ? onlineActionHint : undefined}
+            onClick={() => invitation.mutate(role)}
+            loading={invitation.isPending}
+          >
             {labels.createInvitation}
           </Button>
         </Group>
+        {readOnly && (
+          <Text size="sm" c="dimmed">
+            {onlineActionHint}
+          </Text>
+        )}
         {invitation.error ? <Alert color="red">{errorMessage(invitation.error, labels.saveError)}</Alert> : null}
-        {invitation.data ? <LinkActions link={invitation.data} shareTitle={labels.invitationShareTitle} /> : null}
+        {invitation.data && !readOnly ? (
+          <LinkActions link={invitation.data} shareTitle={labels.invitationShareTitle} />
+        ) : null}
       </Stack>
     </Card>
   );
@@ -47,6 +64,8 @@ function InviteCard() {
 
 function JoinCodeCard({ joinCode, canRotate }: { joinCode: string; canRotate: boolean }) {
   const rotation = useRotateJoinCode();
+  const readOnly = useFamilyReadOnly();
+  const offline = useOffline();
 
   const onRotate = () => {
     if (window.confirm(labels.rotateJoinCodeConfirm)) {
@@ -62,15 +81,31 @@ function JoinCodeCard({ joinCode, canRotate }: { joinCode: string; canRotate: bo
           {labels.joinCodeHint}
         </Text>
         <Text ff="monospace" size="xl" fw={700} style={{ letterSpacing: '0.2em' }}>
-          {joinCode}
+          {joinCode || 'Brak zapisanego kodu rodziny'}
         </Text>
+        {offline && joinCode && (
+          <Text size="sm" c="dimmed">
+            Ostatnio zapisany kod rodziny. Mógł się zmienić na innym urządzeniu.
+          </Text>
+        )}
         {canRotate ? (
           <Group>
-            <Button variant="light" onClick={onRotate} loading={rotation.isPending}>
+            <Button
+              disabled={readOnly}
+              title={readOnly ? onlineActionHint : undefined}
+              variant="light"
+              onClick={onRotate}
+              loading={rotation.isPending}
+            >
               {labels.rotateJoinCode}
             </Button>
           </Group>
         ) : null}
+        {canRotate && readOnly && (
+          <Text size="sm" c="dimmed">
+            {onlineActionHint}
+          </Text>
+        )}
         {rotation.error ? <Alert color="red">{errorMessage(rotation.error, labels.saveError)}</Alert> : null}
       </Stack>
     </Card>
@@ -78,7 +113,10 @@ function JoinCodeCard({ joinCode, canRotate }: { joinCode: string; canRotate: bo
 }
 
 export function FamilyPage() {
-  const { user, family } = useMe();
+  const { user, family, familySyncedAt, familySyncError } = useMe();
+  const offline = useOffline();
+  const readOnly = useFamilyReadOnly();
+  const storageIssue = useOfflineStorageIssue();
   const membersQuery = useMembersQuery();
   const [editedMember, setEditedMember] = useState<Member | null>(null);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
@@ -100,8 +138,17 @@ export function FamilyPage() {
         </Button>
       </Group>
 
-      {membersQuery.error ? (
-        <Alert color="red">{errorMessage(membersQuery.error, labels.membersLoadError)}</Alert>
+      {offline && (
+        <Alert color="yellow" role="status">
+          Jesteś offline — pokazujemy ostatnio zapisane dane. Zmiany wymagają połączenia z internetem.
+          {familySyncedAt && (
+            <Text size="sm">Ostatnie udane pobranie: {new Date(familySyncedAt).toLocaleString('pl-PL')}</Text>
+          )}
+        </Alert>
+      )}
+      {storageIssue && <Alert color="red">{storageIssue}</Alert>}
+      {!offline && (familySyncError || membersQuery.error) ? (
+        <Alert color="red">{familySyncError || errorMessage(membersQuery.error, labels.membersLoadError)}</Alert>
       ) : null}
 
       <Card withBorder radius="lg" p="lg">
@@ -109,13 +156,26 @@ export function FamilyPage() {
           <Group justify="space-between">
             <Text fw={600}>{labels.members}</Text>
             {isAdmin ? (
-              <Button size="xs" onClick={() => setIsAddChildOpen(true)}>
+              <Button
+                disabled={readOnly}
+                title={readOnly ? onlineActionHint : undefined}
+                size="xs"
+                onClick={() => setIsAddChildOpen(true)}
+              >
                 {labels.addChild}
               </Button>
             ) : null}
           </Group>
 
-          {membersQuery.isPending ? <Loader size="sm" /> : null}
+          {readOnly && (
+            <Text size="sm" c="dimmed">
+              {onlineActionHint}
+            </Text>
+          )}
+          {offline && !membersQuery.data ? (
+            <Text>Brak danych rodziny zapisanych na tym urządzeniu. Połącz się z internetem, aby je pobrać.</Text>
+          ) : null}
+          {membersQuery.isPending && !offline && !familySyncError ? <Loader size="sm" /> : null}
 
           {membersQuery.data ? (
             <Stack gap="xs">
@@ -135,6 +195,8 @@ export function FamilyPage() {
                   </Group>
                   {canEditProfile(user, member) ? (
                     <Button
+                      disabled={readOnly}
+                      title={readOnly ? onlineActionHint : undefined}
                       size="xs"
                       variant="light"
                       aria-label={`${labels.edit}: ${member.displayName}`}

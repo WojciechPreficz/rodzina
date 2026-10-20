@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { QueryClientContext } from '@tanstack/react-query';
+import { focusManager, onlineManager, QueryClientContext } from '@tanstack/react-query';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { apiFetch, ApiRequestError, sanitizeNextPath } from './api.js';
 import {
@@ -13,6 +13,21 @@ import {
 import { clearNativeSession, invalidateSessionRequests, isAndroid } from './platform.js';
 import { ScheduleSync } from './features/notifications/scheduleSync.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
+import {
+  accountId,
+  clearOfflineData,
+  familyMembersKey,
+  OFFLINE_DATA_KEY,
+  readOfflineData,
+  restoreOfflineData,
+  saveOfflineData,
+  useOfflineStorageIssue,
+  type OfflineSession,
+} from './offlineData.js';
+import { reportTransportFailure } from './connectivity.js';
+import { listMembers } from './features/family/familyApi.js';
+import { SYNC_INTERVAL_MS } from './queryClient.js';
+import { Alert } from '@mantine/core';
 
 export type AuthRole = 'admin' | 'member' | 'child';
 
@@ -41,6 +56,9 @@ export type AuthState = {
   refresh: () => Promise<void>;
   setSession: (user: AuthUser, family: Family) => void;
   logout: () => Promise<void>;
+  familySyncedAt: number | undefined;
+  familySyncError: string | undefined;
+  familyConfirmed: boolean;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -61,64 +79,149 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const queryClient = useContext(QueryClientContext);
   const generation = useRef(0);
+  const refreshRevision = useRef(0);
+  const currentSession = useRef<OfflineSession | undefined>(undefined);
+  const [familySyncedAt, setFamilySyncedAt] = useState<number>();
+  const [familySyncError, setFamilySyncError] = useState<string>();
+  const [familyConfirmed, setFamilyConfirmed] = useState(false);
+  const storageIssue = useOfflineStorageIssue();
 
   const refresh = useCallback(async () => {
     const requestGeneration = generation.current;
+    const revision = ++refreshRevision.current;
+    const current = () => requestGeneration === generation.current && revision === refreshRevision.current;
+    if (!currentSession.current && !pendingWebLogout()) {
+      const saved = readOfflineData();
+      const cached = saved?.session ?? readShoppingSession();
+      if (cached) {
+        if (queryClient) {
+          restoreShopping(queryClient, cached);
+          if (saved) restoreOfflineData(queryClient, saved);
+        }
+        currentSession.current = cached;
+        setUser(cached.user);
+        setFamily(cached.family);
+        setFamilySyncedAt(saved?.syncedAt);
+        setIsLoading(false);
+      }
+    }
     try {
+      if (!onlineManager.isOnline()) throw new TypeError('Offline');
       if (!isAndroid() && pendingWebLogout()) {
         await apiFetch('/api/auth/logout', { method: 'POST' });
         pendingWebLogout(false);
       }
       const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/me');
-      if (requestGeneration !== generation.current) return;
-      if (queryClient) await restoreShopping(queryClient, response);
-      if (requestGeneration !== generation.current) return;
+      if (!current()) return;
+      if (currentSession.current && accountId(currentSession.current) !== accountId(response)) {
+        clearShoppingStorage(queryClient);
+        clearOfflineData();
+        queryClient?.clear();
+        setFamilySyncedAt(undefined);
+        setFamilyConfirmed(false);
+      }
+      currentSession.current = response;
+      if (queryClient) restoreShopping(queryClient, response);
       setUser(response.user);
       setFamily(response.family);
+      setIsLoading(false);
+      if (queryClient)
+        await queryClient.cancelQueries({ queryKey: familyMembersKey(response.family.id, response.user.id) });
+      if (!current()) return;
+      const members = queryClient
+        ? await queryClient.fetchQuery({
+            queryKey: familyMembersKey(response.family.id, response.user.id),
+            staleTime: 0,
+            gcTime: Infinity,
+            retry: false,
+            networkMode: 'always',
+            queryFn: async ({ signal }) => {
+              const result = await listMembers(signal);
+              signal.throwIfAborted();
+              if (!current()) throw new DOMException('Session changed', 'AbortError');
+              return result;
+            },
+          })
+        : await listMembers();
+      if (!current()) return;
+      const syncedAt = Date.now();
+      saveOfflineData(response, members, syncedAt);
+      setFamilySyncedAt(syncedAt);
+      setFamilySyncError(undefined);
+      setFamilyConfirmed(true);
+      reportTransportFailure(false);
     } catch (error) {
-      if (requestGeneration !== generation.current) return;
-      const cached =
-        error instanceof ApiRequestError && [401, 403].includes(error.status) ? undefined : readShoppingSession();
-      if (cached && queryClient) {
-        await restoreShopping(queryClient, cached);
-        if (requestGeneration !== generation.current) return;
-        setUser(cached.user);
-        setFamily(cached.family);
-      } else {
+      if (!current()) return;
+      setFamilyConfirmed(false);
+      if (error instanceof ApiRequestError && [401, 403].includes(error.status)) {
+        generation.current += 1;
+        invalidateSessionRequests();
+        clearOfflineData();
         clearShoppingStorage(queryClient);
+        queryClient?.clear();
+        currentSession.current = undefined;
         setUser(null);
         setFamily(null);
+        setFamilySyncedAt(undefined);
+        setIsLoading(false);
+      } else if (error instanceof ApiRequestError) {
+        reportTransportFailure(false);
+        setFamilySyncError(error.message);
       }
     } finally {
-      setIsLoading(false);
+      if (current()) setIsLoading(false);
     }
   }, [queryClient]);
 
   useEffect(() => {
     void refresh();
+    const reconnect = onlineManager.subscribe((online) => {
+      if (online) void refresh();
+      else setFamilyConfirmed(false);
+    });
+    const focus = focusManager.subscribe((focused) => {
+      if (focused) void refresh();
+    });
+    const interval = window.setInterval(() => {
+      if (onlineManager.isOnline() && focusManager.isFocused()) void refresh();
+    }, SYNC_INTERVAL_MS);
     return () => {
+      refreshRevision.current += 1;
+      reconnect();
+      focus();
+      window.clearInterval(interval);
       if (queryClient) stopShoppingPersistence(queryClient);
     };
   }, [queryClient, refresh]);
 
-  const userId = user?.id;
+  const identity = user && family ? `${family.id}:${user.id}` : undefined;
   useEffect(() => {
     const loseSession = (removeStored: boolean) => {
       if (isAndroid()) localScheduler.invalidate();
       generation.current += 1;
-      if (removeStored) clearShoppingStorage(queryClient);
-      else if (queryClient) stopShoppingPersistence(queryClient);
+      if (removeStored) {
+        clearShoppingStorage(queryClient);
+        clearOfflineData();
+      } else if (queryClient) stopShoppingPersistence(queryClient);
       queryClient?.clear();
       setUser(null);
       setFamily(null);
+      currentSession.current = undefined;
+      setFamilyConfirmed(false);
+      setFamilySyncedAt(undefined);
       setIsLoading(false);
     };
     const onSessionLost = () => loseSession(true);
     window.addEventListener('rodzina:session-lost', onSessionLost);
     const onStorage = (event: StorageEvent) => {
       if (
-        event.key === SHOPPING_STORAGE_KEY &&
-        (!event.newValue || (userId && readShoppingSession()?.user.id !== userId))
+        (event.key === SHOPPING_STORAGE_KEY || event.key === OFFLINE_DATA_KEY || event.key === null) &&
+        (!event.newValue ||
+          (identity &&
+            (() => {
+              const stored = event.key === OFFLINE_DATA_KEY ? readOfflineData()?.session : readShoppingSession();
+              return !stored || accountId(stored) !== identity;
+            })()))
       )
         loseSession(false);
     };
@@ -127,13 +230,19 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       window.removeEventListener('rodzina:session-lost', onSessionLost);
       window.removeEventListener('storage', onStorage);
     };
-  }, [queryClient, userId]);
+  }, [queryClient, identity]);
 
   const logout = async () => {
     if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
     clearShoppingStorage(queryClient);
+    clearOfflineData();
+    currentSession.current = undefined;
+    setUser(null);
+    setFamily(null);
+    setFamilyConfirmed(false);
+    setFamilySyncedAt(undefined);
     if (!isAndroid()) pendingWebLogout(true);
     await queryClient?.cancelQueries();
     queryClient?.clear();
@@ -155,11 +264,17 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     invalidateSessionRequests();
     pendingWebLogout(false);
     clearShoppingStorage(queryClient);
+    clearOfflineData();
     queryClient?.clear();
     if (queryClient) void restoreShopping(queryClient, { user: nextUser, family: nextFamily });
     setUser(nextUser);
     setFamily(nextFamily);
+    currentSession.current = { user: nextUser, family: nextFamily };
+    saveOfflineData(currentSession.current);
+    setFamilyConfirmed(false);
+    setFamilySyncedAt(undefined);
     setIsLoading(false);
+    void refresh();
   };
 
   const value: AuthState = {
@@ -169,11 +284,15 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     refresh,
     setSession,
     logout,
+    familySyncedAt,
+    familySyncError,
+    familyConfirmed,
   };
 
   return (
     <AuthContext.Provider value={value}>
       {queryClient && <ScheduleSync account={user ? `${user.familyId}:${user.id}` : ''} />}
+      {!user && storageIssue && <Alert color="red">{storageIssue}</Alert>}
       {children ?? <Outlet />}
     </AuthContext.Provider>
   );

@@ -648,3 +648,34 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
 - Szczegółowe kryteria, próby 390/1280 px, headless, restartu fizycznego APK,
   synchronizacji i regresji zakupów są w krokach 5.4–5.5 planu. Nie przywracamy
   PWA, nie dodajemy synchronizacji przy zamkniętym APK ani zmian serwera.
+
+## 20.10.2026 — trwały podgląd rodziny (krok 5.4)
+
+- Wspólny zapis `rodzina:offline-data:v1` ma wersję, identyfikator pary
+  rodzina/użytkownik, minimalne konto, nazwę/strefę/kod rodziny, domowników
+  (ID, nazwy, kolory i role) oraz czas udanego pobrania. Walidacja schematu
+  i jawna lista pól wykluczają e-maile, PIN-y, hasła, tokeny i linki.
+  Domownicy w pamięci mają klucz `['family', familyId, userId, 'members']`.
+- `AuthProvider` odtwarza zapis przed oczekiwaniem na sieć. Po potwierdzeniu
+  `/auth/me` pobiera domowników niezależnie od aktualnie otwartej zakładki.
+  Odświeża dane co 20 s w aktywnym interfejsie, po odzyskaniu sieci oraz wznowieniu
+  przez istniejący `focusManager`/mostek Androida. Podczas pobierania zachowuje
+  poprzedni widok. Błędy transportu uzupełniają `onlineManager`; status online
+  sam nie odblokowuje zmian, potrzebne jest udane potwierdzenie danych rodziny.
+- Stary snapshot zakupów pozostaje w dotychczasowym formacie. Odtwarzanie
+  używa go jako źródła konta, jeżeli brakuje wspólnego zapisu. Pierwsze udane
+  pobranie online tworzy nowy zapis bez usuwania starego cache ani dziennika
+  operacji zakupów. Pusty kod ze starego formatu nie jest poprawnym kodem rodziny.
+- Wszystkie mutacje rodziny mają `networkMode: 'always'`, bez ponawiania
+  i kolejki; sprawdzają dostępność przed wysłaniem. UI blokuje akcje i pola
+  otwartych formularzy po utracie połączenia. Przywrócenie sieci wymaga ponownej
+  synchronizacji. Błędy HTTP pokazujemy jako błędy serwera/uprawnień, a 401/403
+  podczas potwierdzania konta lub pobierania domowników usuwa lokalne dane.
+  Zwykły błąd uprawnień mutacji nie oznacza automatycznie utraty całej sesji.
+- Zmiana konta i wylogowanie usuwają oba zapisy oraz cache w pamięci.
+  Generacja sesji chroni również transport WWW przed spóźnionym sukcesem/401
+  poprzedniego konta; anulowanie zapytań chroni listę domowników. Zmiana konta
+  w innej karcie kończy lokalny podgląd bez usuwania zapisu nowej osoby.
+- Błąd odczytu lub zapisu pamięci jest widoczny; nie deklarujemy trwałego zapisu
+  po błędzie. Kalendarz nie otrzymuje jeszcze cache wydarzeń ani blokad z 5.5.
+  Bez nowych endpointów, migracji, zmiennych, cronów i zależności serwera.

@@ -21,8 +21,8 @@ export const MEMBER_COLORS = [
   '#7BC6B9',
 ] as const;
 
-export async function listMembers(): Promise<Member[]> {
-  const response = await apiFetch<{ members: Member[] }>('/api/members');
+export async function listMembers(signal?: AbortSignal): Promise<Member[]> {
+  const response = await apiFetch<{ members: Member[] }>('/api/members', signal ? { signal } : {});
   return response.members;
 }
 
