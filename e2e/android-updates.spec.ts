@@ -37,6 +37,16 @@ test('login and More show release availability without broken downloads at both 
 
 test('browser displays a published same-domain HTTPS release and instructions', async ({ page }, testInfo) => {
   let authenticated = false;
+  const user = {
+    id: 'user',
+    familyId: 'family',
+    displayName: 'Anna',
+    email: 'anna@example.com',
+    role: 'admin',
+    color: '#228be6',
+    createdAt: 0,
+    updatedAt: 0,
+  };
   // A local HTTPS document is served by Playwright routing; no external server is contacted.
   await page.route('https://rodzina.preficze.pl/**', async (route) => {
     const url = new URL(route.request().url());
@@ -45,10 +55,20 @@ test('browser displays a published same-domain HTTPS release and instructions', 
         contentType: 'application/json',
         body: JSON.stringify({
           ok: true,
-          user: { id: 'user', familyId: 'family', displayName: 'Anna', role: 'admin', color: '#228be6' },
-          family: { id: 'family', name: 'Rodzina' },
+          user,
+          family: { id: 'family', name: 'Rodzina', timezone: 'Europe/Warsaw', joinCode: 'ABC123' },
         }),
       });
+    // Session confirmation and background prefetches must share the mocked authenticated state.
+    // Forwarding them to the real API would return 401 and sign the browser out.
+    const authenticatedResponses: Record<string, unknown> = {
+      '/api/members': { members: [user] },
+      '/api/occurrences': { occurrences: [] },
+      '/api/events/upcoming-distant': { events: [] },
+      '/api/tasks/lists': { lists: [] },
+    };
+    if (authenticated && Object.hasOwn(authenticatedResponses, url.pathname))
+      return route.fulfill({ json: authenticatedResponses[url.pathname] });
     if (url.pathname === '/downloads/android/latest.json')
       return route.fulfill({
         contentType: 'application/json',

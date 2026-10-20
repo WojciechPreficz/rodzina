@@ -23,6 +23,7 @@ const adult: AuthUser = { ...admin, id: 'u-member', displayName: 'Piotr', email:
 const child: AuthUser = { ...admin, id: 'u-child', displayName: 'Zosia', email: null, role: 'child' };
 
 const INVITE_LINK = 'http://localhost:5173/zaproszenie/token-123';
+const queryClients: QueryClient[] = [];
 
 function mockApi(me: AuthUser) {
   let members: AuthUser[] = [admin, adult, child];
@@ -37,6 +38,12 @@ function mockApi(me: AuthUser) {
       body = { ok: true, user: me, family };
     } else if (url === '/api/members' && method === 'GET') {
       body = { ok: true, members };
+    } else if (url === '/api/tasks/lists') {
+      body = { lists: [] };
+    } else if (url.startsWith('/api/occurrences?')) {
+      body = { occurrences: [] };
+    } else if (url === '/api/events/upcoming-distant') {
+      body = { events: [] };
     } else if (url === '/api/members/child' && method === 'POST') {
       const input = JSON.parse(String(init?.body)) as { displayName: string; color: string };
       const created: AuthUser = { ...child, id: 'u-child-2', displayName: input.displayName, color: input.color };
@@ -56,6 +63,7 @@ function mockApi(me: AuthUser) {
 
 function renderFamilyPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  queryClients.push(queryClient);
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -74,6 +82,7 @@ function renderFamilyPage() {
 
 describe('FamilyPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
@@ -91,6 +100,8 @@ describe('FamilyPage', () => {
 
   afterEach(() => {
     cleanup();
+    for (const client of queryClients.splice(0)) client.clear();
+    localStorage.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -145,7 +156,9 @@ describe('FamilyPage', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderFamilyPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Utwórz zaproszenie' }));
+    const createInvitation = await screen.findByRole('button', { name: 'Utwórz zaproszenie' });
+    await waitFor(() => expect(createInvitation).toBeEnabled());
+    fireEvent.click(createInvitation);
     expect(await screen.findByDisplayValue(INVITE_LINK)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Kopiuj' }));
