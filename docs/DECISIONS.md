@@ -870,3 +870,24 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   Wyczyszczenie daty wysyła również `dueTime=null`. Udostępnianie i zarządzanie
   listą, formularz przypomnień oraz karta kalendarza pozostają w 7.5.
   Bez zmian API, migracji, zmiennych, cronów i zależności runtime.
+
+## 20.10.2026 — gest przesuwania kalendarza na telefonie
+
+- Na polecenie właściciela dodajemy do Schedule-X gest poziomy: w lewo
+  następny okres, w prawo poprzedni. Okres wynika z wybranego widoku:
+  miesiąc, tydzień albo dzień. Dodajemy mobilną agendę tygodnia z polską
+  etykietą „Tydzień”; desktop zachowuje tygodniową siatkę godzin.
+- Gest działa wyłącznie w trybie małego kalendarza biblioteki, również
+  we wspólnym frontendzie APK i w podglądzie offline. Korzysta z cyklu życia
+  wtyczki oraz funkcji nawigacji bieżącego widoku, bez nowych zależności.
+- Próg 60 px i przewaga ruchu poziomego ograniczają przypadkowe zmiany.
+  Ruch rozpoczęty pionowo zachowuje przewijanie; dotknięcie otwiera wydarzenie.
+  Rozpoznany gest nie otwiera wydarzenia po puszczeniu palca. Nagłówek,
+  pola formularzy, wiele palców, anulowanie i długie przytrzymanie nie zmieniają okresu.
+- Zmiana nie obejmuje wdrożenia WWW ani publikacji APK. Próba gestu na
+  fizycznym telefonie pozostaje do wykonania; test przeglądarkowy jej nie zastępuje.
+- Weryfikacja lokalna: 65 testów kalendarza, Playwright headless przy 390
+  i 1280 px, przegląd zrzutów trzech mobilnych widoków i desktopu, lint,
+  formatowanie, typecheck oraz build WWW/API — poprawne. Bez próby w APK.
+  Stan: **zweryfikowane lokalnie, oczekuje na CI**. Na polecenie właściciela
+  zapisujemy commit na `main`, bez pusha i uruchomienia CI.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Group, Loader, Modal, Stack, Text, Title } from '@mantine/core';
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react';
-import { createViewDay, createViewMonthAgenda, createViewWeek } from '@schedule-x/calendar';
+import { createViewDay, createViewMonthAgenda, createViewWeek, createViewWeekAgenda } from '@schedule-x/calendar';
 import { createEventsServicePlugin } from '@schedule-x/events-service';
 import { Temporal } from 'temporal-polyfill';
 import { eventUrl, type EventData } from '@rodzina/shared';
@@ -21,8 +21,15 @@ import { EventForm } from './EventForm.js';
 import { DistantEvents } from './DistantEvents.js';
 import { NotificationBanner } from '../notifications/NotificationBanner.js';
 import { TodayTasks } from '../tasks/TodayTasks.js';
+import { createCalendarSwipePlugin } from './calendarSwipe.js';
 
 const text = labels.calendarUi;
+
+function createMobileWeekView() {
+  const view = createViewWeekAgenda();
+  view.label = 'Week';
+  return view;
+}
 
 function CalendarView({ members, timezone }: { members: Member[]; timezone: string }) {
   const navigate = useNavigate();
@@ -33,11 +40,12 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
   const [kind, setKind] = useState<EventData['kind'] | null>(null);
   const [ready, setReady] = useState(false);
   const [eventsService] = useState(() => createEventsServicePlugin());
+  const [swipe] = useState(() => createCalendarSwipePlugin());
   const occurrences = useOccurrences(range);
   const readOnly = useCalendarReadOnly();
   const { create } = useCalendarMutations();
   const calendar = useCalendarApp({
-    views: [createViewMonthAgenda(), createViewWeek(), createViewDay()],
+    views: [createViewMonthAgenda(), createMobileWeekView(), createViewWeek(), createViewDay()],
     locale: 'pl-PL',
     timezone,
     firstDayOfWeek: 1,
@@ -51,7 +59,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
       onSelectedDateUpdate: (selectedDate) => setDate(selectedDate.toString()),
       onEventClick: (event) => navigate(eventUrl(String(event.eventId), String(event.occurrenceDate))),
     },
-    plugins: [eventsService],
+    plugins: [eventsService, swipe],
   });
   useEffect(() => {
     if (!ready) return;
