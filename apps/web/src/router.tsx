@@ -14,6 +14,7 @@ import { EventRoute } from './features/calendar/EventRoute.js';
 import { NotificationsPage } from './features/notifications/NotificationsPage.js';
 import { NativeNavigation } from './nativeNavigation.js';
 import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
+import { ShoppingPage } from './features/shopping/ShoppingPage.js';
 
 export const router = createBrowserRouter([
   {
@@ -51,7 +52,7 @@ export const router = createBrowserRouter([
             children: [
               { index: true, element: <CalendarPage /> },
               { path: 'kalendarz', element: <CalendarPage /> },
-              { path: 'zakupy', element: <EmptyPage title={labels.shopping} /> },
+              { path: 'zakupy', element: <ShoppingPage /> },
               { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
               { path: 'wiecej', element: <MorePage /> },
               { path: 'wiecej/rodzina', element: <FamilyPage /> },

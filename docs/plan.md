@@ -886,6 +886,13 @@ w krokach 5.2–5.3. Ten krok nie wdraża produkcji ani nie publikuje APK.
 
 #### Krok 5.2 - UI: lista zakupów
 
+**Stan 20.10.2026:** zaimplementowany lokalnie: ekran zakupów, parser shared,
+podpowiedzi, zarządzanie listami i produktami, uprawnienia dziecka oraz mutacje
+optymistyczne. Przechodzą standardowe kontrole, 401 testów Vitest, 32 testy
+Playwright headless i build debug APK. Wyniki i ograniczenia weryfikacji Androida zapisano
+w DEVELOPMENT, decyzje UI w DECISIONS. Trwała kolejka offline pozostaje krokiem
+5.3; produkcja i opublikowane APK nie są aktualizowane w ramach tego kroku.
+
 - **Zakres:** zakładka Zakupy z zakładkami list i zarządzaniem listami (dodaj, zmień nazwę, usuń, dla dorosłych). Parser szybkiego dodawania w `shared` ("mleko 2l", "jajka 10 szt"). Podpowiedzi. Pozycje pogrupowane po kategoriach, odhaczanie (przekreślenie, przeniesienie na dół, "kupił(a): Ania"), edycja i usuwanie (swipe albo menu), "Wyczyść kupione" z potwierdzeniem. `refetchInterval` 20 s, `refetchOnWindowFocus` i mutacje optymistyczne.
 - **Gotowe, gdy:** test parsera i komponentu dodawania, ukrywanie akcji niedostępnych dla dziecka. Ręcznie: odhaczenie w jednym kontekście przeglądarki jest widoczne w drugim po maksymalnie 20 s.
 

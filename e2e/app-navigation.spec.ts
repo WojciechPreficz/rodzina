@@ -52,7 +52,7 @@ test('website uses a left sidebar on desktop and a right drawer on phones', asyn
     await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible();
     await openNavigation(page);
-    await page.mouse.click(10, 200);
+    await page.locator('.mantine-Drawer-overlay').click({ position: { x: 10, y: 200 } });
     await expect(dialog).not.toBeVisible();
     await openNavigation(page);
   } else {

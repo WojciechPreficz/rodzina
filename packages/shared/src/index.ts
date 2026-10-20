@@ -8,3 +8,4 @@ export * from './schemas/reminders.js';
 export * from './schemas/schedule.js';
 export * from './schemas/android-release.js';
 export * from './schemas/shopping.js';
+export * from './shopping.js';

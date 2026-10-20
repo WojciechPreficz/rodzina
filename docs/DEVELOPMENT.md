@@ -1366,3 +1366,49 @@ Bez nowych zależności runtime, zmiennych środowiskowych, cronów i usług w t
 Nie zmieniano wspólnego UI; ten krok nie obejmuje testów interfejsu zakupów,
 kolejki offline ani fizycznego telefonu. Kroki 5.2 i 5.3 pozostają osobne.
 Serwer i opublikowane APK nie zostały zmienione.
+
+## Krok 5.2 — interfejs zakupów (20.10.2026)
+
+Ekran `/zakupy` korzysta z API kroku 5.1. Udostępnia zakładki list, szybkie
+dodawanie z parserem i podpowiedziami historii, grupowanie według kategorii,
+odhaczanie i menu edycji/usuwania. Kupione produkty przechodzą do sekcji na dole
+z przekreśloną nazwą, ilością i informacją o kupującym. Usuwanie oraz czyszczenie
+wymaga potwierdzenia. Dorosły zarządza listami i wszystkimi produktami; dziecko
+dodaje i odhacza dowolne produkty, a menu edycji/usuwania widzi tylko przy własnych.
+
+| Warunek kroku               | Dowód                                                                                                                                                                                                                                               |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parser shared               | 8 przypadków: „mleko 2l”, „jajka 10 szt”, nazwa wielowyrazowa, ilości dziesiętne, odstępy, nazwy zawierające cyfry i pusty tekst.                                                                                                                   |
+| Komponent dodawania         | Testy formularza obu przykładów z planu; wybór podpowiedzi zachowuje ilość i przekazuje kategorię.                                                                                                                                                  |
+| Uprawnienia dziecka         | Test komponentu ukrywa zarządzanie listami, czyszczenie oraz menu cudzych produktów. Dwie niezależne sesje e2e potwierdzają odhaczanie produktu dorosłego przez dziecko.                                                                            |
+| Optymistyczny zapis         | Test przed odpowiedzią serwera sprawdza odhaczenie, przeniesienie na dół i autora; powrót fokusu nie nadpisuje zmiany, błąd przywraca poprzedni stan.                                                                                               |
+| Zarządzanie i potwierdzenia | Testy komponentów oraz scenariusz e2e: tworzenie, zmiana nazwy i usuwanie listy, edycja nazwy/ilości/kategorii, usuwanie produktu i czyszczenie kupionych.                                                                                          |
+| Synchronizacja              | Dwa osobne konteksty przeglądarki: dorosły i dziecko. Zmiana checkboxa pojawiła się w drugim kontekście po 19 826 ms na desktopie i 19 889 ms przy 390 px, bez ręcznego odświeżenia. Odczyty mają interwał 20 s i odświeżanie po powrocie do karty. |
+| Układ                       | Obejrzano zrzuty Chromium headless przy 390 i 1280 px: lista, ilości, menu, sekcja kupionych i formularz mieszczą się w ekranie; automatyczna kontrola nie wykrywa poziomego przewijania dokumentu.                                                 |
+| Android                     | Debug APK z lokalnym frontendem buduje się poprawnie. Headless test atrapy mostka sprawdza dodawanie, odhaczanie i odczyt po ponownym otwarciu strony przez natywny transport API w obu szerokościach. Nie wykonano próby na fizycznym urządzeniu.  |
+
+Kontrole lokalne: lint (wyłącznie dwa dotychczasowe ostrzeżenia Fast Refresh
+w `auth.tsx`), typecheck, format:check i build WWW/API przechodzą. Vitest:
+401/401 testów w 50 plikach, w tym 8 testów parsera i 8 komponentu zakupów.
+Po rozszerzeniu próby powrotu fokusu ponowiono wszystkie 8 testów komponentu.
+
+Końcowy pełny Playwright: **32/32 testy headless**, bez pominięć i ponowień,
+przy 390 i 1280 px. Cztery próby zakupów obejmują współpracę dorosłego i dziecka
+oraz atrapę transportu Androida w obu szerokościach. Wcześniejszy przebieg miał
+błędy mobilnego menu i kalendarza; kalendarz przeszedł przy powtórzeniu.
+W istniejącym teście menu zastąpiono natychmiastowy klik współrzędnych kliknięciem
+nakładki przez locator, który czeka na jej dostępność. Nie zmieniano kodu menu.
+Po tej poprawce cała regresja przeszła. Końcowe `npm run android:debug`
+zakończyło się `BUILD SUCCESSFUL`.
+
+Pierwszy pełny przebieg Vitest w piaskownicy napotkał błędy jej plików
+tymczasowych; powtórzenie poza nią przeszło. Uruchomienie serwera Playwright
+i komunikacja Gradle również wymagały wykonania poza piaskownicą.
+
+Brak nowych zależności, zmiennych środowiskowych, migracji i cronów. Ten krok
+nie zmienia API, harmonogramu alarmów ani sposobu publikacji. `release:smoke`
+nie jest wymagany w 5.2 (brak zmian konfiguracji, jobów i zależności); końcowa
+kontrola paczki należy do 5.3. Nie wdrażano serwera ani nowego APK.
+Trwały cache, kolejka offline i próba odtwarzania po zamknięciu procesu zakupów
+pozostają zakresem 5.3. Build i atrapa mostka nie zastępują weryfikacji zakupów
+w zainstalowanym APK na fizycznym telefonie.

@@ -552,3 +552,26 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   przypomnień lub sesji. Brak nowych zależności, konfiguracji i cronów. Zakres
   lokalny obejmuje API; UI i parser (5.2) oraz trwała kolejka offline (5.3) pozostają
   w swoich krokach. Aktualizacja produkcji wymaga osobnego polecenia właściciela.
+
+## 20.10.2026 — interfejs zakupów (krok 5.2)
+
+- Parser szybkiego dodawania normalizuje odstępy i rozdziela tekst przy ostatniej
+  spacji poprzedzającej fragment zaczynający się cyfrą. Cały dalszy tekst jest
+  ilością, np. „jajka 10 szt”. Bez takiego fragmentu całość jest nazwą; „witamina
+  B12” i „7up” pozostają nazwami. To prosta reguła z planu, bez słownika jednostek.
+- Podpowiedzi pobieramy po 200 ms bez pisania, dla sparsowanej nazwy. Wybór
+  zachowuje wpisaną ilość i przekazuje kategorię podpowiedzi. Gdy podpowiedzi nie
+  ma, kategorię wyznacza istniejące API z historii albo przyjmuje „Inne”.
+- Niekupione pozycje grupujemy w kolejności kategorii shared. Kupione są w osobnej
+  sekcji na końcu, z przekreśleniem i osobą kupującą; null oznacza byłego domownika.
+  Do edycji/usuwania służy menu. Usuwanie produktu, listy i czyszczenie kupionych
+  wymaga potwierdzenia, żeby ograniczyć przypadkowe usunięcia na telefonie.
+- Cache zakupów i podpowiedzi jest przypisany do rodziny oraz użytkownika.
+  Mutacje optymistyczne anulują trwające odczyty, zachowują poprzedni stan do
+  przywrócenia po błędzie i odświeżają dane po zakończeniu. Na czas zapisu blokujemy
+  kolejne akcje zakupów, żeby cofnięcie błędnej zmiany nie nadpisało późniejszej.
+  Lista list i aktywna lista produktów odświeżają się co 20 s i po powrocie do karty.
+- Nie dodajemy zależności, migracji, konfiguracji, cronów ani trwałego cache
+  i kolejki offline. Obsługa słabego zasięgu i odtwarzanie po zamknięciu procesu
+  pozostają wyłącznie krokiem 5.3. Debug APK i atrapa mostka sprawdzają build
+  i ścieżkę transportu Androida; nie stanowią próby na fizycznym telefonie.
