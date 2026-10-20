@@ -68,6 +68,8 @@ Ten dokument jest samowystarczalny i przeznaczony do przekazania agentowi AI lub
 - **Zasada pracy.** Agent realizuje **jeden krok jednej fazy naraz** (fazy 1-8 są podzielone na kroki, sekcja 1.2; faza 0 jest realizowana w całości). Fazę kończy dopiero wtedy, gdy wszystkie kroki są gotowe, wszystkie kryteria akceptacji są spełnione oraz pełne CI dla końcowego commita przechodzi zgodnie z sekcją 1.2. Każdą decyzję, której plan nie rozstrzyga, zapisuje w `docs/DECISIONS.md` (data, decyzja, powód).
 - **Zakres lektury.** Przed pracą czytamy aktualny kontekst i zasady z sekcji 1, 1.1 i 1.2 oraz opis bieżącej fazy i kroku. Decyzje, konwencje, model danych z sekcji 2-5 i pozostałe dokumenty doczytujemy w zakresie zmiany i jej zależności. Nie ma obowiązku czytania całego planu w każdym czacie ani ponownego wczytywania niezmienionych treści już przeczytanych. Zapisy historyczne i przyszłe fazy służą jako odniesienie, gdy są potrzebne.
 
+**Układ ekranów (decyzja właściciela 20.10.2026):** nie wyświetlamy górnego paska z powtórzoną nazwą zakładki. Tytuł pozostaje w treści ekranu. Na telefonie i w APK zachowujemy hamburger w prawym górnym rogu, a na szerokiej stronie pionowe menu po lewej.
+
 ### 1.1 Gotowość do deployu w każdej fazie (Definition of Done)
 
 Każda faza, która to dotyczy, musi:

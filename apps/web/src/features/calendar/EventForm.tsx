@@ -129,7 +129,8 @@ export function EventForm({
       };
       if (!occurrenceOnly && remindersChanged) {
         data.reminders = reminders.map((reminder) => {
-          if (reminder.audience === 'user') throw new Error(text.reminderInvalid);
+          if (reminder.audience === 'user' || reminder.audience === 'list_members')
+            throw new Error(text.reminderInvalid);
           return reminder.type === 'absolute'
             ? { type: 'absolute', remindAt: reminder.remindAt, audience: reminder.audience }
             : {

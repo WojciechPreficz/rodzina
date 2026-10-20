@@ -28,7 +28,7 @@ describe('task request contracts', () => {
     { doneBy: null },
     { doneAt: 1 },
     { createdBy: null },
-    { reminders: [] },
+    { reminders: [{ type: 'offset', offsetValue: 0, offsetUnit: 'day', audience: 'family' }] },
   ])('rejects invalid or protected fields: %j', (fields) => {
     expect(createTaskSchema.safeParse({ title: 'Zadanie', ...fields }).success).toBe(false);
     expect(patchTaskSchema.safeParse(fields).success).toBe(false);

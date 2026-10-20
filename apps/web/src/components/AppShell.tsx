@@ -1,14 +1,4 @@
-import {
-  AppShell as MantineAppShell,
-  Burger,
-  Button,
-  Divider,
-  Drawer,
-  Group,
-  NavLink,
-  Stack,
-  Text,
-} from '@mantine/core';
+import { AppShell as MantineAppShell, Burger, Button, Divider, Drawer, NavLink, Stack, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Link, Outlet, useLocation } from 'react-router';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -73,7 +63,6 @@ export function AppShell({ children }: { children?: ReactNode }) {
       : to === '/wiecej'
         ? location.pathname === to
         : location.pathname === to || location.pathname.startsWith(`${to}/`);
-  const title = navigation.find(({ to }) => active(to))?.label ?? labels.appName;
 
   const menu = (
     <Stack className="app-navigation" gap="md">
@@ -133,14 +122,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
     <MantineAppShell
       layout="alt"
       padding="md"
-      header={{ height: 'calc(64px + var(--safe-top, 0px))' }}
       navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: true, desktop: native } }}
     >
-      <MantineAppShell.Header className="app-header">
-        <Group justify="space-between" h="100%" wrap="nowrap">
-          <Text fw={700} size="lg" truncate>
-            {title}
-          </Text>
+      {!desktop && (
+        <div className="app-menu-toggle">
           <Burger
             {...(native ? {} : { hiddenFrom: 'sm' })}
             opened={opened}
@@ -150,8 +135,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
             aria-controls="mobile-navigation-body"
             size="sm"
           />
-        </Group>
-      </MantineAppShell.Header>
+        </div>
+      )}
       {!native && (
         <MantineAppShell.Navbar visibleFrom="sm" className="app-sidebar" role="presentation">
           <Text size="xl" fw={800} c="teal.8" mb="xl">
@@ -160,7 +145,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
           {desktop && menu}
         </MantineAppShell.Navbar>
       )}
-      <MantineAppShell.Main>
+      <MantineAppShell.Main className={desktop ? '' : 'app-main-mobile'}>
         <Stack maw={1200} mx="auto" py="md" style={{ minWidth: 0 }}>
           <AndroidUpdateNotice />
           {children ?? <Outlet />}

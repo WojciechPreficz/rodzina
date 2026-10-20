@@ -17,6 +17,14 @@ test.beforeEach(async ({ page, baseURL }, info) => {
 test('website uses a left sidebar on desktop and a right drawer on phones', async ({ page }, info) => {
   const phone = info.project.name === 'phone';
   await page.goto('/');
+  await expect(page.locator('.mantine-AppShell-header')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Kalendarz', exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('calendar-without-header.png'), fullPage: true });
+  if (phone) {
+    await page.evaluate(() => window.scrollTo(0, 300));
+    await expect(page.getByRole('button', { name: 'Otwórz menu' })).toBeInViewport();
+    await page.evaluate(() => window.scrollTo(0, 0));
+  }
   const navigation = await openNavigation(page);
   const accountMenu = page.locator('.app-navigation:visible');
   await expect(accountMenu.getByText('Anna', { exact: true })).toBeVisible();
@@ -145,4 +153,7 @@ test('APK uses the same right drawer and native Back closes it before leaving th
   await menu.getByRole('link', { name: 'Zakupy', exact: true }).click();
   await expect(page).toHaveURL(/\/zakupy$/);
   await expect(dialog).not.toBeVisible();
+  await expect(page.locator('.mantine-AppShell-header')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Zakupy', exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('android-shopping-without-header.png'), fullPage: true });
 });

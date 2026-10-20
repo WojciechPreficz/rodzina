@@ -116,12 +116,12 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
   await expect.poll(async () => (await alarms())[0]?.title).toContain('Zmieniony termin');
   expect((await alarms()).map((item) => item.id)).toEqual(original.map((item) => item.id));
 
-  await page.route('**/api/reminders/schedule', (route) => route.abort());
+  await page.route('**/api/reminders/schedule*', (route) => route.abort());
   await page.getByRole('button', { name: 'Synchronizuj teraz' }).click();
   await expect(page.getByRole('alert')).toBeVisible();
   expect(await alarms()).toHaveLength(1);
   await expect(page.getByRole('status')).not.toContainText('Harmonogram zapisany.');
-  await page.unroute('**/api/reminders/schedule');
+  await page.unroute('**/api/reminders/schedule*');
 
   const removed = await page.request.delete(`/api/events/${event.id}`, {
     headers: { Origin: baseURL!, 'Content-Type': 'application/json' },
@@ -131,4 +131,40 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
   await page.getByRole('button', { name: 'Synchronizuj teraz' }).click();
   await expect.poll(alarms).toHaveLength(0);
   await expect(page.getByRole('status')).toContainText('Harmonogram zapisany.');
+  const listResponse = await page.request.post('/api/tasks/lists', {
+    headers: { Origin: baseURL! },
+    data: { name: 'Poufna lista' },
+  });
+  expect(listResponse.ok()).toBe(true);
+  const { list } = await listResponse.json();
+  const taskResponse = await page.request.post(`/api/tasks/lists/${list.id}/tasks`, {
+    headers: { Origin: baseURL! },
+    data: {
+      title: 'Poufny tytuł zadania',
+      notes: 'Poufna notatka',
+      dueDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+      reminders: [{ type: 'offset', offsetValue: 0, offsetUnit: 'day' }],
+    },
+  });
+  expect(taskResponse.ok()).toBe(true);
+  const { task } = await taskResponse.json();
+  await page.getByRole('button', { name: 'Synchronizuj teraz' }).click();
+  await expect.poll(async () => (await alarms()).some((item) => item.title === 'Przypomnienie o zadaniu')).toBe(true);
+  expect(JSON.stringify(await alarms())).not.toMatch(/Poufn/);
+  for (const isDone of [true, false]) {
+    const response = await page.request.patch(`/api/tasks/${task.id}`, {
+      headers: { Origin: baseURL! },
+      data: { isDone },
+    });
+    expect(response.ok()).toBe(true);
+    await page.getByRole('button', { name: 'Synchronizuj teraz' }).click();
+    await expect.poll(alarms).toHaveLength(isDone ? 0 : 1);
+  }
+  const deletedTask = await page.request.delete(`/api/tasks/${task.id}`, {
+    headers: { Origin: baseURL!, 'Content-Type': 'application/json' },
+    data: {},
+  });
+  expect(deletedTask.ok()).toBe(true);
+  await page.getByRole('button', { name: 'Synchronizuj teraz' }).click();
+  await expect.poll(alarms).toHaveLength(0);
 });

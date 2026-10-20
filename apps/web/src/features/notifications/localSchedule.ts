@@ -297,6 +297,6 @@ export function createLocalScheduler(deps: Dependencies) {
 export const localScheduler = createLocalScheduler({
   notifications: LocalNotifications,
   store: alarmStore,
-  fetch: () => apiFetch('/api/reminders/schedule'),
+  fetch: () => apiFetch('/api/reminders/schedule?includeTasks=true'),
   now: Date.now,
 });

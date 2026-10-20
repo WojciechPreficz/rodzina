@@ -69,6 +69,38 @@ function fixture(items = [reminder('one')]) {
   return { scheduler, notifications, store, fetch, pending, delivered, snapshot, systemIds };
 }
 
+it('persists generic task alarms and cancels them after loss of access, completion or deletion', async () => {
+  const item: ScheduledReminder = {
+    ...reminder('task'),
+    sourceType: 'task',
+    title: 'Przypomnienie o zadaniu',
+    body: 'Termin: 16.10.2026. Otwórz aplikację, aby sprawdzić szczegóły.',
+    url: '/zadania/10000000-0000-4000-8000-000000000003?zadanie=10000000-0000-4000-8000-000000000002',
+  };
+  const f = fixture([item]);
+  await f.scheduler.sync('family:user');
+  const saved = f.store.write.mock.calls.at(-1)![0].value;
+  expect(saved).toContain('Przypomnienie o zadaniu');
+  expect(saved).not.toContain('Basen');
+  expect([...f.pending.values()][0]).toMatchObject({
+    title: item.title,
+    body: item.body,
+    extra: { url: item.url, reminders: [item] },
+  });
+  const firstId = [...f.pending.keys()][0]!;
+  f.snapshot.reminders = [];
+  await f.scheduler.sync('family:user');
+  expect(f.notifications.cancel).toHaveBeenCalledWith({ notifications: [{ id: firstId }] });
+  expect(f.pending.size).toBe(0);
+  expect(f.store.write.mock.calls.at(-1)![0].value).not.toContain(item.url);
+  f.snapshot.reminders = [item];
+  await f.scheduler.sync('family:user');
+  expect(f.pending.size).toBe(1);
+  await f.scheduler.clear();
+  expect(f.pending.size).toBe(0);
+  expect(f.notifications.removeAllDeliveredNotifications).toHaveBeenCalledOnce();
+});
+
 it.each([0, 1])('ignores retained delivered notifications when checking %i future alarms', async (count) => {
   const f = fixture(count ? [reminder('future')] : []);
   f.delivered.set(42, { id: 42, title: 'Old reminder', body: '', schedule: { at: new Date(now - 60000) } });

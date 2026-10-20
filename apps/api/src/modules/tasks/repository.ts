@@ -3,9 +3,19 @@ import { and, asc, count, eq, inArray, lte, max, or, sql } from 'drizzle-orm';
 import type { CreateTask, PatchTask, TaskStatus } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { families, taskListMembers, taskLists, tasks, users } from '../../db/schema.js';
+import { createReminderRepository } from '../reminders/repository.js';
 
 export function createTaskListRepository(database: DatabaseConnection) {
   const db = database.db;
+  const reminderRepository = createReminderRepository(database);
+  function serializeTask(task: typeof tasks.$inferSelect) {
+    const familyId = db
+      .select({ familyId: taskLists.familyId })
+      .from(taskLists)
+      .where(eq(taskLists.id, task.listId))
+      .get()!.familyId;
+    return { ...task, reminders: reminderRepository.listTask(familyId, task.id) };
+  }
   const accessFilter = (familyId: string, actorId: string) =>
     and(
       eq(taskLists.familyId, familyId),
@@ -162,7 +172,8 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .from(tasks)
       .where(and(eq(tasks.listId, listId), status === 'all' ? undefined : eq(tasks.isDone, status === 'done')))
       .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
-      .all();
+      .all()
+      .map(serializeTask);
   }
   function findTask(familyId: string, actorId: string, id: string) {
     return db
@@ -222,7 +233,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .where(and(accessFilter(familyId, actorId), eq(tasks.isDone, false), lte(tasks.dueDate, today)))
       .orderBy(asc(tasks.dueDate), asc(tasks.dueTime), asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
       .all()
-      .map(({ task }) => task);
+      .map(({ task }) => serializeTask(task));
   }
   return {
     findAccessibleList,

@@ -37,15 +37,17 @@ export function registerReminderRoutes(app: FastifyInstance, database: DatabaseC
         .send({ error: { code: 'INTERNAL_ERROR', message: 'Nie udało się obsłużyć przypomnienia.' } });
     });
     routes.get('/api/reminders/schedule', async (request, reply) => {
-      parse(z.object({}).strict(), request.query);
+      const query = parse(z.object({ includeTasks: z.enum(['true', 'false']).optional() }).strict(), request.query);
       reply.header('Cache-Control', 'no-store');
-      return reminderScheduleSchema.parse(readReminderSchedule(database, request.familyId!, request.user!.id));
+      return reminderScheduleSchema.parse(
+        readReminderSchedule(database, request.familyId!, request.user!.id, query.includeTasks === 'true'),
+      );
     });
     routes.get('/api/reminders/mine', async (request) => {
-      const { eventId } = parse(myRemindersQuerySchema, request.query);
+      const source = parse(myRemindersQuerySchema, request.query);
       return myRemindersResponseSchema.parse({
         ok: true,
-        reminders: service.listMine(request.familyId!, request.user!.id, eventId),
+        reminders: service.listMine(request.familyId!, request.user!.id, source),
       });
     });
     routes.post('/api/reminders/mine', async (request) => {

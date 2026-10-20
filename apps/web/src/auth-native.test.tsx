@@ -8,6 +8,7 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => ({ request, clearSession }),
 }));
 import { AuthProvider, useMe, type AuthUser, type Family } from './auth.js';
+import { localScheduler } from './features/notifications/localSchedule.js';
 import { restoreShopping, stopShoppingPersistence, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingOffline.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined), invalidate: vi.fn() },
@@ -101,6 +102,7 @@ describe('native session lifecycle', () => {
     fireEvent.click(screen.getByText('logout'));
     await screen.findByText('logged out');
     expect(clearSession).toHaveBeenCalledOnce();
+    expect(localScheduler.clear).toHaveBeenCalled();
     expect(client.getQueryData(['events'])).toBeUndefined();
   });
 

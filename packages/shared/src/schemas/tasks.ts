@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { calendarDateSchema } from './events.js';
+import { reminderSchema, sharedTaskReminderSchema } from './reminders.js';
 
 const nameSchema = z.string().trim().min(1).max(200);
 const memberIdsSchema = z.array(z.string().uuid()).max(200);
@@ -39,6 +40,7 @@ const taskFieldsSchema = z.object({
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
     .nullable(),
   assigneeId: z.string().uuid().nullable(),
+  reminders: z.array(sharedTaskReminderSchema).max(20).optional(),
 });
 
 export const createTaskSchema = taskFieldsSchema
@@ -51,6 +53,7 @@ export const patchTaskSchema = taskFieldsSchema
   .strict()
   .refine((data) => Object.keys(data).length > 0, 'Brak danych do zmiany.');
 export const taskSchema = taskFieldsSchema.extend({
+  reminders: z.array(reminderSchema).optional(),
   id: z.string().uuid(),
   listId: z.string().uuid(),
   isDone: z.boolean(),

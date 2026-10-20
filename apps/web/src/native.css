@@ -11,12 +11,20 @@ body {
   --safe-bottom: 0px;
 }
 .mantine-AppShell-main {
-  padding-top: calc(var(--app-shell-header-offset, 0px) + var(--mantine-spacing-md));
+  padding-top: calc(var(--safe-top) + var(--mantine-spacing-md));
   padding-bottom: calc(var(--mantine-spacing-md) + var(--safe-bottom));
 }
-.app-header {
-  padding: var(--safe-top) max(var(--mantine-spacing-md), env(safe-area-inset-right, 0px)) 0
-    max(var(--mantine-spacing-md), env(safe-area-inset-left, 0px));
+.app-menu-toggle {
+  position: fixed;
+  top: calc(var(--safe-top) + 8px);
+  right: max(var(--mantine-spacing-md), env(safe-area-inset-right, 0px));
+  z-index: 100;
+  padding: 8px;
+  background: var(--mantine-color-body);
+  border-radius: var(--mantine-radius-md);
+}
+.app-main-mobile {
+  padding-top: calc(var(--safe-top) + 48px);
 }
 .app-sidebar {
   padding: calc(var(--safe-top) + var(--mantine-spacing-lg)) var(--mantine-spacing-md)

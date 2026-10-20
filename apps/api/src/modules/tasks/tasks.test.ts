@@ -302,7 +302,7 @@ describe('task lists API', () => {
       { doneAt: 1 },
       { listId: list.id },
       { familyId },
-      { reminders: [] },
+      { reminders: [{ type: 'offset', offsetValue: 0, offsetUnit: 'day', audience: 'family' }] },
     ]) {
       expect((await request('POST', `${base}/${list.id}/tasks`, { title: 'Nowe', ...data })).statusCode).toBe(400);
       expect((await request('PATCH', taskUrl(task.id), data)).statusCode).toBe(400);

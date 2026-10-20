@@ -256,6 +256,7 @@ export const labels = {
       adults: 'Dorośli',
       family: 'Cała rodzina',
       owner: 'Twórca wydarzenia',
+      list_members: 'Wszyscy na liście',
       user: 'Tylko ja',
     },
     reminderDate: 'Data przypomnienia',

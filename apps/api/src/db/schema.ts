@@ -129,13 +129,15 @@ export const reminders = sqliteTable(
       .notNull()
       .references(() => families.id, { onDelete: 'cascade' }),
     eventId: text('event_id').references(() => events.id, { onDelete: 'cascade' }),
-    taskId: text('task_id'),
+    taskId: text('task_id').references(() => tasks.id, { onDelete: 'cascade' }),
     documentId: text('document_id'),
     type: text('type', { enum: ['offset', 'absolute'] }).notNull(),
     offsetValue: integer('offset_value'),
     offsetUnit: text('offset_unit', { enum: ['minute', 'hour', 'day', 'week', 'month'] }),
     remindAt: integer('remind_at'),
-    audience: text('audience', { enum: ['participants', 'family', 'adults', 'owner', 'user'] }).notNull(),
+    audience: text('audience', {
+      enum: ['participants', 'family', 'adults', 'owner', 'user', 'list_members'],
+    }).notNull(),
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
     createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     nextFireAt: integer('next_fire_at'),

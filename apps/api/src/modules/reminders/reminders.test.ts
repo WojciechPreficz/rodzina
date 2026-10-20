@@ -198,7 +198,7 @@ describe('event reminders API', () => {
     }
     for (const data of [
       offset,
-      { ...offset, taskId: crypto.randomUUID() },
+      { ...offset, taskId: 'invalid' },
       { ...offset, eventId: source.id, documentId: crypto.randomUUID() },
       { ...offset, eventId: source.id, userId: member.id },
       { ...offset, eventId: source.id, audience: 'family' },

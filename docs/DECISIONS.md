@@ -780,3 +780,32 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
 - Testy obejmują CRUD, liczniki, filtry, granice dnia w dwóch strefach,
   prywatność i izolację rodzin, cofnięcie dostępu, przypisania oraz zachowanie
   zadań po usunięciu domownika. Bez nowych zmiennych, cronów i zależności.
+
+## 20.10.2026 — przypomnienia zadań (7.3, #14) i usunięcie nagłówka
+
+- Na polecenie właściciela usuwamy górny pasek powtarzający nazwę zakładki.
+  Tytuł w treści ekranu zostaje; menu boczne i prawy panel z hamburgera działają
+  jak dotychczas. Obie zmiany trafiają bezpośrednio na `main` w jednym commicie.
+- `GET /api/reminders/schedule?includeTasks=true` rozszerza snapshot o zadania.
+  Bez parametru (lub dla `false`) API nadal zwraca tylko wydarzenia. Nowe APK
+  wysyła parametr; starsze APK z walidatorem `sourceType=event` zachowuje działający
+  harmonogram. Odczyt pozostaje pełnym snapshotem bieżących odbiorców, bez joba.
+- Przypomnienia wspólne zadania dopuszczają `owner` i `list_members`. Osobiste
+  używają `taskId` w `/api/reminders/mine`; wymagane jest dokładnie jedno źródło.
+  Nowe przypomnienie wymaga terminu zadania. Usunięcie daty zatrzymuje istniejące
+  przypomnienia bez ich kasowania; ponowne ustawienie daty je przelicza.
+  Zapis wspólnych przypomnień nie usuwa osobistych. Odhaczenie zeruje
+  `next_fire_at`, odznaczenie przelicza je; snapshot liczy przyszłość niezależnie
+  od historycznego `next_fire_at`.
+- Odbiorcy zadań zawsze muszą widzieć listę, także przy „tylko ja”. Brak
+  odbiorców nie uruchamia awaryjnych dorosłych. Alarm zawiera ogólny tytuł,
+  bezwzględny termin i zachętę do otwarcia aplikacji, bez treści zadania/listy.
+  Utrata dostępu, wykonanie i usunięcie usuwają alarm po udanej synchronizacji.
+  Telefon offline zachowuje wcześniej zapisany ogólny alarm; nie obiecujemy
+  odwołania go przy zamkniętym APK. Wylogowanie czyści alarmy i zapis natywny.
+- Migracja `0017_rare_lady_bullseye.sql` dodaje FK `reminders.task_id` z kaskadą
+  do zadań. Zachowuje dotychczasowe przypomnienia wydarzeń. Bez nowych zmiennych,
+  cronów, zależności runtime ani usług w tle.
+- `taskUrl(listId, taskId)` przygotowuje adres `/zadania/:listId?zadanie=:taskId`.
+  Ekran i obsługa otwierania szczegółów należą do 7.4, formularz przypomnień do
+  7.5. Ten krok nie udostępnia prywatnych szczegółów zadania offline.

@@ -71,6 +71,8 @@ describe('AppShell', () => {
     expect(await screen.findByText('Anna')).toBeInTheDocument();
     expect(screen.getByText('Administrator')).toBeInTheDocument();
     expect(screen.queryByText(/Test/)).not.toBeInTheDocument();
+    expect(document.querySelector('.mantine-AppShell-header')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Otwórz menu' })).not.toBeInTheDocument();
   });
 
   it.each(['/kalendarz/wydarzenie/event-1', '/wiecej/rodzina', '/wiecej/powiadomienia'])(

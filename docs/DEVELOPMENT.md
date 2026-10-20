@@ -1598,3 +1598,62 @@ zmiennych, cronów, zależności runtime i usług w tle. Starsze APK pozostają 
 Nie wykonano wdrożenia. Po lokalnych kontrolach status brzmi:
 **zweryfikowane lokalnie, oczekuje na CI**. Zakończenie kroku wymaga sukcesu
 wszystkich zadań istniejącego CI dla końcowego commita, według sekcji 1.2 planu.
+
+## Przypomnienia zadań (7.3, #14) i pojedynczy tytuł ekranu
+
+Wspólne przypomnienia zapisuje się przez `reminders` w tworzeniu/edycji zadania:
+`offset` z `offsetValue`/`offsetUnit` lub `absolute` z `remindAt`. Odbiorca to
+`owner` (domyślnie: osoba przypisana, a bez niej właściciel listy) albo
+`list_members`. `family`, `adults`, `participants` i `user` są w tym miejscu
+odrzucane kodem 400. Osobiste przypomnienia dodaje/odczytuje wyłącznie aktualny
+uczestnik listy przez `/api/reminders/mine` z `taskId`; parametr nie może
+występować razem z `eventId`. Usuwanie osobistego przypomnienia również
+wymaga aktualnego dostępu. Odczyty zadań zawierają tylko wspólne przypomnienia.
+
+Nowe APK pobiera `/api/reminders/schedule?includeTasks=true`. Brak parametru
+zachowuje kontrakt wydarzeń dla starszego APK. Termin bez godziny liczymy od
+09:00 w strefie rodziny; ukończone, bezterminowe i minione zadania nie dodają
+alarmu. Zmiana terminu przelicza offset, a przypomnienie bezwzględne pozostaje
+przy swoim czasie. Przypisanie, udostępnienie i aktualny skład rodziny są
+rozstrzygane przy każdym odczycie. Nie ma wysyłki Web Push ani joba przypomnień.
+
+Treść zapisana w alarmie/snapshotach zadań jest ogólna: „Przypomnienie o zadaniu”,
+bezwzględny termin i informacja o otwarciu aplikacji. Nie zapisujemy tytułu,
+notatki ani nazwy listy. `taskUrl` przygotowuje trasę dla 7.4; w 7.3 nie ma
+jeszcze ekranu Zadań ani obsługi jego linku w nawigacji natywnej. Szczegóły
+w przyszłym ekranie wymagają aktualnego dostępu online. Cofnięcie dostępu
+usuwa wpis ze snapshotu i anuluje alarm po synchronizacji, a telefon offline
+może nadal wyświetlić poprzedni ogólny alarm.
+
+Usunięto wspólny pasek z powtórzonym tytułem zakładki. Na stronie od 768 px
+pozostaje lewy panel, a na telefonie i w APK hamburger z prawym panelem.
+Tytuł w treści ekranu i rezerwa miejsca na przycisk menu zapobiegają kolizjom.
+
+Weryfikacja lokalna 20.10.2026:
+
+- Testy zmienianych modułów `tasks`, `reminders`, shared, AppShell,
+  powiadomień i sesji natywnej przechodzą; 15 testów API przypomnień zadań
+  obejmuje odbiorców, prywatność, odmowy 400/404, leave/cofnięcie dostępu,
+  ukończenie/odznaczenie, terminy, usuwanie i przekazanie listy po usunięciu
+  domownika. Test migracji starej bazy przechodzi po zachowaniu domyślnego
+  odczytu wydarzeń bez tabel zadań.
+- Playwright headless: 8/8 scenariuszy nawigacji i 8/8 regresji
+  logowania, pobierania APK i alarmów; oba projekty 390 i 1280 px. Scenariusz
+  alarmów sprawdza API → snapshot → atrapa mostka Androida, ogólny payload
+  zadania oraz anulowanie/przywrócenie po odhaczeniu/odznaczeniu i usunięciu.
+  Przejrzano zrzuty Kalendarza i Zakupów bez powtórzonego nagłówka.
+- Typecheck, lint i formatowanie zmienionych plików, build oraz lokalny
+  `release:smoke` przechodzą. Paczka zawiera 47 plików, migracje i działający
+  start API/SPA oraz backup. Debug APK buduje się (`BUILD SUCCESSFUL`).
+- Vitest, Playwright, Gradle i smoke wymagały pracy poza sandboxem ze względu
+  na pliki tymczasowe, lokalne połączenia i instalację zależności paczki.
+  Pełne logi są w ignorowanym `.android-tools/step73-*`.
+
+Nie wykonano próby na fizycznym telefonie: odczyt ADB poza sandboxem nie uzyskał
+zgody. Build i atrapa mostka jej nie zastępują. Do sprawdzenia na urządzeniu
+pozostają układ, synchronizacja ogólnego alarmu zadania, praca offline,
+anulowanie po utracie dostępu i wylogowaniu. Nie wykonano deployu ani publikacji
+podpisanego APK. Brak nowych zmiennych i cronów; migracja znajduje się w repo
+i paczce. Na etapie przygotowania commita: **zweryfikowane lokalnie, oczekuje
+na CI**, z otwartą próbą telefonu. Wynik CI dla końcowego commita raportujemy
+osobno; nie oznaczamy kroku jako w pełni gotowego bez brakującej próby.

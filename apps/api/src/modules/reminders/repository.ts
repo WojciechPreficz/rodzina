@@ -4,6 +4,8 @@ import {
   computeNextFireAt,
   type Reminder,
   type SharedEventReminder,
+  type SharedTaskReminder,
+  type Task,
   type TimeEvent,
   type TimeReminder,
   type TimeException,
@@ -103,5 +105,82 @@ export function createReminderRepository(database: DatabaseConnection) {
         .run().changes > 0
     );
   }
-  return { list, insert, saveEvent, removeMine };
+  function listTask(familyId: string, taskId: string, userId?: string): Reminder[] {
+    return db
+      .select()
+      .from(reminders)
+      .where(
+        and(
+          eq(reminders.familyId, familyId),
+          eq(reminders.taskId, taskId),
+          userId === undefined
+            ? ne(reminders.audience, 'user')
+            : and(eq(reminders.audience, 'user'), eq(reminders.userId, userId)),
+        ),
+      )
+      .orderBy(asc(reminders.id))
+      .all();
+  }
+  function taskTime(task: Pick<Task, 'dueDate' | 'dueTime' | 'isDone'>) {
+    return { date: task.dueDate, time: task.dueTime, completed: task.isDone };
+  }
+  function insertTask(
+    familyId: string,
+    task: Task,
+    actorId: string,
+    data: TimeReminder,
+    audience: Reminder['audience'],
+    tz: string,
+    now: number,
+    userId: string | null = null,
+  ) {
+    const row: Reminder = {
+      id: crypto.randomUUID(),
+      familyId,
+      eventId: null,
+      taskId: task.id,
+      documentId: null,
+      type: data.type,
+      offsetValue: data.type === 'offset' ? data.offsetValue : null,
+      offsetUnit: data.type === 'offset' ? data.offsetUnit : null,
+      remindAt: data.type === 'absolute' ? data.remindAt : null,
+      audience,
+      userId,
+      createdBy: actorId,
+      nextFireAt: task.dueDate ? computeNextFireAt(data, taskTime(task), now, tz) : null,
+      lastSentAt: null,
+    };
+    db.insert(reminders).values(row).run();
+    return row;
+  }
+  function saveTask(
+    familyId: string,
+    task: Task,
+    actorId: string,
+    shared: SharedTaskReminder[] | undefined,
+    tz: string,
+    now: number,
+  ) {
+    if (shared !== undefined) {
+      db.delete(reminders)
+        .where(and(eq(reminders.familyId, familyId), eq(reminders.taskId, task.id), ne(reminders.audience, 'user')))
+        .run();
+      for (const data of shared) insertTask(familyId, task, actorId, data, data.audience, tz, now);
+    }
+    for (const row of db
+      .select()
+      .from(reminders)
+      .where(and(eq(reminders.familyId, familyId), eq(reminders.taskId, task.id)))
+      .all()) {
+      const data: TimeReminder =
+        row.type === 'offset'
+          ? { type: 'offset', offsetValue: row.offsetValue!, offsetUnit: row.offsetUnit! }
+          : { type: 'absolute', remindAt: row.remindAt! };
+      db.update(reminders)
+        .set({ nextFireAt: task.dueDate ? computeNextFireAt(data, taskTime(task), now, tz) : null })
+        .where(eq(reminders.id, row.id))
+        .run();
+    }
+  }
+  return { list, insert, saveEvent, removeMine, listTask, insertTask, saveTask, taskTime };
 }

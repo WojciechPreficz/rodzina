@@ -1,4 +1,4 @@
-import type { CalendarEvent, Reminder } from '@rodzina/shared';
+import type { CalendarEvent, Reminder, Task, TaskList } from '@rodzina/shared';
 
 export interface ReminderMember {
   id: string;
@@ -13,10 +13,39 @@ export interface EventReminderSource {
   members: readonly ReminderMember[];
 }
 
-/** All current family members can read events, including children. */
-export function resolveRecipients(reminder: Reminder, source: EventReminderSource): string[] {
+export interface TaskReminderSource {
+  task: Task;
+  list: TaskList;
+  members: readonly ReminderMember[];
+}
+
+export function resolveRecipients(reminder: Reminder, source: EventReminderSource | TaskReminderSource): string[] {
+  if ('task' in source) {
+    const { task, list } = source;
+    if (
+      reminder.familyId !== list.familyId ||
+      reminder.taskId !== task.id ||
+      task.listId !== list.id ||
+      reminder.eventId ||
+      reminder.documentId
+    )
+      return [];
+    const visible = source.members.filter(
+      ({ id, familyId }) => familyId === list.familyId && (id === list.ownerId || list.memberIds.includes(id)),
+    );
+    const candidates =
+      reminder.audience === 'owner'
+        ? [task.assigneeId ?? list.ownerId]
+        : reminder.audience === 'list_members'
+          ? [list.ownerId, ...list.memberIds]
+          : reminder.audience === 'user'
+            ? [reminder.userId]
+            : [];
+    return [...new Set(visible.filter(({ id }) => candidates.includes(id)).map(({ id }) => id))];
+  }
   const { event } = source;
-  if (reminder.familyId !== event.familyId || reminder.eventId !== event.id) return [];
+  if (reminder.familyId !== event.familyId || reminder.eventId !== event.id || reminder.taskId || reminder.documentId)
+    return [];
   const visible = source.members.filter((member) => member.familyId === event.familyId);
   const adults = visible.filter((member) => member.role !== 'child');
   let candidates: readonly (string | null)[];
@@ -36,6 +65,8 @@ export function resolveRecipients(reminder: Reminder, source: EventReminderSourc
     case 'user':
       candidates = [reminder.userId];
       break;
+    default:
+      return [];
   }
   const recipients = visible.filter(({ id }) => candidates.includes(id));
   return [...new Set((recipients.length ? recipients : adults).map(({ id }) => id))];

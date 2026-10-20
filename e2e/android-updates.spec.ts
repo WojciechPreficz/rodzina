@@ -28,7 +28,7 @@ test('login and More show release availability without broken downloads at both 
   await page.getByLabel('E-mail', { exact: true }).fill(`updates-${testInfo.project.name}@example.com`);
   await page.getByLabel('Hasło', { exact: true }).fill('password123');
   await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
-  await expect(page.locator('.mantine-AppShell-header')).toBeVisible();
+  await expect(page.locator('.mantine-AppShell-main')).toBeVisible();
   await page.goto('/wiecej');
   await expect(page.getByText('Wydanie Androida jest obecnie niedostępne.')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('android-download-more.png'), fullPage: true });

@@ -1,6 +1,7 @@
 import type { CreateTask, CreateTaskList, PatchTask, PatchTaskList, TaskStatus } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { createTaskListRepository } from './repository.js';
+import { createReminderRepository } from '../reminders/repository.js';
 
 export class TaskListError extends Error {
   constructor(
@@ -14,6 +15,7 @@ export class TaskListError extends Error {
 
 export function createTaskListService(database: DatabaseConnection) {
   const repository = createTaskListRepository(database);
+  const reminders = createReminderRepository(database);
   const transaction = <T>(operation: () => T) => database.db.transaction(operation, { behavior: 'immediate' });
   function getList(familyId: string, actorId: string, id: string) {
     const list = repository.findAccessibleList(familyId, actorId, id);
@@ -52,7 +54,12 @@ export function createTaskListService(database: DatabaseConnection) {
       return transaction(() => {
         const list = getList(familyId, actorId, listId);
         validateAssignee(list, data.assigneeId);
-        return repository.createTask(listId, actorId, data);
+        if (data.reminders?.length && !data.dueDate)
+          throw new TaskListError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
+        const { reminders: shared, ...fields } = data;
+        const task = repository.createTask(listId, actorId, fields);
+        reminders.saveTask(familyId, task, actorId, shared, repository.timezone(familyId), Date.now());
+        return { ...task, reminders: reminders.listTask(familyId, task.id) };
       });
     },
     updateTask(familyId: string, actorId: string, id: string, data: PatchTask) {
@@ -63,7 +70,12 @@ export function createTaskListService(database: DatabaseConnection) {
         validateAssignee(list, merged.assigneeId);
         if (merged.dueTime && !merged.dueDate)
           throw new TaskListError(400, 'VALIDATION_ERROR', 'Godzina wymaga daty terminu.');
-        return repository.updateTask(task, actorId, data);
+        if (data.reminders?.length && !merged.dueDate)
+          throw new TaskListError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
+        const { reminders: shared, ...fields } = data;
+        const updated = repository.updateTask(task, actorId, fields);
+        reminders.saveTask(familyId, updated, actorId, shared, repository.timezone(familyId), Date.now());
+        return { ...updated, reminders: reminders.listTask(familyId, task.id) };
       });
     },
     removeTask(familyId: string, actorId: string, id: string) {
