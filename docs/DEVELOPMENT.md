@@ -1548,3 +1548,53 @@ wymagane według sekcji 1.2 planu. Nie wykonywano deployu ani publikacji APK.
 
 Stan: **zweryfikowane lokalnie, oczekuje na CI**, z powyższymi brakami prób
 ręcznych. Krok 5.5 i rozszerzona faza 5 nie są oznaczone jako zamknięte.
+
+## Listy zadań — model i widoczność (krok 7.1, #12)
+
+Krok udostępnia API list, bez ekranu Zadań i bez CRUD pojedynczych zadań.
+Migracja `0016_task_lists.sql` dodaje pełny model trzech tabel wymagany przez
+7.1. Liczniki otwartych zadań powstają w 7.2, a przypomnienia w 7.3.
+
+| Endpoint                          | Zachowanie                                                                                                                        |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/tasks/lists`            | `{ ok, lists }`: własne i udostępnione listy, własna domyślna pierwsza. Pierwszy odczyt tworzy „Moje zadania”, także dla dziecka. |
+| `POST /api/tasks/lists`           | `{ name, memberIds? }`, odpowiedź 201 z `{ ok, list }`. Pierwszy zapis również zapewnia listę domyślną.                           |
+| `PATCH /api/tasks/lists/:id`      | `{ name?, memberIds? }`, co najmniej jedno pole; tylko właściciel. `memberIds` zastępuje całe udostępnienie.                      |
+| `DELETE /api/tasks/lists/:id`     | Tylko właściciel; lista domyślna daje 400. Pozostałe listy usuwane z zadaniami i członkostwami.                                   |
+| `POST /api/tasks/lists/:id/leave` | Członek opuszcza listę; właściciel otrzymuje 403. Po utracie dostępu dalsze akcje zwracają 404.                                   |
+
+Lista zawiera `id`, `familyId`, `ownerId`, `name`, `isDefault`, `position`,
+`memberIds`, `createdAt` i `updatedAt`. Identyfikatory członków nie zawierają
+właściciela. Nazwa ma 1–200 znaków po przycięciu, a żądanie do 200 identyfikatorów
+udostępnienia. Powtórzenia normalizujemy. Inna rodzina lub nieistniejący członek
+odrzuca całą zmianę kodem 400. Osoba spoza listy, również administrator rodziny,
+otrzymuje 404; widoczny członek przy zmianie nazwy/udostępnienia lub usuwaniu 403.
+
+Usunięcie domownika usuwa jego prywatne listy i przekazuje udostępnione
+najwcześniej utworzonemu pozostałemu członkowi (rozstrzygnięcie remisu: ID).
+Przekazana lista traci `isDefault`, więc nie koliduje z własną listą następcy.
+Całość, sesje i usunięcie konta są jedną transakcją. FK zerują `createdBy`,
+`doneBy` i `assigneeId` zachowanych zadań oraz usuwają członkostwa.
+
+Weryfikacja lokalna 20.10.2026:
+
+- Testy całego API: **120/120, 17 plików**, w tym 17 testów nowych reguł list
+  i test aktualizacji istniejącej bazy oraz ponownego uruchomienia migracji.
+- Pokryte kryteria #12: 404 dla osób spoza listy, również administratora;
+  403 dla członków; ochrona listy domyślnej; `leave`; przekazanie/usunięcie
+  list domownika; izolacja rodzin. Dodatkowo wycofanie całej transakcji przy
+  błędzie usunięcia konta, walidacja udostępnienia i kaskady zadań.
+- Typecheck całego repo, lint i formatowanie zmienionych plików oraz build
+  przechodzą. Lokalny `release:smoke` przechodzi: paczka ma 45 plików,
+  instalacja produkcyjna, migracje, start API, health/SPA i backup działają.
+- Vitest wymagał ponowienia poza sandboxem z powodu błędu odczytu własnych
+  plików tymczasowych. Smoke poza sandboxem zapewnił dostęp do rejestru npm.
+  Pełne logi zapisano w ignorowanym `.android-tools/tasks-*`.
+
+W tym kroku nie zmieniono frontendu ani APK; próby układu 390/1280 px
+i fizycznego telefonu nie mają nowego zakresu. Otwarte próby poprzednich kroków
+pozostają niezaliczone. Gotowość do deployu: migracja w repo i paczce, bez nowych
+zmiennych, cronów, zależności runtime i usług w tle. Starsze APK pozostają zgodne.
+Nie wykonano wdrożenia. Po lokalnych kontrolach status brzmi:
+**zweryfikowane lokalnie, oczekuje na CI**. Zakończenie kroku wymaga sukcesu
+wszystkich zadań istniejącego CI dla końcowego commita, według sekcji 1.2 planu.

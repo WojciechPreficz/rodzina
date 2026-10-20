@@ -720,3 +720,35 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   rodziny, aby uniknąć powtórzeń takich jak „Wojciech Preficz · Preficz”.
   Zapisanych nazw użytkowników nie skracamy automatycznie; można je zmienić
   w edycji domownika. Bez migracji danych i zmian API.
+
+## 20.10.2026 — listy zadań: model i widoczność (krok 7.1, #12)
+
+- Na bezpośrednie polecenie właściciela realizujemy krok 7.1 przed fazą obiadów.
+  Model i dostęp do list nie zależą od fazy 6. Zakres pozostaje ograniczony
+  do #12: trzy tabele, API list i usuwanie domownika. CRUD zadań oraz liczniki
+  otwartych zadań należą do 7.2, przypomnienia do 7.3, a ekran Zadań do 7.4–7.5.
+- Pierwszy odczyt lub utworzenie listy tworzy prywatną listę „Moje zadania”
+  dla aktualnego użytkownika, także dziecka. Transakcja i częściowy unikalny
+  indeks na właścicielu zapewniają jedną listę domyślną. Jej właściciel może
+  zmienić nazwę i udostępnienie, ale nie może jej usunąć ani opuścić.
+- API zwraca `memberIds` bez właściciela. Powtórzone identyfikatory i wskazanie
+  właściciela normalizujemy; nieistniejący użytkownik lub osoba spoza rodziny
+  odrzuca cały zapis kodem 400, bez zmiany listy. Właściciel i członkowie widzą
+  listę; inne osoby, również administrator rodziny, otrzymują 404. Widoczny
+  członek otrzymuje 403 przy próbie zmiany nazwy, udostępnienia lub usunięcia.
+- Własna lista domyślna jest pierwsza; pozostałe widoczne listy porządkujemy
+  po pozycji, czasie utworzenia i ID. Usuwając członka z listy lub opuszczając
+  ją, zerujemy jego przypisania do zadań tej listy, zachowując autorstwo.
+- Usuwanie domownika i przygotowanie jego list wykonujemy atomowo. Prywatne
+  listy usuwamy wraz z zadaniami; udostępnione przekazujemy pierwszemu
+  pozostałemu członkowi, ustawiając `is_default=false` i usuwając jego nadmiarowy
+  wpis członkostwa. Ponieważ model nie zawiera daty dołączenia do listy,
+  „pierwszy” oznacza najwcześniej utworzone konto (`created_at`, potem ID).
+  Własna lista domyślna następcy pozostaje bez zmian. FK właściciela chroni
+  przed usunięciem konta bez uprzedniej obsługi list; FK członkostw i zadań
+  zapewniają kaskady oraz `SET NULL` dla autora, wykonawcy i przypisania.
+- Schemat bazy importuje kategorię zakupów wyłącznie jako typ, aby generator
+  migracji Drizzle nie wymagał ładowania pakietu shared ESM przez `require`.
+  Model SQL zakupów pozostaje bez zmian. Migracja 0016 dodaje wyłącznie trzy
+  tabele zadań i ich indeksy. Bez nowych zmiennych środowiskowych, cronów,
+  zależności runtime i zmian frontendu lub APK.

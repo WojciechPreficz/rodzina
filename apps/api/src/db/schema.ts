@@ -1,7 +1,7 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { check } from 'drizzle-orm/sqlite-core';
-import { shoppingCategorySchema } from '@rodzina/shared';
+import type { ShoppingCategory } from '@rodzina/shared';
 
 export const families = sqliteTable('families', {
   id: text('id').primaryKey(),
@@ -180,11 +180,7 @@ export const shoppingItems = sqliteTable(
       .references(() => shoppingLists.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     quantity: text('quantity'),
-    category: text('category', {
-      enum: shoppingCategorySchema.options,
-    })
-      .notNull()
-      .default('other'),
+    category: text('category').$type<ShoppingCategory>().notNull().default('other'),
     isChecked: integer('is_checked', { mode: 'boolean' }).notNull().default(false),
     checkedBy: text('checked_by').references(() => users.id, { onDelete: 'set null' }),
     checkedAt: integer('checked_at'),
@@ -204,9 +200,7 @@ export const shoppingHistory = sqliteTable(
       .references(() => families.id, { onDelete: 'cascade' }),
     nameNormalized: text('name_normalized').notNull(),
     displayName: text('display_name').notNull(),
-    category: text('category', {
-      enum: shoppingCategorySchema.options,
-    }).notNull(),
+    category: text('category').$type<ShoppingCategory>().notNull(),
     useCount: integer('use_count').notNull(),
     lastUsedAt: integer('last_used_at').notNull(),
   },
@@ -225,4 +219,67 @@ export const shoppingOperations = sqliteTable(
     status: integer('status').notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.id] })],
+);
+
+export const taskLists = sqliteTable(
+  'task_lists',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+    position: integer('position').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('task_lists_family_owner_idx').on(table.familyId, table.ownerId),
+    uniqueIndex('task_lists_default_owner_idx')
+      .on(table.ownerId)
+      .where(sql`${table.isDefault} = 1`),
+  ],
+);
+
+export const taskListMembers = sqliteTable(
+  'task_list_members',
+  {
+    listId: text('list_id')
+      .notNull()
+      .references(() => taskLists.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.listId, table.userId] }),
+    index('task_list_members_user_idx').on(table.userId),
+  ],
+);
+
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: text('id').primaryKey(),
+    listId: text('list_id')
+      .notNull()
+      .references(() => taskLists.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    notes: text('notes'),
+    dueDate: text('due_date'),
+    dueTime: text('due_time'),
+    assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    isDone: integer('is_done', { mode: 'boolean' }).notNull().default(false),
+    doneBy: text('done_by').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: integer('done_at'),
+    position: integer('position').notNull().default(0),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('tasks_list_position_idx').on(table.listId, table.position)],
 );

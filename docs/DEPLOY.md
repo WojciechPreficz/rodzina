@@ -1,5 +1,15 @@
 # Wdrożenie i aktualizacje na cPanel vh.pl
 
+**Listy zadań, krok 7.1 (20.10.2026):** migracja `0016_task_lists.sql`
+dodaje `task_lists`, `task_list_members` i `tasks` wraz z indeksami, bez zmiany
+istniejących danych. Wymagany jest standardowy backup przed aktualizacją;
+migracja uruchamia się przy starcie API, a backup obejmuje nowe tabele.
+Usuwanie domownika usuwa prywatne listy i przekazuje udostępnione listy
+pozostałemu członkowi w jednej transakcji. Ten krok dodaje tylko API list;
+nie wymaga aktualizacji APK i zachowuje zgodność ze starszym klientem.
+Bez nowych zmiennych, zależności runtime, cronów i usług w tle.
+Samo przygotowanie tej zmiany nie aktualizuje serwera.
+
 **Podgląd offline, kroki 5.4–5.5 (20.10.2026):** cache rodziny i kalendarza
 jest zapisany lokalnie, osobno od kolejki zakupów i harmonogramu alarmów.
 Zmiana wymaga aktualizacji WWW oraz osobnego zbudowania i opublikowania APK,

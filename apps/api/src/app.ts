@@ -28,6 +28,8 @@ import * as schema from './db/schema.js';
 import { registerEventRoutes } from './modules/events/routes.js';
 import { registerReminderRoutes } from './modules/reminders/routes.js';
 import { registerShoppingRoutes } from './modules/shopping/routes.js';
+import { registerTaskListRoutes } from './modules/tasks/routes.js';
+import { createTaskListService } from './modules/tasks/service.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 
 type Database = ReturnType<typeof createDatabase>;
@@ -1116,8 +1118,14 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       return sendError(reply, 400, 'VALIDATION_ERROR', 'Nie można usunąć ostatniego administratora.');
     }
 
-    database.db.delete(schema.sessions).where(eq(schema.sessions.userId, memberId)).run();
-    database.db.delete(schema.users).where(eq(schema.users.id, memberId)).run();
+    database.db.transaction(
+      () => {
+        createTaskListService(database).prepareMemberRemoval(request.familyId!, memberId);
+        database.db.delete(schema.sessions).where(eq(schema.sessions.userId, memberId)).run();
+        database.db.delete(schema.users).where(eq(schema.users.id, memberId)).run();
+      },
+      { behavior: 'immediate' },
+    );
 
     return { ok: true, deleted: true };
   });
@@ -1185,6 +1193,7 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
 
   registerEventRoutes(app, database);
   registerShoppingRoutes(app, database);
+  registerTaskListRoutes(app, database);
   registerAndroidDownloads(app, config);
   app.get('/.well-known/assetlinks.json', async (_request, reply) => {
     reply.header('Cache-Control', 'public, max-age=300');
