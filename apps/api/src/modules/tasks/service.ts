@@ -50,14 +50,14 @@ export function createTaskListService(database: DatabaseConnection) {
       getList(familyId, actorId, listId);
       return repository.listTasks(listId, status);
     },
-    createTask(familyId: string, actorId: string, listId: string, data: CreateTask) {
+    createTask(familyId: string, actorId: string, listId: string, data: CreateTask, id?: string) {
       return transaction(() => {
         const list = getList(familyId, actorId, listId);
         validateAssignee(list, data.assigneeId);
         if (data.reminders?.length && !data.dueDate)
           throw new TaskListError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
         const { reminders: shared, ...fields } = data;
-        const task = repository.createTask(listId, actorId, fields);
+        const task = repository.createTask(listId, actorId, fields, id);
         reminders.saveTask(familyId, task, actorId, shared, repository.timezone(familyId), Date.now());
         return { ...task, reminders: reminders.listTask(familyId, task.id) };
       });

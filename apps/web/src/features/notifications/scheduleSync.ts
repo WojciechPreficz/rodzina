@@ -6,6 +6,7 @@ import { focusManager, onlineManager, useQuery, useQueryClient, type QueryClient
 import { isAndroid } from '../../platform.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { localScheduler } from './localSchedule.js';
+import { isOffline } from '../../connectivity.js';
 
 export const scheduleKey = ['local-schedule'];
 
@@ -34,7 +35,14 @@ export function useLocalSchedule(account: string, automatic = false) {
         let error: string | undefined;
         let result;
         try {
-          result = await localScheduler.sync(account);
+          // Persist cancellation before any network attempt. Reconciliation also
+          // removes affected task entries from groups containing calendar alarms.
+          try {
+            await localScheduler.retry(account);
+          } catch {
+            /* The first sync has no saved schedule. */
+          }
+          result = isOffline() ? await localScheduler.retry(account) : await localScheduler.sync(account);
         } catch (failure) {
           signal.throwIfAborted();
           error = failure instanceof Error ? failure.message : String(failure);
@@ -53,6 +61,13 @@ export function useLocalSchedule(account: string, automatic = false) {
 export function ScheduleSync({ account }: { account: string }) {
   useLocalSchedule(account, true);
   const client = useQueryClient();
+  useEffect(() => {
+    const changed = () => {
+      void refreshLocalSchedule(client);
+    };
+    window.addEventListener('rodzina:tasks-changed', changed);
+    return () => window.removeEventListener('rodzina:tasks-changed', changed);
+  }, [client]);
   useEffect(() => {
     if (!isAndroid() || !account) return;
     let disposed = false;

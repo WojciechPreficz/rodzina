@@ -3,6 +3,7 @@ import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/loc
 import { reminderScheduleSchema, type ReminderSchedule } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { labels } from '../../i18n/pl.js';
+import { taskStore } from '../tasks/taskOffline.js';
 
 const text = labels.localAlarms;
 export const alarmStore = registerPlugin<{
@@ -97,6 +98,7 @@ type Dependencies = {
   store: Pick<typeof alarmStore, 'read' | 'write' | 'runtimeStatus' | 'reconcileSystem' | 'systemStatus'>;
   fetch: () => Promise<unknown>;
   now: () => number;
+  blockedTasks?: (account: string) => string[];
 };
 
 export function createLocalScheduler(deps: Dependencies) {
@@ -184,6 +186,11 @@ export function createLocalScheduler(deps: Dependencies) {
     revision: string,
     downloaded = false,
   ): Promise<ScheduleResult> {
+    const blocked = new Set(deps.blockedTasks?.(account) ?? []);
+    data.snapshot = {
+      ...data.snapshot,
+      reminders: data.snapshot.reminders.filter((item) => item.sourceType !== 'task' || !blocked.has(item.sourceId)),
+    };
     const access = await permissions();
     if (access.display !== 'granted' || access.exact !== 'granted') throw new Error(text.permissionRequired);
     const all = buildAlarms(data.snapshot, data.ids, deps.now());
@@ -299,4 +306,18 @@ export const localScheduler = createLocalScheduler({
   store: alarmStore,
   fetch: () => apiFetch('/api/reminders/schedule?includeTasks=true'),
   now: Date.now,
+  blockedTasks: (account) =>
+    taskStore.getSnapshot().account === account
+      ? taskStore
+          .getSnapshot()
+          .pending.filter(
+            (op) =>
+              op.change.type === 'remove' ||
+              (op.change.type === 'update' &&
+                (op.change.data.isDone !== undefined ||
+                  op.change.data.dueDate !== undefined ||
+                  op.change.data.dueTime !== undefined)),
+          )
+          .map((op) => op.taskId)
+      : [],
 });

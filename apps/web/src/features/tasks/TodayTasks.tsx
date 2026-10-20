@@ -1,76 +1,68 @@
-import { Alert, Button, Loader, Paper, Stack, Text, Title } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { taskUrl, type Task } from '@rodzina/shared';
+import { Alert, Loader, Paper, Stack, Text, Title } from '@mantine/core';
+import { taskUrl } from '@rodzina/shared';
 import { Link } from 'react-router';
-import { apiFetch } from '../../api.js';
+import { useEffect, useState } from 'react';
 import { useMe } from '../../auth.js';
-import { useOffline } from '../../connectivity.js';
 import { labels } from '../../i18n/pl.js';
-import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { isTaskOverdue } from './taskRules.js';
+import { useTaskData } from './taskQueries.js';
+import { taskOfflineText } from './taskOffline.js';
 
 const t = labels.tasksUi;
 export function TodayTasks() {
-  const { user, family, familyConfirmed } = useMe();
-  const offline = useOffline();
+  const { family } = useMe();
+  const data = useTaskData();
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: family?.timezone ?? 'Europe/Warsaw',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  const complete = data.lists && data.lists.every((list) => data.items[list.id] !== undefined);
+  const tasks = Object.values(data.items)
+    .flat()
+    .filter((task) => !task.isDone && task.dueDate && task.dueDate <= today)
+    .sort(
+      (a, b) =>
+        a.dueDate!.localeCompare(b.dueDate!) ||
+        (a.dueTime ?? '').localeCompare(b.dueTime ?? '') ||
+        a.position - b.position ||
+        a.id.localeCompare(b.id),
+    );
   return (
     <Paper withBorder p="md" component="section" aria-label={t.today} style={{ minWidth: 0 }}>
       <Stack gap="xs">
         <Title order={3}>{t.today}</Title>
-        {offline || !familyConfirmed || !user || !family ? (
+        {data.offline && (
           <Text size="sm" c="dimmed">
-            {offline ? t.todayOffline : t.confirming}
+            Pokazujemy zapisane zadania i oczekujące zmiany.
           </Text>
-        ) : (
-          <TodayTasksOnline
-            key={`${family.id}:${user.id}`}
-            familyId={family.id}
-            userId={user.id}
-            timezone={family.timezone}
-          />
         )}
+        {!complete &&
+          (data.offline || data.error ? <Alert>{taskOfflineText.empty}</Alert> : <Loader aria-label={t.loading} />)}
+        {complete && !tasks.length && (
+          <Text size="sm" c="dimmed">
+            {t.todayEmpty}
+          </Text>
+        )}
+        {tasks.map((task) => (
+          <Stack gap={0} key={task.id}>
+            <Text component={Link} to={taskUrl(task.listId, task.id)} fw={500} style={{ overflowWrap: 'anywhere' }}>
+              {task.title}
+            </Text>
+            <Text size="sm" c={isTaskOverdue(task, family?.timezone ?? 'Europe/Warsaw') ? 'red' : 'dimmed'}>
+              {task.dueDate?.split('-').reverse().join('.')}
+              {task.dueTime ? `, ${task.dueTime}` : ''}
+              {isTaskOverdue(task, family?.timezone ?? 'Europe/Warsaw') ? ` · ${t.overdue}` : ''}
+            </Text>
+          </Stack>
+        ))}
       </Stack>
     </Paper>
   );
-}
-
-function TodayTasksOnline({ familyId, userId, timezone }: { familyId: string; userId: string; timezone: string }) {
-  const query = useQuery({
-    queryKey: ['tasks', familyId, userId, 'today'],
-    queryFn: async ({ signal }) => (await apiFetch<{ tasks: Task[] }>('/api/tasks/today', { signal })).tasks,
-    staleTime: 0,
-    retry: false,
-    refetchInterval: SYNC_INTERVAL_MS,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
-    refetchOnReconnect: 'always',
-  });
-  if (query.isError)
-    return (
-      <Alert color="red">
-        {query.error.message}
-        <Button variant="subtle" onClick={() => void query.refetch()}>
-          {t.retry}
-        </Button>
-      </Alert>
-    );
-  if (!query.isFetchedAfterMount || !query.data) return <Loader aria-label={t.loading} />;
-  if (!query.data.length)
-    return (
-      <Text size="sm" c="dimmed">
-        {t.todayEmpty}
-      </Text>
-    );
-  return query.data.map((task) => (
-    <Stack gap={0} key={task.id}>
-      <Text component={Link} to={taskUrl(task.listId, task.id)} fw={500} style={{ overflowWrap: 'anywhere' }}>
-        {task.title}
-      </Text>
-      <Text size="sm" c={isTaskOverdue(task, timezone) ? 'red' : 'dimmed'}>
-        {task.dueDate?.split('-').reverse().join('.')}
-        {task.dueTime ? `, ${task.dueTime}` : ''}
-        {isTaskOverdue(task, timezone) ? ` · ${t.overdue}` : ''}
-      </Text>
-    </Stack>
-  ));
 }

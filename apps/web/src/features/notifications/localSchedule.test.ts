@@ -17,7 +17,7 @@ function reminder(key: string, fireAt = now + 60_000): ScheduledReminder {
     url: '/kalendarz/wydarzenie/10000000-0000-4000-8000-000000000002?data=2026-10-16',
   };
 }
-function fixture(items = [reminder('one')]) {
+function fixture(items = [reminder('one')], blockedTasks?: (account: string) => string[]) {
   let value: string | null = null;
   const pending = new Map<number, LocalNotificationSchema>();
   const delivered = new Map<number, LocalNotificationSchema>();
@@ -65,9 +65,40 @@ function fixture(items = [reminder('one')]) {
     }),
   };
   const fetch = vi.fn(async (): Promise<unknown> => snapshot);
-  const scheduler = createLocalScheduler({ notifications, store, fetch, now: () => now });
+  const scheduler = createLocalScheduler({
+    notifications,
+    store,
+    fetch,
+    now: () => now,
+    ...(blockedTasks ? { blockedTasks } : {}),
+  });
   return { scheduler, notifications, store, fetch, pending, delivered, snapshot, systemIds };
 }
+
+it('durably suppresses a changed task offline while retaining calendar alarms from the same group', async () => {
+  let blocked: string[] = [];
+  const event = reminder('event');
+  const task = {
+    ...reminder('task'),
+    sourceType: 'task' as const,
+    sourceId: '10000000-0000-4000-8000-000000000005',
+    title: 'Przypomnienie o zadaniu',
+    url: '/zadania/10000000-0000-4000-8000-000000000003?zadanie=10000000-0000-4000-8000-000000000005',
+  };
+  const f = fixture([event, task], () => blocked);
+  await f.scheduler.sync('family:user');
+  expect([...f.pending.values()][0]!.extra.reminders).toHaveLength(2);
+  blocked = [task.sourceId];
+  await f.scheduler.retry('family:user');
+  expect([...f.pending.values()][0]!.extra.reminders).toEqual([event]);
+  const saved = f.store.write.mock.calls.at(-1)![0].value;
+  expect(saved).not.toContain('Przypomnienie o zadaniu');
+  blocked = [];
+  await f.scheduler.retry('family:user');
+  expect([...f.pending.values()][0]!.extra.reminders).toEqual([event]);
+  await f.scheduler.sync('family:user');
+  expect([...f.pending.values()][0]!.extra.reminders).toHaveLength(2);
+});
 
 it('persists generic task alarms and cancels them after loss of access, completion or deletion', async () => {
   const item: ScheduledReminder = {

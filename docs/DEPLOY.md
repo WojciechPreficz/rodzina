@@ -1,5 +1,21 @@
 # Wdrożenie i aktualizacje na cPanel vh.pl
 
+**Zadania offline, krok 7.6 (20.10.2026):** migracja
+`0018_silent_revanche.sql` dodaje tabelę `task_operations` do trwałego
+zapamiętywania odpowiedzi zapisów. Backup obejmuje tę tabelę; nie usuwaj wpisów
+podczas zwykłego porządkowania, bo urządzenie może ponowić operację po długiej
+przerwie. Usunięcie użytkownika lub listy usuwa jej wpisy przez FK.
+Migracja nie zmienia istniejących zadań, wydarzeń, sesji ani przypomnień.
+Najpierw aktualizujemy API/WWW, następnie osobno APK. Starsze APK nadal używają
+dotychczasowych endpointów. Nowe opcjonalne parametry `operationId`, `actorId`
+i `taskId` (przy dodawaniu) wymagają nowego API, aby zapewnić bezpieczne ponawianie.
+Przed zwróceniem zapisanej odpowiedzi serwer ponownie kontroluje dostęp do listy.
+Brak nowych zmiennych, cronów, zależności runtime i usług w tle.
+Dane i kolejka są w localStorage profilu WWW/WebView APK; wylogowanie je usuwa.
+Pierwsze pobranie wymaga internetu. APK zawiera frontend, natomiast ponowne
+załadowanie zwykłej strony WWW może wymagać sieci. Nie przywracamy PWA.
+Samo przygotowanie kroku nie wdraża aktualizacji ani nie publikuje APK.
+
 **Listy zadań, krok 7.1 (20.10.2026):** migracja `0016_task_lists.sql`
 dodaje `task_lists`, `task_list_members` i `tasks` wraz z indeksami, bez zmiany
 istniejących danych. Wymagany jest standardowy backup przed aktualizacją;

@@ -117,6 +117,50 @@ describe('task lists API', () => {
     database?.sqlite.close();
   });
 
+  it('replays create, patch and delete atomically without duplicates or changed completion metadata', async () => {
+    const list = await defaultList();
+    const id = crypto.randomUUID();
+    const url = `${base}/${list.id}/tasks?operationId=${crypto.randomUUID()}&actorId=${owner.id}&taskId=${id}`;
+    const first = await request('POST', url, { title: 'Offline' });
+    expect(first.statusCode, first.body).toBe(201);
+    expect(first.json().task.id).toBe(id);
+    expect((await request('POST', url, { title: 'Offline' })).body).toBe(first.body);
+    expect((await request('POST', url, { title: 'Inne' })).statusCode).toBe(409);
+    expect((await request('GET', `${base}/${list.id}/tasks?status=all`)).json().tasks).toHaveLength(1);
+    const patchUrl = `/api/tasks/${id}?operationId=${crypto.randomUUID()}&actorId=${owner.id}`;
+    const checked = await request('PATCH', patchUrl, { isDone: true });
+    expect((await request('PATCH', patchUrl, { isDone: true })).body).toBe(checked.body);
+    const deleteUrl = `/api/tasks/${id}?operationId=${crypto.randomUUID()}&actorId=${owner.id}`;
+    expect((await request('DELETE', deleteUrl)).statusCode).toBe(200);
+    expect((await request('DELETE', deleteUrl)).statusCode).toBe(200);
+    expect((await request('GET', `${base}/${list.id}/tasks?status=all`)).json().tasks).toHaveLength(0);
+  });
+
+  it('checks current access before replaying a cached response with private task content', async () => {
+    const list = await create([member.id]);
+    const url = `${base}/${list.id}/tasks?operationId=${crypto.randomUUID()}&actorId=${member.id}&taskId=${crypto.randomUUID()}`;
+    expect((await request('POST', url, { title: 'Prywatne' }, member)).statusCode).toBe(201);
+    await request('PATCH', `${base}/${list.id}`, { memberIds: [] });
+    const replay = await request('POST', url, { title: 'Prywatne' }, member);
+    expect(replay.statusCode).toBe(404);
+    expect(replay.body).not.toContain('Prywatne');
+    expect((await request('POST', url, { title: 'Prywatne' }, admin)).statusCode).toBe(401);
+  });
+
+  it('rolls back the task when the durable operation record cannot be written', async () => {
+    const list = await defaultList();
+    database.sqlite.exec(
+      "CREATE TRIGGER fail_task_operation BEFORE INSERT ON task_operations BEGIN SELECT RAISE(ABORT, 'test'); END",
+    );
+    const response = await request(
+      'POST',
+      `${base}/${list.id}/tasks?operationId=${crypto.randomUUID()}&taskId=${crypto.randomUUID()}`,
+      { title: 'Rollback' },
+    );
+    expect(response.statusCode).toBe(500);
+    expect((await request('GET', `${base}/${list.id}/tasks?status=all`)).json().tasks).toHaveLength(0);
+  });
+
   async function addTask(listId: string, data: Record<string, unknown> = {}, user = owner): Promise<Task> {
     const response = await request('POST', `${base}/${listId}/tasks`, { title: 'Zadanie', ...data }, user);
     expect(response.statusCode, response.body).toBe(201);

@@ -183,7 +183,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .where(and(eq(tasks.id, id), accessFilter(familyId, actorId)))
       .get()?.task;
   }
-  function createTask(listId: string, actorId: string, data: CreateTask) {
+  function createTask(listId: string, actorId: string, data: CreateTask, id: string = crypto.randomUUID()) {
     const now = Date.now();
     const position = Math.min(
       (db
@@ -197,7 +197,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .insert(tasks)
       .values({
         ...data,
-        id: crypto.randomUUID(),
+        id,
         listId,
         position,
         createdBy: actorId,

@@ -1,15 +1,23 @@
 import { Alert, Button, Group, Loader, Select, Stack, Text, Textarea, TextInput } from '@mantine/core';
-import { createTaskSchema, sharedTaskReminderSchema, type CreateTask, type Reminder, type Task } from '@rodzina/shared';
+import {
+  createTaskSchema,
+  sharedTaskReminderSchema,
+  type CreateTask,
+  type PatchTask,
+  type Reminder,
+  type Task,
+} from '@rodzina/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { apiFetch } from '../../api.js';
 import { useMe } from '../../auth.js';
-import { isOffline } from '../../connectivity.js';
+import { isOffline, useOffline } from '../../connectivity.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput, type ReminderInput, type ReminderItem } from '../../components/reminderFields.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
+import { taskOfflineText } from './taskOffline.js';
 import type { Member } from '../family/familyApi.js';
 
 const t = labels.tasksUi;
@@ -18,7 +26,7 @@ type TaskFormProps = {
   task?: Task | undefined;
   members: Member[];
   shared: boolean;
-  onSave: (data: CreateTask, id?: string) => Promise<Task>;
+  onSave: (data: CreateTask, id?: string, changes?: PatchTask) => Promise<Task>;
   onCancel: () => void;
   pending: boolean;
   error?: string | undefined;
@@ -26,6 +34,8 @@ type TaskFormProps = {
 
 export function TaskForm(props: TaskFormProps) {
   const { user, family } = useMe();
+  const offline = useOffline();
+  const openedOffline = useRef(offline).current;
   const personal = useQuery({
     queryKey: ['tasks', family?.id, user?.id, 'my-reminders', props.task?.id],
     queryFn: async ({ signal }) =>
@@ -34,19 +44,20 @@ export function TaskForm(props: TaskFormProps) {
           signal,
         })
       ).reminders,
-    enabled: !!props.task,
+    enabled: !!props.task && !offline && !openedOffline,
     staleTime: 0,
     retry: false,
   });
-  if (props.task && personal.isError)
+  if (!offline && !openedOffline && props.task && personal.isError)
     return (
       <Alert color="red">
         {personal.error.message}
         <Button onClick={() => void personal.refetch()}>{t.retry}</Button>
       </Alert>
     );
-  if (props.task && !personal.isFetchedAfterMount) return <Loader aria-label={t.loading} />;
-  return <TaskEditor {...props} personal={personal.data ?? []} />;
+  if (!offline && !openedOffline && props.task && !personal.isFetchedAfterMount)
+    return <Loader aria-label={t.loading} />;
+  return <TaskEditor {...props} personal={personal.data ?? []} openedOffline={openedOffline} />;
 }
 
 function TaskEditor({
@@ -58,11 +69,15 @@ function TaskEditor({
   onCancel,
   pending,
   error,
-}: TaskFormProps & { personal: Reminder[] }) {
+  openedOffline,
+}: TaskFormProps & { personal: Reminder[]; openedOffline: boolean }) {
   const { family, user } = useMe();
+  const offline = useOffline();
+  const configurationOffline = offline || openedOffline;
   const client = useQueryClient();
   const navigation = useFormNavigation();
   const savedId = useRef(task?.id);
+  const baseline = useRef(task);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [reminders, setReminders] = useState<(ReminderItem & { id?: string })[]>(() =>
@@ -104,10 +119,26 @@ function TaskEditor({
     });
     setInvalid(!result.success);
     if (!result.success) return;
+    if (
+      isOffline() &&
+      (sharedChanged ||
+        reminders.some((reminder) => !reminder.id) ||
+        storedPersonal.current.some((stored) => !reminders.some((reminder) => reminder.id === stored.id)))
+    ) {
+      setSaveError(taskOfflineText.limits);
+      return;
+    }
     setSaving(true);
     try {
-      const saved = await onSave(result.data, savedId.current);
+      const changes = Object.fromEntries(
+        Object.entries(result.data).filter(
+          ([field, value]) =>
+            field === 'reminders' || JSON.stringify(baseline.current?.[field as keyof Task]) !== JSON.stringify(value),
+        ),
+      ) as PatchTask;
+      const saved = await onSave(result.data, savedId.current, changes);
       savedId.current = saved.id;
+      baseline.current = saved;
       try {
         for (const stored of [...storedPersonal.current]) {
           if (reminders.some((reminder) => reminder.id === stored.id)) continue;
@@ -136,10 +167,11 @@ function TaskEditor({
       } catch (cause) {
         throw new Error(`${t.reminderSaveFailed} ${cause instanceof Error ? cause.message : ''}`);
       } finally {
-        await Promise.all([
-          client.invalidateQueries({ queryKey: ['tasks', family?.id, user?.id] }),
-          refreshLocalSchedule(client),
-        ]);
+        if (!isOffline())
+          await Promise.all([
+            client.invalidateQueries({ queryKey: ['tasks', family?.id, user?.id] }),
+            refreshLocalSchedule(client),
+          ]);
       }
       navigation.saved();
       onCancel();
@@ -153,6 +185,12 @@ function TaskEditor({
     <form data-navigation-guard="true" onChange={navigation.changed} onSubmit={(event) => void submit(event)}>
       <fieldset disabled={pending || saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <Stack>
+          {configurationOffline && (
+            <Alert>
+              {taskOfflineText.limits}
+              {!offline && ' Zamknij i otwórz formularz ponownie, aby pobrać aktualną konfigurację.'}
+            </Alert>
+          )}
           {(saveError || error) && <Alert color="red">{saveError || error}</Alert>}
           {invalid && <Alert color="red">{t.invalid}</Alert>}
           <TextInput
@@ -195,7 +233,7 @@ function TaskEditor({
             placeholder={t.unassigned}
             clearable
             value={assigneeId}
-            disabled={pending}
+            disabled={pending || configurationOffline}
             data={members.map((member) => ({ value: member.id, label: member.displayName }))}
             onChange={(value) => {
               navigation.changed();
@@ -210,7 +248,7 @@ function TaskEditor({
             task
             value={reminders}
             timezone={family!.timezone}
-            pending={pending || saving}
+            pending={pending || saving || configurationOffline}
             onRemove={(index) => {
               navigation.changed();
               if (reminders[index]!.audience !== 'user') setSharedChanged(true);
@@ -227,7 +265,7 @@ function TaskEditor({
             timezone={family!.timezone}
             audiences={shared ? ['owner', 'list_members', 'user'] : ['owner', 'user']}
             defaultAudience="owner"
-            pending={!dueDate || pending || saving}
+            pending={!dueDate || pending || saving || configurationOffline}
             onAdd={(reminder) => {
               if (!dueDate) throw new Error(t.reminderNeedsDate);
               if (reminders.length >= 20) throw new Error(t.reminderLimit);

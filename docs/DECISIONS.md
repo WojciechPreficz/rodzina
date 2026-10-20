@@ -1,5 +1,41 @@
 # Decyzje
 
+## 20.10.2026 — zadania offline (7.6)
+
+- Na polecenie właściciela rozszerzamy zadania o podgląd i edycję offline,
+  podobnie do zakupów. Zapis obejmuje wszystkie pobrane listy i pełne zadania,
+  osobno dla rodziny i użytkownika, również po zamknięciu APK. Zastępuje to
+  wcześniejsze ograniczenie szczegółów do trybu online z kroków 7.3–7.5.
+  Odebranie dostępu jest wykrywalne dopiero po połączeniu z serwerem.
+- Wspólny magazyn `taskOffline.ts` jest niezależny od cache zapytań TanStack:
+  przechowuje bazę potwierdzonych danych i osobny trwały dziennik operacji.
+  UI nakłada oczekujące operacje na bazę, więc odrzucenie jednej zmiany nie
+  cofa późniejszych zmian. Oddzielne klucze operacji chronią kolejkę wielu kart.
+  Awaria zapisu pamięci nie może być przedstawiona jako przyjęcie zmiany.
+- API zachowuje dotychczasowe kontrakty i dodaje opcjonalne UUID operacji,
+  oczekiwanej osoby oraz nowego zadania. Migracja `0018_silent_revanche.sql`
+  dodaje rejestr wyników zapisany w tej samej transakcji co zmiana zadania.
+  Powtórzenie nie dubluje zadania ani metadanych wykonania. Przed zwróceniem
+  zapisanego wyniku ponownie sprawdzamy bieżący dostęp do prywatnej listy.
+- Wysyłamy zmienione pola; formularz porównuje je ze stanem przy otwarciu,
+  aby nie nadpisać niezauważonej zmiany z drugiego urządzenia. Dla tego samego
+  pola wygrywa ostatni zapis przyjęty przez serwer. Błąd 400/404/409 odrzuca
+  pojedynczą operację z komunikatem; transport, 429 i 5xx zachowują kolejkę.
+  Potwierdzone cofnięcie listy usuwa jej dane i oczekujące operacje.
+- Zarządzanie listami, udostępnianie, opuszczanie listy, zmiana przypisanej
+  osoby i konfiguracji przypomnień pozostają online. Ekran i formularz informują
+  o ograniczeniach, a kontrolki są zablokowane. Formularz otwarty offline
+  zachowuje pola po powrocie sieci i wymaga ponownego otwarcia, aby edytować
+  konfigurację przypomnień po pobraniu osobistych ustawień.
+- Odhaczenie, usunięcie, zmiana terminu lub ponowne otwarcie wstrzymują lokalne
+  alarmy tego zadania. Adapter zapisuje przefiltrowany harmonogram i zachowuje
+  pozostałe alarmy, również z tej samej grupy. Nowe terminy i ponowne planowanie
+  czekają na serwer; nie budujemy drugiego kalkulatora przypomnień offline.
+  Payload pozostaje ogólny. Synchronizacja działa podczas aktywności aplikacji,
+  po wznowieniu i powrocie sieci; nie zakładamy pracy przy zamkniętym APK.
+- Nie dodajemy zmiennych, cronów, zależności runtime ani nowej usługi na serwerze.
+  Wdrożenie wymaga aktualizacji API/WWW i osobnej aktualizacji APK.
+
 ## 19.10.2026 — wycofanie PWA, kroki 4.8-4.10
 
 - Na polecenie właściciela pozostają strona WWW i APK. Alarmy offline Androida

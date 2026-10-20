@@ -86,9 +86,10 @@ for (const native of [false, true]) {
     await page.goto(`/zadania/${listId}?zadanie=${taskId}`);
     await expect(page.getByRole('dialog', { name: 'Edytuj zadanie' })).toBeVisible();
     await page.context().setOffline(true);
-    await expect(page.getByRole('alert').filter({ hasText: 'Prywatne szczegóły' })).toBeVisible();
-    await expect(page.getByRole('dialog', { name: 'Edytuj zadanie' })).toHaveCount(0);
-    await expect(page.getByText('Kod odbioru u mamy')).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: 'Jesteś offline' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Edytuj zadanie' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByLabel('Notatka')).toHaveValue('Kod odbioru u mamy');
+    await expect(page.getByRole('dialog').getByRole('textbox', { name: 'Osoba przypisana' })).toBeDisabled();
     await page.context().setOffline(false);
     await expect(page.getByRole('dialog', { name: 'Edytuj zadanie' })).toBeVisible({ timeout: 21000 });
   });

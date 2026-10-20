@@ -1,5 +1,72 @@
 # Praca lokalna — strona WWW i APK
 
+## Zadania offline — krok 7.6, 20.10.2026
+
+Ten krok rozszerza wcześniejsze wymagania online zadań: zapisane prywatne
+szczegóły i formularz są teraz dostępne bez sieci. Nie stosujemy już historycznej
+próby ukrywania wszystkich szczegółów po odłączeniu internetu. Podgląd odpowiada
+ostatnio potwierdzonemu dostępowi; dopiero ponowne połączenie pozwala wykryć
+cofnięcie udostępnienia. Wylogowanie i zmiana konta usuwają lokalne dane.
+
+Po zalogowaniu pobieramy wszystkie dostępne listy i zadania. Dziennik zapisów
+przetrwa zamknięcie procesu APK; zaakceptowane lokalnie zmiany są widoczne od razu
+i wysyłane po powrocie sieci w aktywnej aplikacji. Bez internetu można dodawać,
+edytować tytuł/notatkę/termin, odhaczać, ponownie otwierać i usuwać zadania.
+Karta kalendarza wylicza dzisiejsze i zaległe zadania z lokalnych danych.
+
+Offline blokujemy tworzenie i ustawienia list, udostępnianie, opuszczenie listy,
+zmianę osoby przypisanej i konfiguracji przypomnień. Ekran i formularz wyjaśniają
+ograniczenia. Formularz otwarty offline należy ponownie otworzyć po połączeniu,
+aby pobrać osobiste przypomnienia i odblokować ich konfigurację. Zmiana terminu,
+odhaczenie lub usunięcie wstrzymują lokalne alarmy zadania. Przywrócenie lub nowy
+termin oczekują na serwerowy harmonogram; powiadomienia nadal są ogólne.
+
+Wymagana próba odbiorcza przy 390 i 1280 px oraz w APK:
+
+1. Zalogować się online, otworzyć zadania, odciąć sieć. Otworzyć również wcześniej
+   nieodwiedzoną listę. Sprawdzić komunikat i wszystkie blokady.
+2. Dodać zadanie, zmienić tytuł, notatkę i termin, odhaczyć trzy zadania,
+   jedno otworzyć ponownie, inne usunąć. Sprawdzić liczniki i kartę kalendarza.
+3. Zamknąć proces APK i uruchomić offline: dane i kolejka mają pozostać.
+   Na fizycznym telefonie dodatkowo wykonać restart urządzenia offline.
+4. Przywrócić internet w aktywnej aplikacji; drugi kontekst ma zobaczyć zmiany
+   bez duplikatów. Cofnąć udostępnienie listy z drugiej sesji przy oczekującej
+   zmianie: po synchronizacji dane znikają, a aplikacja wyjaśnia odrzucenie.
+5. Na fizycznym Androidzie pobrać ogólny alarm zadania, odciąć sieć, odhaczyć
+   zadanie i potwierdzić anulowanie alarmu, również po zamknięciu i restarcie.
+   Pozostały alarm wydarzenia, także wcześniej grupowany z zadaniem, ma pozostać.
+   Ponownie otwarte zadanie odzyskuje przyszłe alarmy po synchronizacji online.
+
+Wyniki lokalne (20.10.2026):
+
+- Vitest: **126 testów w 11 plikach** — zadania API/UI, trwała kolejka,
+  przypomnienia zadań, adapter i synchronizacja alarmów oraz sesja Androida.
+  Po rozszerzeniu dziennika i próbie północy pozostałe 108 testów przeszło;
+  końcowe 18 testów UI potwierdzono osobno po wydłużeniu oczekiwania na zamknięcie
+  formularza z 1 do 4 s. Zapis nie wywołuje pytania o odrzucenie zmian.
+- Playwright: **14/14**, Chromium headless przy 390 i 1280 px, WWW i atrapa
+  transportu Androida. Nowe scenariusze sprawdzają odhaczenie trzech zadań,
+  dodanie, edycję i usunięcie offline, ponowne załadowanie frontendu bez API,
+  odtworzenie kolejki i synchronizację do drugiej sesji bez duplikatów.
+  To symulacja ponownego uruchomienia JavaScript, nie fizyczny restart APK.
+- Przejrzano zrzuty listy i formularza w obu szerokościach; bez przepełnienia.
+  Końcowe korekty komunikatu alarmów i usuwania cache przy błędzie pamięci
+  potwierdza dodatkowy przebieg **4/4** scenariuszy offline końcowego buildu.
+- Lint zmienionych plików: bez błędów (dwa dotychczasowe ostrzeżenia Fast Refresh
+  w `auth.tsx`). Prettier, typecheck, build WWW/API i debug APK: poprawne.
+- Lokalny `release:smoke` utworzył paczkę, lecz nie zakończył kontroli w sandboxie.
+  Właściciel odrzucił wykonanie poza sandboxem, więc testu nie zaliczamy.
+  Nowa migracja jest objęta testami API; pełny smoke pozostaje do wykonania.
+- Próby telefonu nie zostały wykonane: odczyt ADB poza sandboxem został odrzucony.
+  Nie zaliczamy fizycznego restartu offline, anulowania rzeczywistego alarmu
+  ani interaktywnego odbioru APK na podstawie testów i samego buildu.
+
+Logi są w ignorowanych `.android-tools/tasks-offline-*`, a zrzuty w `test-results/`.
+Stan: **zweryfikowane lokalnie, oczekuje na CI**, z jawnymi brakami smoke i prób
+fizycznego telefonu. Na polecenie właściciela zapisujemy lokalny commit na `main`,
+bez pusha i uruchamiania CI. Krok nie jest jeszcze formalnie zamknięty według
+sekcji 1.2 planu. Nie wykonano deployu ani publikacji APK.
+
 Aktualne zasady po kroku 4.10 (19.10.2026). Starsze przebiegi i instrukcje
 zachowano w części „Historia realizacji”; opisy PWA i usuniętych poleceń Web Push
 w tej części nie są instrukcją dla obecnego wydania.

@@ -127,6 +127,13 @@
       "when": 1792491593578,
       "tag": "0017_rare_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1792516798128,
+      "tag": "0018_silent_revanche",
+      "breakpoints": true
     }
   ]
 }

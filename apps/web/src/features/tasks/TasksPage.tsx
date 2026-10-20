@@ -18,7 +18,6 @@ import { taskUrl, type Task } from '@rodzina/shared';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useMe } from '../../auth.js';
-import { useOffline } from '../../connectivity.js';
 import { labels } from '../../i18n/pl.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { useMembersQuery } from '../family/familyQueries.js';
@@ -27,6 +26,8 @@ import { TaskForm } from './TaskForm.js';
 import { TaskListSettings } from './TaskListSettings.js';
 import { useTasks } from './taskQueries.js';
 import { isTaskOverdue } from './taskRules.js';
+import { taskOfflineText } from './taskOffline.js';
+import { isAndroid } from '../../platform.js';
 
 const t = labels.tasksUi;
 
@@ -41,15 +42,6 @@ function MemberAvatar({ member, id }: { member: Member | undefined; id: string }
 
 export function TasksPage() {
   const { listId } = useParams();
-  const offline = useOffline();
-  const { familyConfirmed } = useMe();
-  if (offline || !familyConfirmed)
-    return (
-      <Stack>
-        <Title order={2}>{t.title}</Title>
-        <Alert>{offline ? t.offline : t.confirming}</Alert>
-      </Stack>
-    );
   return <TaskListPage key={listId ?? 'lists'} />;
 }
 
@@ -99,18 +91,26 @@ function TaskListPage() {
     return (
       <Stack>
         <Title order={2}>{t.title}</Title>
-        <Alert color="red">{data.lists.error.message}</Alert>
+        <Alert color="red">{data.lists.error?.message}</Alert>
         <Button onClick={() => void data.lists.refetch()}>{t.retry}</Button>
       </Stack>
     );
-  if (!data.lists.isFetchedAfterMount || !data.lists.data) return <Loader aria-label={t.loading} />;
+  if (!data.lists.data)
+    return (
+      <Stack>
+        <Title order={2}>{t.title}</Title>
+        {data.offline && <Alert>{taskOfflineText.limits}</Alert>}
+        {data.syncError && <Alert color="red">{data.syncError}</Alert>}
+        {data.offline || data.syncError ? <Alert>{taskOfflineText.empty}</Alert> : <Loader aria-label={t.loading} />}
+      </Stack>
+    );
   const lists = [...data.lists.data].sort(
     (a, b) =>
       Number(b.isDefault && b.ownerId === user?.id) - Number(a.isDefault && a.ownerId === user?.id) ||
       a.position - b.position,
   );
   const active = data.active;
-  const visibleTasks = data.tasks.isError || !data.tasks.isFetchedAfterMount ? [] : (data.tasks.data ?? []);
+  const visibleTasks = data.tasks.data ?? [];
   const editedTask = visibleTasks.find((task) => task.id === taskId);
   const listMembers = active
     ? members.filter((member) => [active.ownerId, ...active.memberIds].includes(member.id))
@@ -155,9 +155,30 @@ function TaskListPage() {
   );
   return (
     <Stack maw={860} w="100%" mx="auto">
+      {data.offline && (
+        <Alert title="Tryb offline">
+          <Text>{taskOfflineText.banner}</Text>
+          <Text mt="xs">{taskOfflineText.limits}</Text>
+        </Alert>
+      )}
+      {data.pendingCount > 0 && (
+        <Alert>
+          <Text>Zmiany oczekujące na wysłanie: {data.pendingCount}</Text>
+          {isAndroid() && data.pendingAlarms && <Text size="sm">{taskOfflineText.alarms}</Text>}
+        </Alert>
+      )}
+      {data.syncError && (
+        <Alert color="red">
+          {data.syncError}
+          <Button variant="subtle" onClick={() => void data.lists.refetch()}>
+            {t.retry}
+          </Button>
+        </Alert>
+      )}
       <Group justify="space-between">
         <Title order={2}>{t.title}</Title>
         <Button
+          disabled={data.offline}
           onClick={() => {
             data.createList.reset();
             setAddingList(true);
@@ -212,6 +233,7 @@ function TaskListPage() {
             {active.ownerId === user?.id ? (
               <Button
                 variant="default"
+                disabled={data.offline}
                 onClick={() => {
                   data.updateList.reset();
                   data.removeList.reset();
@@ -224,6 +246,7 @@ function TaskListPage() {
               <Button
                 variant="subtle"
                 color="red"
+                disabled={data.offline}
                 loading={data.leaveList.isPending}
                 onClick={() => {
                   if (window.confirm(t.leaveListConfirm))
@@ -273,13 +296,17 @@ function TaskListPage() {
           </Button>
           {data.tasks.isError ? (
             <Alert color="red">
-              {data.tasks.error.message}
+              {data.tasks.error?.message}
               <Button variant="subtle" onClick={() => void data.tasks.refetch()}>
                 {t.retry}
               </Button>
             </Alert>
-          ) : !data.tasks.isFetchedAfterMount || data.tasks.isPending ? (
-            <Loader aria-label={t.loading} />
+          ) : !data.tasks.data ? (
+            data.offline || data.syncError ? (
+              <Alert>{taskOfflineText.empty}</Alert>
+            ) : (
+              <Loader aria-label={t.loading} />
+            )
           ) : (
             <>
               {visibleTasks.filter((task) => !task.isDone).map(row)}
@@ -301,7 +328,7 @@ function TaskListPage() {
           )}
         </Stack>
       )}
-      <Modal opened={addingList} onClose={() => setAddingList(false)} title={t.addList}>
+      <Modal opened={addingList && !data.offline} onClose={() => setAddingList(false)} title={t.addList}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -332,7 +359,7 @@ function TaskListPage() {
         </form>
       </Modal>
       <Modal
-        opened={settingsOpened && !!active && active.ownerId === user?.id}
+        opened={!data.offline && settingsOpened && !!active && active.ownerId === user?.id}
         onClose={() => {
           if (allowNavigation()) setSettingsOpened(false);
         }}
@@ -372,8 +399,8 @@ function TaskListPage() {
             pending={data.create.isPending || data.update.isPending || data.remove.isPending}
             error={(editedTask ? data.update.error : data.create.error)?.message}
             onCancel={closeTask}
-            onSave={async (input, id) => {
-              if (id) return data.update.mutateAsync({ id, data: input });
+            onSave={async (input, id, changes) => {
+              if (id) return data.update.mutateAsync({ id, data: changes ?? input });
               return data.create.mutateAsync(input);
             }}
           />

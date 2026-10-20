@@ -285,3 +285,20 @@ export const tasks = sqliteTable(
   },
   (table) => [index('tasks_list_position_idx').on(table.listId, table.position)],
 );
+
+export const taskOperations = sqliteTable(
+  'task_operations',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    id: text('id').notNull(),
+    listId: text('list_id')
+      .notNull()
+      .references(() => taskLists.id, { onDelete: 'cascade' }),
+    fingerprint: text('fingerprint').notNull(),
+    response: text('response').notNull(),
+    status: integer('status').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.id] })],
+);

@@ -1151,6 +1151,14 @@ zakres. Obecna decyzja to wyłącznie odczyt; zapisy offline wymagają osobnego 
 
 **Cel:** każdy domownik ma własne listy zadań. Wybraną listę może udostępnić konkretnym domownikom, np. wspólną listę "Remont łazienki" dla obojga rodziców.
 
+**Rozszerzenie offline, decyzja właściciela 20.10.2026 (krok 7.6):** zapisane
+listy i szczegóły zadań są dostępne offline, również po restarcie APK.
+Ten zapis zastępuje wcześniejszy obowiązek potwierdzania online przed każdym
+podglądem prywatnych szczegółów, także po otwarciu ogólnego alarmu. Dostęp
+odpowiada ostatniej udanej synchronizacji; cofnięcia dostępu telefon offline
+nie pozna do połączenia z serwerem. Powiadomienia pozostają ogólne.
+Szczegóły zakresu i ograniczeń opisuje krok 7.6 poniżej.
+
 **Zasady widoczności i uprawnień:**
 
 - Każdy użytkownik (także dziecko) dostaje przy pierwszym wejściu domyślną listę "Moje zadania" (`is_default=true`). Tej listy nie można usunąć.
@@ -1237,7 +1245,42 @@ zakres. Obecna decyzja to wyłącznie odczyt; zapisy offline wymagają osobnego 
 - Manualnie: lista udostępniona drugiemu domownikowi pojawia się u niego po maksymalnie 20 s, a po cofnięciu udostępnienia znika.
 - Spełnione punkty z sekcji 1.1.
 
-**Poza zakresem:** zadania cykliczne, podzadania, punkty i nagrody, załączniki, udostępnianie pojedynczych zadań.
+#### Krok 7.6 - Zadania offline z trwałą kolejką zmian
+
+- **Zakres:** po potwierdzeniu sesji pobranie wszystkich widocznych list i ich
+  pełnych zadań, z zapisem per rodzina i użytkownik. Podgląd i formularz działają
+  na zapisanych danych także po zamknięciu procesu APK. Offline można dodawać
+  zadania do zapisanych list, edytować tytuł, notatkę i termin, odhaczać,
+  ponownie otwierać i usuwać zadania. Karta „Dziś do zrobienia” wynika z lokalnych
+  danych, bieżącej daty w strefie rodziny i oczekujących zmian.
+- **Kolejka:** trwały dziennik operacji zapisywany przed potwierdzeniem zmiany
+  w UI. Każda operacja ma UUID; API zapisuje wynik i zmianę w jednej transakcji,
+  aby ponowienie nie dublowało zadania. Powrót sieci, wznowienie i aktywne
+  odświeżanie co 20 s uruchamiają synchronizację. Brak wysyłki przy zamkniętym APK.
+  Wysyłamy tylko zmienione pola; dla tego samego pola wygrywa ostatni zapis
+  przyjęty przez serwer. Usuniętych zadań nie odtwarzamy.
+- **Ograniczenia:** tworzenie i ustawienia list, udostępnianie, opuszczanie listy,
+  zmiana przypisanej osoby i konfiguracji przypomnień wymagają internetu.
+  Ekran i formularz offline wyjaśniają te ograniczenia, a kontrolki są zablokowane.
+  Formularz otwarty offline wymaga ponownego otwarcia online, aby pobrać osobiste
+  przypomnienia i udostępnić ich konfigurację bez utraty niezapisanych pól.
+- **Prywatność:** wylogowanie i zmiana konta usuwają dane i kolejkę. Przed replay
+  sprawdzamy sesję i widoczne listy, a API kontroluje dostęp również przed
+  zwróceniem zapamiętanej odpowiedzi. Potwierdzona utrata listy usuwa jej cache
+  i zatrzymuje zmiany z komunikatem. Błąd transportu zachowuje zapis lokalny.
+- **Alarmy:** odhaczenie, usunięcie i zmiana terminu wstrzymują lokalne alarmy
+  zadania przez zapis zmienionego harmonogramu APK. Ponowne otwarcie i nowe
+  terminy oczekują na pobranie harmonogramu z serwera. Nie tworzymy nowego
+  mechanizmu obliczania alarmów offline; payload nadal jest ogólny.
+- **Gotowe, gdy:** testy trwałości, restartu, powtórzeń żądań, błędów pamięci,
+  utraty dostępu, izolacji kont, spóźnionych odpowiedzi i niezależnych operacji
+  wielu kart przechodzą. Próba online → offline → zamknięcie → otwarcie → online
+  zachowuje zmiany i synchronizuje je z drugim kontekstem bez duplikatów.
+  UI sprawdzone przy 390 i 1280 px, wspólny frontend także w APK; na fizycznym
+  telefonie sprawdzono restart offline i anulowanie alarmu po odhaczeniu.
+  Wymagane końcowe CI i gotowość do deployu z sekcji 1.1–1.2.
+
+**Poza zakresem:** zadania cykliczne, podzadania, punkty i nagrody, załączniki, udostępnianie pojedynczych zadań, zarządzanie listami i konfiguracją przypomnień offline.
 
 ---
 

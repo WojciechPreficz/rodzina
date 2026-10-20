@@ -30,6 +30,8 @@ import { SYNC_INTERVAL_MS } from './queryClient.js';
 import { Alert } from '@mantine/core';
 import { calendarStore } from './features/calendar/calendarOffline.js';
 import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
+import { taskStore } from './features/tasks/taskOffline.js';
+import { TaskPrefetch } from './features/tasks/taskQueries.js';
 
 export type AuthRole = 'admin' | 'member' | 'child';
 
@@ -97,6 +99,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       const cached = saved?.session ?? readShoppingSession();
       if (cached) {
         calendarStore.activate(accountId(cached));
+        taskStore.activate(accountId(cached));
         if (queryClient) {
           restoreShopping(queryClient, cached);
           if (saved) restoreOfflineData(queryClient, saved);
@@ -118,6 +121,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       if (!current()) return;
       if (currentSession.current && accountId(currentSession.current) !== accountId(response)) {
         calendarStore.clear();
+        taskStore.clear();
         clearShoppingStorage(queryClient);
         clearOfflineData();
         queryClient?.clear();
@@ -126,6 +130,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       }
       currentSession.current = response;
       calendarStore.activate(accountId(response));
+      taskStore.activate(accountId(response));
       if (queryClient) restoreShopping(queryClient, response);
       setUser(response.user);
       setFamily(response.family);
@@ -163,6 +168,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
         invalidateSessionRequests();
         clearOfflineData();
         calendarStore.clear();
+        taskStore.clear();
         clearShoppingStorage(queryClient);
         queryClient?.clear();
         currentSession.current = undefined;
@@ -204,6 +210,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   useEffect(() => {
     const loseSession = (removeStored: boolean) => {
       calendarStore.clear(removeStored);
+      taskStore.clear(removeStored);
       if (isAndroid()) localScheduler.invalidate();
       generation.current += 1;
       if (removeStored) {
@@ -241,6 +248,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
 
   const logout = async () => {
     calendarStore.clear();
+    taskStore.clear();
     if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
@@ -268,7 +276,9 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
 
   const setSession = (nextUser: AuthUser, nextFamily: Family) => {
     calendarStore.clear();
+    taskStore.clear();
     calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
+    taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
     if (isAndroid()) localScheduler.invalidate();
     generation.current += 1;
     invalidateSessionRequests();
@@ -301,6 +311,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
+      {queryClient && user && family && <TaskPrefetch />}
       {queryClient && <ScheduleSync account={user ? `${user.familyId}:${user.id}` : ''} />}
       {queryClient && family && familyConfirmed && familySyncedAt && (
         <CalendarPrefetch confirmedAt={familySyncedAt} timezone={family.timezone} />

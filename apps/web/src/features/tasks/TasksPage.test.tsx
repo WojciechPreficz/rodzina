@@ -8,6 +8,7 @@ import type { Task, TaskList } from '@rodzina/shared';
 import { TasksPage } from './TasksPage.js';
 import { TodayTasks } from './TodayTasks.js';
 import { isTaskOverdue } from './taskRules.js';
+import { taskStore } from './taskOffline.js';
 import { reportTransportFailure } from '../../connectivity.js';
 
 const session = vi.hoisted(() => ({
@@ -57,13 +58,15 @@ function setup(
   let items = [...initial];
   let lists = [{ ...list, id: 'second', name: 'Remont', isDefault: false, memberIds: ['other'] }, list];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
+    const rawUrl = String(input);
+    const url = rawUrl.split('?operationId=')[0]!;
     const method = init?.method ?? 'GET';
     const data = init?.body ? JSON.parse(String(init.body)) : {};
     const custom = override?.(url, method, data);
     if (custom) return custom instanceof Response ? custom : new Response(JSON.stringify({ ok: true, ...custom }));
+    if (url === '/api/auth/me') return new Response(JSON.stringify(session));
     if (failPatch && method === 'PATCH')
-      return new Response(JSON.stringify({ error: { message: 'Nie udało się zapisać.' } }), { status: 500 });
+      return new Response(JSON.stringify({ error: { message: 'Nie udało się zapisać.' } }), { status: 400 });
     let body: object;
     if (url.startsWith('/api/reminders/mine')) body = { reminders: [] };
     else if (url === '/api/tasks/lists' && method === 'GET') body = { lists };
@@ -72,7 +75,11 @@ function setup(
       lists = [...lists, created];
       body = { list: created };
     } else if (method === 'POST') {
-      const created = { ...task, ...data, id: 'new-task' };
+      const created = {
+        ...task,
+        ...data,
+        id: new URL(rawUrl, 'https://test').searchParams.get('taskId') ?? 'new-task',
+      };
       items = [...items, created];
       body = { task: created };
     } else if (method === 'PATCH') {
@@ -81,7 +88,7 @@ function setup(
     } else if (method === 'DELETE') {
       items = [];
       body = { deleted: true };
-    } else body = { tasks: items };
+    } else body = { tasks: url.includes('/lists/second/') ? [] : items };
     return new Response(JSON.stringify({ ok: true, ...body }));
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -102,6 +109,7 @@ function setup(
   return fetchMock;
 }
 beforeEach(() => {
+  taskStore.clear();
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
   reportTransportFailure(false);
   session.familyConfirmed = true;
@@ -128,11 +136,13 @@ beforeEach(() => {
 afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
   cleanup();
+  taskStore.clear();
   client?.clear();
   onlineManager.setOnline(true);
   reportTransportFailure(false);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('tasks UI', () => {
@@ -160,7 +170,7 @@ describe('tasks UI', () => {
     fireEvent.click(checkbox);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Zrobione (0)' })).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/tasks/task',
+      expect.stringMatching(/^\/api\/tasks\/task\?operationId=/),
       expect.objectContaining({ method: 'PATCH', body: '{"isDone":false}' }),
     );
   });
@@ -174,7 +184,7 @@ describe('tasks UI', () => {
   it('keeps the unchecked task on a rejected write and offers the server error', async () => {
     setup('/zadania/list', [task], true);
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Zrobione: Kupić farbę' }));
-    expect(await screen.findByText('Nie udało się zapisać.')).toBeInTheDocument();
+    expect((await screen.findAllByText(/Nie udało się zapisać/)).length).toBeGreaterThan(0);
     expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
   });
   it('quick-adds a trimmed title and keeps the form clear after success', async () => {
@@ -185,11 +195,12 @@ describe('tasks UI', () => {
     expect(await screen.findByRole('article', { name: 'Odebrać paczkę' })).toBeInTheDocument();
     expect(input).toHaveValue('');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/tasks/lists/list/tasks',
+      expect.stringMatching(/^\/api\/tasks\/lists\/list\/tasks\?operationId=/),
       expect.objectContaining({ method: 'POST', body: '{"title":"Odebrać paczkę"}' }),
     );
   });
   it('opens a task URL, limits assignment to list members and clears both deadline fields without touching reminders', async () => {
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const fetchMock = setup('/zadania/list?zadanie=task', [{ ...task, dueTime: '16:45' }]);
     const dialog = await screen.findByRole('dialog', { name: 'Edytuj zadanie' });
     await within(dialog).findByLabelText('Notatka');
@@ -200,27 +211,35 @@ describe('tasks UI', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: /^Tytuł/ }), { target: { value: 'Nowy tytuł' } });
     fireEvent.change(within(dialog).getByLabelText('Termin'), { target: { value: '' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument(), { timeout: 4000 });
+    expect(confirmation).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/tasks/task',
+      expect.stringMatching(/^\/api\/tasks\/task\?operationId=/),
       expect.objectContaining({
         body: JSON.stringify({
           title: 'Nowy tytuł',
-          notes: 'Biała',
           dueDate: null,
           dueTime: null,
-          assigneeId: session.user.id,
         }),
       }),
     );
   });
-  it('hides already loaded private content and its dialog when going offline', async () => {
+  it('keeps saved private content available offline and explains disabled actions', async () => {
     setup('/zadania/list?zadanie=task');
-    await screen.findByRole('dialog');
+    await screen.findByLabelText('Notatka');
     act(() => onlineManager.setOnline(false));
-    expect(screen.queryByText(task.title)).not.toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('aktualnego dostępu online');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText('Notatka')).toHaveValue('Biała');
+    expect(screen.getByRole('textbox', { name: 'Osoba przypisana' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dodaj przypomnienie' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dodaj listę' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Ustawienia listy' })).toBeDisabled();
+    expect(screen.getAllByText(/Bez internetu nie można tworzyć list/).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByRole('textbox', { name: /^Tytuł/ }), { target: { value: 'Offline tytuł' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await screen.findByRole('article', { name: 'Offline tytuł' })).toBeInTheDocument();
+    expect(taskStore.getSnapshot().pending).toHaveLength(1);
   });
   it('lets the owner rename and share a default list but never offers deletion', async () => {
     const fetchMock = setup();
@@ -261,7 +280,7 @@ describe('tasks UI', () => {
     await screen.findByLabelText('Notatka');
     revoked = true;
     await act(async () => {
-      await client.invalidateQueries({ queryKey: ['tasks'] });
+      await taskStore.synchronize();
     });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.queryByText(task.title)).not.toBeInTheDocument();
@@ -282,7 +301,7 @@ describe('tasks UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/tasks/task',
+        expect.stringMatching(/^\/api\/tasks\/task\?operationId=/),
         expect.objectContaining({
           body: expect.stringContaining(
             '"reminders":[{"type":"offset","offsetValue":0,"offsetUnit":"minute","audience":"owner"}]',
@@ -314,19 +333,23 @@ describe('tasks UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(
-      fetchMock.mock.calls.filter(([url, init]) => url === '/api/tasks/lists/list/tasks' && init?.method === 'POST'),
+      fetchMock.mock.calls.filter(
+        ([url, init]) => String(url).startsWith('/api/tasks/lists/list/tasks?') && init?.method === 'POST',
+      ),
     ).toHaveLength(1);
     expect(attempts).toBe(2);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/reminders/mine',
-      expect.objectContaining({ body: '{"taskId":"new-task","type":"offset","offsetValue":0,"offsetUnit":"minute"}' }),
+      expect.objectContaining({
+        body: expect.stringContaining('"type":"offset","offsetValue":0,"offsetUnit":"minute"'),
+      }),
     );
   });
   it('does not request private data before confirming the account', () => {
     session.familyConfirmed = false;
     const fetchMock = setup();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Potwierdzanie');
+    expect(screen.getByLabelText('Wczytywanie zadań…')).toBeInTheDocument();
   });
   it('hides cached details when a later access check is rejected', async () => {
     const fetchMock = setup('/zadania/list?zadanie=task');
@@ -335,31 +358,48 @@ describe('tasks UI', () => {
       async () => new Response(JSON.stringify({ error: { message: 'Nie znaleziono listy.' } }), { status: 404 }),
     );
     await act(async () => {
-      await client.invalidateQueries({ queryKey: ['tasks'] });
+      await taskStore.synchronize();
     });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.queryByText(task.title)).not.toBeInTheDocument();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Nie znaleziono listy.');
+    expect(await screen.findByText('Nie znaleziono listy.')).toBeInTheDocument();
   });
 });
 
 describe('today tasks card', () => {
-  it('links visible due tasks to their online details and hides them offline', async () => {
+  it('recomputes today after midnight offline in the family timezone', async () => {
+    setup('/', [{ ...task, dueDate: '2026-10-21' }]);
+    await screen.findByText('Na dziś wszystko zrobione.');
+    act(() => onlineManager.setOnline(false));
+    cleanup();
+    client.clear();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-20T21:59:30Z'));
+    setup('/');
+    expect(screen.getByText('Na dziś wszystko zrobione.')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(screen.getByRole('link', { name: task.title })).toBeInTheDocument();
+  });
+  it('links visible due tasks and keeps them available offline', async () => {
     setup('/');
     const link = await screen.findByRole('link', { name: task.title });
     expect(link).toHaveAttribute('href', '/zadania/list?zadanie=task');
     expect(screen.getByText(/po terminie/)).toBeInTheDocument();
     act(() => onlineManager.setOnline(false));
-    expect(screen.queryByText(task.title)).not.toBeInTheDocument();
-    expect(screen.getByText('Połącz się z internetem, aby zobaczyć dzisiejsze zadania.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: task.title })).toBeInTheDocument();
+    expect(screen.getByText('Pokazujemy zapisane zadania i oczekujące zmiany.')).toBeInTheDocument();
   });
   it('replaces removed tasks with the empty state on refresh', async () => {
     let removed = false;
-    setup('/', [task], false, (url) => (url === '/api/tasks/today' ? { tasks: removed ? [] : [task] } : undefined));
+    setup('/', [task], false, (url) =>
+      url.includes('/tasks?status=all') ? { tasks: removed ? [] : [task] } : undefined,
+    );
     await screen.findByText(task.title);
     removed = true;
     await act(async () => {
-      await client.invalidateQueries({ queryKey: ['tasks'] });
+      await taskStore.synchronize();
     });
     expect(await screen.findByText('Na dziś wszystko zrobione.')).toBeInTheDocument();
     expect(screen.queryByText(task.title)).not.toBeInTheDocument();
