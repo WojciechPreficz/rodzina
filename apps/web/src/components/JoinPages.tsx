@@ -1,3 +1,4 @@
+import type { SessionResponse, ChildProfile, FamilyMembersResponse, InvitationResponse } from '@rodzina/shared';
 import {
   Alert,
   Button,
@@ -15,12 +16,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { apiFetch, sanitizeNextPath } from '../api.js';
-import { useMe, type AuthUser, type Family } from '../auth.js';
+import { useMe } from '../auth.js';
 import { labels } from '../i18n/pl.js';
 import { errorMessage, validateDisplayName, validatePin } from '../features/family/familyRules.js';
-
-type SessionResponse = { user: AuthUser; family: Family };
-type ChildProfile = Pick<AuthUser, 'id' | 'displayName' | 'color'>;
 
 export function ChildLoginPage() {
   const [searchParams] = useSearchParams();
@@ -42,7 +40,7 @@ export function ChildLoginPage() {
     setPending(true);
     setError('');
     try {
-      const response = await apiFetch<{ members: ChildProfile[] }>(
+      const response = await apiFetch<FamilyMembersResponse>(
         `/api/auth/family-members?joinCode=${encodeURIComponent(joinCode)}`,
       );
       setMembers(response.members);
@@ -210,7 +208,7 @@ export function InvitationPage() {
   const queryClient = useQueryClient();
   const preview = useQuery({
     queryKey: ['invitation', token],
-    queryFn: () => apiFetch<{ family: { name: string } }>(`/api/invitations/${encodeURIComponent(token)}`),
+    queryFn: () => apiFetch<InvitationResponse>(`/api/invitations/${encodeURIComponent(token)}`),
     retry: false,
   });
   const [form, setForm] = useState({ displayName: '', email: '', password: '' });

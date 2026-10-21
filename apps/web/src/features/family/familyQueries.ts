@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useMe } from '../../auth.js';
 import { familyMembersKey } from '../../offlineData.js';
 import { isOffline, useOffline } from '../../connectivity.js';
+import type { Member } from '@rodzina/shared';
 import {
   createChild,
   createInvitation,
@@ -9,7 +10,6 @@ import {
   deleteMember,
   rotateJoinCode,
   updateMember,
-  type Member,
   type MemberUpdate,
 } from './familyApi.js';
 

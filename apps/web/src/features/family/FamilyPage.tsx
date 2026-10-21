@@ -5,7 +5,8 @@ import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
 import { LinkActions } from './LinkActions.js';
 import { AddChildModal, EditMemberModal } from './MemberDialogs.js';
-import type { Member } from './familyApi.js';
+import type { Member } from '@rodzina/shared';
+
 import { useCreateInvitation, useMembersQuery, useRotateJoinCode } from './familyQueries.js';
 import { canEditProfile, errorMessage, isFamilyAdmin } from './familyRules.js';
 import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';

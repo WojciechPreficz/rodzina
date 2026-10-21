@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { useSyncExternalStore } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
-import type { AuthUser, Family } from './auth.js';
+import type { AuthUser, Family } from '@rodzina/shared';
 
 export const OFFLINE_DATA_KEY = 'rodzina:offline-data:v1';
 export const familyMembersKey = (familyId: string, userId: string) => ['family', familyId, userId, 'members'] as const;

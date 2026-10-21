@@ -12,10 +12,12 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useState, type FormEvent } from 'react';
-import type { AuthUser } from '../../auth.js';
+import type { AuthUser } from '@rodzina/shared';
+
 import { labels } from '../../i18n/pl.js';
 import { LinkActions } from './LinkActions.js';
-import { MEMBER_COLORS, type Member, type MemberUpdate } from './familyApi.js';
+import type { Member } from '@rodzina/shared';
+import { MEMBER_COLORS, type MemberUpdate } from './familyApi.js';
 import { useCreateChild, useCreatePasswordResetLink, useDeleteMember, useUpdateMember } from './familyQueries.js';
 import { errorMessage, validateDisplayName, validatePin } from './familyRules.js';
 import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';

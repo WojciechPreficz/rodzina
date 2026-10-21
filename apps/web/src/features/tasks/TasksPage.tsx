@@ -21,7 +21,8 @@ import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { useMembersQuery } from '../family/familyQueries.js';
-import type { Member } from '../family/familyApi.js';
+import type { Member } from '@rodzina/shared';
+
 import { TaskForm } from './TaskForm.js';
 import { TaskListSettings } from './TaskListSettings.js';
 import { useTasks } from './taskQueries.js';

@@ -12,7 +12,8 @@ import { useMe } from '../../auth.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
-import type { Member } from '../family/familyApi.js';
+import type { Member } from '@rodzina/shared';
+
 import { calendarOnlineHint, useCalendarReadOnly, useCalendarMutations, useOccurrences } from './calendarQueries.js';
 import { CalendarOfflineNotice } from './CalendarOfflineNotice.js';
 import { useOffline } from '../../connectivity.js';

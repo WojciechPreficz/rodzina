@@ -1,7 +1,8 @@
 import 'temporal-polyfill/global';
 import { Temporal } from 'temporal-polyfill';
 import type { CalendarEventExternal, CalendarType } from '@schedule-x/calendar';
-import type { Member } from '../family/familyApi.js';
+import type { Member } from '@rodzina/shared';
+
 import type { CalendarOccurrence, CalendarRange } from './calendarApi.js';
 
 export const FAMILY_CALENDAR = 'family';

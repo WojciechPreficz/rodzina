@@ -25,7 +25,8 @@ import {
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput, type ReminderItem } from '../../components/reminderFields.js';
 import { RecurrenceFields } from './RecurrenceFields.js';
-import type { Member } from '../family/familyApi.js';
+import type { Member } from '@rodzina/shared';
+
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import { isOffline, useOffline } from '../../connectivity.js';

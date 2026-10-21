@@ -1,8 +1,9 @@
+import type { SessionResponse } from '@rodzina/shared';
 import { Alert, Button, Group, Paper, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useState } from 'react';
 import { apiFetch, sanitizeNextPath } from '../api.js';
-import { useMe, type AuthUser, type Family } from '../auth.js';
+import { useMe } from '../auth.js';
 
 import { labels } from '../i18n/pl.js';
 
@@ -38,7 +39,7 @@ export function RegisterPage() {
     }
 
     try {
-      const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/register-family', {
+      const response = await apiFetch<SessionResponse>('/api/auth/register-family', {
         method: 'POST',
         body: JSON.stringify({
           ...form,
@@ -145,7 +146,7 @@ export function LoginPage() {
     }
 
     try {
-      const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/login', {
+      const response = await apiFetch<SessionResponse>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: form.email.trim(), password: form.password }),
       });

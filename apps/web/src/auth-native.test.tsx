@@ -7,7 +7,8 @@ vi.mock('@capacitor/core', () => ({
   Capacitor: { getPlatform: () => 'android' },
   registerPlugin: () => ({ request, clearSession }),
 }));
-import { AuthProvider, useMe, type AuthUser, type Family } from './auth.js';
+import type { AuthUser, Family } from '@rodzina/shared';
+import { AuthProvider, useMe } from './auth.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
 import { restoreShopping, stopShoppingPersistence, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingOffline.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({

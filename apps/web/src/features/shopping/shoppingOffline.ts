@@ -2,7 +2,8 @@ import { dehydrate, hydrate, onlineManager, type QueryClient } from '@tanstack/r
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import type { PersistedClient } from '@tanstack/query-persist-client-core';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
-import type { AuthUser, Family } from '../../auth.js';
+import type { AuthUser, Family } from '@rodzina/shared';
+
 import { apiFetch, ApiRequestError } from '../../api.js';
 import { changeShopping, type ShoppingChange } from './shoppingApi.js';
 import { applyShoppingChange, shoppingKey, type ShoppingAccount } from './shoppingOptimistic.js';

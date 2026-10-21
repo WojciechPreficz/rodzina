@@ -13,7 +13,8 @@ vi.mock('../notifications/scheduleSync.js', () => ({ ScheduleSync: () => null })
 vi.mock('../notifications/localSchedule.js', () => ({
   localScheduler: { invalidate: vi.fn(), clear: vi.fn(async () => {}) },
 }));
-import { AuthProvider, useMe, type AuthUser } from '../../auth.js';
+import type { AuthUser } from '@rodzina/shared';
+import { AuthProvider, useMe } from '../../auth.js';
 import { reportTransportFailure } from '../../connectivity.js';
 import {
   clearOfflineData,

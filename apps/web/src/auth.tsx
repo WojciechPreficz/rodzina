@@ -1,3 +1,4 @@
+import type { AuthUser, Family, AuthMeResponse, AuthOkResponse } from '@rodzina/shared';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { focusManager, onlineManager, QueryClientContext } from '@tanstack/react-query';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
@@ -32,26 +33,6 @@ import { calendarStore } from './features/calendar/calendarOffline.js';
 import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
 import { taskStore } from './features/tasks/taskOffline.js';
 import { TaskPrefetch } from './features/tasks/taskQueries.js';
-
-export type AuthRole = 'admin' | 'member' | 'child';
-
-export type Family = {
-  id: string;
-  name: string;
-  timezone: string;
-  joinCode: string;
-};
-
-export type AuthUser = {
-  id: string;
-  familyId: string;
-  displayName: string;
-  email: string | null;
-  role: AuthRole;
-  color: string;
-  createdAt: number;
-  updatedAt: number;
-};
 
 export type AuthState = {
   user: AuthUser | null;
@@ -117,7 +98,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
         await apiFetch('/api/auth/logout', { method: 'POST' });
         pendingWebLogout(false);
       }
-      const response = await apiFetch<{ ok: boolean; user: AuthUser; family: Family }>('/api/auth/me');
+      const response = await apiFetch<AuthMeResponse>('/api/auth/me');
       if (!current()) return;
       if (currentSession.current && accountId(currentSession.current) !== accountId(response)) {
         calendarStore.clear();
@@ -263,7 +244,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     await queryClient?.cancelQueries();
     queryClient?.clear();
     try {
-      await apiFetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' });
+      await apiFetch<AuthOkResponse>('/api/auth/logout', { method: 'POST' });
       pendingWebLogout(false);
     } catch (error) {
       if (!isAndroid() && error instanceof ApiRequestError) throw error;

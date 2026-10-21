@@ -1,3 +1,4 @@
+import { serializeFamily } from '../../http/family.js';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -235,7 +236,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
 
     return {
       ok: true,
-      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
+      family: serializeFamily(family),
       user: serializeUser(created),
     };
   }
@@ -426,12 +427,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
 
     return {
       ok: true,
-      family: {
-        id: updated.id,
-        name: updated.name,
-        timezone: updated.timezone,
-        joinCode: updated.joinCode,
-      },
+      family: serializeFamily(updated),
     };
   }
 

@@ -8,7 +8,7 @@ import {
   restoreOfflineData,
   saveOfflineData,
 } from './offlineData.js';
-import type { AuthUser } from './auth.js';
+import type { AuthUser } from '@rodzina/shared';
 
 const user: AuthUser = {
   id: 'user',

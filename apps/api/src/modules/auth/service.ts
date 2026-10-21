@@ -1,3 +1,4 @@
+import { serializeFamily } from '../../http/family.js';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { hashPassword, hashToken, isValidPassword, normalizeEmail, verifyPassword, verifyPin } from '../../auth.js';
@@ -101,12 +102,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
 
     return {
       ok: true,
-      family: {
-        id: family.id,
-        name: family.name,
-        timezone: family.timezone,
-        joinCode: family.joinCode,
-      },
+      family: serializeFamily(family),
       user: serializeUser(user),
     };
   }
@@ -147,7 +143,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     return {
       ok: true,
       user: serializeUser(user),
-      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
+      family: serializeFamily(family),
     };
   }
 
@@ -212,7 +208,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     return {
       ok: true,
       user: serializeUser(user),
-      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
+      family: serializeFamily(family),
     };
   }
 
@@ -233,7 +229,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     return {
       ok: true,
       user,
-      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
+      family: serializeFamily(family),
     };
   }
 

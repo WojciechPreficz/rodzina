@@ -1,15 +1,7 @@
+import type { AuthUser as PublicAuthUser } from '@rodzina/shared';
 import type { users } from '../db/schema.js';
 
-export type PublicAuthUser = {
-  id: string;
-  familyId: string;
-  displayName: string;
-  email: string | null;
-  role: 'admin' | 'member' | 'child';
-  color: string;
-  createdAt: number;
-  updatedAt: number;
-};
+export type { AuthUser as PublicAuthUser } from '@rodzina/shared';
 
 declare module 'fastify' {
   interface FastifyRequest {

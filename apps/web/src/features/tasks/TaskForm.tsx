@@ -18,7 +18,7 @@ import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import { taskOfflineText } from './taskOffline.js';
-import type { Member } from '../family/familyApi.js';
+import type { Member } from '@rodzina/shared';
 
 const t = labels.tasksUi;
 

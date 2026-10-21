@@ -3,7 +3,7 @@ import type { PatchTaskList, TaskList } from '@rodzina/shared';
 import { useState } from 'react';
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
-import type { Member } from '../family/familyApi.js';
+import type { Member } from '@rodzina/shared';
 
 const t = labels.tasksUi;
 export function TaskListSettings({

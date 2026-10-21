@@ -1,4 +1,5 @@
-import type { AuthUser } from '../../auth.js';
+import type { AuthUser } from '@rodzina/shared';
+
 import { labels } from '../../i18n/pl.js';
 
 type Actor = Pick<AuthUser, 'id' | 'role'>;

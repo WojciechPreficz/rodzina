@@ -5,7 +5,7 @@ import {
   localDateTimeToUtc,
   type CalendarEvent,
 } from '@rodzina/shared';
-import type { AuthUser } from '../../auth.js';
+import type { AuthUser } from '@rodzina/shared';
 
 export function canEditEvent(user: AuthUser, event: CalendarEvent): boolean {
   return user.role !== 'child' || event.createdBy === user.id;

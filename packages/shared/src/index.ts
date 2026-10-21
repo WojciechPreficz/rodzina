@@ -10,3 +10,4 @@ export * from './schemas/android-release.js';
 export * from './schemas/shopping.js';
 export * from './shopping.js';
 export * from './schemas/tasks.js';
+export * from './schemas/auth.js';

@@ -1,7 +1,14 @@
 import { apiFetch } from '../../api.js';
-import type { AuthRole, AuthUser } from '../../auth.js';
-
-export type Member = AuthUser;
+import type {
+  AuthRole,
+  Member,
+  MembersResponse,
+  MemberResponse,
+  DeleteMemberResponse,
+  CreateInvitationResponse,
+  PasswordResetLinkResponse,
+  RotateJoinCodeResponse,
+} from '@rodzina/shared';
 
 export type MemberUpdate = {
   displayName?: string;
@@ -22,12 +29,12 @@ export const MEMBER_COLORS = [
 ] as const;
 
 export async function listMembers(signal?: AbortSignal): Promise<Member[]> {
-  const response = await apiFetch<{ members: Member[] }>('/api/members', signal ? { signal } : {});
+  const response = await apiFetch<MembersResponse>('/api/members', signal ? { signal } : {});
   return response.members;
 }
 
 export async function createChild(input: { displayName: string; pin: string; color: string }): Promise<Member> {
-  const response = await apiFetch<{ member: Member }>('/api/members/child', {
+  const response = await apiFetch<MemberResponse>('/api/members/child', {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -35,7 +42,7 @@ export async function createChild(input: { displayName: string; pin: string; col
 }
 
 export async function updateMember(id: string, update: MemberUpdate): Promise<Member> {
-  const response = await apiFetch<{ member: Member }>(`/api/members/${encodeURIComponent(id)}`, {
+  const response = await apiFetch<MemberResponse>(`/api/members/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(update),
   });
@@ -43,11 +50,11 @@ export async function updateMember(id: string, update: MemberUpdate): Promise<Me
 }
 
 export async function deleteMember(id: string): Promise<void> {
-  await apiFetch<{ deleted: boolean }>(`/api/members/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await apiFetch<DeleteMemberResponse>(`/api/members/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function createInvitation(role: 'admin' | 'member'): Promise<string> {
-  const response = await apiFetch<{ link: string }>('/api/invitations', {
+  const response = await apiFetch<CreateInvitationResponse>('/api/invitations', {
     method: 'POST',
     body: JSON.stringify({ role }),
   });
@@ -55,13 +62,16 @@ export async function createInvitation(role: 'admin' | 'member'): Promise<string
 }
 
 export async function createPasswordResetLink(id: string): Promise<string> {
-  const response = await apiFetch<{ link: string }>(`/api/members/${encodeURIComponent(id)}/password-reset-link`, {
-    method: 'POST',
-  });
+  const response = await apiFetch<PasswordResetLinkResponse>(
+    `/api/members/${encodeURIComponent(id)}/password-reset-link`,
+    {
+      method: 'POST',
+    },
+  );
   return response.link;
 }
 
 export async function rotateJoinCode(): Promise<string> {
-  const response = await apiFetch<{ joinCode: string }>('/api/family/join-code/rotate', { method: 'POST' });
+  const response = await apiFetch<RotateJoinCodeResponse>('/api/family/join-code/rotate', { method: 'POST' });
   return response.joinCode;
 }
