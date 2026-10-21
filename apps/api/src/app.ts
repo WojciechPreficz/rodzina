@@ -1,3 +1,5 @@
+import { registerAuthRoutes } from './modules/auth/routes.js';
+import { createSessionFactory } from './modules/auth/session.js';
 import { registerSecurityHeaders } from './http/security-headers.js';
 import { registerSessionAuth } from './http/session-auth.js';
 import { serializeUser, type PublicAuthUser } from './http/user.js';
@@ -10,19 +12,7 @@ import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
-import {
-  generateJoinCode,
-  hashPassword,
-  hashPin,
-  hashToken,
-  isValidPassword,
-  isValidPin,
-  normalizeEmail,
-  randomToken,
-  SESSION_TTL_MS,
-  verifyPassword,
-  verifyPin,
-} from './auth.js';
+import { generateJoinCode, hashPassword, hashPin, hashToken, isValidPin, normalizeEmail, randomToken } from './auth.js';
 import { canEditMemberProfile, canManageFamilyMembers, canSetChildPin, canUpdateMemberRole } from './permissions.js';
 import type { AppConfig } from './config.js';
 import type { createDatabase } from './db/client.js';
@@ -35,20 +25,6 @@ import { createTaskListService } from './modules/tasks/service.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 
 type Database = ReturnType<typeof createDatabase>;
-
-const registerFamilySchema = z.object({
-  familyName: z.string().trim().min(2),
-  displayName: z.string().trim().min(2),
-  email: z.string().trim().email(),
-  password: z.string().min(8),
-});
-
-const loginSchema = z.object({
-  email: z.string().trim().email(),
-  password: z.string().min(8),
-});
-
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function findFamilyMember(
   database: Database,
@@ -91,71 +67,6 @@ function buildMemberPayload(
   return serializeUser(user);
 }
 
-function getLoginRateLimitKey(ip: string, email: string): string {
-  return `${ip}:${email}`;
-}
-
-function checkRateLimit(key: string): boolean {
-  const now = Date.now();
-  const existing = loginAttempts.get(key);
-
-  if (!existing) {
-    loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
-    return true;
-  }
-
-  if (existing.resetAt <= now) {
-    loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
-    return true;
-  }
-
-  if (existing.count >= 10) {
-    return false;
-  }
-
-  existing.count += 1;
-  loginAttempts.set(key, existing);
-  return true;
-}
-
-function clearLoginRateLimit(key: string): void {
-  loginAttempts.delete(key);
-}
-
-async function createSessionForUser(
-  reply: FastifyReply,
-  request: { headers: Record<string, string | string[] | undefined> },
-  database: Database,
-  userId: string,
-  config: AppConfig,
-): Promise<void> {
-  const sessionToken = randomToken();
-  const sessionHash = hashToken(sessionToken);
-  const now = Date.now();
-  const userAgent = Array.isArray(request.headers['user-agent'])
-    ? request.headers['user-agent'][0]
-    : request.headers['user-agent'];
-
-  database.db
-    .insert(schema.sessions)
-    .values({
-      id: sessionHash,
-      userId,
-      expiresAt: now + SESSION_TTL_MS,
-      createdAt: now,
-      userAgent: userAgent ?? null,
-    })
-    .run();
-
-  reply.setCookie('sid', sessionToken, {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: config.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 60,
-  });
-}
-
 function sendError(reply: FastifyReply, status: number, code: string, message: string) {
   return reply.code(status).send({ error: { code, message } });
 }
@@ -171,6 +82,7 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
             serializers: { req: (request) => ({ method: request.method, hostname: request.hostname }) },
           },
   });
+  const createSession = createSessionFactory(database, config);
   const version = process.env.npm_package_version ?? '0.1.0';
 
   registerApiErrorHandler(app);
@@ -179,6 +91,7 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
   await app.register(fastifyCookie);
 
   registerSessionAuth(app, database, config);
+  registerAuthRoutes(app, database, config);
 
   app.get('/api/health', async (_request, reply) => {
     let dbOk = false;
@@ -190,281 +103,6 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
     }
 
     return reply.code(dbOk ? 200 : 503).send({ ok: true, version, dbOk });
-  });
-
-  app.post('/api/auth/register-family', async (request, reply) => {
-    const parsed = registerFamilySchema.safeParse(request.body ?? {});
-    if (!parsed.success) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane rejestracji są niepoprawne.');
-    }
-
-    if (!config.RODZINA_ALLOW_REGISTRATION) {
-      return sendError(reply, 403, 'FORBIDDEN', 'Rejestracja rodziny jest wyłączona.');
-    }
-
-    const { familyName, displayName, email, password } = parsed.data;
-    const normalizedEmail = normalizeEmail(email);
-    const existingUser = database.db.select().from(schema.users).where(eq(schema.users.email, normalizedEmail)).get();
-
-    if (existingUser) {
-      return sendError(reply, 409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
-    }
-
-    if (!isValidPassword(password)) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Hasło musi mieć co najmniej 8 znaków.');
-    }
-
-    const familyId = crypto.randomUUID();
-    const userId = crypto.randomUUID();
-    const now = Date.now();
-    const passwordHash = await hashPassword(password);
-    try {
-      database.db.transaction((tx) => {
-        let joinCode = generateJoinCode();
-
-        while (tx.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get()) {
-          joinCode = generateJoinCode();
-        }
-
-        tx.insert(schema.families)
-          .values({
-            id: familyId,
-            name: familyName,
-            timezone: 'Europe/Warsaw',
-            joinCode,
-            createdAt: now,
-          })
-          .run();
-
-        tx.insert(schema.users)
-          .values({
-            id: userId,
-            familyId,
-            displayName,
-            email: normalizedEmail,
-            passwordHash,
-            role: 'admin',
-            color: '#5C7CFA',
-            createdAt: now,
-            updatedAt: now,
-          })
-          .run();
-      });
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-        return sendError(reply, 409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
-      }
-      throw error;
-    }
-
-    const sessionToken = randomToken();
-    const sessionHash = hashToken(sessionToken);
-
-    database.db
-      .insert(schema.sessions)
-      .values({
-        id: sessionHash,
-        userId,
-        expiresAt: now + SESSION_TTL_MS,
-        createdAt: now,
-        userAgent: request.headers['user-agent'] ?? null,
-      })
-      .run();
-
-    const family = database.db.select().from(schema.families).where(eq(schema.families.id, familyId)).get();
-    const user = database.db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
-
-    if (!family || !user) {
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odtworzyć rodziny lub użytkownika po rejestracji.');
-    }
-
-    reply.setCookie('sid', sessionToken, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 60,
-    });
-
-    return reply.code(201).send({
-      ok: true,
-      family: {
-        id: family.id,
-        name: family.name,
-        timezone: family.timezone,
-        joinCode: family.joinCode,
-      },
-      user: serializeUser(user),
-    });
-  });
-
-  app.post('/api/auth/login', async (request, reply) => {
-    const parsed = loginSchema.safeParse(request.body ?? {});
-    if (!parsed.success) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane logowania są niepoprawne.');
-    }
-
-    const { email, password } = parsed.data;
-    const normalizedEmail = normalizeEmail(email);
-    const loginKey = getLoginRateLimitKey(request.ip ?? 'unknown', normalizedEmail);
-
-    if (!checkRateLimit(loginKey)) {
-      return sendError(reply, 429, 'RATE_LIMITED', 'Za dużo prób logowania. Spróbuj ponownie później.');
-    }
-
-    const user = database.db.select().from(schema.users).where(eq(schema.users.email, normalizedEmail)).get();
-    if (!user || !user.passwordHash) {
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Nieprawidłowy e-mail lub hasło.');
-    }
-
-    const isValid = await verifyPassword(user.passwordHash, password);
-    if (!isValid) {
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Nieprawidłowy e-mail lub hasło.');
-    }
-
-    clearLoginRateLimit(loginKey);
-
-    const now = Date.now();
-    const sessionToken = randomToken();
-    const sessionHash = hashToken(sessionToken);
-
-    database.db
-      .insert(schema.sessions)
-      .values({
-        id: sessionHash,
-        userId: user.id,
-        expiresAt: now + SESSION_TTL_MS,
-        createdAt: now,
-        userAgent: request.headers['user-agent'] ?? null,
-      })
-      .run();
-
-    reply.setCookie('sid', sessionToken, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 60,
-    });
-
-    const family = database.db.select().from(schema.families).where(eq(schema.families.id, user.familyId)).get();
-    if (!family) {
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Nie można odczytać rodziny po zalogowaniu.');
-    }
-
-    return {
-      ok: true,
-      user: serializeUser(user),
-      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
-    };
-  });
-
-  app.get('/api/auth/family-members', async (request, reply) => {
-    const joinCode = String((request.query as Record<string, unknown> | undefined)?.joinCode ?? '').trim();
-    if (!joinCode) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Kod rodziny jest wymagany.');
-    }
-
-    const family = database.db.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get();
-    if (!family) {
-      return sendError(reply, 404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
-    }
-
-    const children = database.db
-      .select({ id: schema.users.id, displayName: schema.users.displayName, color: schema.users.color })
-      .from(schema.users)
-      .where(and(eq(schema.users.familyId, family.id), eq(schema.users.role, 'child')))
-      .orderBy(asc(schema.users.createdAt))
-      .all();
-
-    return {
-      ok: true,
-      members: children,
-      children,
-    };
-  });
-
-  app.post('/api/auth/login-child', async (request, reply) => {
-    const parsed = z
-      .object({
-        joinCode: z.string().trim().min(1),
-        userId: z.string().trim().min(1),
-        pin: z.string().trim().min(4).max(6),
-      })
-      .safeParse(request.body ?? {});
-
-    if (!parsed.success) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane logowania dziecka są niepoprawne.');
-    }
-
-    const { joinCode, userId, pin } = parsed.data;
-    const family = database.db.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get();
-    if (!family) {
-      return sendError(reply, 404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
-    }
-
-    const user = database.db
-      .select()
-      .from(schema.users)
-      .where(and(eq(schema.users.id, userId), eq(schema.users.familyId, family.id), eq(schema.users.role, 'child')))
-      .get();
-
-    if (!user || !user.pinHash) {
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
-    }
-
-    const loginKey = getLoginRateLimitKey(request.ip ?? 'unknown', `${family.id}:${userId}`);
-    if (!checkRateLimit(loginKey)) {
-      return sendError(reply, 429, 'RATE_LIMITED', 'Za dużo prób logowania. Spróbuj ponownie później.');
-    }
-
-    const isValid = await verifyPin(user.pinHash, pin);
-    if (!isValid) {
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
-    }
-
-    clearLoginRateLimit(loginKey);
-    await createSessionForUser(reply, request, database, user.id, config);
-
-    return {
-      ok: true,
-      user: serializeUser(user),
-      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
-    };
-  });
-
-  app.post('/api/auth/logout', async (request, reply) => {
-    const sessionToken = request.cookies?.sid;
-    if (sessionToken) {
-      database.db
-        .delete(schema.sessions)
-        .where(eq(schema.sessions.id, hashToken(sessionToken)))
-        .run();
-    }
-
-    reply.clearCookie('sid', { path: '/' });
-    return { ok: true };
-  });
-
-  app.get('/api/auth/me', async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
-    }
-
-    const family = database.db
-      .select()
-      .from(schema.families)
-      .where(eq(schema.families.id, request.user.familyId))
-      .get();
-    if (!family) {
-      return sendError(reply, 500, 'INTERNAL_ERROR', 'Brak danych rodziny dla aktywnego użytkownika.');
-    }
-
-    return {
-      ok: true,
-      user: request.user,
-      family: { id: family.id, name: family.name, timezone: family.timezone, joinCode: family.joinCode },
-    };
   });
 
   app.get('/api/members', async (request, reply) => {
@@ -712,7 +350,7 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       return sendError(reply, 410, 'USED', 'Zaproszenie wygasło lub zostało już wykorzystane.');
     }
 
-    await createSessionForUser(reply, request, database, userId, config);
+    await createSession(reply, request, userId);
 
     const created = database.db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
     if (!created) {
@@ -775,70 +413,6 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
       link: `${config.RODZINA_PUBLIC_URL.replace(/\/$/, '')}/reset-hasla/${token}`,
       expiresAt,
     };
-  });
-
-  app.post('/api/auth/reset-password', async (request, reply) => {
-    const parsed = z
-      .object({
-        token: z.string().trim().min(1),
-        password: z.string().min(8),
-      })
-      .safeParse(request.body ?? {});
-
-    if (!parsed.success) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Dane resetu hasła są niepoprawne.');
-    }
-
-    const { token, password } = parsed.data;
-    const resetRequest = database.db
-      .select()
-      .from(schema.passwordResets)
-      .where(eq(schema.passwordResets.tokenHash, hashToken(token)))
-      .get();
-
-    if (!resetRequest) {
-      return sendError(reply, 404, 'NOT_FOUND', 'Token resetu hasła jest nieprawidłowy.');
-    }
-
-    if (resetRequest.expiresAt <= Date.now()) {
-      return sendError(reply, 410, 'EXPIRED', 'Token resetu hasła wygasł.');
-    }
-
-    if (resetRequest.usedAt) {
-      return sendError(reply, 410, 'USED', 'Token resetu hasła został już wykorzystany.');
-    }
-
-    if (!isValidPassword(password)) {
-      return sendError(reply, 400, 'VALIDATION_ERROR', 'Hasło musi mieć co najmniej 8 znaków.');
-    }
-
-    const passwordHash = await hashPassword(password);
-    const now = Date.now();
-
-    const reset = database.db.transaction((tx) => {
-      const claimed = tx
-        .update(schema.passwordResets)
-        .set({ usedAt: now })
-        .where(
-          and(
-            eq(schema.passwordResets.id, resetRequest.id),
-            isNull(schema.passwordResets.usedAt),
-            gt(schema.passwordResets.expiresAt, now),
-          ),
-        )
-        .run();
-      if (claimed.changes !== 1) return false;
-      tx.update(schema.users)
-        .set({ passwordHash, updatedAt: now })
-        .where(eq(schema.users.id, resetRequest.userId))
-        .run();
-      return true;
-    });
-    if (!reset) {
-      return sendError(reply, 410, 'USED', 'Token resetu hasła wygasł lub został już wykorzystany.');
-    }
-
-    return { ok: true };
   });
 
   app.patch('/api/members/:id', async (request, reply) => {
