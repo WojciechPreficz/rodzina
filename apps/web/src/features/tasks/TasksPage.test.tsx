@@ -368,13 +368,13 @@ describe('tasks UI', () => {
 
 describe('today tasks card', () => {
   it('recomputes today after midnight offline in the family timezone', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-20T21:59:30Z'));
     setup('/', [{ ...task, dueDate: '2026-10-21' }]);
-    await screen.findByText('Na dziś wszystko zrobione.');
+    await vi.waitFor(() => expect(screen.getByText('Na dziś wszystko zrobione.')).toBeInTheDocument());
     act(() => onlineManager.setOnline(false));
     cleanup();
     client.clear();
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-10-20T21:59:30Z'));
     setup('/');
     expect(screen.getByText('Na dziś wszystko zrobione.')).toBeInTheDocument();
     await act(async () => {
