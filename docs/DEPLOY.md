@@ -580,6 +580,23 @@ zastępuje weryfikacji podpisu przez Androida. Źródła:
 
 ## Krok 4.7 — ręczna aktualizacja przez GitHub Actions
 
+### Błąd pobierania zależności Androida (HTTP 403)
+
+Jeżeli po udanej kontroli keystore krok „Build and verify signed Android release”
+kończy się `Could not GET ... repo.maven.apache.org ... 403 Forbidden`, błąd dotyczy
+dostępu do Maven Central. Nie wymaga zmiany klucza, aliasu ani haseł podpisywania.
+Deploy zatrzymuje się przed publikacją plików na serwerze.
+
+`android/maven-repositories.gradle` kieruje repozytoria Maven Central wszystkich
+modułów (także buildscript i pluginów Capacitor) do
+[publicznego mirrora Google](https://storage-download.googleapis.com/maven-central/index.html).
+CI i Deploy zapisują cache Gradle przez `gradle/actions/setup-gradle@v4`;
+cache konfiguracji z sekretami podpisywania pozostaje wyłączony.
+Po wysłaniu poprawki uruchom nowy Deploy dla aktualnego `main`.
+Ponowienie starego przebiegu korzysta ze starego commita bez poprawki.
+
+### Uruchomienie workflow
+
 Workflow **Deploy** aktualizuje istniejącą instalację API/WWW oraz przy każdym
 uruchomieniu buduje, podpisuje i publikuje nową wersję APK. Nie trzeba ręcznie
 wgrywać pierwszego ani następnych APK. Uruchamia się tylko

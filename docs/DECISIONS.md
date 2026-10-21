@@ -887,6 +887,19 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   listą, formularz przypomnień oraz karta kalendarza pozostają w 7.5.
   Bez zmian API, migracji, zmiennych, cronów i zależności runtime.
 
+## 21.10.2026 — pobieranie zależności Androida
+
+- Deploy zatrzymał się przed publikacją, ponieważ Maven Central zwracał HTTP 403
+  podczas pobierania zależności Gradle. Kontrola klucza podpisującego przeszła.
+- Korzystamy z publicznego mirrora Maven Central utrzymywanego przez Google:
+  `https://maven-central.storage-download.googleapis.com/maven2/`.
+  Skrypt stosowany z ustawień Gradle zmienia adres Central w repozytoriach
+  buildscript i zależności każdego projektu, również pluginów Capacitor.
+  Nie zmieniamy repozytorium Google Maven ani wersji zależności.
+- CI i Deploy korzystają z `gradle/actions/setup-gradle@v4`, aby zachować cache
+  zależności pomiędzy uruchomieniami. Nie włączamy cache konfiguracji z sekretami
+  podpisywania. Zmiana dotyczy narzędzi budowania, bez zmian runtime serwera.
+
 ## 20.10.2026 — gest przesuwania kalendarza na telefonie
 
 - Na polecenie właściciela dodajemy do Schedule-X gest poziomy: w lewo
