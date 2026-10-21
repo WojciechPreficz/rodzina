@@ -1,5 +1,21 @@
 # Decyzje
 
+## 21.10.2026 — podział modułów API
+
+- `app.ts` składa aplikację. Wspólne hooki sesji i nagłówków, serializacja
+  użytkownika oraz obsługa błędów znajdują się w `apps/api/src/http/`.
+- Nowe funkcje API dodajemy w `modules/<nazwa>/`: `routes.ts` obsługuje HTTP,
+  `service.ts` waliduje dane i uprawnienia oraz wykonuje logikę, a `repository.ts`
+  zawiera zapytania i transakcje. Auth i rodzina korzystają z tego samego podziału
+  co wydarzenia i przypomnienia. Reguły uprawnień pozostają w `permissions.ts`.
+- Błędy domenowe zgłaszamy przez `ApiError(status, code, message)` z `http/errors.ts`.
+  `registerApiErrorHandler` zachowuje kształt `{ error: { code, message } }`,
+  dotychczasowe komunikaty modułów i mapowanie walidacji Fastify. Bez konfiguracji
+  modułu pozostałe błędy obsługuje dotychczasowy handler Fastify.
+- Trasy wymagające sesji pobierają użytkownika przez `requireUser(request)`.
+  Auth i akceptacja zaproszenia tworzą sesje przez wspólne `createSession`
+  z `modules/auth/session.ts`. Bez zmian schematu bazy, zależności i konfiguracji.
+
 ## 20.10.2026 — wymagane źródło mutacji API (CSRF)
 
 - Mutacje POST/PUT/PATCH/DELETE pod `/api/` wymagają nagłówka `Origin`,
