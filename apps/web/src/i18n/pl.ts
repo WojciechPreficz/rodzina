@@ -1,4 +1,13 @@
 export const labels = {
+  notFound: {
+    loading: 'Wczytywanie strony',
+    eyebrow: 'CHWILA, TO NIE TEN ADRES',
+    titleFirst: 'Nie znaleźliśmy',
+    titleLast: 'tej strony.',
+    description: 'Być może adres jest niepoprawny albo strona została przeniesiona.',
+    back: 'Wróć do kalendarza',
+    foot: 'Twoje rodzinne plany czekają na Ciebie.',
+  },
   tasksUi: {
     title: 'Zadania',
     description: 'Małe kroki, spokojniejszy dzień.',

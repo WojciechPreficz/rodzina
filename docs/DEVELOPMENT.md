@@ -1,5 +1,47 @@
 # Praca lokalna — strona WWW i APK
 
+## Redesign R.7 — strona 404, 21.10.2026
+
+Nieznany adres pokazuje stronę 404 z lokalnym SVG domu i wewnętrznym linkiem
+„Wróć do kalendarza”. Zalogowany użytkownik zachowuje `AppShell`, a osoba
+bez sesji otrzymuje `AuthLayout`; powrót do `/kalendarz` prowadzi przez
+istniejącą ochronę do `/login?next=%2Fkalendarz`. Układ wybieramy dopiero po
+odczycie sesji. Konkretne trasy mają pierwszeństwo przed wildcardem, w tym
+zaproszenie, reset hasła, wydarzenie z alarmu i lista zadań.
+
+Referencja: komponent MagicPath `463520743301451776`, rewizja
+`463522197215002624`, zakładka „404 Nie znaleziono strony”. Obejrzano warianty
+1280 i 390 px; ilustrację przeniesiono z wyrenderowanego SVG bez zmiany rysunku.
+API kodu MagicPath odmówiło odczytu z powodu limitu, więc strukturę i style
+sprawdzono przez DOM podglądu tej samej rewizji. Nie dodano ramek prototypu,
+przełączników ani zewnętrznego odnośnika do kalendarza. Odstępstwa dotyczą
+czytelności tekstu i istniejącego szkieletu — opis w `DECISIONS.md`.
+
+Weryfikacja lokalna:
+
+- Vitest: **40/40** w czterech plikach — 404 i rzeczywista konfiguracja tras,
+  szkielet, zaproszenia/reset oraz szczegóły wydarzenia.
+- Playwright: **6/6**, Chromium headless przy **390 i 1280 px** — publiczne
+  i zalogowane 404 po wejściu i odświeżeniu, powrót klawiaturą przez logowanie,
+  powrót do kalendarza po zalogowaniu, regresja rejestracji/zaproszeń/resetu.
+  Sprawdzono ładowanie ilustracji i brak poziomego przepełnienia.
+- Lint i Prettier zmienionych plików, typecheck i build WWW/API: poprawne.
+- `npm run android:debug`: poprawny build wspólnego frontendu i debug APK
+  w `android/app/build/outputs/apk/debug/app-debug.apk`. Build nie zalicza
+  uruchomienia ekranu na urządzeniu.
+- Przejrzano zrzuty publicznego i zalogowanego 404; kopie zachowano
+  w ignorowanym `.android-tools/redesign-r7/`.
+
+Próba ręczna właściciela: otworzyć dowolny nieznany adres, odświeżyć stronę,
+wrócić do kalendarza z sesją i bez niej. W APK sprawdzić ten sam widok,
+przycisk powrotu, menu i systemowy Wstecz. Próba na fizycznym telefonie
+pozostaje **niewykonana**. Nie zmieniono API, danych, uprawnień, cache,
+harmonogramu ani konfiguracji wdrożenia; bez nowych zależności i migracji.
+
+Stan: **zweryfikowane lokalnie, oczekuje na CI** oraz ręczny odbiór właściciela.
+Po przygotowaniu zmian właściciel polecił zapisanie lokalnego commita R.7,
+bez pusha, uruchomienia CI i deployu. R.8 nie jest częścią zmiany.
+
 ## Redesign R.6 — pozostałe istniejące ekrany, 21.10.2026
 
 Logowanie, rejestracja, wejście dziecka, zaproszenie, reset hasła i powitanie

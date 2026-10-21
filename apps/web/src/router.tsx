@@ -16,6 +16,7 @@ import { NativeNavigation } from './nativeNavigation.js';
 import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
 import { ShoppingPage } from './features/shopping/ShoppingPage.js';
 import { TasksPage } from './features/tasks/TasksPage.js';
+import { NotFoundLayout, NotFoundPage } from './components/NotFoundPage.js';
 
 export const router = createBrowserRouter([
   {
@@ -28,6 +29,10 @@ export const router = createBrowserRouter([
       </>
     ),
     children: [
+      {
+        element: <NotFoundLayout />,
+        children: [{ path: '*', element: <NotFoundPage /> }],
+      },
       { path: 'kalendarz/wydarzenie/:eventId', element: <EventRoute /> },
       {
         element: <AuthLayout />,

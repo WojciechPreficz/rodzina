@@ -1,0 +1,103 @@
+.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: calc(100dvh - 32px);
+  padding: 40px 0 64px;
+  text-align: center;
+}
+
+.not-found-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 340px;
+  max-width: 100%;
+}
+
+.not-found-code {
+  color: #e0e7d5;
+  font:
+    165px/1 Georgia,
+    serif;
+  letter-spacing: 0.035em;
+}
+
+.not-found-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: -50px;
+}
+
+.not-found-eyebrow {
+  margin-top: 24px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.not-found-title {
+  margin-top: 12px;
+  font:
+    400 44px/1.13 Georgia,
+    serif;
+  letter-spacing: -0.035em;
+}
+
+.not-found-description {
+  max-width: 310px;
+  margin-top: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.not-found-return {
+  max-width: 100%;
+  height: auto;
+  min-height: 46px;
+  margin-top: 28px;
+  padding: 12px 24px;
+}
+
+.not-found-return .mantine-Button-label {
+  white-space: normal;
+}
+
+.not-found-foot {
+  margin-top: 20px;
+}
+
+.auth-layout > .not-found {
+  min-height: 0;
+  padding-top: 24px;
+}
+
+@media (max-width: 47.99em) {
+  .not-found {
+    min-height: 0;
+    padding: 24px 0 40px;
+  }
+
+  .not-found-art {
+    width: 292px;
+  }
+
+  .not-found-code {
+    font-size: 116px;
+  }
+
+  .not-found-art img {
+    margin-top: -40px;
+  }
+
+  .not-found-title {
+    font-size: 35px;
+  }
+
+  .not-found-return {
+    min-width: 225px;
+    margin-top: 24px;
+  }
+}

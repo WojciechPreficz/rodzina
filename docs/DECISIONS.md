@@ -1113,6 +1113,19 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   Stan: **zweryfikowane lokalnie, oczekuje na CI**. Na polecenie właściciela
   zapisujemy commit na `main`, bez pusha i uruchomienia CI.
 
+## 21.10.2026 — strona 404 redesignu R.7
+
+- Przenosimy lokalny rysunek SVG domu i układ strony 404 z rewizji MagicPath
+  `463522197215002624`. Wspólny szkielet, logo i panel menu pozostają zgodne
+  z wdrożonym R.1, również na telefonie; publiczny wariant używa `AuthLayout`.
+- Drobne napisy makiety (7–12 px) powiększamy do 12–14 px i stosujemy
+  istniejący kolor pomocniczy `#606e62` zamiast jasnych `#a1ad8e`, `#8b9980`
+  i `#a6b095`. Zapewnia to czytelność i wymagany kontrast tekstu na kremowym tle.
+  Jasne „404” jest dekoracją ukrytą przed czytnikiem wraz z ilustracją;
+  znaczenie błędu przekazuje nagłówek. Nie dodajemy nowych fontów ani zależności.
+- Wildcard wybiera układ po rozpoznaniu sesji, ale nie zmienia ochrony
+  `/kalendarz` ani obsługi błędów w istniejących trasach.
+
 ## 21.10.2026 — logo launchera Androida
 
 - Na polecenie właściciela zastępujemy domyślną ikonę Androida przekazanym
