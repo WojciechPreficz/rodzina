@@ -2094,3 +2094,30 @@ pozostawionymi właścicielowi. Na jego polecenie zmiany zapisujemy w lokalnym
 commicie, bez pusha, uruchomienia CI i deployu.
 Pełne zamknięcie fazy wymaga jeszcze potwierdzenia tych prób i sukcesu CI
 dla końcowego commita, w tym `release:smoke` i kontroli natywnych Androida.
+
+## Ikona aplikacji Android (21.10.2026)
+
+Źródło logo przekazane przez właściciela zachowujemy w
+`android/artwork/launcher-source.jpg`. Ikony PNG w
+`android/app/src/main/res/mipmap-*` powstały przez skalowanie tego pliku,
+bez zmiany znaku ani kolorystyki.
+
+| Gęstość | Zwykła i okrągła | Warstwa adaptacyjna |
+| ------- | ---------------- | ------------------- |
+| mdpi    | 48 × 48 px       | 108 × 108 px        |
+| hdpi    | 72 × 72 px       | 162 × 162 px        |
+| xhdpi   | 96 × 96 px       | 216 × 216 px        |
+| xxhdpi  | 144 × 144 px     | 324 × 324 px        |
+| xxxhdpi | 192 × 192 px     | 432 × 432 px        |
+
+Wersja zwykła zachowuje cały kwadrat źródła, okrągła ma przezroczyste
+narożniki poza kołem. Warstwa adaptacyjna ma logo przeskalowane do 80%
+rozmiaru płótna i wyśrodkowane, z zielonym dopełnieniem `#39634F`
+(pobranym z narożnika źródła). Ten sam kolor jest tłem ikony adaptacyjnej.
+Margines chroni literę R przed maskami launchera. Istniejące zasoby XML
+ikon adaptacyjnych i odwołania w manifeście pozostają prawidłowe.
+
+Po instalacji nowego APK sprawdź ikonę w launcherze telefonu i na ekranie
+informacji o aplikacji, w tym maskę okrągłą i zaokrąglony kwadrat, jeżeli
+launcher pozwala je wybrać. Podgląd na komputerze nie zastępuje tej próby.
+Aktualizacja ikony na telefonie wymaga zbudowania i zainstalowania nowego APK.

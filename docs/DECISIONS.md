@@ -1092,3 +1092,15 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   formatowanie, typecheck oraz build WWW/API — poprawne. Bez próby w APK.
   Stan: **zweryfikowane lokalnie, oczekuje na CI**. Na polecenie właściciela
   zapisujemy commit na `main`, bez pusha i uruchomienia CI.
+
+## 21.10.2026 — logo launchera Androida
+
+- Na polecenie właściciela zastępujemy domyślną ikonę Androida przekazanym
+  kremowym znakiem R na zielonym tle. Zachowujemy oryginał w
+  `android/artwork/launcher-source.jpg` i przygotowujemy pięć gęstości PNG,
+  w tym wersje okrągłe i adaptacyjne.
+- Adaptacyjna warstwa ma 10% marginesu z każdej strony i zielone dopełnienie,
+  aby maski launchera nie przycinały litery. Obraz skalujemy bez generowania
+  nowego znaku. Zmiana dotyczy zasobów natywnych Androida.
+- Publikacja podpisanego APK i próba na fizycznym telefonie pozostają osobnymi
+  czynnościami; zmiana plików nie aktualizuje już zainstalowanej aplikacji.
