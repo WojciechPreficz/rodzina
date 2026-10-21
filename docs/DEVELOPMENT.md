@@ -1,5 +1,54 @@
 # Praca lokalna — strona WWW i APK
 
+## Redesign R.2 — kalendarz i karty dnia, 21.10.2026
+
+Nagłówek pokazuje wybrany miesiąc w strefie rodziny. Desktop ma dodawanie
+obok tytułu i domyślną siatkę miesiąca; telefon tydzień z agendą oraz przycisk
+pływający. Nadal dostępne są widoki miesiąca, tygodnia i dnia, wybór daty,
+nawigacja okresów i gesty. Filtry zachowują wielokrotny wybór domowników.
+Karta zadań, odległe terminy i Schedule-X otrzymały wspólny motyw.
+Formularz wydarzenia nadal otwiera modal; jego przebudowa należy do R.3.
+
+Kontrole lokalne:
+
+- Vitest: **98/98**, 14 plików — kalendarz, adapter, offline, formularze,
+  przypomnienia, karta zadań i regresja AppShell. Zachowano testy prywatności
+  karty, utraty dostępu oraz obecnego podglądu offline zadań.
+- Playwright: **18 scenariuszy sprawdzonych** przy **390 i 1280 px**.
+  Końcowy przebieg zaliczył 17/18; proces jednego testu menu zakończył się
+  awarią Windows przed jego startem. Ten sam scenariusz zaliczył ponowienie
+  **1/1** bez zmiany kodu. Zakres: kalendarz, filtry, prawdziwa nawigacja dat
+  i wydarzeń, gesty, offline WWW i zimny start z atrapą transportu Androida,
+  blokada wcześniej otwartego formularza, powrót sieci, menu i portale.
+- Test offline wykrył niszczenie kalendarza po zmianie tożsamości konfiguracji
+  rozszerzeń. Poprawiono je przed końcowym przebiegiem: konfiguracja jest stała.
+- Lint zmienionych plików, Prettier, typecheck, build WWW/API i debug APK
+  z końcowym frontendem: **poprawne**. Przejrzano zrzuty desktopowego miesiąca,
+  mobilnych widoków i stanów offline, bez poziomego przepełnienia.
+  Zrzuty znajdują się w ignorowanym `test-results/`, a ponowienie menu
+  w `.android-tools/redesign-r2-menu-retry/`.
+
+Próba ręczna właściciela przed commitem R.2:
+
+1. Przy 390 i 1280 px sprawdzić nagłówek miesiąca, wszystkie widoki,
+   poprzedni/następny okres, „Dzisiaj” i ręczny wybór daty.
+2. Wybrać kilku domowników, odznaczyć filtry i otworzyć wydarzenie z siatki,
+   agendy oraz odległych terminów. Sprawdzić długie tytuły i wiele wydarzeń.
+3. Sprawdzić rzeczywistą kartę zadań, link do zadania i widoczność zgodną
+   z dostępem bieżącej osoby. Odłączyć sieć: kalendarz blokuje dodawanie,
+   pokazuje zapisane dane lub informację o brakującym zakresie.
+4. W fizycznym APK sprawdzić gesty, menu, systemowy Wstecz, przewijanie,
+   safe area i wejście z powiadomienia. Build i atrapa nie zaliczają tych prób.
+
+- Po uwadze właściciela dodano mobilny odstęp 4 px między etykietą i polem.
+  Formatowanie, build WWW i dwa scenariusze portali przy 390/1280 px: poprawne.
+  Ta drobna korekta CSS nie została ponownie sprawdzona na fizycznym APK.
+
+Stan: **zweryfikowane lokalnie, oczekuje na CI**. Właściciel polecił commit
+R.2 i rozpoczęcie R.3. R.1 zapisano jako `dc5cb98`. Nie wywodzimy z polecenia
+szczegółowego wyniku prób fizycznego telefonu.
+Nie wykonano pusha, CI, deployu ani instalacji na fizycznym telefonie.
+
 ## Redesign R.1 — motyw i szkielet, 21.10.2026
 
 Wydzielono wspólny motyw Mantine, paletę szałwiową i style powierzchni,

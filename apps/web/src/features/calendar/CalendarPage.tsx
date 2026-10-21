@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react';
-import { createViewDay, createViewMonthAgenda, createViewWeek, createViewWeekAgenda } from '@schedule-x/calendar';
+import {
+  createViewDay,
+  createViewMonthGrid,
+  createViewMonthAgenda,
+  createViewWeek,
+  createViewWeekAgenda,
+} from '@schedule-x/calendar';
 import { createEventsServicePlugin } from '@schedule-x/events-service';
 import { Temporal } from 'temporal-polyfill';
 import { eventUrl, type EventData } from '@rodzina/shared';
@@ -24,8 +30,16 @@ import { DistantEvents } from './DistantEvents.js';
 import { NotificationBanner } from '../notifications/NotificationBanner.js';
 import { TodayTasks } from '../tasks/TodayTasks.js';
 import { createCalendarSwipePlugin } from './calendarSwipe.js';
+import { CalendarHeader } from './CalendarHeader.js';
+import { CalendarAgendaEvent } from './CalendarAgendaEvent.js';
 
 const text = labels.calendarUi;
+// The adapter destroys the calendar when this object changes identity.
+const calendarComponents = {
+  headerContent: CalendarHeader,
+  monthAgendaEvent: CalendarAgendaEvent,
+  weekAgendaEvent: CalendarAgendaEvent,
+};
 
 function createMobileWeekView() {
   const view = createViewWeekAgenda();
@@ -47,7 +61,8 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
   const readOnly = useCalendarReadOnly();
   const { create } = useCalendarMutations();
   const calendar = useCalendarApp({
-    views: [createViewMonthAgenda(), createMobileWeekView(), createViewWeek(), createViewDay()],
+    views: [createMobileWeekView(), createViewMonthGrid(), createViewMonthAgenda(), createViewWeek(), createViewDay()],
+    defaultView: 'month-grid',
     locale: 'pl-PL',
     timezone,
     firstDayOfWeek: 1,
@@ -69,10 +84,29 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
   }, [eventsService, occurrences.data, timezone, selected, ready]);
 
   return (
-    <Stack>
+    <Stack className="calendar-page" gap="lg">
+      <PageHeader
+        title={labels.calendar}
+        description={Temporal.PlainDate.from(date).toLocaleString('pl-PL', { month: 'long', year: 'numeric' })}
+        actions={
+          <Button
+            className="calendar-add"
+            aria-label={text.add}
+            disabled={readOnly}
+            title={readOnly ? calendarOnlineHint : undefined}
+            onClick={() => setOpened(true)}
+          >
+            <span aria-hidden="true" className="calendar-add-icon">
+              ＋
+            </span>
+            <span className="calendar-add-label">{text.add}</span>
+          </Button>
+        }
+      />
       <CalendarOfflineNotice syncedAt={occurrences.syncedAt} />
       <NotificationBanner />
-      <Stack gap="xs">
+      <TodayTasks />
+      <div className="calendar-filters">
         <Text size="sm" fw={500} id="calendar-member-filter-label">
           {text.showOnly}
         </Text>
@@ -84,8 +118,9 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
               color={member.color}
               variant={selected.includes(member.id) ? 'light' : 'default'}
               radius="xl"
-              size="compact-sm"
-              mih={36}
+              className="calendar-member-filter"
+              style={{ '--member-color': member.color }}
+              mih={44}
               aria-pressed={selected.includes(member.id)}
               leftSection={<Box aria-hidden="true" w={8} h={8} bg={member.color} style={{ borderRadius: '50%' }} />}
               rightSection={selected.includes(member.id) ? <span aria-hidden="true">✓</span> : undefined}
@@ -99,12 +134,10 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
             </Button>
           ))}
         </Group>
-        {selected.length === 0 && (
-          <Text size="xs" c="dimmed">
-            {text.allMembers}
-          </Text>
-        )}
-      </Stack>
+        <Text size="xs" c="dimmed" className="calendar-filter-summary">
+          {selected.length === 0 ? text.allMembers : text.selectedMembers}
+        </Text>
+      </div>
       {occurrences.isFetching && occurrences.coverage === 'missing' && <Loader aria-label={text.loading} />}
       {occurrences.coverage && occurrences.coverage !== 'complete' && (
         <Alert color="yellow">
@@ -125,7 +158,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
         </Alert>
       )}
       <div className="family-calendar">
-        <ScheduleXCalendar calendarApp={calendar} />
+        <ScheduleXCalendar calendarApp={calendar} customComponents={calendarComponents} />
       </div>
       {occurrences.coverage === 'complete' &&
         !occurrences.error &&
@@ -135,17 +168,6 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
           {calendarOnlineHint}
         </Text>
       )}
-      <Button
-        className="calendar-add"
-        aria-label={text.add}
-        disabled={readOnly}
-        title={readOnly ? calendarOnlineHint : undefined}
-        onClick={() => setOpened(true)}
-      >
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 4v16M4 12h16" stroke="currentColor" strokeWidth="3" />
-        </svg>
-      </Button>
       <DistantEvents timezone={timezone} selected={selected} />
       <Modal
         opened={opened}
@@ -192,8 +214,12 @@ export function CalendarPage() {
   const offline = useOffline();
   return (
     <Stack>
-      <PageHeader title={labels.calendar} />
-      <TodayTasks />
+      {(!family || !members.data) && (
+        <>
+          <PageHeader title={labels.calendar} />
+          <TodayTasks />
+        </>
+      )}
       {members.error && (
         <Alert color="red" role="alert">
           {members.error.message}

@@ -97,7 +97,6 @@ for (const native of [false, true]) {
       await expect(page.getByText('Zajęcia offline', { exact: true }).first()).toBeVisible();
       const views = info.project.name === 'phone' ? ['Dzień', 'Miesiąc'] : ['Dzień', 'Tydzień'];
       for (const view of views) {
-        await page.getByRole('button', { name: 'Wybierz widok', exact: true }).click();
         await page.getByRole('button', { name: `Wybierz widok ${view}`, exact: true }).click();
         await expect(page.getByText('Zajęcia offline', { exact: true }).first()).toBeVisible();
         await expect(page.getByText(/Ten zakres nie został zapisany offline/)).toHaveCount(0);

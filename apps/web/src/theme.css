@@ -76,6 +76,10 @@ body {
 }
 
 @media (max-width: 47.999em) {
+  .mantine-InputWrapper-label {
+    margin-bottom: 4px;
+  }
+
   .page-header-title {
     font-size: 36px;
   }

@@ -23,7 +23,7 @@ test('navigates calendar periods with touch while preserving taps and vertical s
   const gesture = async (
     dx: number,
     dy = 0,
-    surface = calendar.locator('.sx__month-agenda-wrapper, .sx__time-grid-day').first(),
+    surface = calendar.locator('.sx__month-agenda-wrapper, .sx__time-grid-day, .sx__month-grid-day').first(),
   ) => {
     await surface.scrollIntoViewIfNeeded();
     const box = await surface.boundingBox();
@@ -45,7 +45,6 @@ test('navigates calendar periods with touch while preserving taps and vertical s
     await expect(input).toHaveValue(initial);
   } else {
     for (const view of ['Miesiąc', 'Tydzień', 'Dzień']) {
-      await calendar.getByRole('button', { name: 'Wybierz widok', exact: true }).click();
       await calendar.getByRole('button', { name: `Wybierz widok ${view}`, exact: true }).click();
       const viewSelector =
         view === 'Dzień'

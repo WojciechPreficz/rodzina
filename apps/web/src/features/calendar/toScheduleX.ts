@@ -32,6 +32,8 @@ export function toScheduleX(
         eventId: event.eventId,
         occurrenceDate: event.occurrenceDate,
         title: event.title,
+        kind: event.kind,
+        memberColor: participant?.color ?? '#426655',
         people: event.participants.map((p) => p.displayName),
         ...(event.location ? { location: event.location } : {}),
         calendarId: participant?.id ?? FAMILY_CALENDAR,
@@ -46,11 +48,11 @@ export function memberCalendars(members: Member[]): Record<string, CalendarType>
   const make = (label: string, color: string): CalendarType => ({
     label,
     colorName: `member${color.replace('#', '')}`,
-    lightColors: { main: color, container: '#f1f3f5', onContainer: '#212529' },
+    lightColors: { main: color, container: `color-mix(in srgb, ${color} 12%, #fffefa)`, onContainer: '#2f4035' },
     darkColors: { main: color, container: '#343a40', onContainer: '#ffffff' },
   });
   return Object.fromEntries([
-    [FAMILY_CALENDAR, make('Rodzina', '#426b53')],
+    [FAMILY_CALENDAR, make('Rodzina', '#426655')],
     ...members.map((member) => [member.id, make(member.displayName, member.color)]),
   ]);
 }

@@ -950,6 +950,30 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   zależności pomiędzy uruchomieniami. Nie włączamy cache konfiguracji z sekretami
   podpisywania. Zmiana dotyczy narzędzi budowania, bez zmian runtime serwera.
 
+## 21.10.2026 — kalendarz i karty dnia, krok R.2
+
+- Zachowujemy Schedule-X, API, cache i logikę odbiorców. Dodajemy siatkę
+  miesiąca na szerokim kalendarzu i domyślny tydzień z agendą na wąskim;
+  pozostałe dotychczasowe widoki są nadal dostępne. O wyborze wariantu
+  decyduje responsywność biblioteki, uwzględniająca szerokość samego kalendarza.
+- Nagłówek z przyciskami widoków korzysta z rozszerzenia `headerContent`
+  i kontekstu Schedule-X. Zmiana okresu używa funkcji aktywnego widoku,
+  a „Dzisiaj” strefy rodziny. Zachowujemy wybór daty w natywnym polu,
+  którego nie ma w referencji; nie usuwamy tej istniejącej funkcji.
+  Konfiguracja komponentów pozostaje stała, aby adapter React nie niszczył
+  kalendarza po zmianie filtra lub odświeżeniu danych.
+- Agenda korzysta z rozszerzeń biblioteki i rzeczywistych godzin, miejsca,
+  uczestników oraz rodzaju wydarzenia. Akcje kliknięcia i klawiatury nadal
+  obsługuje Schedule-X. Jasne tła wydarzeń wynikają z koloru domownika,
+  a tekst pozostaje ciemny; nie przypisujemy przykładowych osób ani kolorów.
+- Karta zadań zachowuje wszystkie dostępne otwarte zadania na dziś i zaległe,
+  uprawnienia oraz istniejący cache offline. Dzień na karcie wynika z zegara
+  i strefy rodziny, niezależnie od oglądanego miesiąca kalendarza.
+- Na telefonie agenda ma naturalną wysokość, przyciski widoków pełny wiersz,
+  a dodawanie pozostaje przyciskiem pływającym z odstępem nad safe area.
+  Desktop ma dodawanie obok nagłówka. Formularz pozostaje modalem do R.3.
+  Bez zmian API, migracji, zależności runtime, pakowania ani konfiguracji serwera.
+
 ## 21.10.2026 — wspólny motyw redesignu, krok R.1
 
 - Zachowujemy rewizje MagicPath wskazane w `REDESIGN_PLAN.md`.

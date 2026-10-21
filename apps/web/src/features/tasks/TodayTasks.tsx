@@ -7,6 +7,7 @@ import { labels } from '../../i18n/pl.js';
 import { isTaskOverdue } from './taskRules.js';
 import { useTaskData } from './taskQueries.js';
 import { taskOfflineText } from './taskOffline.js';
+import './todayTasks.css';
 
 const t = labels.tasksUi;
 export function TodayTasks() {
@@ -35,9 +36,14 @@ export function TodayTasks() {
         a.id.localeCompare(b.id),
     );
   return (
-    <Paper withBorder p="md" component="section" aria-label={t.today} style={{ minWidth: 0 }}>
+    <Paper className="today-tasks" withBorder p="lg" component="section" aria-label={t.today} style={{ minWidth: 0 }}>
+      <span className="today-tasks-icon" aria-hidden="true">
+        ✓
+      </span>
       <Stack gap="xs">
-        <Title order={3}>{t.today}</Title>
+        <Title order={2} size="sm">
+          {t.today}
+        </Title>
         {data.offline && (
           <Text size="sm" c="dimmed">
             Pokazujemy zapisane zadania i oczekujące zmiany.
@@ -52,7 +58,13 @@ export function TodayTasks() {
         )}
         {tasks.map((task) => (
           <Stack gap={0} key={task.id}>
-            <Text component={Link} to={taskUrl(task.listId, task.id)} fw={500} style={{ overflowWrap: 'anywhere' }}>
+            <Text
+              className="today-task-link"
+              component={Link}
+              to={taskUrl(task.listId, task.id)}
+              fw={500}
+              style={{ overflowWrap: 'anywhere' }}
+            >
               {task.title}
             </Text>
             <Text size="sm" c={isTaskOverdue(task, family?.timezone ?? 'Europe/Warsaw') ? 'red' : 'dimmed'}>
@@ -63,6 +75,21 @@ export function TodayTasks() {
           </Stack>
         ))}
       </Stack>
+      <time
+        className="today-tasks-date"
+        dateTime={today}
+        aria-label={new Intl.DateTimeFormat('pl-PL', {
+          timeZone: family?.timezone ?? 'Europe/Warsaw',
+          dateStyle: 'long',
+        }).format(now)}
+      >
+        <b>{today.split('-')[2]}</b>
+        <span>
+          {new Intl.DateTimeFormat('pl-PL', { timeZone: family?.timezone ?? 'Europe/Warsaw', month: 'short' }).format(
+            now,
+          )}
+        </span>
+      </time>
     </Paper>
   );
 }
