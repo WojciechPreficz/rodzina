@@ -86,7 +86,7 @@ function setup(
       items = items.map((item) => (item.id === 'task' ? { ...item, ...data } : item));
       body = { task: items[0] };
     } else if (method === 'DELETE') {
-      items = [];
+      items = items.filter((item) => url !== `/api/tasks/${item.id}`);
       body = { deleted: true };
     } else body = { tasks: url.includes('/lists/second/') ? [] : items };
     return new Response(JSON.stringify({ ok: true, ...body }));
@@ -146,6 +146,63 @@ afterEach(() => {
 });
 
 describe('tasks UI', () => {
+  it('confirms clearing only completed tasks and preserves open tasks', async () => {
+    const fetchMock = setup('/zadania/list', [
+      task,
+      { ...task, id: 'done-1', title: 'Gotowe 1', isDone: true },
+      { ...task, id: 'done-2', title: 'Gotowe 2', isDone: true },
+    ]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Wyczyść zrobione' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Wyczyść zrobione' });
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Anuluj' }));
+    expect(screen.getByRole('button', { name: 'Zrobione (2)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Wyczyść zrobione' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Wyczyść zrobione' })).getByRole('button', { name: 'Usuń' }),
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Zrobione (0)' })).toBeInTheDocument());
+    expect(screen.getByRole('article', { name: task.title })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Wyczyść zrobione' })).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([url]) => String(url).split('?')[0]),
+    ).toEqual(['/api/tasks/done-1', '/api/tasks/done-2']);
+  });
+  it('queues clearing completed tasks offline without sending requests', async () => {
+    const fetchMock = setup('/zadania/list', [
+      task,
+      { ...task, id: 'done-1', isDone: true },
+      { ...task, id: 'done-2', isDone: true },
+    ]);
+    await screen.findByRole('button', { name: 'Wyczyść zrobione' });
+    await act(async () => {
+      onlineManager.setOnline(false);
+    });
+    const calls = fetchMock.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Wyczyść zrobione' }));
+    fireEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Wyczyść zrobione' })).getByRole('button', { name: 'Usuń' }),
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Zrobione (0)' })).toBeInTheDocument());
+    expect(taskStore.getSnapshot().pending.map((op) => [op.taskId, op.change.type])).toEqual([
+      ['done-1', 'remove'],
+      ['done-2', 'remove'],
+    ]);
+    expect(fetchMock.mock.calls).toHaveLength(calls);
+    expect(screen.getByRole('article', { name: task.title })).toBeInTheDocument();
+  });
+  it('shows a rejected deletion and retains the completed task for retry', async () => {
+    setup('/zadania/list', [{ ...task, isDone: true }], false, (_url, method) =>
+      method === 'DELETE'
+        ? new Response(JSON.stringify({ error: { message: 'Nie udało się usunąć.' } }), { status: 400 })
+        : undefined,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Wyczyść zrobione' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Wyczyść zrobione' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Usuń' }));
+    expect(await within(dialog).findByText(/Nie udało się usunąć/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zrobione (1)' })).toBeInTheDocument();
+  });
   it('sorts the default list first and shows member avatars only on shared lists', async () => {
     setup('/zadania');
     const navigation = await screen.findByRole('navigation', { name: 'Listy zadań' });

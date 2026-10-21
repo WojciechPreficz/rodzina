@@ -98,18 +98,23 @@ export function useTasks(listId?: string) {
     ...mutationOptions,
     mutationFn: () => write(`/api/tasks/lists/${encodeURIComponent(listId!)}/leave`, 'POST', undefined),
   });
-  const submit = async (id: string, change: Parameters<typeof taskStore.enqueue>[2]) => {
-    const result = taskStore.enqueue(listId!, id, change);
-    window.dispatchEvent(new Event('rodzina:tasks-changed'));
+  const submitChanges = async (changes: { id: string; change: Parameters<typeof taskStore.enqueue>[2] }[]) => {
+    try {
+      for (const { id, change } of changes) taskStore.enqueue(listId!, id, change);
+    } finally {
+      window.dispatchEvent(new Event('rodzina:tasks-changed'));
+    }
+    const pending = () => taskStore.getSnapshot().pending.some((op) => changes.some(({ id }) => op.taskId === id));
     if (!isOffline()) {
       await taskStore.synchronize();
-      if (!taskStore.getSnapshot().error && taskStore.getSnapshot().pending.some((op) => op.taskId === id))
-        await taskStore.synchronize();
+      if (!taskStore.getSnapshot().error && pending()) await taskStore.synchronize();
       window.dispatchEvent(new Event('rodzina:tasks-changed'));
-      if (taskStore.getSnapshot().error && !taskStore.getSnapshot().pending.some((op) => op.taskId === id))
-        throw new Error(taskStore.getSnapshot().error);
+      if (taskStore.getSnapshot().error && !pending()) throw new Error(taskStore.getSnapshot().error);
     }
-    return taskStore.project().items[listId!]?.find((task) => task.id === id) ?? result;
+  };
+  const submit = async (id: string, change: Parameters<typeof taskStore.enqueue>[2]) => {
+    await submitChanges([{ id, change }]);
+    return taskStore.project().items[listId!]?.find((task) => task.id === id);
   };
   const create = useMutation({
     networkMode: 'always',
@@ -138,6 +143,13 @@ export function useTasks(listId?: string) {
       await submit(id, { type: 'remove' });
     },
   });
+  const clearDone = useMutation({
+    networkMode: 'always',
+    mutationFn: async () => {
+      const completed = taskStore.project().items[listId!]?.filter((task) => task.isDone) ?? [];
+      await submitChanges(completed.map((task) => ({ id: task.id, change: { type: 'remove' } })));
+    },
+  });
   return {
     lists: query(data.lists),
     tasks: query(items),
@@ -162,5 +174,6 @@ export function useTasks(listId?: string) {
     create,
     update,
     remove,
+    clearDone,
   };
 }

@@ -59,6 +59,7 @@ function TaskListPage() {
   const [settingsOpened, setSettingsOpened] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
   const [doneOpened, setDoneOpened] = useState(false);
+  const [clearingDone, setClearingDone] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const taskId = params.get('zadanie');
   const run = async (action: () => Promise<unknown>) => {
@@ -122,7 +123,7 @@ function TaskListPage() {
           mt={4}
           aria-label={t.check(task.title)}
           checked={task.isDone}
-          disabled={data.update.isPending}
+          disabled={data.update.isPending || data.clearDone.isPending}
           onChange={(event) => {
             const isDone = event.currentTarget.checked;
             void run(() => data.update.mutateAsync({ id: task.id, data: { isDone } }));
@@ -311,15 +312,32 @@ function TaskListPage() {
             <>
               {visibleTasks.filter((task) => !task.isDone).map(row)}
               {!visibleTasks.some((task) => !task.isDone) && <Text c="dimmed">{t.empty}</Text>}
-              <Button
-                variant="subtle"
-                justify="flex-start"
-                aria-expanded={doneOpened}
-                aria-controls="done-tasks"
-                onClick={() => setDoneOpened((value) => !value)}
-              >
-                {t.done} ({visibleTasks.filter((task) => task.isDone).length})
-              </Button>
+              <Group justify="space-between">
+                <Button
+                  variant="subtle"
+                  justify="flex-start"
+                  aria-expanded={doneOpened}
+                  aria-controls="done-tasks"
+                  onClick={() => setDoneOpened((value) => !value)}
+                >
+                  {t.done} ({visibleTasks.filter((task) => task.isDone).length})
+                </Button>
+                {visibleTasks.some((task) => task.isDone) && (
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="red"
+                    disabled={data.update.isPending || data.remove.isPending}
+                    loading={data.clearDone.isPending}
+                    onClick={() => {
+                      data.clearDone.reset();
+                      setClearingDone(true);
+                    }}
+                  >
+                    {t.clearDone}
+                  </Button>
+                )}
+              </Group>
               <Collapse in={doneOpened} id="done-tasks">
                 <Stack>{visibleTasks.filter((task) => task.isDone).map(row)}</Stack>
               </Collapse>
@@ -328,6 +346,35 @@ function TaskListPage() {
           )}
         </Stack>
       )}
+      <Modal
+        opened={clearingDone}
+        onClose={() => {
+          if (!data.clearDone.isPending) setClearingDone(false);
+        }}
+        title={t.clearDone}
+      >
+        <Stack>
+          <Text>{t.clearDoneConfirm}</Text>
+          {data.clearDone.error && <Alert color="red">{data.clearDone.error.message}</Alert>}
+          <Group justify="flex-end">
+            <Button variant="default" disabled={data.clearDone.isPending} onClick={() => setClearingDone(false)}>
+              {t.cancel}
+            </Button>
+            <Button
+              color="red"
+              loading={data.clearDone.isPending}
+              onClick={() => {
+                void run(async () => {
+                  await data.clearDone.mutateAsync();
+                  setClearingDone(false);
+                });
+              }}
+            >
+              {t.clearDoneRemove}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Modal opened={addingList && !data.offline} onClose={() => setAddingList(false)} title={t.addList}>
         <form
           onSubmit={(event) => {

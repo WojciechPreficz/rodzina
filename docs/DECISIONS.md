@@ -1,5 +1,18 @@
 # Decyzje
 
+## 21.10.2026 — zbiorcze usuwanie zrobionych zadań
+
+- Na polecenie właściciela dodajemy przy sekcji „Zrobione” przycisk
+  „Wyczyść zrobione”, widoczny, gdy bieżąca lista zawiera ukończone zadania.
+  Okno potwierdzenia pozwala anulować operację przed usunięciem.
+- Właściciel i członkowie listy, także dzieci, mogą usunąć jej ukończone
+  zadania. Zadania otwarte i zadania innych list pozostają bez zmian.
+- Korzystamy z istniejącej trwałej kolejki usunięć, dzięki czemu operacja
+  działa offline i synchronizuje się po odzyskaniu połączenia. Kolejka zapisuje
+  konkretne identyfikatory zadań ukończonych w chwili potwierdzenia;
+  zadania ukończone później nie są objęte tą operacją. API zachowuje kontrolę
+  dostępu i kaskadowe usuwanie przypomnień. Bez zmian kontraktu API i migracji.
+
 ## 21.10.2026 — podział modułów API
 
 - `app.ts` składa aplikację. Wspólne hooki sesji i nagłówków, serializacja

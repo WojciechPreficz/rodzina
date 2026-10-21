@@ -3,6 +3,83 @@ import { installNativeTransport } from './nativeTransport.js';
 import { openNavigation } from './navigation.js';
 
 for (const native of [false, true]) {
+  test(`clears completed tasks offline through ${native ? 'Android transport' : 'the website'}`, async ({
+    page,
+    baseURL,
+  }, info) => {
+    const headers = { Origin: baseURL! };
+    const registration = await page.request.post('/api/auth/register-family', {
+      headers,
+      data: {
+        familyName: 'Porządki',
+        displayName: 'Ania',
+        email: `tasks-clear-${native}-${info.project.name}@example.com`,
+        password: 'password123',
+      },
+    });
+    expect(registration.ok()).toBe(true);
+    const { lists } = await (await page.request.get('/api/tasks/lists')).json();
+    const listId = lists[0].id;
+    const { list: other } = await (
+      await page.request.post('/api/tasks/lists', { headers, data: { name: 'Inna lista' } })
+    ).json();
+    for (const [id, title, done] of [
+      [listId, 'Otwarte zadanie', false],
+      [listId, 'Gotowe pierwsze', true],
+      [listId, 'Gotowe drugie', true],
+      [other.id, 'Zadanie innej listy', true],
+    ] as const) {
+      const { task } = await (
+        await page.request.post(`/api/tasks/lists/${id}/tasks`, { headers, data: { title } })
+      ).json();
+      if (done)
+        expect((await page.request.patch(`/api/tasks/${task.id}`, { headers, data: { isDone: true } })).ok()).toBe(
+          true,
+        );
+    }
+    if (native) await installNativeTransport(page);
+    await page.goto(`/zadania/${listId}`);
+    await expect(page.getByRole('button', { name: 'Zrobione (2)' })).toBeVisible();
+    await page.context().setOffline(true);
+    if (native)
+      await page.evaluate(() => {
+        localStorage.setItem('test:offline', 'yes');
+        window.dispatchEvent(new Event('offline'));
+      });
+    await expect(page.getByRole('alert').filter({ hasText: 'Jesteś offline' })).toBeVisible();
+    await page.getByRole('button', { name: 'Wyczyść zrobione' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Wyczyść zrobione' });
+    await expect(dialog).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({
+      path: info.outputPath(`tasks-clear-${native}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
+    await dialog.getByRole('button', { name: 'Anuluj' }).click();
+    await expect(page.getByRole('button', { name: 'Zrobione (2)' })).toBeVisible();
+    await page.getByRole('button', { name: 'Wyczyść zrobione' }).click();
+    await dialog.getByRole('button', { name: 'Usuń', exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Zrobione (0)' })).toBeVisible();
+    await expect(page.getByRole('article', { name: 'Otwarte zadanie', exact: true })).toBeVisible();
+    await page.context().setOffline(false);
+    if (native)
+      await page.evaluate(() => {
+        localStorage.removeItem('test:offline');
+        window.dispatchEvent(new Event('online'));
+      });
+    await expect
+      .poll(async () =>
+        (await (await page.request.get(`/api/tasks/lists/${listId}/tasks?status=all`)).json()).tasks.map(
+          (task: { title: string }) => task.title,
+        ),
+      )
+      .toEqual(['Otwarte zadanie']);
+    const remaining = await (await page.request.get(`/api/tasks/lists/${other.id}/tasks?status=all`)).json();
+    expect(remaining.tasks).toHaveLength(1);
+    await page.screenshot({ path: info.outputPath(`tasks-cleared-${native}.png`), fullPage: true });
+  });
   test(`tasks support creation, completion, editing and polling through ${native ? 'Android transport' : 'the website'}`, async ({
     page,
     baseURL,
