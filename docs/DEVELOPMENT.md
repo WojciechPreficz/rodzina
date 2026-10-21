@@ -1,5 +1,74 @@
 # Praca lokalna — strona WWW i APK
 
+## Redesign R.5 — listy zadań, formularz i ustawienia, 21.10.2026
+
+Zadania mają katalog list obok zawartości od 768 px. Na telefonie wejście
+do listy ukrywa katalog, a powrót przywraca fokus na karcie i przewinięcie.
+Bezpośrednie adresy listy i zadania zachowują działanie oraz powrót do katalogu.
+Listy prywatne i udostępnione mają opisy, liczniki i awatary domowników.
+Wiersze pokazują termin, przeterminowanie i przypisanie. Sekcja „Zrobione”
+zachowuje rozwijanie, ponowne otwarcie i czyszczenie.
+
+Formularz ma karty szczegółów, terminu i przypisania oraz przypomnień,
+w dwóch kolumnach na desktopie i jednej na telefonie. Ustawienia listy
+wyróżniają dostęp domowników. Istniejące API, kolejka offline, odbiorcy
+alarmów i uprawnienia pozostają bez zmian. Termin po czasie ma ciemniejszą
+czerwień Mantine `red.9` dla czytelności na jasnej powierzchni
+(kontrast około 5,4:1 na `#fffefa`). Ten sam odcień stosujemy do akcji usuwania.
+
+Kontrole lokalne:
+
+- Vitest: **91 testów zaliczonych** w 7 plikach (łącznie z ponowieniem testu
+  zmienionego koloru terminu). UI, API i reguły zadań, kolejka offline,
+  przypomnienia zadań, ochrona formularzy oraz nawigacja natywna. Test kolejności list używa
+  dostępnych nazw kart zamiast całej ich treści.
+- Typecheck oraz build WWW/API: **poprawne**. Testy Vitest i Playwright
+  wymagają wykonania poza sandboxem z powodu ograniczeń plików tymczasowych
+  i lokalnego serwera.
+- Playwright headless: **22 różne scenariusze zaliczone** przy **390 i 1280 px**,
+  łącznie z ponowieniami poprawionych testów. CRUD, polling, uprawnienia,
+  udostępnianie i cofnięcie dostępu, przypomnienia, kolejki offline i ich
+  odtworzenie, czyszczenie zrobionych oraz brak dostępu do listy lub zadania.
+  Katalog sprawdzono z wieloma listami, odtworzeniem fokusu i przewinięcia,
+  utratą sieci i powrotem do listy. Atrapa Androida sprawdza też Wstecz
+  z listy i dialogu oraz wejście do zadania przez zdarzenie alarmu.
+  Przejrzano zrzuty obu szerokości; bez poziomego przewijania strony.
+- Szybkie dodawanie używa istniejącej ochrony formularzy i czyści stan
+  niezapisanych zmian po udanym zapisie do kolejki. Zapobiega to pytaniu
+  o odrzucenie już zapisanego zadania przy natywnym Wstecz. Test komponentu
+  sprawdza też odmowę i zgodę na opuszczenie niezapisanego formularza.
+- Lint i formatowanie zmienionych plików oraz debug APK: **poprawne**.
+  Build Androida w sandboxie nie połączył się z lokalnym daemonem Gradle;
+  ponowienie poza sandboxem zakończyło się sukcesem. APK zawiera końcowy
+  frontend i jest dostępne w `android/app/build/outputs/apk/debug/app-debug.apk`.
+  Sam build nie potwierdza instalacji ani działania na fizycznym telefonie.
+
+Zrzuty: `.android-tools/redesign-r5/`, `redesign-r5-final/`,
+`redesign-r5-catalog-final/` i `redesign-r5-offline/` (katalogi w `.android-tools/`).
+Pierwszy przebieg ujawnił założenia testów sprzed podziału mobilnych widoków,
+zawieszenie `.check()` przy przeniesieniu zadania do ukrytej sekcji oraz
+pojedynczy nieoczekiwany koniec procesu workera. Poprawione scenariusze ponowiono.
+Samo ukrycie katalogu nie jest dowodem cofnięcia dostępu; test czeka na usunięcie
+również ukrytej karty oraz zamknięcie otwartego zadania drugiej osoby.
+
+Lista do ręcznej oceny właściciela:
+
+1. Katalog, długa nazwa listy, wybór i powrót z zachowaniem miejsca.
+2. Szybkie dodanie, formularz, termin, przypisanie, przypomnienia,
+   ukończenie, ponowne otwarcie i czyszczenie zrobionych.
+3. Udostępnienie i cofnięcie dostępu w dwóch sesjach, ustawienia właściciela,
+   opuszczenie listy przez członka i zachowanie konta dziecka.
+4. Utrata sieci w liście, zmiana offline, powrót do katalogu i synchronizacja.
+5. Fizyczne APK: safe area, klawiatura, przewijanie formularza,
+   systemowy Wstecz oraz bezpośrednie wejście z alarmu zadania.
+
+Porównanie z przypiętą makietą pozostaje niezaliczone: MagicPath odrzucił
+odczyt kodu i podglądu z powodu wyczerpanego limitu API. Nie zaliczono prób
+na fizycznym telefonie ani CI. Początkowo zmiany pozostawiono bez commita
+do ręcznej oceny. Następnie właściciel polecił zapisanie lokalnego commita R.5,
+bez pusha i deployu. Polecenie nie zalicza brakujących prób ani porównania z makietą.
+Stan: **zweryfikowane lokalnie, oczekuje na CI** oraz wskazane próby ręczne.
+
 ## Redesign R.4 — katalog list i zawartość zakupów, 21.10.2026
 
 Zakupy mają katalog i zawartość obok siebie od 768 px, a na telefonie

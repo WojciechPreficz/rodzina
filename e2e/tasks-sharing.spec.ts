@@ -131,7 +131,10 @@ for (const native of [false, true]) {
       await page.getByRole('button', { name: 'Ustawienia listy' }).click();
       await page.getByRole('dialog').getByRole('button', { name: 'Cofnij udostępnienie wszystkim' }).click();
       await page.getByRole('dialog').getByRole('button', { name: 'Zapisz', exact: true }).click();
-      await expect(other.getByRole('link', { name: 'Wspólny remont', exact: true })).toHaveCount(0, { timeout: 21000 });
+      await expect(other.getByRole('link', { name: 'Wspólny remont', exact: true, includeHidden: true })).toHaveCount(
+        0,
+        { timeout: 21000 },
+      );
       await expect(other.getByRole('dialog')).toHaveCount(0);
       await expect(other.getByText('Wybrać prywatne płytki', { exact: true })).toHaveCount(0);
 

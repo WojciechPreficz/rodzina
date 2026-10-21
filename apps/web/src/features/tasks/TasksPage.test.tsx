@@ -146,6 +146,29 @@ afterEach(() => {
 });
 
 describe('tasks UI', () => {
+  it('protects an unsaved quick task when switching lists', async () => {
+    setup();
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Dodaj zadanie' }), {
+      target: { value: 'Niezapisane zadanie' },
+    });
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(screen.getByRole('link', { name: 'Remont' }));
+    expect(confirmation).toHaveBeenCalled();
+    expect(screen.getByRole('textbox', { name: 'Dodaj zadanie' })).toHaveValue('Niezapisane zadanie');
+    confirmation.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('link', { name: 'Remont' }));
+    expect(await screen.findByRole('heading', { name: 'Remont' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Dodaj zadanie' })).toHaveValue('');
+  });
+  it('returns from a directly opened list to the catalog', async () => {
+    setup();
+    await screen.findByRole('article', { name: task.title });
+    fireEvent.click(screen.getByText(/Wróć do list/));
+    expect(await screen.findByText('Wybierz listę, aby zobaczyć zadania.')).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: task.title })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Moje zadania' })).toBeInTheDocument();
+  });
+
   it('confirms clearing only completed tasks and preserves open tasks', async () => {
     const fetchMock = setup('/zadania/list', [
       task,
@@ -209,7 +232,7 @@ describe('tasks UI', () => {
     expect(
       within(navigation)
         .getAllByRole('link')
-        .map((link) => link.textContent),
+        .map((link) => link.getAttribute('aria-label')),
     ).toEqual(['Moje zadania', 'Remont']);
     expect(within(navigation).getByLabelText('Bartek')).toBeInTheDocument();
     expect(within(navigation).getAllByLabelText('Ania')).toHaveLength(1);
@@ -235,7 +258,7 @@ describe('tasks UI', () => {
     setup();
     const article = await screen.findByRole('article', { name: task.title });
     const deadline = within(article).getByText(/po terminie/);
-    expect(deadline).toHaveStyle({ color: 'var(--mantine-color-red-text)' });
+    expect(deadline).toHaveStyle({ color: 'var(--mantine-color-red-9)' });
     expect(within(article).getByLabelText('Ania')).toBeInTheDocument();
   });
   it('keeps the unchecked task on a rejected write and offers the server error', async () => {

@@ -3,6 +3,139 @@ import { installNativeTransport } from './nativeTransport.js';
 import { openNavigation } from './navigation.js';
 
 for (const native of [false, true]) {
+  test(`task catalog restores focus and scroll via ${native ? 'Android transport' : 'the website'}`, async ({
+    page,
+    baseURL,
+  }, info) => {
+    const headers = { Origin: baseURL! };
+    expect(
+      (
+        await page.request.post('/api/auth/register-family', {
+          headers,
+          data: {
+            familyName: 'Katalog zadań',
+            displayName: 'Ania',
+            email: `tasks-catalog-${native}-${info.project.name}@example.com`,
+            password: 'password123',
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+    for (let index = 0; index < 12; index++) {
+      expect((await page.request.post('/api/tasks/lists', { headers, data: { name: `Lista ${index}` } })).ok()).toBe(
+        true,
+      );
+    }
+    if (native) {
+      await installNativeTransport(page);
+      await page.addInitScript(() => {
+        const listeners = new Map<string, (data: unknown) => void>();
+        const bridge = (
+          window as unknown as {
+            Capacitor: {
+              nativeCallback: unknown;
+              PluginHeaders: { name: string; methods: { name: string; rtype: string }[] }[];
+            };
+          }
+        ).Capacitor;
+        bridge.PluginHeaders.find((plugin) => plugin.name === 'LocalNotifications')!.methods.push(
+          { name: 'addListener', rtype: 'callback' },
+          { name: 'removeListener', rtype: 'promise' },
+        );
+        bridge.PluginHeaders.find((plugin) => plugin.name === 'App')!.methods.push(
+          { name: 'getLaunchUrl', rtype: 'promise' },
+          { name: 'minimizeApp', rtype: 'promise' },
+        );
+        bridge.nativeCallback = (
+          plugin: string,
+          _method: string,
+          options: { eventName: string },
+          callback: (data: unknown) => void,
+        ) => {
+          listeners.set(`${plugin}:${options.eventName}`, callback);
+          return 'task-listener';
+        };
+        Object.assign(window, {
+          emitTaskNative: (event: string, data: unknown) => {
+            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+            listeners.get(event)?.(data);
+          },
+        });
+      });
+    }
+    const nativeEvent = (event: string, data: unknown = {}) =>
+      page.evaluate(
+        ({ event, data }) =>
+          (window as unknown as { emitTaskNative: (event: string, data: unknown) => void }).emitTaskNative(event, data),
+        { event, data },
+      );
+    await page.goto('/zadania');
+    const catalog = page.getByRole('navigation', { name: 'Listy zadań' });
+    const card = catalog.getByRole('link', { name: 'Lista 10', exact: true });
+    await expect(card).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`tasks-catalog-${native}.png`), fullPage: true });
+    await card.scrollIntoViewIfNeeded();
+    const scroll = await page.evaluate(() => scrollY);
+    await card.click();
+    const heading = page.getByRole('heading', { name: 'Lista 10', exact: true });
+    await expect(heading).toBeVisible();
+    const phone = page.viewportSize()!.width < 768;
+    if (phone) {
+      await expect(heading).toBeFocused();
+      await expect(catalog).not.toBeVisible();
+    } else {
+      await expect(catalog).toBeVisible();
+    }
+    await page.getByRole('textbox', { name: 'Dodaj zadanie', exact: true }).fill('Zadanie katalogu');
+    await page.getByRole('button', { name: 'Dodaj', exact: true }).click();
+    const row = page.getByRole('article', { name: 'Zadanie katalogu', exact: true });
+    await expect(row).toBeVisible();
+    await page.context().setOffline(true);
+    if (native)
+      await page.evaluate(() => {
+        localStorage.setItem('test:offline', 'yes');
+        window.dispatchEvent(new Event('offline'));
+      });
+    await row.getByRole('checkbox').click();
+    await expect(page.getByRole('button', { name: 'Zrobione (1)' })).toBeVisible();
+    if (phone && native) await nativeEvent('App:backButton');
+    else if (phone) await page.getByRole('button', { name: 'Wróć do list' }).click();
+    else await page.goBack();
+    if (phone) {
+      await expect(card).toBeFocused();
+      await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(scroll, 0);
+    }
+    await card.click();
+    await page.getByRole('button', { name: 'Zrobione (1)' }).click();
+    await expect(row.getByRole('checkbox')).toBeChecked();
+    await page.screenshot({ path: info.outputPath(`tasks-catalog-offline-${native}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.context().setOffline(false);
+    if (native)
+      await page.evaluate(() => {
+        localStorage.removeItem('test:offline');
+        window.dispatchEvent(new Event('online'));
+      });
+    await expect(page.getByText(/Zmiany oczekujące na wysłanie/)).toHaveCount(0);
+    const listId = new URL(page.url()).pathname.split('/').at(-1)!;
+    const { tasks } = await (await page.request.get(`/api/tasks/lists/${listId}/tasks?status=all`)).json();
+    const taskPath = `/zadania/${listId}?zadanie=${tasks[0].id}`;
+    if (native)
+      await nativeEvent('LocalNotifications:localNotificationActionPerformed', {
+        notification: { extra: { url: taskPath } },
+      });
+    else await page.goto(taskPath);
+    await expect(page.getByRole('dialog', { name: 'Edytuj zadanie' })).toBeVisible();
+    if (native) await nativeEvent('App:backButton');
+    else await page.getByRole('dialog').getByRole('button', { name: 'Anuluj' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    if (phone) {
+      if (native) await nativeEvent('App:backButton');
+      else await page.getByRole('button', { name: 'Wróć do list' }).click();
+      await expect(catalog).toBeVisible();
+      await expect(page).toHaveURL(/\/zadania$/);
+    }
+  });
   test(`clears completed tasks offline through ${native ? 'Android transport' : 'the website'}`, async ({
     page,
     baseURL,

@@ -1,9 +1,10 @@
-import { Alert, Button, Group, MultiSelect, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, MultiSelect, Paper, Stack, Text, TextInput } from '@mantine/core';
 import type { PatchTaskList, TaskList } from '@rodzina/shared';
 import { useState } from 'react';
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import type { Member } from '@rodzina/shared';
+import './tasks.css';
 
 const t = labels.tasksUi;
 export function TaskListSettings({
@@ -51,22 +52,30 @@ export function TaskListSettings({
           disabled={pending}
           onChange={(event) => setName(event.currentTarget.value)}
         />
-        <MultiSelect
-          label={t.shareWith}
-          placeholder={t.sharePlaceholder}
-          searchable
-          clearable
-          clearButtonProps={{ 'aria-label': t.clearSharing, 'aria-hidden': false, tabIndex: 0 }}
-          value={memberIds}
-          disabled={pending}
-          data={members
-            .filter((member) => member.id !== list.ownerId)
-            .map((member) => ({ value: member.id, label: member.displayName }))}
-          onChange={(value) => {
-            navigation.changed();
-            setMemberIds(value);
-          }}
-        />
+        <Paper component="section" withBorder className="task-form-section" aria-label={t.sharing}>
+          <Stack gap="xs">
+            <Text fw={600}>{t.sharing}</Text>
+            <Text size="sm" c="dimmed">
+              {t.privacyHint}
+            </Text>
+            <MultiSelect
+              label={t.shareWith}
+              placeholder={t.sharePlaceholder}
+              searchable
+              clearable
+              clearButtonProps={{ 'aria-label': t.clearSharing, 'aria-hidden': false, tabIndex: 0 }}
+              value={memberIds}
+              disabled={pending}
+              data={members
+                .filter((member) => member.id !== list.ownerId)
+                .map((member) => ({ value: member.id, label: member.displayName }))}
+              onChange={(value) => {
+                navigation.changed();
+                setMemberIds(value);
+              }}
+            />
+          </Stack>
+        </Paper>
         <Group justify="flex-end">
           <Button variant="default" disabled={pending} onClick={onCancel}>
             {t.cancel}
@@ -81,7 +90,7 @@ export function TaskListSettings({
           </Text>
         ) : (
           <Button
-            color="red"
+            color="red.9"
             variant="subtle"
             disabled={pending}
             onClick={() => {

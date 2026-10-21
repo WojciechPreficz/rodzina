@@ -1,5 +1,31 @@
 # Decyzje
 
+## 21.10.2026 — redesign zadań, krok R.5
+
+- Zadania korzystają z układu katalogu i zawartości sprawdzonego w zakupach:
+  dwie karty od 768 px, na telefonie katalog albo zawartość z powrotem.
+  Zachowujemy adresy `/zadania/:listId?zadanie=:taskId`. Powrót odtwarza
+  fokus i przewinięcie katalogu; bezpośrednio otwarta lista ma powrót
+  do `/zadania`. Natywne Wstecz korzysta z istniejącej obsługi klawiatury,
+  dialogów i ochrony niezapisanych zmian, a następnie wraca do katalogu.
+- Karty list pokazują rzeczywiste liczniki, prywatność oraz awatary
+  uczestników list udostępnionych. Formularz pozostaje modalem, z sekcjami
+  szczegółów, terminu i przypisania oraz przypomnień. Na szerokim ekranie
+  sekcje zajmują dwie kolumny, na telefonie jedną. Ustawienia listy
+  wyróżniają sekcję dostępu, bez zmiany uprawnień i kontraktów API.
+- Terminy po czasie i akcje usuwania używają `red.9` zamiast domyślnej
+  czerwieni. Dla tekstu na powierzchni `#fffefa` daje to kontrast około
+  5,4:1 (odcień `red.8` daje około 4,47:1, poniżej wymaganego 4,5:1).
+- Odczyt kodu i podglądu referencji MagicPath `463391177069174784`
+  komponentu `463388652152692736` zablokował wyczerpany limit API.
+  Nie znaleziono lokalnej kopii. Implementacja opiera się na zakresie R.5,
+  istniejącym motywie i układzie R.4. Nie zmieniamy referencyjnej rewizji
+  i nie zaliczamy dokładnego porównania z makietą.
+- Bez zmian API, migracji, cache, odbiorców alarmów i zależności runtime.
+  Początkowo zmiany pozostawiono bez commita do ręcznej oceny. Następnie
+  właściciel polecił zapisanie lokalnego commita R.5, bez pusha i deployu.
+  Polecenie nie zalicza brakujących prób APK, porównania z makietą ani CI.
+
 ## 21.10.2026 — redesign zakupów, krok R.4
 
 - Katalog list zastępuje poziome zakładki. Od 768 px katalog i zawartość

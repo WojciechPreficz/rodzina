@@ -1,4 +1,16 @@
-import { Alert, Button, Group, Loader, Select, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Group,
+  Loader,
+  Paper,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core';
 import {
   createTaskSchema,
   sharedTaskReminderSchema,
@@ -19,6 +31,7 @@ import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import { taskOfflineText } from './taskOffline.js';
 import type { Member } from '@rodzina/shared';
+import './tasks.css';
 
 const t = labels.tasksUi;
 
@@ -193,94 +206,114 @@ function TaskEditor({
           )}
           {(saveError || error) && <Alert color="red">{saveError || error}</Alert>}
           {invalid && <Alert color="red">{t.invalid}</Alert>}
-          <TextInput
-            label={t.name}
-            value={title}
-            onChange={(event) => setTitle(event.currentTarget.value)}
-            required
-            maxLength={200}
-            disabled={pending}
-            data-autofocus
-          />
-          <Textarea
-            label={t.notes}
-            value={notes}
-            onChange={(event) => setNotes(event.currentTarget.value)}
-            maxLength={10000}
-            autosize
-            minRows={3}
-            disabled={pending}
-          />
-          <TextInput
-            type="date"
-            label={t.dueDate}
-            value={dueDate}
-            disabled={pending}
-            onChange={(event) => {
-              setDueDate(event.currentTarget.value);
-              if (!event.currentTarget.value) setDueTime('');
-            }}
-          />
-          <TextInput
-            type="time"
-            label={t.dueTime}
-            value={dueTime}
-            disabled={pending || !dueDate}
-            onChange={(event) => setDueTime(event.currentTarget.value)}
-          />
-          <Select
-            label={t.assignee}
-            placeholder={t.unassigned}
-            clearable
-            value={assigneeId}
-            disabled={pending || configurationOffline}
-            data={members.map((member) => ({ value: member.id, label: member.displayName }))}
-            onChange={(value) => {
-              navigation.changed();
-              setAssigneeId(value);
-            }}
-          />
-          <Text fw={600}>{t.reminders}</Text>
-          <Text size="sm" c="dimmed">
-            {t.reminderHint}
-          </Text>
-          <ReminderList
-            task
-            value={reminders}
-            timezone={family!.timezone}
-            pending={pending || saving || configurationOffline}
-            onRemove={(index) => {
-              navigation.changed();
-              if (reminders[index]!.audience !== 'user') setSharedChanged(true);
-              setReminders((current) => current.filter((_, position) => position !== index));
-            }}
-          />
-          {!dueDate && (
-            <Text size="sm" c="dimmed">
-              {t.reminderNeedsDate}
-            </Text>
-          )}
-          <ReminderPicker
-            task
-            timezone={family!.timezone}
-            audiences={shared ? ['owner', 'list_members', 'user'] : ['owner', 'user']}
-            defaultAudience="owner"
-            pending={!dueDate || pending || saving || configurationOffline}
-            onAdd={(reminder) => {
-              if (!dueDate) throw new Error(t.reminderNeedsDate);
-              if (reminders.length >= 20) throw new Error(t.reminderLimit);
-              if (
-                reminders.some(
-                  (item) =>
-                    JSON.stringify(reminderInputForSave(item)) === JSON.stringify(reminderInputForSave(reminder)),
-                )
-              )
-                return;
-              navigation.changed();
-              if (reminder.audience !== 'user') setSharedChanged(true);
-              setReminders((current) => [...current, reminder]);
-            }}
-          />
+          <div className="task-form-grid">
+            <Stack gap="md">
+              <Paper component="section" withBorder className="task-form-section" aria-label={t.details}>
+                <Stack>
+                  <Text fw={600}>{t.details}</Text>
+                  <TextInput
+                    label={t.name}
+                    value={title}
+                    onChange={(event) => setTitle(event.currentTarget.value)}
+                    required
+                    maxLength={200}
+                    disabled={pending}
+                    data-autofocus
+                  />
+                  <Textarea
+                    label={t.notes}
+                    value={notes}
+                    onChange={(event) => setNotes(event.currentTarget.value)}
+                    maxLength={10000}
+                    autosize
+                    minRows={3}
+                    disabled={pending}
+                  />
+                </Stack>
+              </Paper>
+              <Paper component="section" withBorder className="task-form-section" aria-label={t.planning}>
+                <Stack>
+                  <Text fw={600}>{t.planning}</Text>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                    <TextInput
+                      type="date"
+                      label={t.dueDate}
+                      value={dueDate}
+                      disabled={pending}
+                      onChange={(event) => {
+                        setDueDate(event.currentTarget.value);
+                        if (!event.currentTarget.value) setDueTime('');
+                      }}
+                    />
+                    <TextInput
+                      type="time"
+                      label={t.dueTime}
+                      value={dueTime}
+                      disabled={pending || !dueDate}
+                      onChange={(event) => setDueTime(event.currentTarget.value)}
+                    />
+                  </SimpleGrid>
+                  <Select
+                    label={t.assignee}
+                    placeholder={t.unassigned}
+                    clearable
+                    value={assigneeId}
+                    disabled={pending || configurationOffline}
+                    data={members.map((member) => ({ value: member.id, label: member.displayName }))}
+                    onChange={(value) => {
+                      navigation.changed();
+                      setAssigneeId(value);
+                    }}
+                  />
+                </Stack>
+              </Paper>
+            </Stack>
+            <Paper component="section" withBorder className="task-form-section task-reminders" aria-label={t.reminders}>
+              <Stack>
+                <Text fw={600}>{t.reminders}</Text>
+                <Text size="sm" c="dimmed">
+                  {t.reminderHint}
+                </Text>
+                <ReminderList
+                  task
+                  value={reminders}
+                  timezone={family!.timezone}
+                  pending={pending || saving || configurationOffline}
+                  onRemove={(index) => {
+                    navigation.changed();
+                    if (reminders[index]!.audience !== 'user') setSharedChanged(true);
+                    setReminders((current) => current.filter((_, position) => position !== index));
+                  }}
+                />
+                {!dueDate && (
+                  <Text size="sm" c="dimmed">
+                    {t.reminderNeedsDate}
+                  </Text>
+                )}
+                <ReminderPicker
+                  task
+                  timezone={family!.timezone}
+                  audiences={shared ? ['owner', 'list_members', 'user'] : ['owner', 'user']}
+                  defaultAudience="owner"
+                  pending={!dueDate || pending || saving || configurationOffline}
+                  onAdd={(reminder) => {
+                    if (!dueDate) throw new Error(t.reminderNeedsDate);
+                    if (reminders.length >= 20) throw new Error(t.reminderLimit);
+                    if (
+                      reminders.some(
+                        (item) =>
+                          JSON.stringify(reminderInputForSave(item)) === JSON.stringify(reminderInputForSave(reminder)),
+                      )
+                    )
+                      return;
+                    navigation.changed();
+                    if (reminder.audience !== 'user') setSharedChanged(true);
+                    setReminders((current) => [...current, reminder]);
+                  }}
+                />
+              </Stack>
+            </Paper>
+          </div>
           <Group justify="flex-end">
             <Button variant="default" onClick={onCancel} disabled={pending}>
               {t.cancel}

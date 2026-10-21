@@ -55,7 +55,13 @@ for (const native of [false, true]) {
       });
       await expect(page.getByRole('alert').filter({ hasText: 'Jesteś offline' })).toBeVisible();
       await expect(page.getByText(/Bez internetu nie można tworzyć list/)).toBeVisible();
+      if (page.viewportSize()!.width < 768) await page.getByRole('button', { name: 'Wróć do list' }).click();
       await expect(page.getByRole('button', { name: 'Dodaj listę', exact: true })).toBeDisabled();
+      if (page.viewportSize()!.width < 768)
+        await page
+          .getByRole('navigation', { name: 'Listy zadań' })
+          .getByRole('link', { name: 'Moje zadania', exact: true })
+          .click();
       await expect(page.getByRole('button', { name: 'Ustawienia listy' })).toBeDisabled();
       for (const title of ['Pierwsze', 'Drugie', 'Trzecie'])
         await page.getByRole('article', { name: title, exact: true }).getByRole('checkbox').click();

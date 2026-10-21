@@ -1,6 +1,14 @@
 export const labels = {
   tasksUi: {
     title: 'Zadania',
+    description: 'Małe kroki, spokojniejszy dzień.',
+    backToLists: 'Wróć do list',
+    privateList: 'Lista prywatna',
+    sharedList: 'Lista udostępniona',
+    privacyHint: 'Listę widzisz Ty i zaproszeni do niej domownicy.',
+    details: 'Szczegóły zadania',
+    planning: 'Termin i przypisanie',
+    sharing: 'Dostęp do listy',
     lists: 'Listy zadań',
     addList: 'Dodaj listę',
     listName: 'Nazwa listy',

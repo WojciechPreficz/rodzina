@@ -15,11 +15,14 @@ import {
   Title,
 } from '@mantine/core';
 import { taskUrl, type Task } from '@rodzina/shared';
-import { useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { useMediaQuery } from '@mantine/hooks';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
-import { allowNavigation } from '../../nativeNavigation.js';
+import { addNativeBackHandler, allowNavigation } from '../../nativeNavigation.js';
+import { PageHeader } from '../../components/PageHeader.js';
+import { useFormNavigation } from '../../useFormNavigation.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import type { Member } from '@rodzina/shared';
 
@@ -29,6 +32,7 @@ import { useTasks } from './taskQueries.js';
 import { isTaskOverdue } from './taskRules.js';
 import { taskOfflineText } from './taskOffline.js';
 import { isAndroid } from '../../platform.js';
+import './tasks.css';
 
 const t = labels.tasksUi;
 
@@ -42,27 +46,69 @@ function MemberAvatar({ member, id }: { member: Member | undefined; id: string }
 }
 
 export function TasksPage() {
-  const { listId } = useParams();
-  return <TaskListPage key={listId ?? 'lists'} />;
+  return <TaskListPage />;
 }
 
 function TaskListPage() {
   const { listId } = useParams();
   const { user, family } = useMe();
   const navigate = useNavigate();
+  const location = useLocation();
+  const wide = useMediaQuery('(min-width: 48em)');
+  const catalog = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const returnTo = useRef<{ id: string; scroll: number } | null>(null);
+  const previous = useRef(listId);
   const [params, setParams] = useSearchParams();
   const data = useTasks(listId);
+  const activeListId = data.active?.id;
   const membersQuery = useMembersQuery();
   const members = membersQuery.data ?? (user ? [user] : []);
   const [addingList, setAddingList] = useState(false);
   const [listName, setListName] = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [settingsOpened, setSettingsOpened] = useState(false);
-  const [quickTitle, setQuickTitle] = useState('');
   const [doneOpened, setDoneOpened] = useState(false);
   const [clearingDone, setClearingDone] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const taskId = params.get('zadanie');
+  const backToCatalog = () => {
+    if (!allowNavigation()) return;
+    if (location.state?.tasksCatalog) void navigate(-1);
+    else void navigate('/zadania', { replace: true });
+  };
+  useEffect(() => {
+    if (!listId || wide) return;
+    return addNativeBackHandler(() => {
+      if (location.state?.tasksCatalog) void navigate(-1);
+      else void navigate('/zadania', { replace: true });
+    });
+  }, [listId, wide, location.state, navigate]);
+  useEffect(() => {
+    setAddingTask(false);
+    setSettingsOpened(false);
+    setDoneOpened(false);
+    setClearingDone(false);
+    setActionError(undefined);
+  }, [listId]);
+  useEffect(() => {
+    if (previous.current === listId || (listId && !activeListId)) return;
+    previous.current = listId;
+    if (wide) return;
+    const frame = requestAnimationFrame(() => {
+      if (listId) {
+        window.scrollTo(0, 0);
+        heading.current?.focus({ preventScroll: true });
+      } else if (returnTo.current) {
+        const target = [...(catalog.current?.querySelectorAll<HTMLAnchorElement>('[data-list-id]') ?? [])].find(
+          (link) => link.dataset.listId === returnTo.current?.id,
+        );
+        target?.focus({ preventScroll: true });
+        window.scrollTo(0, returnTo.current.scroll);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [listId, wide, activeListId]);
   const run = async (action: () => Promise<unknown>) => {
     setActionError(undefined);
     try {
@@ -118,31 +164,39 @@ function TaskListPage() {
     ? members.filter((member) => [active.ownerId, ...active.memberIds].includes(member.id))
     : [];
   const row = (task: Task) => (
-    <Paper component="article" aria-label={task.title} withBorder p="sm" key={task.id}>
-      <Group wrap="nowrap" align="flex-start">
-        <Checkbox
-          mt={4}
-          aria-label={t.check(task.title)}
-          checked={task.isDone}
-          disabled={data.update.isPending || data.clearDone.isPending}
-          onChange={(event) => {
-            const isDone = event.currentTarget.checked;
-            void run(() => data.update.mutateAsync({ id: task.id, data: { isDone } }));
-          }}
-        />
+    <Paper
+      component="article"
+      aria-label={task.title}
+      className={`task-row${task.isDone ? ' task-row-done' : ''}`}
+      key={task.id}
+    >
+      <Group wrap="nowrap" align="center">
+        <label className="task-checkbox-target">
+          <Checkbox
+            className="task-checkbox"
+            aria-label={t.check(task.title)}
+            checked={task.isDone}
+            disabled={data.update.isPending || data.clearDone.isPending}
+            onChange={(event) => {
+              const isDone = event.currentTarget.checked;
+              void run(() => data.update.mutateAsync({ id: task.id, data: { isDone } }));
+            }}
+          />
+        </label>
         <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
           <Text
             component={Link}
             to={taskUrl(task.listId, task.id)}
             onClick={() => data.update.reset()}
             fw={500}
+            className="task-title"
             td={task.isDone ? 'line-through' : undefined}
             style={{ overflowWrap: 'anywhere' }}
           >
             {task.title}
           </Text>
           {task.dueDate && (
-            <Text size="sm" c={isTaskOverdue(task, family!.timezone) ? 'red' : 'dimmed'}>
+            <Text size="sm" c={isTaskOverdue(task, family!.timezone) ? 'red.9' : 'dimmed'}>
               {t.due}: {task.dueDate.split('-').reverse().join('.')}
               {task.dueTime ? `, ${task.dueTime}` : ''}
               {isTaskOverdue(task, family!.timezone) ? ` · ${t.overdue}` : ''}
@@ -156,7 +210,23 @@ function TaskListPage() {
     </Paper>
   );
   return (
-    <Stack maw={860} w="100%" mx="auto">
+    <Stack className={`tasks-page${listId ? ' tasks-page-detail' : ''}`} gap="lg">
+      <PageHeader
+        title={t.title}
+        description={t.description}
+        actions={
+          <Button
+            disabled={data.offline}
+            onClick={() => {
+              data.createList.reset();
+              setAddingList(true);
+            }}
+          >
+            <span aria-hidden="true">＋&nbsp;</span>
+            {t.addList}
+          </Button>
+        }
+      />
       {data.offline && (
         <Alert title="Tryb offline">
           <Text>{taskOfflineText.banner}</Text>
@@ -177,176 +247,191 @@ function TaskListPage() {
           </Button>
         </Alert>
       )}
-      <Group justify="space-between">
-        <Title order={2}>{t.title}</Title>
-        <Button
-          disabled={data.offline}
-          onClick={() => {
-            data.createList.reset();
-            setAddingList(true);
-          }}
-        >
-          {t.addList}
-        </Button>
-      </Group>
       {actionError && (
         <Alert color="red" withCloseButton onClose={() => setActionError(undefined)}>
           {actionError}
         </Alert>
       )}
-      <Stack component="nav" aria-label={t.lists} gap="xs">
-        {lists.map((list) => (
-          <Paper withBorder p="sm" key={list.id}>
-            <Group wrap="nowrap">
-              <Text
-                component={Link}
-                to={`/zadania/${list.id}`}
-                fw={active?.id === list.id ? 700 : 500}
-                aria-current={active?.id === list.id ? 'page' : undefined}
-                style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}
-              >
-                {list.name}
-              </Text>
-              <Badge aria-label={t.count(list.openTaskCount)}>{list.openTaskCount}</Badge>
-              {list.memberIds.length > 0 && (
-                <Avatar.Group>
-                  {[list.ownerId, ...list.memberIds].slice(0, 3).map((id) => (
-                    <MemberAvatar key={id} id={id} member={members.find((member) => member.id === id)} />
-                  ))}
-                  {list.memberIds.length > 2 && (
-                    <Avatar size="sm" radius="xl">
-                      +{list.memberIds.length - 2}
-                    </Avatar>
-                  )}
-                </Avatar.Group>
-              )}
-            </Group>
-          </Paper>
-        ))}
-      </Stack>
-      {!listId && <Text c="dimmed">{t.chooseList}</Text>}
-      {listId && !active && <Alert color="red">{t.unavailable}</Alert>}
-      {active && (
-        <Stack key={active.id}>
-          <Group justify="space-between">
-            <Title order={3} style={{ overflowWrap: 'anywhere' }}>
-              {active.name}
+      <div className="tasks-layout">
+        <Paper component="nav" aria-label={t.lists} className="tasks-catalog" withBorder ref={catalog}>
+          <Group justify="space-between" mb="md">
+            <Title order={2} size="h4">
+              {t.lists}
             </Title>
-            {active.ownerId === user?.id ? (
-              <Button
-                variant="default"
-                disabled={data.offline}
-                onClick={() => {
-                  data.updateList.reset();
-                  data.removeList.reset();
-                  setSettingsOpened(true);
-                }}
-              >
-                {t.settings}
-              </Button>
-            ) : (
-              <Button
-                variant="subtle"
-                color="red"
-                disabled={data.offline}
-                loading={data.leaveList.isPending}
-                onClick={() => {
-                  if (window.confirm(t.leaveListConfirm))
-                    void run(async () => {
-                      await data.leaveList.mutateAsync();
-                      void navigate('/zadania');
-                    });
-                }}
-              >
-                {t.leaveList}
-              </Button>
-            )}
+            <Text size="sm" c="dimmed">
+              {lists.length}
+            </Text>
           </Group>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (data.create.isPending || !quickTitle.trim()) return;
-              void run(async () => {
-                await data.create.mutateAsync({ title: quickTitle.trim() });
-                setQuickTitle('');
-              });
-            }}
-          >
-            <Group align="flex-end" wrap="nowrap">
-              <TextInput
-                label={t.quickAdd}
-                value={quickTitle}
-                onChange={(event) => setQuickTitle(event.currentTarget.value)}
-                maxLength={200}
-                required
-                disabled={data.create.isPending}
-                style={{ flex: 1, minWidth: 0 }}
-              />
-              <Button type="submit" loading={data.create.isPending} disabled={!quickTitle.trim()}>
-                {t.add}
-              </Button>
-            </Group>
-          </form>
-          <Button
-            variant="light"
-            onClick={() => {
-              data.create.reset();
-              setAddingTask(true);
-            }}
-          >
-            {t.addTask}
+          <Stack gap="xs">
+            {lists.map((list) => (
+              <Link
+                key={list.id}
+                className="task-list-card"
+                data-list-id={list.id}
+                aria-label={list.name}
+                to={`/zadania/${list.id}`}
+                state={{ tasksCatalog: !listId }}
+                onClick={() => {
+                  if (!wide && !listId) returnTo.current = { id: list.id, scroll: window.scrollY };
+                }}
+                aria-current={active?.id === list.id ? 'page' : undefined}
+              >
+                <span className="task-list-icon" aria-hidden="true">
+                  ✓
+                </span>
+                <span className="task-list-summary">
+                  <span className="task-list-name">{list.name}</span>
+                  <Text component="span" size="xs" c="dimmed">
+                    {list.memberIds.length ? t.sharedList : t.privateList}
+                  </Text>
+                </span>
+                <Badge aria-label={t.count(list.openTaskCount)}>{list.openTaskCount}</Badge>
+                {list.memberIds.length > 0 && (
+                  <Avatar.Group>
+                    {[list.ownerId, ...list.memberIds].slice(0, 3).map((id) => (
+                      <MemberAvatar key={id} id={id} member={members.find((member) => member.id === id)} />
+                    ))}
+                    {list.memberIds.length > 2 && (
+                      <Avatar size="sm" radius="xl">
+                        +{list.memberIds.length - 2}
+                      </Avatar>
+                    )}
+                  </Avatar.Group>
+                )}
+              </Link>
+            ))}
+          </Stack>
+          <Text size="xs" c="dimmed" mt="lg">
+            {t.privacyHint}
+          </Text>
+        </Paper>
+        <Paper component="section" className="tasks-content" withBorder aria-label={active?.name ?? t.lists}>
+          <Button variant="subtle" className="tasks-back" onClick={backToCatalog}>
+            ← {t.backToLists}
           </Button>
-          {data.tasks.isError ? (
-            <Alert color="red">
-              {data.tasks.error?.message}
-              <Button variant="subtle" onClick={() => void data.tasks.refetch()}>
-                {t.retry}
-              </Button>
-            </Alert>
-          ) : !data.tasks.data ? (
-            data.offline || data.syncError ? (
-              <Alert>{taskOfflineText.empty}</Alert>
-            ) : (
-              <Loader aria-label={t.loading} />
-            )
-          ) : (
-            <>
-              {visibleTasks.filter((task) => !task.isDone).map(row)}
-              {!visibleTasks.some((task) => !task.isDone) && <Text c="dimmed">{t.empty}</Text>}
+          {!listId && (
+            <Text c="dimmed" className="tasks-empty">
+              {t.chooseList}
+            </Text>
+          )}
+          {listId && !active && <Alert color="red">{t.unavailable}</Alert>}
+          {active && (
+            <Stack key={active.id}>
               <Group justify="space-between">
-                <Button
-                  variant="subtle"
-                  justify="flex-start"
-                  aria-expanded={doneOpened}
-                  aria-controls="done-tasks"
-                  onClick={() => setDoneOpened((value) => !value)}
-                >
-                  {t.done} ({visibleTasks.filter((task) => task.isDone).length})
-                </Button>
-                {visibleTasks.some((task) => task.isDone) && (
+                <div className="tasks-content-heading">
+                  <Title order={2} ref={heading} tabIndex={-1}>
+                    {active.name}
+                  </Title>
+                  <Group gap="xs" mt="xs">
+                    <Text size="sm" c="dimmed">
+                      {active.memberIds.length ? t.sharedList : t.privateList}
+                    </Text>
+                    {active.memberIds.length > 0 && (
+                      <Avatar.Group>
+                        {listMembers.map((member) => (
+                          <MemberAvatar key={member.id} id={member.id} member={member} />
+                        ))}
+                      </Avatar.Group>
+                    )}
+                  </Group>
+                </div>
+                {active.ownerId === user?.id ? (
                   <Button
-                    size="xs"
-                    variant="light"
-                    color="red"
-                    disabled={data.update.isPending || data.remove.isPending}
-                    loading={data.clearDone.isPending}
+                    variant="default"
+                    disabled={data.offline}
                     onClick={() => {
-                      data.clearDone.reset();
-                      setClearingDone(true);
+                      data.updateList.reset();
+                      data.removeList.reset();
+                      setSettingsOpened(true);
                     }}
                   >
-                    {t.clearDone}
+                    {t.settings}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="subtle"
+                    color="red.9"
+                    disabled={data.offline}
+                    loading={data.leaveList.isPending}
+                    onClick={() => {
+                      if (window.confirm(t.leaveListConfirm))
+                        void run(async () => {
+                          await data.leaveList.mutateAsync();
+                          void navigate('/zadania');
+                        });
+                    }}
+                  >
+                    {t.leaveList}
                   </Button>
                 )}
               </Group>
-              <Collapse in={doneOpened} id="done-tasks">
-                <Stack>{visibleTasks.filter((task) => task.isDone).map(row)}</Stack>
-              </Collapse>
-              {taskId && !editedTask && <Alert color="red">{t.taskUnavailable}</Alert>}
-            </>
+              <TaskQuickAdd
+                key={active.id}
+                pending={data.create.isPending}
+                onAdd={(title) => run(() => data.create.mutateAsync({ title }))}
+              />
+              <Button
+                variant="light"
+                onClick={() => {
+                  data.create.reset();
+                  setAddingTask(true);
+                }}
+              >
+                {t.addTask}
+              </Button>
+              {data.tasks.isError ? (
+                <Alert color="red">
+                  {data.tasks.error?.message}
+                  <Button variant="subtle" onClick={() => void data.tasks.refetch()}>
+                    {t.retry}
+                  </Button>
+                </Alert>
+              ) : !data.tasks.data ? (
+                data.offline || data.syncError ? (
+                  <Alert>{taskOfflineText.empty}</Alert>
+                ) : (
+                  <Loader aria-label={t.loading} />
+                )
+              ) : (
+                <>
+                  {visibleTasks.filter((task) => !task.isDone).map(row)}
+                  {!visibleTasks.some((task) => !task.isDone) && <Text c="dimmed">{t.empty}</Text>}
+                  <Group justify="space-between" className="tasks-done-heading">
+                    <Button
+                      variant="subtle"
+                      justify="flex-start"
+                      aria-expanded={doneOpened}
+                      aria-controls="done-tasks"
+                      onClick={() => setDoneOpened((value) => !value)}
+                    >
+                      {t.done} ({visibleTasks.filter((task) => task.isDone).length})
+                    </Button>
+                    {visibleTasks.some((task) => task.isDone) && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="red.9"
+                        disabled={data.update.isPending || data.remove.isPending}
+                        loading={data.clearDone.isPending}
+                        onClick={() => {
+                          data.clearDone.reset();
+                          setClearingDone(true);
+                        }}
+                      >
+                        {t.clearDone}
+                      </Button>
+                    )}
+                  </Group>
+                  <Collapse in={doneOpened} id="done-tasks">
+                    <Stack>{visibleTasks.filter((task) => task.isDone).map(row)}</Stack>
+                  </Collapse>
+                  {taskId && !editedTask && <Alert color="red">{t.taskUnavailable}</Alert>}
+                </>
+              )}
+            </Stack>
           )}
-        </Stack>
-      )}
+        </Paper>
+      </div>
       <Modal
         opened={clearingDone}
         onClose={() => {
@@ -362,7 +447,7 @@ function TaskListPage() {
               {t.cancel}
             </Button>
             <Button
-              color="red"
+              color="red.9"
               loading={data.clearDone.isPending}
               onClick={() => {
                 void run(async () => {
@@ -412,6 +497,7 @@ function TaskListPage() {
           if (allowNavigation()) setSettingsOpened(false);
         }}
         title={t.settings}
+        size="lg"
       >
         {settingsOpened && active && active.ownerId === user?.id && (
           <TaskListSettings
@@ -437,6 +523,7 @@ function TaskListPage() {
         opened={!!active && (addingTask || !!editedTask)}
         onClose={closeTask}
         title={editedTask ? t.editTask : t.addTask}
+        size="xl"
       >
         {(addingTask || editedTask) && active && (
           <TaskForm
@@ -456,7 +543,7 @@ function TaskListPage() {
         {editedTask && (
           <Button
             mt="md"
-            color="red"
+            color="red.9"
             variant="subtle"
             disabled={data.remove.isPending || data.update.isPending}
             onClick={() => {
@@ -472,5 +559,41 @@ function TaskListPage() {
         )}
       </Modal>
     </Stack>
+  );
+}
+
+function TaskQuickAdd({ pending, onAdd }: { pending: boolean; onAdd: (title: string) => Promise<boolean> }) {
+  const [title, setTitle] = useState('');
+  const navigation = useFormNavigation();
+  return (
+    <form
+      className="tasks-quick-add"
+      data-navigation-guard="true"
+      onChange={navigation.changed}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (pending || !title.trim()) return;
+        void onAdd(title.trim()).then((saved) => {
+          if (!saved) return;
+          setTitle('');
+          navigation.saved();
+        });
+      }}
+    >
+      <Group align="flex-end" wrap="nowrap">
+        <TextInput
+          label={t.quickAdd}
+          value={title}
+          onChange={(event) => setTitle(event.currentTarget.value)}
+          maxLength={200}
+          required
+          disabled={pending}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <Button type="submit" loading={pending} disabled={!title.trim()}>
+          {t.add}
+        </Button>
+      </Group>
+    </form>
   );
 }
