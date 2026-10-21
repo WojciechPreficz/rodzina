@@ -1,5 +1,50 @@
 # Praca lokalna — strona WWW i APK
 
+## Redesign R.4 — katalog list i zawartość zakupów, 21.10.2026
+
+Zakupy mają katalog i zawartość obok siebie od 768 px, a na telefonie
+katalog i osobny widok wybranej listy. Wybór trafia do parametru `?lista=`.
+Powrót przywraca fokus i przewinięcie katalogu. Natywne Wstecz uwzględnia
+klawiaturę i modale, a potem wraca do katalogu także z bezpośredniego adresu.
+Akcje listy są w menu obok jej tytułu. Kategorie, kupujący, uprawnienia
+oraz kolejka zmian korzystają z dotychczasowej logiki.
+
+Kontrole lokalne:
+
+- **24/24 Vitest**, 3 pliki: zakupy i nawigacja natywna. Sprawdzono szybkie
+  dodawanie i podpowiedzi, edycję, kupowanie, błędy zapisu, uprawnienia dziecka,
+  listy tworzone offline, brak cache oraz powrót z fokusem i przewinięciem.
+- **10/10 Playwright headless** przy **390 i 1280 px**: CRUD, współdzielenie i polling,
+  transport Androida, kolejka offline i ponowne uruchomienie frontendu,
+  katalog z wieloma listami, utrata sieci w otwartej liście i powrót do katalogu,
+  brak zawartości w cache oraz odświeżenie i synchronizacja po odzyskaniu sieci.
+  Dodatkowo granice 767/768 px i natywne Wstecz z otwartej listy oraz adresu
+  bez wcześniejszego wejścia przez katalog (atrapa mostka Androida).
+- Lint zmienionych plików, Prettier, typecheck, build WWW/API oraz debug APK:
+  **poprawne**. Początkowe próby Vitest, Playwright i Gradle ograniczał sandbox;
+  udane przebiegi wykonano poza nim. Przejrzano zrzuty obu szerokości;
+  testy nie wykazały poziomego przewijania całej strony.
+
+Zrzuty końcowego przebiegu: `.android-tools/redesign-r4-final/`.
+Aktualny debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Lista do ręcznej oceny właściciela:
+
+1. Wybór listy, powrót z odtworzeniem miejsca, długie nazwy i dużo list.
+2. Dodanie produktu z ilością, sugestie, kategorię po edycji, kupienie i osobę
+   kupującą, przywrócenie produktu, czyszczenie kupionych i akcje listy.
+3. Utratę sieci w liście, dodanie i kupienie offline, powrót do katalogu,
+   ponowne wejście oraz synchronizację po odzyskaniu sieci.
+4. W fizycznym APK: safe area, klawiaturę, przewijanie, menu i systemowy Wstecz.
+
+Nie wykonano instalacji ani prób na fizycznym telefonie. Porównanie z przypiętą
+rewizją MagicPath pozostaje niezaliczone z powodu wyczerpanego limitu API
+oraz niedostępnego osadzonego podglądu. Ograniczenie opisano w `DECISIONS.md`.
+Stan: **zweryfikowane lokalnie, oczekuje na CI** i ręczną ocenę właściciela.
+Po przygotowaniu zmian właściciel polecił zapisanie lokalnego commita R.4,
+bez pusha i deployu; CI nie uruchomiono. Polecenie nie stanowi szczegółowego
+raportu z prób ręcznych i nie zalicza brakujących kontroli.
+
 ## Redesign R.3 — formularz i szczegóły wydarzenia, 21.10.2026
 
 Dodawanie otwiera pełny widok treści przy istniejącym URL kalendarza.

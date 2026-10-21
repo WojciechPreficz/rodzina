@@ -23,7 +23,13 @@ vi.mock('@capacitor/local-notifications', () => ({
     }),
   },
 }));
-import { appLinkPath, notificationPath, installNativeNavigation, addNavigationGuard } from './nativeNavigation.js';
+import {
+  appLinkPath,
+  notificationPath,
+  installNativeNavigation,
+  addNavigationGuard,
+  addNativeBackHandler,
+} from './nativeNavigation.js';
 import { sanitizeNextPath } from './api.js';
 afterEach(() => {
   f.listeners.clear();
@@ -31,6 +37,34 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 const url = '/kalendarz/wydarzenie/event-1?data=2026-10-20';
+it('returns to a page catalog before history, after keyboard, dialogs and guards', async () => {
+  f.launch.mockResolvedValue(undefined);
+  const navigate = vi.fn();
+  const nav = installNativeNavigation(navigate);
+  await nav.ready;
+  const catalog = vi.fn();
+  const remove = addNativeBackHandler(catalog);
+  const back = () => f.listeners.get('backButton')!({} as never);
+  document.body.innerHTML = '<input />';
+  document.querySelector('input')!.focus();
+  back();
+  expect(catalog).not.toHaveBeenCalled();
+  const unguard = addNavigationGuard(() => false);
+  back();
+  expect(catalog).not.toHaveBeenCalled();
+  unguard();
+  document.body.innerHTML = '<div role="dialog"></div>';
+  back();
+  expect(catalog).not.toHaveBeenCalled();
+  document.body.innerHTML = '';
+  back();
+  expect(catalog).toHaveBeenCalledOnce();
+  expect(navigate).not.toHaveBeenCalled();
+  remove();
+  back();
+  expect(catalog).toHaveBeenCalledOnce();
+  nav.dispose();
+});
 it('rejects external URLs, backslashes, encoded escapes and control characters in next and notifications', () => {
   for (const unsafe of [
     'https://evil.test',

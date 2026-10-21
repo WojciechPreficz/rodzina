@@ -40,7 +40,7 @@ export function QuickAdd({
     if (result.success && (await onAdd(result.data))) setValue('');
   };
   return (
-    <form onSubmit={(event) => void submit(event)}>
+    <form className="shopping-quick-add" onSubmit={(event) => void submit(event)}>
       <Stack gap="xs">
         <Group align="flex-end" wrap="nowrap">
           <Autocomplete
@@ -58,7 +58,7 @@ export function QuickAdd({
             data={(suggestions.data ?? []).map((item) => `${item.name}${parsed.quantity ? ` ${parsed.quantity}` : ''}`)}
             filter={({ options }) => options}
           />
-          <Button type="submit" loading={pending} disabled={!value.trim()}>
+          <Button type="submit" disabled={pending || !value.trim()}>
             {t.add}
           </Button>
         </Group>

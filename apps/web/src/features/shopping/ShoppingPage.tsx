@@ -8,19 +8,23 @@ import {
   Paper,
   Select,
   Stack,
-  Tabs,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
 import { SHOPPING_CATEGORIES, createShoppingItemSchema, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useMediaQuery } from '@mantine/hooks';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useMe } from '../../auth.js';
+import { PageHeader } from '../../components/PageHeader.js';
+import { addNativeBackHandler } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import { QuickAdd } from './QuickAdd.js';
 import { useShopping } from './shoppingQueries.js';
 import type { ShoppingChange } from './shoppingApi.js';
+import './shopping.css';
 
 const t = labels.shoppingUi;
 type Dialog =
@@ -33,13 +37,54 @@ type Dialog =
 
 export function ShoppingPage() {
   const { user } = useMe();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const selected = params.get('lista');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const wide = useMediaQuery('(min-width: 48em)');
+  const catalog = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const returnTo = useRef<{ id: string; scroll: number } | null>(null);
+  const previous = useRef(selected);
+  const openList = (id: string) => {
+    if (!wide) returnTo.current = { id, scroll: window.scrollY };
+    setParams({ lista: id }, { state: { shoppingCatalog: !selected } });
+  };
+  const backToCatalog = () => {
+    if (location.state?.shoppingCatalog) void navigate(-1);
+    else setParams({}, { replace: true });
+  };
   const { lists, items, queueChange, active, online, pendingCount, syncError, dismissSyncError } =
     useShopping(selected);
   const members = useMembersQuery();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const adult = user?.role !== 'child';
+  useEffect(() => {
+    if (!selected || wide) return;
+    return addNativeBackHandler(() => {
+      if (location.state?.shoppingCatalog) void navigate(-1);
+      else setParams({}, { replace: true });
+    });
+  }, [selected, wide, location.state, navigate, setParams]);
+  useEffect(() => {
+    if (previous.current === selected) return;
+    previous.current = selected;
+    if (wide) return;
+    const frame = requestAnimationFrame(() => {
+      if (selected) {
+        window.scrollTo(0, 0);
+        heading.current?.focus({ preventScroll: true });
+      } else if (returnTo.current) {
+        const target = [...(catalog.current?.querySelectorAll<HTMLButtonElement>('[data-list-id]') ?? [])].find(
+          (button) => button.dataset.listId === returnTo.current?.id,
+        );
+        target?.focus({ preventScroll: true });
+        window.scrollTo(0, returnTo.current.scroll);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selected, wide]);
   const run = async (change: ShoppingChange) => {
     setError(null);
     try {
@@ -77,32 +122,38 @@ export function ShoppingPage() {
         ? user.displayName
         : members.data?.find((member) => member.id === item.checkedBy)?.displayName;
     return (
-      <Paper key={item.id} p="sm" withBorder component="article" aria-label={item.name}>
-        <Group wrap="nowrap" align="flex-start">
+      <Paper
+        key={item.id}
+        className={`shopping-row${item.isChecked ? ' shopping-row-checked' : ''}`}
+        component="article"
+        aria-label={item.name}
+      >
+        <Group wrap="nowrap" align="center" gap="xs">
           <Checkbox
             checked={item.isChecked}
-
-            mt={3}
+            className="shopping-checkbox"
             aria-label={t.check(item.name)}
             onChange={() =>
               void run({ type: 'edit', listId: item.listId, id: item.id, data: { isChecked: !item.isChecked } })
             }
+            label={
+              <Stack gap={2} style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                <Text td={item.isChecked ? 'line-through' : undefined} fw={500}>
+                  {item.name}
+                </Text>
+                {item.quantity && (
+                  <Text size="sm" c="dimmed">
+                    {item.quantity}
+                  </Text>
+                )}
+                {item.isChecked && (
+                  <Text size="xs" c="dimmed">
+                    {t.boughtBy(item.checkedBy === null ? t.formerMember : (buyer ?? '…'))}
+                  </Text>
+                )}
+              </Stack>
+            }
           />
-          <Stack gap={2} style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
-            <Text td={item.isChecked ? 'line-through' : undefined} fw={500}>
-              {item.name}
-            </Text>
-            {item.quantity && (
-              <Text size="sm" c="dimmed">
-                {item.quantity}
-              </Text>
-            )}
-            {item.isChecked && (
-              <Text size="xs" c="dimmed">
-                {t.boughtBy(item.checkedBy === null ? t.formerMember : (buyer ?? '…'))}
-              </Text>
-            )}
-          </Stack>
           {editable && (
             <Menu position="bottom-end">
               <Menu.Target>
@@ -123,15 +174,19 @@ export function ShoppingPage() {
     );
   };
   return (
-    <Stack maw={960} mx="auto" w="100%">
-      <Group justify="space-between">
-        <Title order={1}>{t.title}</Title>
-        {adult && (
-          <Button variant="light" onClick={() => setDialog({ type: 'createList' })}>
-            {t.addList}
-          </Button>
-        )}
-      </Group>
+    <Stack className={`shopping-page${selected ? ' shopping-page-detail' : ''}`} gap="lg">
+      <PageHeader
+        title={t.title}
+        description={t.description}
+        actions={
+          adult && (
+            <Button variant="filled" onClick={() => setDialog({ type: 'createList' })}>
+              <span aria-hidden="true">＋&nbsp;</span>
+              {t.addList}
+            </Button>
+          )
+        }
+      />
       {!online && (
         <Alert color="yellow" role="status">
           {t.offline}
@@ -162,87 +217,132 @@ export function ShoppingPage() {
           </Button>
         </Alert>
       )}
-      <Tabs value={active?.id ?? null} onChange={setSelected}>
-        <Tabs.List aria-label={t.lists} style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
-          {lists.data.map((list) => (
-            <Tabs.Tab
-              key={list.id}
-              value={list.id}
-
-              style={{ flexShrink: 0, maxWidth: 220, overflow: 'hidden', overflowWrap: 'anywhere' }}
-            >
-              {list.name}
-            </Tabs.Tab>
-          ))}
-        </Tabs.List>
-      </Tabs>
-      {active && (
-        <>
-          {adult && (
-            <Group gap="xs">
-              <Button
-                size="xs"
-                variant="subtle"
-
-                onClick={() => setDialog({ type: 'renameList', list: active })}
+      <div className="shopping-layout">
+        <Paper component="section" className="shopping-catalog" withBorder ref={catalog} aria-label={t.lists}>
+          <Group justify="space-between" mb="md">
+            <Title order={2} size="h4">
+              {t.lists}
+            </Title>
+            <Text size="sm" c="dimmed">
+              {lists.data.length}
+            </Text>
+          </Group>
+          <Stack gap="xs">
+            {lists.data.map((list) => (
+              <button
+                key={list.id}
+                type="button"
+                className="shopping-list-card"
+                data-list-id={list.id}
+                aria-current={active?.id === list.id ? 'true' : undefined}
+                onClick={() => openList(list.id)}
               >
-                {t.renameList}
-              </Button>
-              <Button
-                size="xs"
-                variant="subtle"
-                color="red"
-
-                onClick={() => setDialog({ type: 'deleteList', list: active })}
-              >
-                {t.deleteList}
-              </Button>
-            </Group>
+                <span className="shopping-list-icon" aria-hidden="true">
+                  ☷
+                </span>
+                <span className="shopping-list-name">{list.name}</span>
+                <span aria-hidden="true">›</span>
+              </button>
+            ))}
+          </Stack>
+          {lists.data.length === 0 && (
+            <Text c="dimmed" size="sm">
+              {t.noLists}
+            </Text>
           )}
-          <QuickAdd
-            key={active.id}
-            pending={items.isPending}
-            onAdd={(data) => run({ type: 'add', listId: active.id, id: crypto.randomUUID(), data })}
-          />
-          {items.isPending ? (
-            <Text role="status">{t.loading}</Text>
-          ) : all.length === 0 && !items.isError ? (
-            <Text c="dimmed">{t.empty}</Text>
-          ) : null}
-          {SHOPPING_CATEGORIES.map((category) => {
-            const group = sort(open.filter((item) => item.category === category.value));
-            return group.length ? (
-              <Stack key={category.value} gap="xs">
-                <Title order={2} size="h4">
-                  {category.label}
-                </Title>
-                {group.map(row)}
-              </Stack>
-            ) : null;
-          })}
-          {checked.length > 0 && (
-            <Stack gap="xs">
-              <Group justify="space-between">
-                <Title order={2} size="h4">
-                  {t.checked} ({checked.length})
-                </Title>
+          <Text c="dimmed" size="xs" mt="lg">
+            {t.sharedLists}
+          </Text>
+        </Paper>
+        <Paper component="section" className="shopping-content" withBorder aria-label={active?.name ?? t.lists}>
+          <Button variant="subtle" className="shopping-back" onClick={backToCatalog}>
+            ← {t.backToLists}
+          </Button>
+          {active && (
+            <>
+              <Group justify="space-between" align="flex-start" mb="lg" gap="xs">
+                <div className="shopping-content-heading">
+                  <Title order={2} ref={heading} tabIndex={-1}>
+                    {active.name}
+                  </Title>
+                  {items.data && (
+                    <Text c="dimmed" size="sm">
+                      {t.remaining(open.length)} · {t.checked}: {checked.length}
+                    </Text>
+                  )}
+                </div>
                 {adult && (
-                  <Button
-                    size="xs"
-                    variant="light"
-                    color="red"
-
-                    onClick={() => setDialog({ type: 'clear', listId: active.id })}
-                  >
-                    {t.clear}
-                  </Button>
+                  <Menu position="bottom-end">
+                    <Menu.Target>
+                      <Button variant="default" aria-label={t.listActions}>
+                        •••
+                      </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item onClick={() => setDialog({ type: 'renameList', list: active })}>
+                        {t.renameList}
+                      </Menu.Item>
+                      <Menu.Item color="red" onClick={() => setDialog({ type: 'deleteList', list: active })}>
+                        {t.deleteList}
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
                 )}
               </Group>
-              {sort(checked).map(row)}
-            </Stack>
+              <QuickAdd
+                key={active.id}
+                pending={!items.data}
+                onAdd={(data) => run({ type: 'add', listId: active.id, id: crypto.randomUUID(), data })}
+              />
+              {!online && !items.data ? (
+                <Alert color="yellow" role="status">
+                  {t.noOfflineItems}
+                </Alert>
+              ) : items.isPending ? (
+                <Text role="status">{t.loading}</Text>
+              ) : all.length === 0 && !items.isError ? (
+                <Text c="dimmed">{t.empty}</Text>
+              ) : null}
+              {SHOPPING_CATEGORIES.map((category) => {
+                const group = sort(open.filter((item) => item.category === category.value));
+                return group.length ? (
+                  <Stack key={category.value} gap={0} className="shopping-category">
+                    <Title order={2} size="h4">
+                      {category.label}{' '}
+                      <Text component="span" size="sm" c="dimmed">
+                        {group.length}
+                      </Text>
+                    </Title>
+                    {group.map(row)}
+                  </Stack>
+                ) : null;
+              })}
+              {checked.length > 0 && (
+                <Stack gap={0} className="shopping-category shopping-checked">
+                  <Group justify="space-between">
+                    <Title order={2} size="h4">
+                      {t.checked} ({checked.length})
+                    </Title>
+                    {adult && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="red"
+
+                        onClick={() => setDialog({ type: 'clear', listId: active.id })}
+                      >
+                        {t.clear}
+                      </Button>
+                    )}
+                  </Group>
+                  {sort(checked).map(row)}
+                </Stack>
+              )}
+            </>
           )}
-        </>
-      )}
+          {!active && <Text c="dimmed">{t.noLists}</Text>}
+        </Paper>
+      </div>
       {dialog && (
         <ShoppingDialog
           dialog={dialog}
@@ -252,7 +352,10 @@ export function ShoppingPage() {
             setError(null);
           }}
           save={async (change) => {
-            if (await run(change)) setDialog(null);
+            if (await run(change)) {
+              setDialog(null);
+              if (change.type === 'deleteList') setParams({}, { replace: true });
+            }
           }}
         />
       )}
@@ -361,7 +464,7 @@ function ShoppingDialog({
             <Button variant="default" onClick={close}>
               {t.cancel}
             </Button>
-            <Button type="submit" color={editingList || dialog.type === 'edit' ? 'blue' : 'red'}>
+            <Button type="submit" color={editingList || dialog.type === 'edit' ? 'sage' : 'red'}>
               {editingList || dialog.type === 'edit' ? t.save : t.remove}
             </Button>
           </Group>

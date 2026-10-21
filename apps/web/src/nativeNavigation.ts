@@ -56,6 +56,15 @@ export function allowNavigation() {
   return guards.at(-1)?.() ?? true;
 }
 
+const backHandlers: Array<() => void> = [];
+export function addNativeBackHandler(handler: () => void) {
+  backHandlers.push(handler);
+  return () => {
+    const index = backHandlers.indexOf(handler);
+    if (index >= 0) backHandlers.splice(index, 1);
+  };
+}
+
 export function installNativeNavigation(navigate: (path: string | number) => void) {
   let disposed = false;
   let urlRevision = 0;
@@ -110,6 +119,11 @@ export function installNativeNavigation(navigate: (path: string | number) => voi
           return;
         }
         if (!allowNavigation() || !allowOtherForms(document)) return;
+        const backHandler = backHandlers.at(-1);
+        if (backHandler) {
+          backHandler();
+          return;
+        }
         if (window.history.state?.idx > 0) navigate(-1);
         else if (!['/', '/kalendarz', '/witaj', '/login'].includes(window.location.pathname)) navigate('/kalendarz');
         else void App.minimizeApp();

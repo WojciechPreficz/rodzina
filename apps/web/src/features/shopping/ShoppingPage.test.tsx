@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { ShoppingPage } from './ShoppingPage.js';
+import { MemoryRouter } from 'react-router';
 import { configureShoppingMutations } from './shoppingOffline.js';
+import { shoppingKey } from './shoppingOptimistic.js';
 
 const session = vi.hoisted(() => ({
   user: { id: 'adult', role: 'member', displayName: 'Ania' },
@@ -79,7 +81,9 @@ function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>
   render(
     <QueryClientProvider client={client}>
       <MantineProvider env="test">
-        <ShoppingPage />
+        <MemoryRouter initialEntries={['/zakupy']}>
+          <ShoppingPage />
+        </MemoryRouter>
       </MantineProvider>
     </QueryClientProvider>,
   );
@@ -88,6 +92,7 @@ function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>
 
 describe('shopping UI', () => {
   beforeEach(() => {
+    vi.stubGlobal('scrollTo', vi.fn());
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -229,12 +234,13 @@ describe('shopping UI', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Dodaj listę' }));
     fireEvent.change(await screen.findByRole('textbox', { name: /^Nazwa listy/ }), { target: { value: 'Drogeria' } });
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zapisz' }));
-    expect(await screen.findByRole('tab', { name: 'Drogeria' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Drogeria/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Zmień nazwę listy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Opcje listy' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Zmień nazwę listy' }));
     fireEvent.change(await screen.findByRole('textbox', { name: /^Nazwa listy/ }), { target: { value: 'Spożywcze' } });
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zapisz' }));
-    expect(await screen.findByRole('tab', { name: 'Spożywcze' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Spożywcze/ })).toBeInTheDocument();
   });
 
   it('creates a list, adds and checks a product offline without blocking the next action', async () => {
@@ -244,7 +250,7 @@ describe('shopping UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj listę' }));
     fireEvent.change(await screen.findByRole('textbox', { name: /^Nazwa listy/ }), { target: { value: 'Offline' } });
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zapisz' }));
-    fireEvent.click(await screen.findByRole('tab', { name: 'Offline' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Offline/ }));
     const field = screen.getByRole('textbox', { name: 'Dodaj produkt' });
     expect(field).toBeEnabled();
     fireEvent.change(field, { target: { value: 'Chleb 2 szt' } });
@@ -253,5 +259,34 @@ describe('shopping UI', () => {
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Kupione: Chleb' })).toBeChecked());
     expect(client.isMutating()).toBe(3);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method && init.method !== 'GET')).toHaveLength(0);
+  });
+
+  it('returns to the catalog with focus and scroll restored', async () => {
+    setup();
+    const card = await screen.findByRole('button', { name: 'Zakupy' });
+    vi.stubGlobal('scrollY', 320);
+    fireEvent.click(card);
+    const title = screen.getByRole('heading', { name: 'Zakupy', level: 2 });
+    await waitFor(() => expect(title).toHaveFocus());
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+    fireEvent.click(screen.getByRole('button', { name: /Wróć do list/ }));
+    await waitFor(() => expect(card).toHaveFocus());
+    expect(window.scrollTo).toHaveBeenLastCalledWith(0, 320);
+  });
+
+  it('distinguishes an uncached offline list from an empty list and blocks adding', async () => {
+    setup();
+    await screen.findByRole('article', { name: 'Mleko' });
+    act(() => {
+      client.setQueryData(
+        [...shoppingKey({ familyId: 'family', userId: 'adult' }), 'lists'],
+        [list, { ...list, id: 'uncached', name: 'Niepobrana' }],
+      );
+      onlineManager.setOnline(false);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Niepobrana' }));
+    expect(await screen.findByText(/Brak zawartości tej listy na urządzeniu/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Dodaj produkt' })).toBeDisabled();
+    expect(screen.queryByText('Lista jest pusta. Dodaj pierwszy produkt.')).not.toBeInTheDocument();
   });
 });

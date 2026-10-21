@@ -166,8 +166,21 @@ test('APK uses the same right drawer and native Back closes it before leaving th
   await expect(page).toHaveURL(/\/zakupy$/);
   await expect(dialog).not.toBeVisible();
   await expect(page.locator('.mantine-AppShell-header')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Zakupy', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Zakupy', exact: true, level: 1 })).toBeVisible();
   await page.screenshot({ path: info.outputPath('android-shopping-without-header.png'), fullPage: true });
+  if (info.project.name === 'phone') {
+    await page.getByRole('button', { name: 'Zakupy', exact: true }).click();
+    await expect(page).toHaveURL(/\?lista=/);
+    await page.evaluate(() => (window as unknown as { nativeBack: () => void }).nativeBack());
+    await expect(page).toHaveURL(/\/zakupy$/);
+    await expect(page.getByRole('button', { name: 'Zakupy', exact: true })).toBeFocused();
+    // A direct entry has no catalog history entry to go back to.
+    const { lists } = await (await page.request.get('/api/shopping/lists')).json();
+    await page.goto('/zakupy?lista=' + lists[0].id);
+    await expect(page.getByRole('button', { name: 'Wróć do list' })).toBeVisible();
+    await page.evaluate(() => (window as unknown as { nativeBack: () => void }).nativeBack());
+    await expect(page).toHaveURL(/\/zakupy$/);
+  }
   const calendarMenu = await openNavigation(page);
   await calendarMenu.getByRole('link', { name: 'Kalendarz', exact: true }).click();
   await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();

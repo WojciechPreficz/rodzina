@@ -1,5 +1,29 @@
 # Decyzje
 
+## 21.10.2026 — redesign zakupów, krok R.4
+
+- Katalog list zastępuje poziome zakładki. Od 768 px katalog i zawartość
+  są obok siebie, na telefonie są osobnymi widokami. Wybór używa
+  istniejącej trasy z parametrem `/zakupy?lista=<id>`, bez nowej trasy API.
+  Powrót odtwarza fokus na karcie i przewinięcie katalogu. Natywne Wstecz
+  respektuje klawiaturę, modale i ochronę formularzy, a potem wraca do katalogu;
+  również przy bezpośrednim wejściu w adres listy.
+- Katalog nie pokazuje zmyślonych liczników dla niepobranych list. Liczby
+  produktów i kupionych wynikają z danych wybranej listy. Kategorie pochodzą
+  z `SHOPPING_CATEGORIES`; nie wprowadzamy osobnego słownika ani kolorów osób.
+- Brak zawartości wybranej listy w cache offline ma osobny komunikat i blokuje
+  szybkie dodawanie do czasu wczytania danych. Pobrane i nowo utworzone lokalnie
+  listy zachowują kolejkę offline, obsługę błędów i uprawnienia dzieci.
+- Odczyt wskazanej rewizji MagicPath `463391177069174784` dla komponentu
+  `463388652152692736` zablokował wyczerpany limit API. Otwarty canvas nie
+  udostępnił również podglądu przez dostępne narzędzie przeglądarki.
+  Implementacja opiera się na opisanym zakresie R.4 i wspólnym motywie R.1–R.3.
+  Nie zmieniamy przypiętej rewizji i nie zaliczamy porównania z makietą.
+- Bez zmian API, migracji, trwałego cache, zależności runtime ani deployu.
+  Początkowo zmiany pozostawiono bez commita do ręcznej oceny. Następnie
+  właściciel polecił zapisanie lokalnego commita R.4, bez pusha i deployu.
+  Nie wywodzimy z tego zaliczenia brakujących prób ani porównania z makietą.
+
 ## 21.10.2026 — porządki w sesjach (#34)
 
 - Ten wpis zastępuje decyzję z 09.10.2026 o odnawianiu sesji przy każdej

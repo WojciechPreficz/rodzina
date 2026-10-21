@@ -59,6 +59,13 @@ export const labels = {
     count: (count: number) => `Otwarte zadania: ${count}`,
   },
   shoppingUi: {
+    description: 'Wspólne listy, spokojne zakupy.',
+    backToLists: 'Wróć do list',
+    listActions: 'Opcje listy',
+    noLists: 'Nie ma jeszcze list zakupów.',
+    sharedLists: 'Listy widoczne dla całej rodziny',
+    remaining: (count: number) => `Do kupienia: ${count}`,
+    noOfflineItems: 'Brak zawartości tej listy na urządzeniu. Połącz się z internetem, aby ją wczytać.',
     noOfflineCache: 'Brak zakupów zapisanych na tym urządzeniu. Połącz się z internetem, aby wczytać listy.',
     offline: 'Jesteś offline - zmiany zostaną wysłane po odzyskaniu połączenia',
     syncing: (count: number) => `Zmiany oczekujące na wysłanie: ${count}`,
