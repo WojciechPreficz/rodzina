@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
 import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
 import { loadConfig } from './config.js';
-import { hashToken, SESSION_TTL_MS } from './auth.js';
+import { hashToken, SESSION_REFRESH_INTERVAL_MS, SESSION_TTL_MS } from './auth.js';
 import * as schema from './db/schema.js';
 
 describe('authentication regressions', () => {
@@ -44,6 +44,7 @@ describe('authentication regressions', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
     database.sqlite.close();
   });
@@ -62,20 +63,73 @@ describe('authentication regressions', () => {
     ).toBe(404);
   });
 
-  it('renews both the database expiration and the browser cookie on activity', async () => {
+  it.each([0, SESSION_REFRESH_INTERVAL_MS - 1, SESSION_REFRESH_INTERVAL_MS, SESSION_REFRESH_INTERVAL_MS + 1])(
+    'only renews the expiration and cookie after the daily refresh threshold (%i ms)',
+    async (elapsed) => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+      const sessionId = hashToken(cookie.slice(4));
+      const expiresAt = now + SESSION_TTL_MS - elapsed;
+      database.db.update(schema.sessions).set({ expiresAt }).where(eq(schema.sessions.id, sessionId)).run();
+      const response = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
+      expect(response.statusCode).toBe(200);
+      const shouldRefresh = elapsed > SESSION_REFRESH_INTERVAL_MS;
+      if (shouldRefresh) {
+        expect(response.headers['set-cookie']).toContain(cookie);
+        expect(response.headers['set-cookie']).toContain(`Max-Age=${SESSION_TTL_MS / 1000}`);
+      } else {
+        expect(response.headers['set-cookie']).toBeUndefined();
+      }
+      expect(database.db.select().from(schema.sessions).where(eq(schema.sessions.id, sessionId)).get()!.expiresAt).toBe(
+        shouldRefresh ? now + SESSION_TTL_MS : expiresAt,
+      );
+      const repeated = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
+      expect(repeated.statusCode).toBe(200);
+      expect(repeated.headers['set-cookie']).toBeUndefined();
+    },
+  );
+
+  it('does not revive an expired session at its exact expiration time', async () => {
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now);
     const sessionId = hashToken(cookie.slice(4));
-    database.db
-      .update(schema.sessions)
-      .set({ expiresAt: Date.now() + 1000 })
-      .where(eq(schema.sessions.id, sessionId))
-      .run();
+    database.db.update(schema.sessions).set({ expiresAt: now }).where(eq(schema.sessions.id, sessionId)).run();
     const response = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
-    expect(response.statusCode).toBe(200);
-    expect(response.headers['set-cookie']).toContain(cookie);
-    expect(response.headers['set-cookie']).toContain(`Max-Age=${SESSION_TTL_MS / 1000}`);
+    expect(response.statusCode).toBe(401);
+    expect(database.db.select().from(schema.sessions).where(eq(schema.sessions.id, sessionId)).get()!.expiresAt).toBe(
+      now,
+    );
+  });
+
+  it('rolls back session deletion when removing a member fails', async () => {
+    const child = await post('/api/members/child', { displayName: 'Child', pin: '1234' }, cookie);
+    const memberId = child.json().member.id;
+    const login = await post('/api/auth/login-child', {
+      joinCode: admin.family.joinCode,
+      userId: memberId,
+      pin: '1234',
+    });
+    const childCookie = String(login.headers['set-cookie']).split(';')[0]!;
+    database.sqlite.exec(
+      "CREATE TRIGGER reject_member_deletion BEFORE DELETE ON users BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+    );
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/members/${memberId}`,
+      headers: { ...headers, cookie },
+    });
+    expect(response.statusCode).toBe(500);
+    expect(database.db.select().from(schema.users).where(eq(schema.users.id, memberId)).get()).toBeDefined();
     expect(
-      database.db.select().from(schema.sessions).where(eq(schema.sessions.id, sessionId)).get()!.expiresAt,
-    ).toBeGreaterThan(Date.now() + SESSION_TTL_MS - 10000);
+      database.db
+        .select()
+        .from(schema.sessions)
+        .where(eq(schema.sessions.id, hashToken(childCookie.slice(4))))
+        .get(),
+    ).toBeDefined();
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: childCookie } })).statusCode,
+    ).toBe(200);
   });
 
   it('consumes an invitation once even when two accounts accept concurrently', async () => {

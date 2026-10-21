@@ -2,10 +2,12 @@
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createDatabase } from '../db/client.js';
 import { loadConfig } from '../config.js';
-import { backupDatabase } from './backup-db.js';
+import * as schema from '../db/schema.js';
+import { backupDatabase, deleteExpiredSessions, runBackup } from './backup-db.js';
 
 describe('SQLite backup', () => {
   let directory: string;
@@ -23,16 +25,98 @@ describe('SQLite backup', () => {
     copy.sqlite.close();
     return rows;
   };
+  const seedSessions = (now: number) => {
+    database.db
+      .insert(schema.families)
+      .values({ id: 'family', name: 'Family', joinCode: 'ABCDEF', createdAt: now })
+      .run();
+    database.db
+      .insert(schema.users)
+      .values({ id: 'user', familyId: 'family', displayName: 'Admin', createdAt: now, updatedAt: now })
+      .run();
+    database.db
+      .insert(schema.sessions)
+      .values([
+        { id: 'expired', userId: 'user', createdAt: now - 2000, expiresAt: now - 1 },
+        { id: 'boundary', userId: 'user', createdAt: now - 2000, expiresAt: now },
+        { id: 'active', userId: 'user', createdAt: now - 2000, expiresAt: now + 60000 },
+      ])
+      .run();
+  };
+  const backupConfig = () =>
+    loadConfig({
+      NODE_ENV: 'test',
+      RODZINA_DATABASE_PATH: path.join(directory, 'source.db'),
+      RODZINA_BACKUP_DIR: path.join(directory, 'backups'),
+    });
   beforeEach(() => {
     directory = mkdtempSync(path.join(tmpdir(), 'rodzina-backup-'));
     database = connect(path.join(directory, 'source.db'));
+    migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
     database.sqlite.exec("CREATE TABLE entries (title TEXT); INSERT INTO entries VALUES ('Pierwszy wpis')");
   });
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const connection of connections.splice(0)) {
       if (connection.sqlite.open) connection.sqlite.close();
     }
     rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('deletes only expired sessions including the exact expiration boundary', () => {
+    const now = Date.now();
+    seedSessions(now);
+    expect(deleteExpiredSessions(database, now)).toBe(2);
+    expect(
+      database.db
+        .select()
+        .from(schema.sessions)
+        .all()
+        .map((row) => row.id),
+    ).toEqual(['active']);
+    expect(deleteExpiredSessions(database, now)).toBe(0);
+    expect(database.db.select().from(schema.users).all()).toHaveLength(1);
+  });
+
+  it('cleans sessions after the backup while keeping them in the snapshot', () => {
+    seedSessions(Date.now() - 1000);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    runBackup(backupConfig());
+    expect(
+      database.db
+        .select()
+        .from(schema.sessions)
+        .all()
+        .map((row) => row.id),
+    ).toEqual(['active']);
+    const file = readdirSync(backupConfig().RODZINA_BACKUP_DIR).find((name) => name.endsWith('.db'))!;
+    const copy = connect(path.join(backupConfig().RODZINA_BACKUP_DIR, file));
+    expect(copy.db.select().from(schema.sessions).all()).toHaveLength(3);
+    expect(log.mock.calls.map(([value]) => JSON.parse(value).event)).toEqual([
+      'backup_finished',
+      'expired_sessions_deleted',
+    ]);
+  });
+
+  it('logs a cleanup failure without failing or removing the completed backup', () => {
+    seedSessions(Date.now() - 1000);
+    database.sqlite.exec(
+      "CREATE TRIGGER reject_session_cleanup BEFORE DELETE ON sessions BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+    );
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => runBackup(backupConfig())).not.toThrow();
+    expect(JSON.parse(error.mock.calls[0]![0]).event).toBe('session_cleanup_failed');
+    expect(database.db.select().from(schema.sessions).all()).toHaveLength(3);
+    const file = readdirSync(backupConfig().RODZINA_BACKUP_DIR).find((name) => name.endsWith('.db'))!;
+    snapshot(path.join(backupConfig().RODZINA_BACKUP_DIR, file));
+  });
+
+  it('does not clean sessions when the backup fails', () => {
+    seedSessions(Date.now() - 1000);
+    writeFileSync(backupConfig().RODZINA_BACKUP_DIR, 'blocked');
+    expect(() => runBackup(backupConfig())).toThrow();
+    expect(database.db.select().from(schema.sessions).all()).toHaveLength(3);
   });
 
   it('creates a standalone consistent snapshot from an open WAL database using the Warsaw date', () => {

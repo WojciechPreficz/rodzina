@@ -60,10 +60,10 @@ export function createFamilyRepository(database: DatabaseConnection) {
     },
     removeMember(memberId: string, prepareRemoval: () => void) {
       return database.db.transaction(
-        () => {
+        (tx) => {
           prepareRemoval();
-          database.db.delete(schema.sessions).where(eq(schema.sessions.userId, memberId)).run();
-          database.db.delete(schema.users).where(eq(schema.users.id, memberId)).run();
+          tx.delete(schema.sessions).where(eq(schema.sessions.userId, memberId)).run();
+          tx.delete(schema.users).where(eq(schema.users.id, memberId)).run();
         },
         { behavior: 'immediate' },
       );

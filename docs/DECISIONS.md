@@ -1,5 +1,26 @@
 # Decyzje
 
+## 21.10.2026 — porządki w sesjach (#34)
+
+- Ten wpis zastępuje decyzję z 09.10.2026 o odnawianiu sesji przy każdej
+  aktywności. Sesja nadal ma ważność 60 dni. Uwierzytelnione żądanie odnawia
+  jednocześnie `sessions.expires_at` i cookie `sid` dopiero, gdy
+  `expiresAt - now < SESSION_TTL_MS - SESSION_REFRESH_INTERVAL_MS`, czyli po
+  przekroczeniu 24 godzin od ostatniego odnowienia. Ogranicza to zapisy SQLite
+  oraz nagłówki `Set-Cookie` przy odpytywaniu co 20 sekund.
+- Android zachowuje dotychczasowy zaszyfrowany zapis do jego terminu ważności,
+  jeśli odpowiedź nie zawiera `Set-Cookie`. Otrzymane cookie nadal odnawia zapis
+  na 60 dni; nie wymaga to zmiany `SessionStore` ani transportu natywnego.
+  Test API transportu Androida obejmuje odczyt bez odnowienia i odnowienie
+  istniejącego tokenu po przekroczeniu progu.
+- Istniejący dzienny job backupu po udanej kopii usuwa sesje z
+  `expires_at <= now`. Osobny błąd sprzątania jest logowany i nie unieważnia
+  backupu. Kopia zachowuje stan sprzed sprzątania; nie dodajemy crona.
+- Usuwanie domownika zachowuje istniejącą transakcję `immediate`, obejmującą
+  przygotowanie usunięcia, sesje i użytkownika. Test wymuszonego błędu usunięcia
+  użytkownika sprawdza przywrócenie jego sesji. Migracja dodaje wyłącznie indeks
+  `sessions_user_idx` na `sessions.user_id`. Bez nowych zależności i konfiguracji.
+
 ## 21.10.2026 — zbiorcze usuwanie zrobionych zadań
 
 - Na polecenie właściciela dodajemy przy sekcji „Zrobione” przycisk

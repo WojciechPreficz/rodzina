@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { eq } from 'drizzle-orm';
+import { hashToken, SESSION_REFRESH_INTERVAL_MS, SESSION_TTL_MS } from './auth.js';
+import { sessions } from './db/schema.js';
 import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
 import { loadConfig } from './config.js';
@@ -56,7 +59,20 @@ describe('native cookie transport with unchanged browser security', () => {
     for (const session of [cookie, cookieOf(childLogin)]) {
       const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { ...headers, cookie: session } });
       expect(me.statusCode).toBe(200);
-      expect(me.headers['set-cookie']).toContain('Max-Age=5184000');
+      expect(me.headers['set-cookie']).toBeUndefined();
+      database.db
+        .update(sessions)
+        .set({ expiresAt: Date.now() + SESSION_TTL_MS - SESSION_REFRESH_INTERVAL_MS - 1000 })
+        .where(eq(sessions.id, hashToken(session.slice(4))))
+        .run();
+      const renewed = await app.inject({
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: { ...headers, cookie: session },
+      });
+      expect(renewed.statusCode).toBe(200);
+      expect(renewed.headers['set-cookie']).toContain('Max-Age=5184000');
+      expect(cookieOf(renewed)).toBe(session);
       const saved = await app.inject({
         method: 'POST',
         url: '/api/events',

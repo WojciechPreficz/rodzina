@@ -206,6 +206,14 @@ Po sukcesie pozostaje 14 ostatnich kopii według dat w nazwach; inne pliki i kat
 nie podlegają rotacji. Błąd tworzenia kopii nie uruchamia rotacji. Job loguje wynik
 do stdout, a błąd do stderr i kończy się kodem 1. Monitoruj `backup.log` i wolne miejsce.
 
+Po udanym backupie ten sam job usuwa wygasłe sesje (`expires_at <= now`),
+bez nowego wpisu crona. Kopia zawiera stan sprzed sprzątania. Zdarzenie
+`expired_sessions_deleted` podaje liczbę usuniętych sesji; błąd
+`session_cleanup_failed` trafia do stderr, ale nie zmienia sukcesu backupu
+ani kodu zakończenia joba. Przy błędzie backupu sprzątanie nie jest wykonywane.
+Migracja zadania #34 dodaje tylko indeks `sessions_user_idx`; uruchamia się
+przy starcie API według istniejącej procedury aktualizacji.
+
 Lokalnie po buildzie uruchom `npm run job:backup` z katalogu repozytorium.
 Na serwerze przed aktualizacją uruchom ręcznie polecenie z wpisu crona (bez harmonogramu
 i przekierowania logów). Kopię można otworzyć jako samodzielną bazę SQLite; nie wymaga

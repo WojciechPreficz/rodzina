@@ -2,8 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { lte } from 'drizzle-orm';
 import { loadConfig } from '../config.js';
 import { createDatabase, type DatabaseConnection } from '../db/client.js';
+import { sessions } from '../db/schema.js';
+
+export function deleteExpiredSessions(database: DatabaseConnection, nowMs: number): number {
+  return database.db.delete(sessions).where(lte(sessions.expiresAt, nowMs)).run().changes;
+}
 
 export function backupDatabase(database: DatabaseConnection, directory: string, now = Date.now()) {
   const date = new Intl.DateTimeFormat('en-CA', {
@@ -32,12 +38,19 @@ export function backupDatabase(database: DatabaseConnection, directory: string, 
   return { file: destination, removed: Math.max(0, copies.length - 14) };
 }
 
-export function runBackup(): void {
-  const config = loadConfig();
+export function runBackup(config = loadConfig()): void {
   const database = createDatabase(config);
   try {
     const result = backupDatabase(database, config.RODZINA_BACKUP_DIR);
     console.log(JSON.stringify({ event: 'backup_finished', ...result }));
+    try {
+      const removed = deleteExpiredSessions(database, Date.now());
+      console.log(JSON.stringify({ event: 'expired_sessions_deleted', removed }));
+    } catch {
+      console.error(
+        JSON.stringify({ event: 'session_cleanup_failed', reason: 'Nie udało się usunąć wygasłych sesji.' }),
+      );
+    }
   } finally {
     database.sqlite.close();
   }

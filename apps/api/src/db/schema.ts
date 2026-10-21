@@ -28,15 +28,19 @@ export const users = sqliteTable('users', {
   updatedAt: integer('updated_at').notNull(),
 });
 
-export const sessions = sqliteTable('sessions', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: integer('expires_at').notNull(),
-  createdAt: integer('created_at').notNull(),
-  userAgent: text('user_agent'),
-});
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+    userAgent: text('user_agent'),
+  },
+  (table) => [index('sessions_user_idx').on(table.userId)],
+);
 
 export const invitations = sqliteTable('invitations', {
   id: text('id').primaryKey(),

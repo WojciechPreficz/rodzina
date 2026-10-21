@@ -1,6 +1,12 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { and, eq, gt } from 'drizzle-orm';
-import { hashToken, isJsonMutation, isTrustedMutationSource, SESSION_TTL_MS } from '../auth.js';
+import {
+  hashToken,
+  isJsonMutation,
+  isTrustedMutationSource,
+  SESSION_REFRESH_INTERVAL_MS,
+  SESSION_TTL_MS,
+} from '../auth.js';
 import type { AppConfig } from '../config.js';
 import type { DatabaseConnection } from '../db/client.js';
 import * as schema from '../db/schema.js';
@@ -64,10 +70,11 @@ export function registerSessionAuth(app: FastifyInstance, database: DatabaseConn
     }
 
     const sessionHash = hashToken(rawSession);
+    const now = Date.now();
     const sessionRecord = database.db
       .select()
       .from(schema.sessions)
-      .where(and(eq(schema.sessions.id, sessionHash), gt(schema.sessions.expiresAt, Date.now())))
+      .where(and(eq(schema.sessions.id, sessionHash), gt(schema.sessions.expiresAt, now)))
       .get();
 
     if (!sessionRecord) {
@@ -82,15 +89,20 @@ export function registerSessionAuth(app: FastifyInstance, database: DatabaseConn
       return sendError(reply, 401, 'UNAUTHORIZED', 'Użytkownik sesji nie istnieje.');
     }
 
-    const nextExpiry = Date.now() + SESSION_TTL_MS;
-    database.db.update(schema.sessions).set({ expiresAt: nextExpiry }).where(eq(schema.sessions.id, sessionHash)).run();
-    reply.setCookie('sid', rawSession, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.NODE_ENV === 'production',
-      maxAge: SESSION_TTL_MS / 1000,
-    });
+    if (sessionRecord.expiresAt - now < SESSION_TTL_MS - SESSION_REFRESH_INTERVAL_MS) {
+      database.db
+        .update(schema.sessions)
+        .set({ expiresAt: now + SESSION_TTL_MS })
+        .where(eq(schema.sessions.id, sessionHash))
+        .run();
+      reply.setCookie('sid', rawSession, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: config.NODE_ENV === 'production',
+        maxAge: SESSION_TTL_MS / 1000,
+      });
+    }
 
     request.user = serializeUser(userRecord);
     request.familyId = userRecord.familyId;

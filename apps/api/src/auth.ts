@@ -3,6 +3,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 import { hash as hashArgon2, verify as verifyArgon2 } from '@node-rs/argon2';
 
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 60;
+export const SESSION_REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 24;
 
 export function hashToken(value: string): string {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
