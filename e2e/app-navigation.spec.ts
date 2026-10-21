@@ -19,7 +19,11 @@ test('website uses a left sidebar on desktop and a right drawer on phones', asyn
   await page.goto('/');
   await expect(page.locator('.mantine-AppShell-header')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Kalendarz', exact: true })).toBeVisible();
-  await page.screenshot({ path: info.outputPath('calendar-without-header.png'), fullPage: true });
+  await page.screenshot({
+    path: info.outputPath('calendar-without-header.png'),
+    fullPage: true,
+    animations: 'disabled',
+  });
   if (phone) {
     await page.evaluate(() => window.scrollTo(0, 300));
     await expect(page.getByRole('button', { name: 'Otwórz menu' })).toBeInViewport();
@@ -164,4 +168,63 @@ test('APK uses the same right drawer and native Back closes it before leaving th
   await expect(page.locator('.mantine-AppShell-header')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Zakupy', exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath('android-shopping-without-header.png'), fullPage: true });
+});
+
+test('shared theme reaches portals and navigation switches at 767/768 px', async ({ page }, info) => {
+  await page.goto('/kalendarz');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(246, 243, 235)');
+  const heading = page.getByRole('heading', { name: 'Kalendarz', exact: true });
+  await expect(heading).toHaveCSS('font-family', 'Georgia, serif');
+  await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
+  const modal = page.getByRole('dialog');
+  await expect(modal).toHaveCSS('background-color', 'rgb(255, 254, 250)');
+  await expect(modal.getByRole('button', { name: 'Jednorazowe', exact: true })).toHaveCSS('color', 'rgb(66, 102, 85)');
+  await page.screenshot({ path: info.outputPath('themed-modal.png'), fullPage: true, animations: 'disabled' });
+  await modal.getByRole('button', { name: 'Jednorazowe', exact: true }).click();
+  await modal.getByLabel('Uczestnicy', { exact: true }).click();
+  await expect(page.getByRole('listbox', { name: 'Uczestnicy' })).toBeVisible();
+  await expect(page.locator('.mantine-MultiSelect-dropdown:visible')).toHaveCSS(
+    'background-color',
+    'rgb(255, 254, 250)',
+  );
+  await page.screenshot({ path: info.outputPath('themed-selector.png'), fullPage: true, animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(modal).not.toBeVisible();
+
+  for (const width of [767, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    if (width === 767) {
+      const burger = page.getByRole('button', { name: 'Otwórz menu' });
+      await expect(burger).toBeVisible();
+      const toggleBox = (await burger.boundingBox())!;
+      const titleBox = (await heading.boundingBox())!;
+      expect(toggleBox.height).toBeGreaterThanOrEqual(44);
+      expect(titleBox.y).toBeGreaterThanOrEqual(toggleBox.y + toggleBox.height);
+      await burger.click();
+      await expect(page.getByRole('dialog', { name: 'Menu Rodziny' })).toBeVisible();
+    } else {
+      await expect(page.getByRole('dialog')).not.toBeVisible();
+      await expect(page.getByRole('button', { name: 'Otwórz menu' })).not.toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Nawigacja główna' })).toBeVisible();
+      expect((await heading.boundingBox())!.x).toBeGreaterThanOrEqual(240);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`navigation-${width}.png`), fullPage: true });
+  }
+
+  for (const [path, title] of [
+    ['/zadania', 'Zadania'],
+    ['/zakupy', 'Zakupy'],
+    ['/obiady', 'Obiady'],
+    ['/wiecej/rodzina', 'Rodzina'],
+    ['/wiecej/powiadomienia', 'Powiadomienia'],
+    ['/wiecej', 'Wersja aplikacji'],
+  ] as const) {
+    const navigation = await openNavigation(page);
+    await navigation.getByRole('link', { name: title, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    await expect(page.getByRole('navigation').locator('[aria-current="page"]')).toHaveText(title);
+  }
 });

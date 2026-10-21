@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Box, Button, Group, Loader, Modal, Stack, Text, Title } from '@mantine/core';
+import { Alert, Box, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react';
 import { createViewDay, createViewMonthAgenda, createViewWeek, createViewWeekAgenda } from '@schedule-x/calendar';
 import { createEventsServicePlugin } from '@schedule-x/events-service';
@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router';
 import '@schedule-x/theme-default/dist/index.css';
 import './calendar.css';
 import { useMe } from '../../auth.js';
+import { PageHeader } from '../../components/PageHeader.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
@@ -191,7 +192,7 @@ export function CalendarPage() {
   const offline = useOffline();
   return (
     <Stack>
-      <Title order={2}>{labels.calendar}</Title>
+      <PageHeader title={labels.calendar} />
       <TodayTasks />
       {members.error && (
         <Alert color="red" role="alert">

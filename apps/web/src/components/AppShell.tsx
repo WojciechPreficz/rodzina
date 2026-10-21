@@ -1,4 +1,16 @@
-import { AppShell as MantineAppShell, Burger, Button, Divider, Drawer, NavLink, Stack, Text } from '@mantine/core';
+import {
+  AppShell as MantineAppShell,
+  Avatar,
+  Burger,
+  Button,
+  Divider,
+  Drawer,
+  Group,
+  NavLink,
+  Stack,
+  Text,
+  VisuallyHidden,
+} from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Link, Outlet, useLocation } from 'react-router';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -49,6 +61,17 @@ function NavigationIcon({ path }: { path: string }) {
   );
 }
 
+function AppBrand() {
+  return (
+    <div className="app-brand">
+      <span className="app-brand-mark" aria-hidden="true">
+        r<span>✦</span>
+      </span>
+      <span>{labels.appName}</span>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children?: ReactNode }) {
   const { user, logout } = useMe();
   const location = useLocation();
@@ -84,21 +107,25 @@ export function AppShell({ children }: { children?: ReactNode }) {
           </div>
         ))}
       </Stack>
-      <Stack gap="xs" mt="auto" pt="md">
+      <Stack className="app-account" gap="xs" mt="auto" pt="md">
         <Divider />
         {user && (
-          <div>
-            <Text size="sm" fw={600}>
-              {user.displayName}
-            </Text>
-            <Text size="xs" c="dimmed">
-              {labels.roles[user.role]}
-            </Text>
-          </div>
+          <Group gap="sm" wrap="nowrap" align="center">
+            <Avatar radius="xl" color="sage" aria-hidden="true">
+              {user.displayName.trim().charAt(0).toLocaleUpperCase('pl-PL')}
+            </Avatar>
+            <div className="app-account-name">
+              <Text size="sm" fw={600}>
+                {user.displayName}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {labels.roles[user.role]}
+              </Text>
+            </div>
+          </Group>
         )}
         <Button
           variant="subtle"
-          color="red"
           fullWidth
           justify="flex-start"
           mih={44}
@@ -123,6 +150,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
     <MantineAppShell
       layout="alt"
       padding="md"
+      className="app-shell"
       navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: true, desktop: native } }}
     >
       {!desktop && (
@@ -135,19 +163,18 @@ export function AppShell({ children }: { children?: ReactNode }) {
             aria-expanded={opened}
             aria-controls="mobile-navigation-body"
             size="sm"
+            styles={{ root: { width: 44, height: 44 } }}
           />
         </div>
       )}
       {!native && (
         <MantineAppShell.Navbar visibleFrom="sm" className="app-sidebar" role="presentation">
-          <Text size="xl" fw={800} c="teal.8" mb="xl">
-            {labels.appName}
-          </Text>
+          <AppBrand />
           {desktop && menu}
         </MantineAppShell.Navbar>
       )}
       <MantineAppShell.Main className={desktop ? '' : 'app-main-mobile'}>
-        <Stack maw={1200} mx="auto" py="md" style={{ minWidth: 0 }}>
+        <Stack className="app-content" maw={1200} mx="auto" style={{ minWidth: 0 }}>
           <AndroidUpdateNotice />
           {children ?? <Outlet />}
         </Stack>
@@ -158,7 +185,14 @@ export function AppShell({ children }: { children?: ReactNode }) {
         onClose={() => setOpened(false)}
         position="right"
         size="min(340px, 85vw)"
-        title={labels.navigation.title}
+        title={
+          <>
+            <VisuallyHidden>{labels.navigation.title}</VisuallyHidden>
+            <div aria-hidden="true">
+              <AppBrand />
+            </div>
+          </>
+        }
         closeButtonProps={{ 'aria-label': labels.navigation.close }}
         overlayProps={{ backgroundOpacity: 0.35 }}
         classNames={{ header: 'app-menu-header', body: 'app-menu-body' }}

@@ -1,0 +1,82 @@
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--mantine-color-body);
+}
+
+:focus-visible {
+  outline: 3px solid var(--app-accent);
+  outline-offset: 3px;
+}
+
+.mantine-Paper-root,
+.mantine-Drawer-content,
+.mantine-Drawer-header,
+.mantine-Modal-content,
+.mantine-Modal-header,
+.mantine-Popover-dropdown,
+.mantine-Combobox-dropdown,
+.mantine-Select-dropdown,
+.mantine-MultiSelect-dropdown,
+.mantine-Autocomplete-dropdown,
+.mantine-TagsInput-dropdown,
+.mantine-Menu-dropdown {
+  background: var(--app-surface);
+}
+
+.mantine-Paper-root[data-with-border] {
+  border-color: var(--app-border);
+}
+
+.mantine-Input-input {
+  background: var(--app-surface);
+  border-color: var(--mantine-color-default-border);
+}
+
+.mantine-Input-input:focus-within {
+  border-color: var(--app-accent);
+}
+
+.mantine-Checkbox-input:not(:checked),
+.mantine-Radio-radio:not(:checked) {
+  border-color: var(--mantine-color-default-border);
+}
+
+.mantine-Menu-item,
+.mantine-Combobox-option,
+.mantine-Select-option,
+.mantine-MultiSelect-option,
+.mantine-Autocomplete-option,
+.mantine-TagsInput-option {
+  min-height: 44px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.page-header-title {
+  font-family: Georgia, serif;
+  font-size: clamp(30px, 4vw, 43px);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.page-header-description {
+  margin-top: 8px;
+}
+
+@media (max-width: 47.999em) {
+  .page-header-title {
+    font-size: 36px;
+  }
+}

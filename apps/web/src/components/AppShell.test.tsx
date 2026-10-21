@@ -8,6 +8,7 @@ import { LoginPage, RegisterPage } from './AuthPages.js';
 import { AppShell } from './AppShell.js';
 import { AuthProvider } from '../auth.js';
 import { addNavigationGuard } from '../nativeNavigation.js';
+import { theme, cssVariablesResolver } from '../theme.js';
 
 function mockViewport(desktop: boolean) {
   vi.stubGlobal(
@@ -27,7 +28,7 @@ function mockViewport(desktop: boolean) {
 
 function renderShell(path = '/') {
   return render(
-    <MantineProvider>
+    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} forceColorScheme="light">
       <MemoryRouter initialEntries={[path]}>
         <AuthProvider>
           <Routes>
@@ -75,18 +76,23 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: 'Otwórz menu' })).not.toBeInTheDocument();
   });
 
-  it.each(['/kalendarz/wydarzenie/event-1', '/wiecej/rodzina', '/wiecej/powiadomienia'])(
-    'marks only the matching section active at %s',
-    async (path) => {
-      renderShell(path);
-      const links = screen
-        .getByRole('navigation', { name: 'Nawigacja główna' })
-        .querySelectorAll('[aria-current="page"]');
-      expect(links).toHaveLength(1);
-      expect(links[0]).toHaveAttribute('href', path.startsWith('/kalendarz') ? '/kalendarz' : path);
-      await screen.findByText('Anna');
-    },
-  );
+  it.each([
+    '/kalendarz/wydarzenie/event-1',
+    '/zadania',
+    '/zakupy',
+    '/obiady',
+    '/wiecej',
+    '/wiecej/rodzina',
+    '/wiecej/powiadomienia',
+  ])('marks only the matching section active at %s', async (path) => {
+    renderShell(path);
+    const links = screen
+      .getByRole('navigation', { name: 'Nawigacja główna' })
+      .querySelectorAll('[aria-current="page"]');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', path.startsWith('/kalendarz') ? '/kalendarz' : path);
+    await screen.findByText('Anna');
+  });
 
   it('opens mobile navigation and closes it after selecting a destination or pressing Escape', async () => {
     mockViewport(false);

@@ -950,6 +950,29 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   zależności pomiędzy uruchomieniami. Nie włączamy cache konfiguracji z sekretami
   podpisywania. Zmiana dotyczy narzędzi budowania, bez zmian runtime serwera.
 
+## 21.10.2026 — wspólny motyw redesignu, krok R.1
+
+- Zachowujemy rewizje MagicPath wskazane w `REDESIGN_PLAN.md`.
+  Wspólna konfiguracja przyjmuje kolory kalendarza: tło `#f6f3eb`,
+  powierzchnia `#fffefa`, tekst `#2f4035`, granice kart `#e6e7de`,
+  akcent `#426655` i jego tło `#e7eee5`. Pozostałe makiety różnią się
+  odcieniami tekstu i granic; nie tworzymy osobnych motywów modułów.
+- Tekst pomocniczy przyciemniamy z `#7b857b` do `#606e62`:
+  kontrast wynosi 4,85:1 na tle aplikacji i 5,33:1 na powierzchni.
+  Granice pól `#819081` mają kontrast 3,33:1 na powierzchni;
+  delikatny kolor granic kart nie służy do oznaczania pól formularza.
+  Biały tekst na głównej akcji ma kontrast 6,44:1, aktywne menu 5,44:1.
+- Znak `r✦` odtwarzamy z nawigacji makiet, bez użycia osobnego obrazu
+  logo z canvasa. Fonty pozostają lokalne: systemowy dla treści i Georgia
+  dla wspólnego nagłówka strony, użytego w kalendarzu już w R.1.
+- Wąska strona i APK rezerwują nad treścią miejsce na stały hamburger
+  o polu 44 × 44 px. Zapobiega to nakładaniu także baneru aktualizacji.
+  Strona od 768 px zachowuje menu 240 px, APK panel z prawej.
+- Na polecenie właściciela po implementacji i kontrolach lokalnych
+  zatrzymujemy się przed commitem. Właściciel wykonuje testy ręczne
+  i wskazuje dalsze działania. R.2 nie należy do tego kroku.
+  Bez zmian API, migracji, konfiguracji hostingu i zależności runtime.
+
 ## 20.10.2026 — gest przesuwania kalendarza na telefonie
 
 - Na polecenie właściciela dodajemy do Schedule-X gest poziomy: w lewo

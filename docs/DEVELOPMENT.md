@@ -1,5 +1,27 @@
 # Praca lokalna — strona WWW i APK
 
+## Redesign R.1 — motyw i szkielet, 21.10.2026
+
+Wydzielono wspólny motyw Mantine, paletę szałwiową i style powierzchni,
+kontrolek oraz portali. Menu, znak aplikacji, konto i panel mobilny korzystają
+z nowego motywu; kalendarz używa wspólnego szeryfowego nagłówka.
+Układ kalendarza i formularzy pozostaje zakresem następnych kroków.
+
+Kontrole lokalne: 83/83 testy Vitest (AppShell, kalendarz i nawigacja natywna),
+10/10 scenariuszy Playwright headless (nawigacja WWW i atrapa Androida,
+ochrona formularza, linki, 390/1280 oraz 767/768 px). Po dodaniu kontroli
+selektora ponowiono 6/6 scenariuszy AppShell z sukcesem. Przejrzano zrzuty
+obu szerokości, modala i selektora w portalu. Lint, Prettier, typecheck,
+build WWW/API oraz debug APK z końcowymi stylami: poprawne.
+Sandbox blokował pliki tymczasowe Vitest, serwer e2e i połączenie Gradle;
+udane próby wykonano poza nim. Zrzuty pozostają w ignorowanym `test-results/`.
+
+Właściciel polecił zapisanie commita R.1 i rozpoczęcie R.2. Nie traktujemy
+tego jako szczegółowego raportu z fizycznego Androida ani potwierdzenia CI.
+Stan: **zweryfikowane lokalnie, oczekuje na CI**. Nie wykonano pusha ani deployu.
+Próby rzeczywistego APK (menu, Wstecz, safe area, klawiatura) wymagają
+odrębnego potwierdzenia; build i atrapa mostka nie zastępują telefonu.
+
 ## Zadania offline — krok 7.6, 20.10.2026
 
 Ten krok rozszerza wcześniejsze wymagania online zadań: zapisane prywatne
