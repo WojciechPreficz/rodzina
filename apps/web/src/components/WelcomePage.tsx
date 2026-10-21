@@ -1,14 +1,13 @@
+import { PageHeader } from './PageHeader.js';
 import { Button, Paper, Stack, Text } from '@mantine/core';
 import { Link } from 'react-router';
 import { labels } from '../i18n/pl.js';
 
 export function WelcomePage() {
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper className="auth-card" withBorder p="lg">
       <Stack gap="lg">
-        <Text component="h2" size="xl" fw={700}>
-          {labels.welcomeTitle}
-        </Text>
+        <PageHeader title={labels.welcomeTitle} />
         <Text c="dimmed">{labels.welcomeSubtitle}</Text>
         <Stack gap="sm">
           <Button component={Link} to="/register" size="lg" radius="md">

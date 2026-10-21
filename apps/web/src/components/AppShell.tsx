@@ -19,6 +19,7 @@ import { labels } from '../i18n/pl.js';
 import { allowNavigation } from '../nativeNavigation.js';
 import { isAndroid } from '../platform.js';
 import { AndroidUpdateNotice } from '../features/updates/AndroidUpdates.js';
+import { AppBrand } from './AppBrand.js';
 
 const navigation = [
   { label: labels.calendar, to: '/kalendarz', icon: 'M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z' },
@@ -58,17 +59,6 @@ function NavigationIcon({ path }: { path: string }) {
     >
       <path d={path} />
     </svg>
-  );
-}
-
-function AppBrand() {
-  return (
-    <div className="app-brand">
-      <span className="app-brand-mark" aria-hidden="true">
-        r<span>✦</span>
-      </span>
-      <span>{labels.appName}</span>
-    </div>
   );
 }
 

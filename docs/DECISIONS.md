@@ -1,5 +1,25 @@
 # Decyzje
 
+## 21.10.2026 — pozostałe ekrany redesignu, krok R.6
+
+- Ekrany bez osobnej szczegółowej makiety stosują istniejący `PageHeader`,
+  kolory i karty motywu R.1–R.5. Znak aplikacji wydzielono do `AppBrand`
+  i użyto w menu oraz publicznym układzie kont, bez zmiany samego znaku.
+- Rodzina, Powiadomienia, Wersja aplikacji i zastępcze Obiady pokazują tytuł
+  ponad kartami. Rodzina korzysta ze wspólnego menu zamiast przycisku powrotu
+  do ekranu wersji aplikacji. Wiersze domowników zachowują miejsce na edycję
+  przy długich nazwach, a wybór koloru profilu ma przyciski 44 × 44 px.
+- Logowanie i rejestracja otrzymały stan oczekiwania na API i blokadę
+  kolejnego wysłania podczas żądania. Nie zmieniono walidacji, sesji,
+  adresów, endpointów ani rozpoczętych niezależnie funkcji kont.
+- Zachowano blokady Rodziny offline i uprawnienia, podział WWW/APK,
+  harmonogram oraz mechanizm pobierania i aktualizacji Androida.
+  Bez nowych zależności, migracji, konfiguracji i zmian API.
+- Początkowo zmiany pozostawiono bez commita do ręcznej oceny. Następnie
+  właściciel polecił zapisanie lokalnego commita R.6, bez pusha i deployu.
+  Próby fizycznego APK i CI pozostają niezaliczone; wyniki lokalne
+  opisano w `DEVELOPMENT.md`.
+
 ## 21.10.2026 — redesign zadań, krok R.5
 
 - Zadania korzystają z układu katalogu i zawartości sprawdzonego w zakupach:

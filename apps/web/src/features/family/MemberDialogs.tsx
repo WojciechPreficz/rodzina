@@ -23,7 +23,7 @@ import { errorMessage, validateDisplayName, validatePin } from './familyRules.js
 import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';
 
 const swatchStyle = { cursor: 'pointer' };
-const selectedSwatchStyle = { cursor: 'pointer', outline: '2px solid var(--mantine-color-dark-6)', outlineOffset: 2 };
+const selectedSwatchStyle = { cursor: 'pointer', outline: '2px solid var(--app-accent)', outlineOffset: 2 };
 
 function ColorField({ value, onChange }: { value: string; onChange: (color: string) => void }) {
   return (
@@ -43,6 +43,7 @@ function ColorField({ value, onChange }: { value: string; onChange: (color: stri
               aria-checked={isSelected}
               aria-label={color}
               color={color}
+              size={44}
               style={isSelected ? selectedSwatchStyle : swatchStyle}
               onClick={() => onChange(color)}
             >

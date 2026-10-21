@@ -1,5 +1,6 @@
+import { PageHeader } from './PageHeader.js';
 import type { SessionResponse } from '@rodzina/shared';
-import { Alert, Button, Group, Paper, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Paper, PasswordInput, Stack, TextInput } from '@mantine/core';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useState } from 'react';
 import { apiFetch, sanitizeNextPath } from '../api.js';
@@ -13,6 +14,7 @@ export function RegisterPage() {
   const { setSession } = useMe();
   const [form, setForm] = useState({ familyName: '', displayName: '', email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const next = sanitizeNextPath(searchParams.get('next'));
@@ -24,6 +26,7 @@ export function RegisterPage() {
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (pending) return;
 
     const nextErrors: Record<string, string> = {
       familyName: form.familyName.trim().length >= 2 ? '' : labels.familyNameError,
@@ -38,6 +41,8 @@ export function RegisterPage() {
       return;
     }
 
+    setPending(true);
+    setError(null);
     try {
       const response = await apiFetch<SessionResponse>('/api/auth/register-family', {
         method: 'POST',
@@ -52,15 +57,15 @@ export function RegisterPage() {
       navigate(next, { replace: true });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : labels.registrationError);
+    } finally {
+      setPending(false);
     }
   };
 
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper className="auth-card" withBorder p="lg">
       <Stack gap="lg">
-        <Text component="h2" size="xl" fw={700}>
-          {labels.registerFamily}
-        </Text>
+        <PageHeader title={labels.registerFamily} />
         <form onSubmit={onSubmit} noValidate>
           <Stack gap="sm">
             <TextInput
@@ -83,6 +88,7 @@ export function RegisterPage() {
             />
             <TextInput
               type="email"
+              autoComplete="email"
               label={labels.email}
               aria-label={labels.email}
               value={form.email}
@@ -91,6 +97,7 @@ export function RegisterPage() {
               required
             />
             <PasswordInput
+              autoComplete="new-password"
               label={labels.password}
               aria-label={labels.password}
               value={form.password}
@@ -98,8 +105,12 @@ export function RegisterPage() {
               error={fieldErrors.password}
               required
             />
-            {error ? <Alert color="red">{error}</Alert> : null}
-            <Group justify="space-between">
+            {error ? (
+              <Alert color="red" role="alert">
+                {error}
+              </Alert>
+            ) : null}
+            <Group className="auth-actions" justify="space-between">
               <Button
                 type="button"
                 variant="default"
@@ -107,7 +118,9 @@ export function RegisterPage() {
               >
                 {labels.login}
               </Button>
-              <Button type="submit">{labels.createFamily}</Button>
+              <Button type="submit" loading={pending}>
+                {labels.createFamily}
+              </Button>
             </Group>
           </Stack>
         </form>
@@ -122,6 +135,7 @@ export function LoginPage() {
   const { setSession } = useMe();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const next = sanitizeNextPath(searchParams.get('next'));
@@ -133,6 +147,7 @@ export function LoginPage() {
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (pending) return;
 
     const nextErrors = {
       email: form.email.trim() && /.+@.+\..+/.test(form.email) ? '' : labels.loginEmailError,
@@ -145,6 +160,8 @@ export function LoginPage() {
       return;
     }
 
+    setPending(true);
+    setError(null);
     try {
       const response = await apiFetch<SessionResponse>('/api/auth/login', {
         method: 'POST',
@@ -154,19 +171,20 @@ export function LoginPage() {
       navigate(next, { replace: true });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : labels.loginError);
+    } finally {
+      setPending(false);
     }
   };
 
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper className="auth-card" withBorder p="lg">
       <Stack gap="lg">
-        <Text component="h2" size="xl" fw={700}>
-          {labels.login}
-        </Text>
+        <PageHeader title={labels.login} />
         <form onSubmit={onSubmit} noValidate>
           <Stack gap="sm">
             <TextInput
               type="email"
+              autoComplete="email"
               label={labels.email}
               aria-label={labels.email}
               value={form.email}
@@ -175,6 +193,7 @@ export function LoginPage() {
               required
             />
             <PasswordInput
+              autoComplete="current-password"
               label={labels.password}
               aria-label={labels.password}
               value={form.password}
@@ -182,8 +201,12 @@ export function LoginPage() {
               error={fieldErrors.password}
               required
             />
-            {error ? <Alert color="red">{error}</Alert> : null}
-            <Group justify="space-between">
+            {error ? (
+              <Alert color="red" role="alert">
+                {error}
+              </Alert>
+            ) : null}
+            <Group className="auth-actions" justify="space-between">
               <Button
                 type="button"
                 variant="default"
@@ -191,7 +214,9 @@ export function LoginPage() {
               >
                 {labels.registerFamily}
               </Button>
-              <Button type="submit">{labels.login}</Button>
+              <Button type="submit" loading={pending}>
+                {labels.login}
+              </Button>
             </Group>
             <Button variant="subtle" onClick={() => navigate(`/login-child?next=${encodeURIComponent(next)}`)}>
               {labels.childLogin}

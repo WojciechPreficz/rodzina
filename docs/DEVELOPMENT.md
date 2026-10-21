@@ -1,5 +1,50 @@
 # Praca lokalna — strona WWW i APK
 
+## Redesign R.6 — pozostałe istniejące ekrany, 21.10.2026
+
+Logowanie, rejestracja, wejście dziecka, zaproszenie, reset hasła i powitanie
+korzystają ze wspólnego nagłówka, jasnej karty i znaku aplikacji współdzielonego
+z menu. Logowanie i rejestracja pokazują oczekiwanie na API, blokują ponowne
+wysłanie formularza i udostępniają błąd jako alert. Nie zmieniono kontraktów kont.
+
+Rodzina, Powiadomienia, Wersja aplikacji i zastępczy ekran Obiadów mają nagłówek
+w treści oraz spójne karty. Rodzina pokazuje nazwę rodziny, rozdzielone wiersze
+domowników i wyróżniony kod; długie imiona zawijają się obok przycisku edycji.
+Wybór koloru profilu ma cele dotykowe 44 px. Usunięto powrót z Rodziny do
+niepowiązanego ekranu wersji; nawigacja odbywa się przez wspólne menu.
+Przyciski przypomnień Androida układają się w dwóch kolumnach na desktopie
+i jednej na telefonie. WWW nadal informuje o przypomnieniach w APK i pokazuje
+wyłącznie rzeczywiście dostępne wydanie, bez PWA i Web Push.
+
+Kontrole lokalne:
+
+- Vitest: **63 testy zaliczone** w 9 plikach — konta, rodzina, uprawnienia,
+  offline, powiadomienia, aktualizacje i szkielet aplikacji. Nowe 2 testy
+  sprawdzają oczekiwanie na odpowiedź, błąd API i blokadę ponownego wysłania.
+  Sandbox blokował pliki tymczasowe Vitest; właściwy przebieg wykonano poza nim.
+- Playwright headless: **14 różnych scenariuszy zaliczonych** przy 390 i 1280 px
+  (`auth`, `family-offline`, `notifications`, `android-updates`, `local-alarms`).
+  Dwa scenariusze Powiadomień ponowiono po dodaniu oczekiwania na zamknięcie
+  panelu menu przed zrzutem. Próby Androida używają atrapy mostka.
+- Build WWW/API, build debug APK, typecheck, lint i formatowanie zmienionych
+  plików: **poprawne**. Gradle wymagał wykonania poza sandboxem z powodu
+  zablokowanego połączenia z lokalnym daemonem.
+- Zrzuty przeglądarkowe: `.android-tools/redesign-r6/`. Debug APK:
+  `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Do ręcznej oceny: wszystkie wymienione ekrany, długie nazwy domowników,
+formularze i ich błędy, stan offline, uprawnienia dorosłego i dziecka.
+Na fizycznym APK pozostają próby safe area, klawiatury, przewijania,
+systemowego Wstecz oraz ekranów przypomnień i aktualizacji. Build ani atrapa
+mostka nie zaliczają tych prób. R.6 nie ma osobnej szczegółowej makiety;
+wykorzystuje motyw i komponenty wcześniejszych kroków zgodnie z planem.
+
+Bez zmian API, migracji, konfiguracji, zależności runtime, cache i harmonogramu.
+Początkowo zmiany pozostawiono bez commita do ręcznej oceny. Następnie
+właściciel polecił zapisanie lokalnego commita R.6, bez pusha i deployu.
+Polecenie nie zalicza brakujących prób fizycznego APK ani CI.
+Stan: **zweryfikowane lokalnie, oczekuje na CI** oraz ręczną ocenę i próby APK.
+
 ## Redesign R.5 — listy zadań, formularz i ustawienia, 21.10.2026
 
 Zadania mają katalog list obok zawartości od 768 px. Na telefonie wejście

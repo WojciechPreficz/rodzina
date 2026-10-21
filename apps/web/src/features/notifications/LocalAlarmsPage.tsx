@@ -1,5 +1,6 @@
+import { PageHeader } from '../../components/PageHeader.js';
 import { useState } from 'react';
-import { Alert, Button, Card, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Card, Stack, Text } from '@mantine/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
@@ -34,106 +35,110 @@ export function LocalAlarmsPage() {
     }
   }
   return (
-    <Card withBorder radius="lg" p="lg">
-      <Stack>
-        <Title order={2}>{text.title}</Title>
-        {access && (
-          <>
-            <Text>{text.displayStatus(access.display === 'granted')}</Text>
-            <Text>{text.exactStatus(access.exact === 'granted')}</Text>
-            <Text>{text.backgroundStatus(access.backgroundRestricted)}</Text>
-          </>
-        )}
-        <Button
-          disabled={busy || access?.display === 'granted'}
-          onClick={() =>
-            void run(async () => {
-              await LocalNotifications.requestPermissions();
-            })
-          }
-        >
-          {access?.display === 'granted' ? text.displayGranted : text.enable}
-        </Button>
-        <Button
-          disabled={busy || access?.exact === 'granted'}
-          onClick={() =>
-            void run(async () => {
-              await LocalNotifications.changeExactNotificationSetting();
-            })
-          }
-        >
-          {access?.exact === 'granted' ? text.exactGranted : text.exact}
-        </Button>
-        <Button variant="subtle" disabled={busy} onClick={() => void run()}>
-          {text.check}
-        </Button>
-        <Button variant="light" disabled={busy} onClick={() => void run(() => alarmStore.openAppSettings())}>
-          {text.appSettings}
-        </Button>
-        <Button loading={busy} disabled={!account} onClick={() => void run()}>
-          {text.syncNow}
-        </Button>
-        <Button
-          variant="light"
-          disabled={busy || !account}
-          onClick={() =>
-            void run(async () => {
-              await localScheduler.retry(account);
-            })
-          }
-        >
-          {text.retry}
-        </Button>
-        {failure && (
-          <Alert color="red" role="alert">
-            {failure}
-          </Alert>
-        )}
-        {result && (
-          <Alert color={result.complete && !failure ? 'teal' : 'orange'} role="status">
-            <Text>{result.complete && !failure ? text.complete : text.incomplete}</Text>
-            <Text>{text.saved(result.count, result.total)}</Text>
-            {result.issues?.map((issue) => (
-              <Text key={issue}>{text.issues[issue]}</Text>
-            ))}
-            {result.planningError && (
+    <Stack className="settings-page" gap="lg">
+      <PageHeader title={text.title} />
+      <Card className="settings-card" withBorder p="lg">
+        <Stack gap="md">
+          {access && (
+            <>
+              <Text>{text.displayStatus(access.display === 'granted')}</Text>
+              <Text>{text.exactStatus(access.exact === 'granted')}</Text>
+              <Text>{text.backgroundStatus(access.backgroundRestricted)}</Text>
+            </>
+          )}
+          <div className="settings-actions">
+            <Button
+              disabled={busy || access?.display === 'granted'}
+              onClick={() =>
+                void run(async () => {
+                  await LocalNotifications.requestPermissions();
+                })
+              }
+            >
+              {access?.display === 'granted' ? text.displayGranted : text.enable}
+            </Button>
+            <Button
+              disabled={busy || access?.exact === 'granted'}
+              onClick={() =>
+                void run(async () => {
+                  await LocalNotifications.changeExactNotificationSetting();
+                })
+              }
+            >
+              {access?.exact === 'granted' ? text.exactGranted : text.exact}
+            </Button>
+            <Button variant="subtle" disabled={busy} onClick={() => void run()}>
+              {text.check}
+            </Button>
+            <Button variant="light" disabled={busy} onClick={() => void run(() => alarmStore.openAppSettings())}>
+              {text.appSettings}
+            </Button>
+            <Button loading={busy} disabled={!account} onClick={() => void run()}>
+              {text.syncNow}
+            </Button>
+            <Button
+              variant="light"
+              disabled={busy || !account}
+              onClick={() =>
+                void run(async () => {
+                  await localScheduler.retry(account);
+                })
+              }
+            >
+              {text.retry}
+            </Button>
+          </div>
+          {failure && (
+            <Alert color="red" role="alert">
+              {failure}
+            </Alert>
+          )}
+          {result && (
+            <Alert color={result.complete && !failure ? 'teal' : 'orange'} role="status">
+              <Text>{result.complete && !failure ? text.complete : text.incomplete}</Text>
+              <Text>{text.saved(result.count, result.total)}</Text>
+              {result.issues?.map((issue) => (
+                <Text key={issue}>{text.issues[issue]}</Text>
+              ))}
+              {result.planningError && (
+                <Text>
+                  {text.planningError} {result.planningError}
+                </Text>
+              )}
+              {result.total === 0 && <Text>{text.noUpcoming}</Text>}
+              {result.nextFireAt !== undefined && (
+                <Text>
+                  {text.nextAlarm} {date(result.nextFireAt)} (Europe/Warsaw)
+                </Text>
+              )}
               <Text>
-                {text.planningError} {result.planningError}
+                {text.generated} {date(result.generatedAt)}
               </Text>
-            )}
-            {result.total === 0 && <Text>{text.noUpcoming}</Text>}
-            {result.nextFireAt !== undefined && (
               <Text>
-                {text.nextAlarm} {date(result.nextFireAt)} (Europe/Warsaw)
+                {text.lastSync} {result.lastSuccessfulAt ? date(result.lastSuccessfulAt) : text.never}
               </Text>
-            )}
+              <Text>
+                {text.until} {date(result.validUntil)} (Europe/Warsaw)
+              </Text>
+            </Alert>
+          )}
+          {!result && (
             <Text>
-              {text.generated} {date(result.generatedAt)}
+              {text.lastSync} {text.never}
             </Text>
-            <Text>
-              {text.lastSync} {result.lastSuccessfulAt ? date(result.lastSuccessfulAt) : text.never}
-            </Text>
-            <Text>
-              {text.until} {date(result.validUntil)} (Europe/Warsaw)
-            </Text>
-          </Alert>
-        )}
-        {!result && (
-          <Text>
-            {text.lastSync} {text.never}
-          </Text>
-        )}
-        <Text size="sm">{text.hint}</Text>
-        <Text size="sm">{text.systemAlarmHint}</Text>
-        <Text size="sm" c="dimmed">
-          {text.limitations}
-        </Text>
-        {access?.manufacturer?.toLowerCase() === 'oppo' && (
+          )}
+          <Text size="sm">{text.hint}</Text>
+          <Text size="sm">{text.systemAlarmHint}</Text>
           <Text size="sm" c="dimmed">
-            {text.oppoHint}
+            {text.limitations}
           </Text>
-        )}
-      </Stack>
-    </Card>
+          {access?.manufacturer?.toLowerCase() === 'oppo' && (
+            <Text size="sm" c="dimmed">
+              {text.oppoHint}
+            </Text>
+          )}
+        </Stack>
+      </Card>
+    </Stack>
   );
 }

@@ -136,8 +136,11 @@ export function AndroidDownload() {
   }, []);
   if (isAndroid()) return null;
   return (
-    <Card withBorder radius="md">
+    <Card className="settings-card android-download-card" withBorder p="lg">
       <Stack gap="sm">
+        <Text component="h2" fw={600} size="lg">
+          {text.download}
+        </Text>
         {pending ? (
           <Text role="status">{text.checking}</Text>
         ) : release ? (
@@ -159,5 +162,11 @@ export function AndroidDownload() {
 }
 
 export function AppVersionCard() {
-  return isAndroid() ? <AndroidVersion /> : <AndroidDownload />;
+  return isAndroid() ? (
+    <Card className="settings-card" withBorder p="lg">
+      <AndroidVersion />
+    </Card>
+  ) : (
+    <AndroidDownload />
+  );
 }

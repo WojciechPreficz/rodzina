@@ -1,14 +1,13 @@
-import { Card, Stack, Title } from '@mantine/core';
+import { Stack } from '@mantine/core';
+import { PageHeader } from './PageHeader.js';
 import { labels } from '../i18n/pl.js';
 import { AppVersionCard } from '../features/updates/AndroidUpdates.js';
 
 export function MorePage() {
   return (
-    <Card withBorder radius="lg" p="lg">
-      <Stack gap="lg">
-        <Title order={2}>{labels.androidUpdates.title}</Title>
-        <AppVersionCard />
-      </Stack>
-    </Card>
+    <Stack className="settings-page" gap="lg">
+      <PageHeader title={labels.androidUpdates.title} />
+      <AppVersionCard />
+    </Stack>
   );
 }

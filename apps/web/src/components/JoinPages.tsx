@@ -1,3 +1,4 @@
+import { PageHeader } from './PageHeader.js';
 import type { SessionResponse, ChildProfile, FamilyMembersResponse, InvitationResponse } from '@rodzina/shared';
 import {
   Alert,
@@ -76,11 +77,9 @@ export function ChildLoginPage() {
   };
 
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper className="auth-card" withBorder p="lg">
       <Stack>
-        <Text component="h2" size="xl" fw={700}>
-          {labels.childLogin}
-        </Text>
+        <PageHeader title={labels.childLogin} />
         {error ? (
           <Alert color="red" role="alert">
             {error}
@@ -243,11 +242,9 @@ export function InvitationPage() {
   };
 
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper className="auth-card" withBorder p="lg">
       <Stack>
-        <Text component="h2" size="xl" fw={700}>
-          {labels.invitationTitle}
-        </Text>
+        <PageHeader title={labels.invitationTitle} />
         {preview.isPending || isLoading ? (
           <Group>
             <Loader size="sm" />
@@ -356,11 +353,9 @@ export function ResetPasswordPage() {
     }
   };
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper className="auth-card" withBorder p="lg">
       <Stack>
-        <Text component="h2" size="xl" fw={700}>
-          {labels.resetPassword}
-        </Text>
+        <PageHeader title={labels.resetPassword} />
         {success ? (
           <Alert color="green" role="status">
             {labels.resetSuccess}

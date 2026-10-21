@@ -1,6 +1,6 @@
+import { PageHeader } from '../../components/PageHeader.js';
 import { Alert, Button, Card, ColorSwatch, Group, Loader, Radio, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
-import { Link } from 'react-router';
 import { useMe } from '../../auth.js';
 import { labels } from '../../i18n/pl.js';
 import { LinkActions } from './LinkActions.js';
@@ -19,7 +19,7 @@ function InviteCard() {
   const readOnly = useFamilyReadOnly();
 
   return (
-    <Card withBorder radius="lg" p="lg">
+    <Card className="settings-card" withBorder p="lg">
       <Stack gap="sm">
         <Text fw={600}>{labels.inviteTitle}</Text>
         <Text size="sm" c="dimmed">
@@ -75,13 +75,13 @@ function JoinCodeCard({ joinCode, canRotate }: { joinCode: string; canRotate: bo
   };
 
   return (
-    <Card withBorder radius="lg" p="lg">
+    <Card className="settings-card" withBorder p="lg">
       <Stack gap="sm">
         <Text fw={600}>{labels.joinCode}</Text>
         <Text size="sm" c="dimmed">
           {labels.joinCodeHint}
         </Text>
-        <Text ff="monospace" size="xl" fw={700} style={{ letterSpacing: '0.2em' }}>
+        <Text className="family-join-code" ff="monospace" size="xl" fw={700}>
           {joinCode || 'Brak zapisanego kodu rodziny'}
         </Text>
         {offline && joinCode && (
@@ -129,15 +129,8 @@ export function FamilyPage() {
   const isAdmin = isFamilyAdmin(user);
 
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <Text component="h2" size="xl" fw={700}>
-          {labels.family}
-        </Text>
-        <Button component={Link} to="/wiecej" variant="subtle">
-          {labels.back}
-        </Button>
-      </Group>
+    <Stack className="settings-page family-page" gap="lg">
+      <PageHeader title={labels.family} description={family.name} />
 
       {offline && (
         <Alert color="yellow" role="status">
@@ -152,7 +145,7 @@ export function FamilyPage() {
         <Alert color="red">{familySyncError || errorMessage(membersQuery.error, labels.membersLoadError)}</Alert>
       ) : null}
 
-      <Card withBorder radius="lg" p="lg">
+      <Card className="settings-card" withBorder p="lg">
         <Stack gap="sm">
           <Group justify="space-between">
             <Text fw={600}>{labels.members}</Text>
@@ -179,12 +172,12 @@ export function FamilyPage() {
           {membersQuery.isPending && !offline && !familySyncError ? <Loader size="sm" /> : null}
 
           {membersQuery.data ? (
-            <Stack gap="xs">
+            <Stack gap={0} className="family-members">
               {membersQuery.data.map((member) => (
-                <Group key={member.id} justify="space-between" wrap="nowrap">
-                  <Group gap="sm" wrap="nowrap">
+                <Group className="family-member" key={member.id} justify="space-between" wrap="nowrap">
+                  <Group className="family-member-identity" gap="sm" wrap="nowrap">
                     <ColorSwatch color={member.color} size={24} />
-                    <div>
+                    <div className="family-member-name">
                       <Text fw={500}>
                         {member.displayName}
                         {member.id === user.id ? ` ${labels.you}` : ''}

@@ -46,6 +46,7 @@ test('website explains APK reminders without browser push or installation prompt
   await expect(page.getByRole('button', { name: 'Włącz powiadomienia' })).toHaveCount(0);
   await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page.locator('.mantine-Drawer-content')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('notifications.png'), fullPage: true });
   await openNavigation(page);
   await page.getByRole('link', { name: 'Powiadomienia', exact: true }).click();
