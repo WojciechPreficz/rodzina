@@ -73,8 +73,7 @@ for (const native of [false, true]) {
         .toEqual([3, 3, 3]);
       await navigate(page, 'Kalendarz');
       await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
-      const dialog = page.getByRole('dialog');
-      await dialog.getByRole('button', { name: 'Jednorazowe', exact: true }).click();
+      const dialog = page.getByRole('form', { name: 'Dodaj wydarzenie' });
       await dialog.getByLabel(/^Tytuł/).fill('Nie wysyłaj offline');
       if (native) {
         await page.route('**/api/**', (route) => route.abort('internetdisconnected'));
@@ -87,7 +86,6 @@ for (const native of [false, true]) {
       await expect(dialog.getByRole('button', { name: 'Dodaj przypomnienie' })).toBeDisabled();
       page.once('dialog', (confirmation) => confirmation.accept());
       await dialog.getByRole('button', { name: 'Anuluj' }).click();
-      await page.keyboard.press('Escape');
       await expect(dialog).not.toBeVisible();
       if (native) await page.reload();
       await expect(

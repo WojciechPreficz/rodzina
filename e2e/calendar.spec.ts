@@ -76,8 +76,7 @@ test('creates a single event and opens its deep link after reload and login', as
   expect(registration.ok()).toBe(true);
   await page.goto('/kalendarz');
   await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Jednorazowe', exact: true }).click();
+  const dialog = page.getByRole('form', { name: 'Dodaj wydarzenie' });
   await dialog.getByLabel(/^Tytuł/).fill('Wizyta u lekarza');
   await dialog.getByLabel(/^Data/).fill('2026-10-12');
   const created = page.waitForResponse(

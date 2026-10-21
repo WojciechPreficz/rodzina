@@ -1,5 +1,57 @@
 # Praca lokalna — strona WWW i APK
 
+## Redesign R.3 — formularz i szczegóły wydarzenia, 21.10.2026
+
+Dodawanie otwiera pełny widok treści przy istniejącym URL kalendarza.
+Trzy karty wyboru rodzaju na komputerze zastępuje selektor na telefonie.
+Szczegóły, termin, uczestnicy i wspólne przypomnienia mają osobne karty,
+z układem dwóch kolumn na komputerze i jednej na telefonie. Edycja nadal
+otwiera modal ze współdzielonym formularzem; szczegóły wydarzenia oraz
+osobiste przypomnienia otrzymały ten sam motyw.
+
+Kontrole lokalne:
+
+- **74/74 Vitest**, 14 plików: formularz, wszystkie rodzaje wydarzeń,
+  szczegóły i zakresy serii, przypomnienia, blokada offline i nawigacja.
+  Nowy test sprawdza przeliczenie przypomnienia z konkretną godziną
+  w strefie rodziny innej niż `Europe/Warsaw`.
+- **20/20 Playwright**: kalendarz, linki do wydarzeń, menu, powrót,
+  odrzucenie utraty brudnego formularza i blokada wcześniej otwartego
+  formularza po utracie sieci, również zimny start z atrapą Androida.
+- **8/8 nowych scenariuszy edytora**, przy 390 i 1280 px: zapis i edycja
+  trzech rodzajów, całodniowe, dokładność miesiąca, zakończenie serii liczbą
+  wystąpień, uczestnicy i wspólne przypomnienia. Druga sesja domownika
+  dodaje własne przypomnienie; edycja źródła zachowuje je bez zmian.
+  Błąd API oraz odrzucona zmiana rodzaju pozostawiają brudną treść,
+  a ponowienie zapisu wraca do kalendarza po sukcesie API.
+- **2/2 ponowione i rozszerzone scenariusze atrapy Androida**: natywne Wstecz
+  w pełnym formularzu, odrzucenie i akceptacja utraty zmian. Nie zastępuje
+  to próby fizycznego telefonu.
+- Lint zmienionych plików, Prettier, typecheck, build WWW/API i debug APK:
+  **poprawne**. Przejrzano zrzuty formularzy i szczegółów przy obu szerokościach,
+  bez poziomego przepełnienia. Starsze testy z założeniem modala dodawania
+  dostosowano do pełnego widoku, a selektory nowych testów doprecyzowano
+  według ról pól. Udane przebiegi wykonano poza sandboxem.
+
+Zrzuty: `test-results/`, `.android-tools/redesign-r3-editors/` oraz
+`.android-tools/redesign-r3-back/`. Debug APK jest w
+`android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Przed commitem właściciel sprawdza ręcznie:
+
+1. Trzy rodzaje formularza, przełączenie z niezapisanymi zmianami, wymagane
+   pola i błąd zapisu. Całodniowe, dokładność miesiąca, zakończenia serii,
+   odbiorców i terminy przypomnień; zapis oraz edycję szczegółów.
+2. Powrót/Anuluj, przeglądarkowe Wstecz i menu przy brudnym formularzu.
+   Bez sieci zapis i dodawanie przypomnień mają być zablokowane.
+3. W fizycznym APK: klawiaturę i przewijanie do dolnych sekcji oraz zapisu,
+   safe area, systemowy Wstecz, wejście z alarmu i powrót do kalendarza.
+
+Stan: **zweryfikowane lokalnie, oczekuje na CI**. R.2 zapisano jako `41cf8e6`.
+Na polecenie właściciela zapisujemy lokalny commit R.3, bez pusha i deployu.
+Polecenie nie stanowi szczegółowego raportu z testów ręcznych. Nie wykonano
+instalacji ani prób na fizycznym telefonie; nie oznaczamy ich jako zaliczonych.
+
 ## Redesign R.2 — kalendarz i karty dnia, 21.10.2026
 
 Nagłówek pokazuje wybrany miesiąc w strefie rodziny. Desktop ma dodawanie

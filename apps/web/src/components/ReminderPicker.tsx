@@ -33,7 +33,7 @@ export function ReminderList({
         </Text>
       )}
       {value.map((reminder, index) => (
-        <Group key={index} justify="space-between" wrap="wrap">
+        <Group className="event-reminder-row" key={index} justify="space-between" wrap="wrap">
           <Stack gap={2} style={{ minWidth: 0 }}>
             <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
               {task && reminder.type === 'offset' && reminder.offsetValue === 0
@@ -110,7 +110,7 @@ export function ReminderPicker({
     }
   }
   return (
-    <Stack gap="xs">
+    <Stack className="event-reminder-picker" gap="sm">
       <Select
         label={text.reminderWhen}
         value={mode}

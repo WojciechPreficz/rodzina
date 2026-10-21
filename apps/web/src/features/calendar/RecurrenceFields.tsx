@@ -17,7 +17,7 @@ export function RecurrenceFields({
     /* Incomplete wizard input. */
   }
   return (
-    <Stack>
+    <Stack className="event-recurrence">
       <Group grow align="start">
         <NumberInput
           label={text.repeatEvery}

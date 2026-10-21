@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Alert, Box, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { Alert, Box, Button, Group, Loader, Stack, Text } from '@mantine/core';
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react';
 import {
   createViewDay,
@@ -10,22 +10,21 @@ import {
 } from '@schedule-x/calendar';
 import { createEventsServicePlugin } from '@schedule-x/events-service';
 import { Temporal } from 'temporal-polyfill';
-import { eventUrl, type EventData } from '@rodzina/shared';
-import { useNavigate } from 'react-router';
+import { eventUrl } from '@rodzina/shared';
+import { useLocation, useNavigate } from 'react-router';
 import '@schedule-x/theme-default/dist/index.css';
 import './calendar.css';
 import { useMe } from '../../auth.js';
 import { PageHeader } from '../../components/PageHeader.js';
-import { allowNavigation } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import type { Member } from '@rodzina/shared';
 
-import { calendarOnlineHint, useCalendarReadOnly, useCalendarMutations, useOccurrences } from './calendarQueries.js';
+import { calendarOnlineHint, useCalendarReadOnly, useOccurrences } from './calendarQueries.js';
 import { CalendarOfflineNotice } from './CalendarOfflineNotice.js';
 import { useOffline } from '../../connectivity.js';
 import { memberCalendars, monthRange, todayInTimezone, toScheduleX } from './toScheduleX.js';
-import { EventForm } from './EventForm.js';
+import { CreateEventView } from './CreateEventView.js';
 import { DistantEvents } from './DistantEvents.js';
 import { NotificationBanner } from '../notifications/NotificationBanner.js';
 import { TodayTasks } from '../tasks/TodayTasks.js';
@@ -47,19 +46,30 @@ function createMobileWeekView() {
   return view;
 }
 
-function CalendarView({ members, timezone }: { members: Member[]; timezone: string }) {
+function CalendarView({
+  members,
+  timezone,
+  date,
+  setDate,
+  selected,
+  setSelected,
+  onCreate,
+}: {
+  members: Member[];
+  timezone: string;
+  date: string;
+  setDate: (date: string) => void;
+  selected: string[];
+  setSelected: Dispatch<SetStateAction<string[]>>;
+  onCreate: () => void;
+}) {
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<string[]>([]);
-  const [date, setDate] = useState(() => todayInTimezone(timezone));
   const [range, setRange] = useState(() => monthRange(date));
-  const [opened, setOpened] = useState(false);
-  const [kind, setKind] = useState<EventData['kind'] | null>(null);
   const [ready, setReady] = useState(false);
   const [eventsService] = useState(() => createEventsServicePlugin());
   const [swipe] = useState(() => createCalendarSwipePlugin());
   const occurrences = useOccurrences(range);
   const readOnly = useCalendarReadOnly();
-  const { create } = useCalendarMutations();
   const calendar = useCalendarApp({
     views: [createMobileWeekView(), createViewMonthGrid(), createViewMonthAgenda(), createViewWeek(), createViewDay()],
     defaultView: 'month-grid',
@@ -94,7 +104,7 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
             aria-label={text.add}
             disabled={readOnly}
             title={readOnly ? calendarOnlineHint : undefined}
-            onClick={() => setOpened(true)}
+            onClick={onCreate}
           >
             <span aria-hidden="true" className="calendar-add-icon">
               ＋
@@ -169,41 +179,6 @@ function CalendarView({ members, timezone }: { members: Member[]; timezone: stri
         </Text>
       )}
       <DistantEvents timezone={timezone} selected={selected} />
-      <Modal
-        opened={opened}
-        onClose={() => {
-          if (!allowNavigation()) return;
-          setOpened(false);
-          setKind(null);
-        }}
-        title={kind ? text.modeNames[kind] : text.chooseMode}
-      >
-        {kind === null ? (
-          <Stack>
-            {(['single', 'recurring', 'distant'] as const).map((mode) => (
-              <Button key={mode} variant="light" disabled={readOnly} onClick={() => setKind(mode)}>
-                {text.modeNames[mode]}
-              </Button>
-            ))}
-          </Stack>
-        ) : (
-          <EventForm
-            kind={kind}
-            members={members}
-            initialDate={date}
-            pending={create.isPending}
-            readOnly={readOnly}
-            onCancel={() => {
-              if (allowNavigation()) setKind(null);
-            }}
-            onSave={async (data) => {
-              await create.mutateAsync(data);
-              setOpened(false);
-              setKind(null);
-            }}
-          />
-        )}
-      </Modal>
     </Stack>
   );
 }
@@ -212,6 +187,23 @@ export function CalendarPage() {
   const { family } = useMe();
   const members = useMembersQuery();
   const offline = useOffline();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [selectedDate, setDate] = useState<string>();
+  const date = selectedDate ?? todayInTimezone(family?.timezone ?? 'Europe/Warsaw');
+  const creating = location.state?.calendarCreate === true;
+  const scrollPosition = useRef(0);
+  const wasCreating = useRef(creating);
+  useEffect(() => {
+    if (creating === wasCreating.current) return;
+    wasCreating.current = creating;
+    const frame = requestAnimationFrame(() => {
+      window.scrollTo(0, creating ? 0 : scrollPosition.current);
+      if (!creating) document.querySelector<HTMLButtonElement>('.calendar-add')?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [creating]);
   return (
     <Stack>
       {(!family || !members.data) && (
@@ -237,13 +229,32 @@ export function CalendarPage() {
         <Text>Brak danych kalendarza zapisanych na tym urządzeniu. Połącz się z internetem, aby je pobrać.</Text>
       )}
       {members.isPending && !offline && <Loader aria-label={text.loading} />}
-      {family && members.data && (
-        <CalendarView
-          key={JSON.stringify(members.data.map((m) => [m.id, m.displayName, m.color]))}
-          members={members.data}
-          timezone={family.timezone}
-        />
-      )}
+      {family &&
+        members.data &&
+        (creating ? (
+          <CreateEventView
+            members={members.data}
+            initialDate={date}
+            timezone={family.timezone}
+            onClose={() => {
+              void navigate(-1);
+            }}
+          />
+        ) : (
+          <CalendarView
+            key={JSON.stringify(members.data.map((m) => [m.id, m.displayName, m.color]))}
+            members={members.data}
+            timezone={family.timezone}
+            date={date}
+            setDate={setDate}
+            selected={selected}
+            setSelected={setSelected}
+            onCreate={() => {
+              scrollPosition.current = window.scrollY;
+              void navigate(`${location.pathname}${location.search}`, { state: { calendarCreate: true } });
+            }}
+          />
+        ))}
     </Stack>
   );
 }

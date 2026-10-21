@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Badge, Button, Group, Loader, Modal, Stack, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   eventUrl,
@@ -25,6 +25,9 @@ import { MyReminders } from './MyReminders.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { isAndroid } from '../../platform.js';
 import { OfflineReminder } from '../notifications/OfflineReminder.js';
+import { PageHeader } from '../../components/PageHeader.js';
+import { EventSection } from './EventSection.js';
+import './event.css';
 
 const text = labels.calendarUi;
 
@@ -42,7 +45,7 @@ export function EventDetailsPage() {
   const [scopeAction, setScopeAction] = useState<'edit' | 'delete' | null>(null);
   const navigate = useNavigate();
   const back = (
-    <Button component={Link} to="/kalendarz" variant="light">
+    <Button className="event-back" component={Link} to="/kalendarz" variant="subtle">
       {text.back}
     </Button>
   );
@@ -152,49 +155,61 @@ export function EventDetailsPage() {
     }
   }
   return (
-    <Stack>
+    <Stack className="event-details" gap="lg">
       <CalendarOfflineNotice syncedAt={query.syncedAt} />
       {query.error && <Alert color="red">{query.error.message}</Alert>}
       {back}
-      <Title order={2}>{title}</Title>
-      {wizard && <Text c="dimmed">{describeRecurrence(wizard)}</Text>}
-      <Text>
-        {dateLabel}
-        {occurrence.allDay ? ` · ${text.allDay}` : ''}
-      </Text>
-      {!occurrence.allDay && (
-        <Text>
-          {text.duration}: {(occurrence.endUtc - occurrence.startUtc) / 60000}
-        </Text>
-      )}
-      {event.description && (
-        <Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{event.description}</Text>
-      )}
-      {event.location && (
-        <Text>
-          {text.location}: {event.location}
-        </Text>
-      )}
-      <Text>
-        {text.author}: {event.createdBy === null ? text.formerMember : (author ?? '…')}
-      </Text>
-      <Group>
-        {event.participants.length ? (
-          event.participants.map((participant) => (
-            <Badge key={participant.id} color={participant.color}>
-              {participant.displayName}
-            </Badge>
-          ))
-        ) : (
-          <Text c="dimmed">{text.noParticipants}</Text>
-        )}
-      </Group>
-      <Title order={3}>{text.reminders}</Title>
-      <ReminderList
-        value={event.reminders.map((r) => ({ ...reminderInput(r), nextFireAt: r.nextFireAt }))}
-        timezone={family.timezone}
-      />
-      <MyReminders key={event.id} event={event} />
+      <PageHeader title={title} description={wizard ? describeRecurrence(wizard) : undefined} />
+      <div className="event-details-grid">
+        <Stack gap="lg">
+          <EventSection title={text.eventDate} number="01">
+            <Text>
+              {dateLabel}
+              {occurrence.allDay ? ` · ${text.allDay}` : ''}
+            </Text>
+            {!occurrence.allDay && (
+              <Text>
+                {text.duration}: {(occurrence.endUtc - occurrence.startUtc) / 60000}
+              </Text>
+            )}
+          </EventSection>
+          <EventSection title={text.eventDetails} number="02">
+            {event.description && (
+              <Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{event.description}</Text>
+            )}
+            {event.location && (
+              <Text>
+                {text.location}: {event.location}
+              </Text>
+            )}
+            <Text>
+              {text.author}: {event.createdBy === null ? text.formerMember : (author ?? '…')}
+            </Text>
+          </EventSection>
+          <EventSection title={text.participants} number="03">
+            <Group>
+              {event.participants.length ? (
+                event.participants.map((participant) => (
+                  <Badge key={participant.id} color={participant.color}>
+                    {participant.displayName}
+                  </Badge>
+                ))
+              ) : (
+                <Text c="dimmed">{text.noParticipants}</Text>
+              )}
+            </Group>
+          </EventSection>
+        </Stack>
+        <Stack gap="lg">
+          <EventSection title={text.reminders}>
+            <ReminderList
+              value={event.reminders.map((r) => ({ ...reminderInput(r), nextFireAt: r.nextFireAt }))}
+              timezone={family.timezone}
+            />
+          </EventSection>
+          <MyReminders key={event.id} event={event} />
+        </Stack>
+      </div>
       {editable && (
         <>
           {readOnly && <Text size="sm">{calendarOnlineHint}</Text>}
@@ -203,7 +218,7 @@ export function EventDetailsPage() {
               {remove.error.message}
             </Alert>
           )}
-          <Group>
+          <Group className="event-details-actions">
             <Button
               onClick={() => {
                 if (event.kind === 'recurring') setScopeAction('edit');
@@ -267,6 +282,8 @@ export function EventDetailsPage() {
           </Modal>
           <Modal
             opened={editing}
+            size="min(1100px, calc(100vw - 32px))"
+            className="event-editor-modal"
             onClose={() => {
               if (allowNavigation()) setEditing(false);
             }}
@@ -280,6 +297,7 @@ export function EventDetailsPage() {
               initialDate={event.startDate}
               pending={update.isPending}
               readOnly={readOnly}
+              timezone={family.timezone}
               onCancel={() => {
                 if (allowNavigation()) setEditing(false);
               }}

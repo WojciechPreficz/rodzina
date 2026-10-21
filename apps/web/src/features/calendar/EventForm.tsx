@@ -1,17 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import {
-  Alert,
-  Button,
-  Group,
-  MultiSelect,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  Textarea,
-  TextInput,
-} from '@mantine/core';
+import { Alert, Button, Group, NumberInput, Select, Stack, Switch, Text, Textarea, TextInput } from '@mantine/core';
 import {
   calendarDateSchema,
   firstEventOccurrenceDate,
@@ -30,6 +18,8 @@ import type { Member } from '@rodzina/shared';
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import { isOffline, useOffline } from '../../connectivity.js';
+import { EventSection } from './EventSection.js';
+import './event.css';
 
 const text = labels.calendarUi;
 
@@ -41,6 +31,7 @@ export function EventForm({
   initialDate,
   pending,
   readOnly = false,
+  timezone = 'Europe/Warsaw',
   onSave,
   onCancel,
 }: {
@@ -51,6 +42,7 @@ export function EventForm({
   initialDate: string;
   pending: boolean;
   readOnly?: boolean;
+  timezone?: string;
   onSave: (data: EventData) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -166,6 +158,8 @@ export function EventForm({
 
   return (
     <form
+      className="event-form"
+      aria-label={event ? text.editEvent : text.add}
       data-navigation-guard="true"
       onChangeCapture={navigation.changed}
       onSubmit={(e) => {
@@ -179,146 +173,192 @@ export function EventForm({
             {error}
           </Alert>
         )}
-        <TextInput
-          label={text.title}
-          required
-          maxLength={200}
-          value={title}
-          onChange={(e) => setTitle(e.currentTarget.value)}
-          error={errors.title}
-        />
-        <Textarea
-          disabled={occurrenceOnly}
-          label={text.description}
-          maxLength={10000}
-          value={description}
-          onChange={(e) => setDescription(e.currentTarget.value)}
-        />
-        <TextInput
-          label={text.location}
-          disabled={occurrenceOnly}
-          maxLength={500}
-          value={location}
-          onChange={(e) => setLocation(e.currentTarget.value)}
-        />
-        <MultiSelect
-          disabled={occurrenceOnly}
-          label={text.participants}
-          data={members.map((m) => ({ value: m.id, label: m.displayName }))}
-          value={participants}
-          onChange={(value) => {
-            navigation.changed();
-            setParticipants(value);
-          }}
-          searchable
-        />
-        {occurrenceOnly && (
-          <Text size="sm" c="dimmed">
-            {text.occurrenceFieldsNotice}
-          </Text>
-        )}
-        {eventKind === 'distant' && (
-          <Select
-            label={text.precision}
-            value={precision}
-            allowDeselect={false}
-            data={[
-              { value: 'day', label: text.precisionDay },
-              { value: 'month', label: text.precisionMonth },
-            ]}
-            onChange={(value) => {
-              if (value === 'day' || value === 'month') {
-                setPrecision(value);
-                if (value === 'month') setDate(`${date.slice(0, 7)}-01`);
-              }
-            }}
-          />
-        )}
-        <Switch
-          label={text.allDay}
-          checked={allDay || monthly}
-          disabled={monthly}
-          onChange={(e) => setAllDay(e.currentTarget.checked)}
-        />
-        <TextInput
-          type={monthly ? 'month' : 'date'}
-          label={text.date}
-          required
-          value={monthly ? date.slice(0, 7) : date}
-          onChange={(e) => setDate(monthly ? `${e.currentTarget.value}-01` : e.currentTarget.value)}
-          error={errors.date}
-        />
-        {!allDay && !monthly && (
-          <Group grow align="start">
-            <TextInput
-              type="time"
-              label={eventKind === 'distant' ? text.optionalTime : text.time}
-              required={eventKind !== 'distant'}
-              value={time}
-              onChange={(e) => setTime(e.currentTarget.value)}
-              error={errors.time}
-            />
-            {hasTime && (
-              <NumberInput
-                label={text.duration}
-                styles={{ label: { whiteSpace: 'nowrap' } }}
+        <div className="event-form-grid">
+          <Stack className="event-form-main" gap="lg">
+            <EventSection title={text.eventDetails} number="01">
+              <TextInput
+                label={text.title}
                 required
-                min={1}
-                max={525600}
-                allowDecimal={false}
-                value={duration}
-                onChange={setDuration}
+                maxLength={200}
+                value={title}
+                onChange={(e) => setTitle(e.currentTarget.value)}
+                error={errors.title}
               />
-            )}
-          </Group>
-        )}
-        {eventKind === 'recurring' &&
-          !occurrenceOnly &&
-          (wizard ? (
-            <RecurrenceFields
-              value={wizard}
-              onChange={(value) => {
-                navigation.changed();
-                setWizard(value);
-              }}
-            />
-          ) : (
-            <Alert>{text.unsupportedRule}</Alert>
-          ))}
-        {occurrenceOnly ? (
-          <Text size="sm" c="dimmed">
-            {text.reminderScope}
-          </Text>
-        ) : (
-          <Stack>
-            <Text fw={600}>{text.reminders}</Text>
-            <Text size="sm" c="dimmed">
-              {text.reminderAllDay}
-            </Text>
-            <ReminderList
-              value={reminders}
-              timezone="Europe/Warsaw"
-              pending={pending || blocked}
-              onRemove={(index) => {
-                setReminders((current) => current.filter((_, i) => i !== index));
-                setRemindersChanged(true);
-                navigation.changed();
-              }}
-            />
-            <ReminderPicker
-              pending={pending || blocked || reminders.length >= 100}
-              onAdd={(reminder) => {
-                setReminders((current) => [...current, reminder]);
-                navigation.changed();
-                setRemindersChanged(true);
-              }}
-            />
-            <Text size="sm" c="dimmed">
-              {text.reminderHint}
-            </Text>
+              <Textarea
+                disabled={occurrenceOnly}
+                label={text.description}
+                maxLength={10000}
+                value={description}
+                onChange={(e) => setDescription(e.currentTarget.value)}
+              />
+              <TextInput
+                label={text.location}
+                disabled={occurrenceOnly}
+                maxLength={500}
+                value={location}
+                onChange={(e) => setLocation(e.currentTarget.value)}
+              />
+            </EventSection>
+            <EventSection title={text.eventDate} number="02">
+              {occurrenceOnly && (
+                <Text size="sm" c="dimmed">
+                  {text.occurrenceFieldsNotice}
+                </Text>
+              )}
+              {eventKind === 'distant' && (
+                <Select
+                  label={text.precision}
+                  value={precision}
+                  allowDeselect={false}
+                  data={[
+                    { value: 'day', label: text.precisionDay },
+                    { value: 'month', label: text.precisionMonth },
+                  ]}
+                  onChange={(value) => {
+                    if (value === 'day' || value === 'month') {
+                      navigation.changed();
+                      setPrecision(value);
+                      if (value === 'month') setDate(`${date.slice(0, 7)}-01`);
+                    }
+                  }}
+                />
+              )}
+              <Switch
+                label={text.allDay}
+                checked={allDay || monthly}
+                disabled={monthly}
+                onChange={(e) => setAllDay(e.currentTarget.checked)}
+              />
+              <TextInput
+                type={monthly ? 'month' : 'date'}
+                label={text.date}
+                required
+                value={monthly ? date.slice(0, 7) : date}
+                onChange={(e) => setDate(monthly ? `${e.currentTarget.value}-01` : e.currentTarget.value)}
+                error={errors.date}
+              />
+              {!allDay && !monthly && (
+                <Group grow align="start">
+                  <TextInput
+                    type="time"
+                    label={eventKind === 'distant' ? text.optionalTime : text.time}
+                    required={eventKind !== 'distant'}
+                    value={time}
+                    onChange={(e) => setTime(e.currentTarget.value)}
+                    error={errors.time}
+                  />
+                  {hasTime && (
+                    <NumberInput
+                      label={text.duration}
+                      styles={{ label: { whiteSpace: 'nowrap' } }}
+                      required
+                      min={1}
+                      max={525600}
+                      allowDecimal={false}
+                      value={duration}
+                      onChange={(value) => {
+                        navigation.changed();
+                        setDuration(value);
+                      }}
+                    />
+                  )}
+                </Group>
+              )}
+              {eventKind === 'recurring' &&
+                !occurrenceOnly &&
+                (wizard ? (
+                  <RecurrenceFields
+                    value={wizard}
+                    onChange={(value) => {
+                      navigation.changed();
+                      setWizard(value);
+                    }}
+                  />
+                ) : (
+                  <Alert>{text.unsupportedRule}</Alert>
+                ))}
+            </EventSection>
+            <EventSection title={text.participants} number="03">
+              <Group role="group" aria-label={text.participants} gap="xs">
+                {members.map((member) => (
+                  <Button
+                    key={member.id}
+                    variant="default"
+                    radius="xl"
+                    className="event-participant"
+                    disabled={occurrenceOnly || pending}
+                    aria-pressed={participants.includes(member.id)}
+                    leftSection={
+                      <span className="event-participant-dot" aria-hidden="true" style={{ background: member.color }} />
+                    }
+                    rightSection={<span aria-hidden="true">{participants.includes(member.id) ? '✓' : '+'}</span>}
+                    onClick={() => {
+                      navigation.changed();
+                      setParticipants((current) =>
+                        current.includes(member.id)
+                          ? current.filter((id) => id !== member.id)
+                          : [...current, member.id],
+                      );
+                    }}
+                  >
+                    {member.displayName}
+                  </Button>
+                ))}
+              </Group>
+              {!members.length && (
+                <Text size="sm" c="dimmed">
+                  {text.noParticipants}
+                </Text>
+              )}
+              <Text size="sm" c="dimmed">
+                {text.participantsHint}
+              </Text>
+            </EventSection>
           </Stack>
-        )}
-        <Group justify="flex-end">
+          <aside className="event-form-aside">
+            <EventSection title={text.reminders}>
+              {occurrenceOnly ? (
+                <Text size="sm" c="dimmed">
+                  {text.reminderScope}
+                </Text>
+              ) : (
+                <Stack>
+                  <Text size="sm" c="dimmed">
+                    {text.reminderAndroidHint}
+                  </Text>
+                  <ReminderList
+                    value={reminders}
+                    timezone={timezone}
+                    pending={pending || blocked}
+                    onRemove={(index) => {
+                      setReminders((current) => current.filter((_, i) => i !== index));
+                      setRemindersChanged(true);
+                      navigation.changed();
+                    }}
+                  />
+                  <ReminderPicker
+                    timezone={timezone}
+                    pending={pending || blocked || reminders.length >= 100}
+                    onAdd={(reminder) => {
+                      setReminders((current) => [...current, reminder]);
+                      navigation.changed();
+                      setRemindersChanged(true);
+                    }}
+                  />
+                  <Text size="sm" c="dimmed">
+                    {text.reminderHint}
+                  </Text>
+                  {(allDay || monthly) && (
+                    <Text size="sm" c="dimmed">
+                      {text.reminderAllDay}
+                    </Text>
+                  )}
+                </Stack>
+              )}
+            </EventSection>
+          </aside>
+        </div>
+        <Group justify="flex-end" className="event-form-actions">
           <Button variant="default" onClick={onCancel} disabled={pending}>
             {labels.cancel}
           </Button>

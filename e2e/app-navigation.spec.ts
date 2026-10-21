@@ -168,6 +168,19 @@ test('APK uses the same right drawer and native Back closes it before leaving th
   await expect(page.locator('.mantine-AppShell-header')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Zakupy', exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath('android-shopping-without-header.png'), fullPage: true });
+  const calendarMenu = await openNavigation(page);
+  await calendarMenu.getByRole('link', { name: 'Kalendarz', exact: true }).click();
+  await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Dodaj wydarzenie' });
+  await form.getByLabel(/^Tytuł/).fill('Niezapisane plany');
+  await form.getByLabel(/^Tytuł/).blur();
+  page.once('dialog', (confirmation) => confirmation.dismiss());
+  await page.evaluate(() => (window as unknown as { nativeBack: () => void }).nativeBack());
+  await expect(form.getByLabel(/^Tytuł/)).toHaveValue('Niezapisane plany');
+  page.once('dialog', (confirmation) => confirmation.accept());
+  await page.evaluate(() => (window as unknown as { nativeBack: () => void }).nativeBack());
+  await expect(form).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Kalendarz', exact: true })).toBeVisible();
 });
 
 test('shared theme reaches portals and navigation switches at 767/768 px', async ({ page }, info) => {
@@ -176,20 +189,18 @@ test('shared theme reaches portals and navigation switches at 767/768 px', async
   const heading = page.getByRole('heading', { name: 'Kalendarz', exact: true });
   await expect(heading).toHaveCSS('font-family', 'Georgia, serif');
   await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
-  const modal = page.getByRole('dialog');
-  await expect(modal).toHaveCSS('background-color', 'rgb(255, 254, 250)');
-  await expect(modal.getByRole('button', { name: 'Jednorazowe', exact: true })).toHaveCSS('color', 'rgb(66, 102, 85)');
-  await page.screenshot({ path: info.outputPath('themed-modal.png'), fullPage: true, animations: 'disabled' });
-  await modal.getByRole('button', { name: 'Jednorazowe', exact: true }).click();
-  await modal.getByLabel('Uczestnicy', { exact: true }).click();
-  await expect(page.getByRole('listbox', { name: 'Uczestnicy' })).toBeVisible();
-  await expect(page.locator('.mantine-MultiSelect-dropdown:visible')).toHaveCSS(
+  const modal = page.getByRole('form', { name: 'Dodaj wydarzenie' });
+  await expect(modal.getByRole('region', { name: 'Szczegóły wydarzenia' })).toHaveCSS(
     'background-color',
     'rgb(255, 254, 250)',
   );
+  await page.screenshot({ path: info.outputPath('themed-form.png'), fullPage: true, animations: 'disabled' });
+  await modal.getByLabel('Kiedy przypomnieć', { exact: true }).click();
+  await expect(page.getByRole('listbox', { name: 'Kiedy przypomnieć' })).toBeVisible();
+  await expect(page.locator('.mantine-Select-dropdown:visible')).toHaveCSS('background-color', 'rgb(255, 254, 250)');
   await page.screenshot({ path: info.outputPath('themed-selector.png'), fullPage: true, animations: 'disabled' });
   await page.keyboard.press('Escape');
-  await page.keyboard.press('Escape');
+  await modal.getByRole('button', { name: 'Anuluj', exact: true }).click();
   await expect(modal).not.toBeVisible();
 
   for (const width of [767, 768]) {

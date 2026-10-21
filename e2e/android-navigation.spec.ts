@@ -87,7 +87,7 @@ test('Android cold notification opens a stored occurrence offline and warm App L
   await expect(page.getByRole('alert')).toContainText('Link jest nieważny');
 });
 
-test('calendar form survives rejecting discard on modal close and browser navigation', async ({
+test('calendar form survives rejecting discard on cancel and browser navigation', async ({
   page,
   baseURL,
 }, testInfo) => {
@@ -105,8 +105,7 @@ test('calendar form survives rejecting discard on modal close and browser naviga
   await openNavigation(page);
   await page.getByRole('link', { name: 'Kalendarz', exact: true }).click();
   await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Jednorazowe', exact: true }).click();
+  const dialog = page.getByRole('form', { name: 'Dodaj wydarzenie' });
   await dialog.getByLabel(/^Tytuł/).fill('Niezapisany formularz');
   page.once('dialog', (confirmation) => confirmation.dismiss());
   await dialog.getByRole('button', { name: 'Anuluj', exact: true }).click();
@@ -115,7 +114,6 @@ test('calendar form survives rejecting discard on modal close and browser naviga
   await page.goBack();
   await expect(page).toHaveURL(/\/kalendarz$/);
   await expect(dialog.getByLabel(/^Tytuł/)).toHaveValue('Niezapisany formularz');
-  page.once('dialog', (confirmation) => confirmation.dismiss());
   await page.keyboard.press('Escape');
   await expect(dialog).toBeVisible();
   page.once('dialog', (confirmation) => confirmation.accept());

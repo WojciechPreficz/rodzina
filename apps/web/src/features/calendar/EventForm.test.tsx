@@ -27,6 +27,35 @@ afterEach(() => {
 });
 
 describe('EventForm', () => {
+  it('uses the family timezone for an absolute shared reminder', async () => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider env="test">
+        <EventForm
+          members={[]}
+          timezone="America/New_York"
+          initialDate="2030-05-20"
+          pending={false}
+          onSave={save}
+          onCancel={() => {}}
+        />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Spotkanie' } });
+    fireEvent.click(screen.getByLabelText('Kiedy przypomnieć', { selector: 'input' }));
+    fireEvent.click(screen.getByRole('option', { name: 'W wybranym dniu' }));
+    fireEvent.change(screen.getByLabelText('Data przypomnienia'), { target: { value: '2030-05-20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj przypomnienie' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Usuń przypomnienie' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reminders: [{ type: 'absolute', remindAt: Date.parse('2030-05-20T13:00:00Z'), audience: 'participants' }],
+        }),
+      ),
+    );
+  });
   it('sends shared reminders in the event body and sends an empty array after removal', async () => {
     const save = vi.fn(async () => {});
     render(

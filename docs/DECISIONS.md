@@ -950,6 +950,31 @@ API zweryfikowano w zainstalowanym kodzie pluginów oraz dokumentacji:
   zależności pomiędzy uruchomieniami. Nie włączamy cache konfiguracji z sekretami
   podpisywania. Zmiana dotyczy narzędzi budowania, bez zmian runtime serwera.
 
+## 21.10.2026 — pełny formularz i szczegóły wydarzenia, krok R.3
+
+- Tworzenie jest pełnym widokiem w istniejącym kalendarzu, bez nowego
+  publicznego adresu. Wpis historii na tym samym URL ma stan `calendarCreate`;
+  dzięki temu przeglądarkowe i natywne Wstecz wracają do kalendarza przez
+  istniejącą ochronę formularzy. Powrót zachowuje wybraną datę, filtry,
+  przywraca przewinięcie i fokus przycisku dodawania.
+- Desktop wybiera rodzaj trzema kartami, telefon selektorem. Zmiana rodzaju
+  wymaga potwierdzenia odrzucenia brudnego formularza; po akceptacji resetuje
+  jego dane. Formularz ma sekcje szczegółów, terminu, uczestników i przypomnień,
+  dwie kolumny na komputerze i jedną na telefonie. Używa prawdziwych domowników.
+- Edycja pozostaje w powiększonym modalu i współdzieli `EventForm`, sekcje,
+  `RecurrenceFields` oraz `ReminderPicker`. Szczegóły i osobiste przypomnienia
+  otrzymują ten sam układ kart. Zachowujemy istniejące linki do wystąpień
+  i zakresy edycji/usuwania serii. Zapis wraca dopiero po udanej mutacji API;
+  błąd pozostawia treść i ponownie włącza ochronę niezapisanych zmian.
+- Wspólne przypomnienie z konkretną datą formularz przelicza w przekazanej
+  strefie rodziny, tak jak przypomnienia osobiste. Usuwamy lokalne założenie
+  `Europe/Warsaw` z wywołania kontrolki; domyślna wartość props pozostaje
+  zgodna z dotychczasowymi samodzielnymi wywołaniami i testami formularza.
+- Nie zmieniamy API ani danych, uprawnień, zakresów mutacji czy cache.
+  Nie dodajemy kolejki kalendarza: utrata sieci blokuje zapis i przypomnienia
+  także w już otwartym formularzu. Bez nowych zależności, migracji, zmiennych
+  środowiskowych lub zmian hostingu. R.4 i kolejne kroki pozostają poza zakresem.
+
 ## 21.10.2026 — kalendarz i karty dnia, krok R.2
 
 - Zachowujemy Schedule-X, API, cache i logikę odbiorców. Dodajemy siatkę

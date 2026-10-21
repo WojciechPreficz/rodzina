@@ -1,0 +1,155 @@
+.event-editor-page {
+  padding-bottom: 24px;
+}
+.event-back {
+  align-self: flex-start;
+  padding-left: 0;
+}
+.event-form-grid,
+.event-details-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.event-form-main,
+.event-form-aside {
+  min-width: 0;
+}
+.event-section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.event-section-title > span {
+  color: var(--mantine-color-dimmed);
+  font-size: 12px;
+  font-weight: 400;
+}
+.event-section .mantine-InputWrapper-label {
+  margin-bottom: 6px;
+}
+.event-section .mantine-InputWrapper-root {
+  min-width: 0;
+}
+.event-section input {
+  max-width: 100%;
+  min-width: 0;
+}
+.event-section textarea {
+  min-height: 88px;
+}
+.event-kind-desktop {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.event-kind-card.mantine-Button-root {
+  height: auto;
+  padding: 16px;
+  border-color: var(--app-border);
+  background: var(--app-surface);
+}
+.event-kind-card .mantine-Button-inner {
+  justify-content: flex-start;
+}
+.event-kind-card .mantine-Button-label {
+  display: flex;
+  width: 100%;
+  gap: 12px;
+  white-space: normal;
+  text-align: left;
+}
+.event-kind-card .mantine-Button-label > span:last-child {
+  margin-left: auto;
+}
+.event-kind-card b {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+.event-kind-card .mantine-Text-root {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+}
+.event-kind-card[aria-pressed='true'],
+.event-participant[aria-pressed='true'] {
+  background: var(--app-tint);
+  border-color: var(--app-accent);
+  color: var(--app-accent);
+}
+.event-kind-icon {
+  font-size: 24px;
+  color: var(--app-accent);
+}
+.event-kind-mobile {
+  display: none;
+}
+.event-participant.mantine-Button-root {
+  height: auto;
+  min-height: 44px;
+}
+.event-participant .mantine-Button-label {
+  white-space: normal;
+}
+.event-participant-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.event-form-actions {
+  padding: 20px 0 0;
+  border-top: 1px solid var(--app-border);
+}
+.event-editor-modal .mantine-Modal-content {
+  width: 100%;
+}
+.event-recurrence {
+  padding-top: 16px;
+  border-top: 1px solid var(--app-border);
+}
+.event-reminder-picker {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--mantine-color-body);
+}
+.event-reminder-row {
+  border-bottom: 1px solid var(--app-border);
+  padding: 8px 0;
+}
+.event-reminder-picker .mantine-Group-root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.event-details-actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 63.999em) {
+  .event-form-grid,
+  .event-details-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 47.999em) {
+  .event-kind-desktop {
+    display: none;
+  }
+  .event-kind-mobile {
+    display: block;
+  }
+  .event-section.mantine-Paper-root {
+    padding: 16px;
+  }
+  .event-form-grid {
+    gap: 16px;
+  }
+  .event-form-actions .mantine-Button-root {
+    flex: 1;
+  }
+  .event-recurrence .mantine-Checkbox-root {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+}

@@ -1,4 +1,4 @@
-import { Alert, Button, Loader, Stack, Title } from '@mantine/core';
+import { Alert, Button, Loader } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CalendarEvent, CreateMyReminder } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
@@ -12,6 +12,8 @@ import { calendarOnlineHint, useCalendarOnlineMutation, useCalendarReadOnly } fr
 import { isOffline, useOffline } from '../../connectivity.js';
 import { fetchPersonal } from './calendarSync.js';
 import { useCalendarSnapshot } from './calendarOffline.js';
+import { EventSection } from './EventSection.js';
+import './event.css';
 
 const text = labels.calendarUi;
 export function MyReminders({ event }: { event: CalendarEvent }) {
@@ -48,8 +50,7 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
   const reminders =
     snapshot.account === `${family?.id}:${user?.id}` ? (snapshot.personal[event.id] ?? query.data) : query.data;
   return (
-    <Stack>
-      <Title order={3}>{text.myReminders}</Title>
+    <EventSection title={text.myReminders}>
       {query.isPending && !offline && !reminders && <Loader aria-label={text.loading} />}
       {offline && !reminders && <Alert color="yellow">Osobiste przypomnienia nie zostały zapisane offline.</Alert>}
       {query.error && (
@@ -97,6 +98,6 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
           await create.mutateAsync(data);
         }}
       />
-    </Stack>
+    </EventSection>
   );
 }
