@@ -248,7 +248,7 @@ test('shared theme reaches portals and navigation switches at 767/768 px', async
     const navigation = await openNavigation(page);
     await navigation.getByRole('link', { name: title, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
-    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: title, level: 1, exact: true })).toBeVisible();
     await expect(page.getByRole('navigation').locator('[aria-current="page"]')).toHaveText(title);
   }
 });

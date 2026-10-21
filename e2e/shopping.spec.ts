@@ -277,7 +277,10 @@ test('shopping catalog restores focus and scroll, keeps offline edits and distin
   await page.getByRole('button', { name: 'Dodaj', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Jabłka', exact: true })).toBeVisible();
   await page.context().setOffline(true);
-  await page.getByRole('checkbox', { name: 'Kupione: Jabłka', exact: true }).check();
+  const checkbox = page.getByRole('checkbox', { name: 'Kupione: Jabłka', exact: true });
+  // Checking moves the item to another section and replaces the input element.
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
   await expect(page.getByText('Jesteś offline - zmiany zostaną wysłane po odzyskaniu połączenia')).toBeVisible();
   await page.goBack();
   if (phone) {

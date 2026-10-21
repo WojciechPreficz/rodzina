@@ -122,6 +122,9 @@ for (const native of [false, true]) {
       await expect(page.getByRole('status')).toContainText('Jesteś offline');
       await expect(page.getByRole('button', { name: 'Dodaj dziecko' })).toBeDisabled();
       await navigate(page, 'Zakupy');
+      if (info.project.name === 'phone') {
+        await page.getByRole('button', { name: 'Zakupy', exact: true }).click();
+      }
       await page.getByRole('textbox', { name: 'Dodaj produkt' }).fill('Mleko 2l');
       await page.getByRole('button', { name: 'Dodaj', exact: true }).click();
       await expect(page.getByRole('article', { name: 'Mleko', exact: true })).toBeVisible();
