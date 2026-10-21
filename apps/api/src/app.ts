@@ -1,3 +1,7 @@
+import { registerSecurityHeaders } from './http/security-headers.js';
+import { registerSessionAuth } from './http/session-auth.js';
+import { serializeUser, type PublicAuthUser } from './http/user.js';
+import { registerApiErrorHandler } from './http/errors.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,8 +15,6 @@ import {
   hashPassword,
   hashPin,
   hashToken,
-  isJsonMutation,
-  isTrustedMutationSource,
   isValidPassword,
   isValidPin,
   normalizeEmail,
@@ -34,24 +36,6 @@ import { registerAndroidDownloads } from './android-downloads.js';
 
 type Database = ReturnType<typeof createDatabase>;
 
-type PublicAuthUser = {
-  id: string;
-  familyId: string;
-  displayName: string;
-  email: string | null;
-  role: 'admin' | 'member' | 'child';
-  color: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: PublicAuthUser;
-    familyId?: string;
-  }
-}
-
 const registerFamilySchema = z.object({
   familyName: z.string().trim().min(2),
   displayName: z.string().trim().min(2),
@@ -65,64 +49,6 @@ const loginSchema = z.object({
 });
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-
-function serializeUser(user: {
-  id: string;
-  family_id?: string;
-  familyId?: string;
-  display_name?: string;
-  displayName?: string;
-  email: string | null;
-  role: 'admin' | 'member' | 'child';
-  color: string;
-  created_at?: number;
-  createdAt?: number;
-  updated_at?: number;
-  updatedAt?: number;
-}): PublicAuthUser {
-  return {
-    id: user.id,
-    familyId: user.familyId ?? user.family_id ?? '',
-    displayName: user.displayName ?? user.display_name ?? '',
-    email: user.email,
-    role: user.role,
-    color: user.color,
-    createdAt: user.createdAt ?? user.created_at ?? Date.now(),
-    updatedAt: user.updatedAt ?? user.updated_at ?? Date.now(),
-  };
-}
-
-function isPublicApiRequest(method: string, url: string): boolean {
-  if (url === '/api/health') {
-    return true;
-  }
-
-  if (method === 'POST' && url === '/api/auth/register-family') {
-    return true;
-  }
-
-  if (method === 'POST' && url === '/api/auth/login') {
-    return true;
-  }
-
-  if (method === 'POST' && url === '/api/auth/login-child') {
-    return true;
-  }
-
-  if (method === 'GET' && url.startsWith('/api/auth/family-members')) {
-    return true;
-  }
-
-  if ((method === 'GET' || method === 'POST') && url.startsWith('/api/invitations/')) {
-    return true;
-  }
-
-  if (method === 'POST' && url === '/api/auth/reset-password') {
-    return true;
-  }
-
-  return false;
-}
 
 function findFamilyMember(
   database: Database,
@@ -247,74 +173,12 @@ export async function buildApp(config: AppConfig, database: Database): Promise<F
   });
   const version = process.env.npm_package_version ?? '0.1.0';
 
-  app.addHook('onSend', async (request, reply) => {
-    reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('Referrer-Policy', 'no-referrer');
-    reply.header('X-Frame-Options', 'DENY');
-    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    reply.header(
-      'Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
-    );
-    if (request.url.startsWith('/api/') || request.url.startsWith('/downloads/android/latest.json'))
-      reply.header('Cache-Control', 'no-store');
-    if (request.url.split('?')[0] === '/sw.js') reply.header('Cache-Control', 'no-store');
-    if (config.NODE_ENV === 'production' && new URL(config.RODZINA_PUBLIC_URL).protocol === 'https:')
-      reply.header('Strict-Transport-Security', 'max-age=31536000');
-  });
+  registerApiErrorHandler(app);
+  registerSecurityHeaders(app, config);
 
   await app.register(fastifyCookie);
 
-  app.addHook('onRequest', async (request, reply) => {
-    if (!request.url.startsWith('/api/')) {
-      return;
-    }
-
-    if (isJsonMutation(request.method) && !isTrustedMutationSource(request.headers)) {
-      return sendError(reply, 403, 'FORBIDDEN', 'Żądanie pochodzi z niezweryfikowanego źródła.');
-    }
-
-    if (isPublicApiRequest(request.method, request.url)) {
-      return;
-    }
-
-    const rawSession = request.cookies?.sid;
-    if (!rawSession) {
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Brak aktywnej sesji.');
-    }
-
-    const sessionHash = hashToken(rawSession);
-    const sessionRecord = database.db
-      .select()
-      .from(schema.sessions)
-      .where(and(eq(schema.sessions.id, sessionHash), gt(schema.sessions.expiresAt, Date.now())))
-      .get();
-
-    if (!sessionRecord) {
-      reply.clearCookie('sid', { path: '/' });
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Sesja wygasła lub jest nieprawidłowa.');
-    }
-
-    const userRecord = database.db.select().from(schema.users).where(eq(schema.users.id, sessionRecord.userId)).get();
-
-    if (!userRecord) {
-      reply.clearCookie('sid', { path: '/' });
-      return sendError(reply, 401, 'UNAUTHORIZED', 'Użytkownik sesji nie istnieje.');
-    }
-
-    const nextExpiry = Date.now() + SESSION_TTL_MS;
-    database.db.update(schema.sessions).set({ expiresAt: nextExpiry }).where(eq(schema.sessions.id, sessionHash)).run();
-    reply.setCookie('sid', rawSession, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.NODE_ENV === 'production',
-      maxAge: SESSION_TTL_MS / 1000,
-    });
-
-    request.user = serializeUser(userRecord);
-    request.familyId = userRecord.familyId;
-  });
+  registerSessionAuth(app, database, config);
 
   app.get('/api/health', async (_request, reply) => {
     let dbOk = false;

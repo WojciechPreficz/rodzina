@@ -1,3 +1,4 @@
+import { ApiError } from '../../http/errors.js';
 import {
   expandOccurrences,
   hasEventOccurrence,
@@ -12,30 +13,20 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { canEditEvent, type FamilyRole } from '../../permissions.js';
 import { createEventRepository } from './repository.js';
 
-export class EventError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
 export function createEventService(database: DatabaseConnection) {
   const repository = createEventRepository(database);
   function get(familyId: string, id: string): CalendarEvent {
     const event = repository.find(familyId, id);
-    if (!event) throw new EventError(404, 'NOT_FOUND', 'Nie znaleziono wydarzenia.');
+    if (!event) throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono wydarzenia.');
     return event;
   }
   function checkParticipants(familyId: string, ids: string[]) {
     if (!repository.validParticipants(familyId, ids))
-      throw new EventError(400, 'VALIDATION_ERROR', 'Uczestnicy muszą należeć do Twojej rodziny.');
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Uczestnicy muszą należeć do Twojej rodziny.');
   }
   function checkEdit(event: CalendarEvent, actorId: string, role: FamilyRole) {
     if (!canEditEvent(role, actorId, event.createdBy))
-      throw new EventError(403, 'FORBIDDEN', 'Możesz zmieniać i usuwać tylko własne wydarzenia.');
+      throw new ApiError(403, 'FORBIDDEN', 'Możesz zmieniać i usuwać tylko własne wydarzenia.');
   }
   function create(familyId: string, actorId: string, data: EventData) {
     checkParticipants(familyId, data.participantIds);
@@ -44,9 +35,9 @@ export function createEventService(database: DatabaseConnection) {
   function checkScope(event: CalendarEvent, query: EventScope) {
     if (query.scope === 'all') return;
     if (event.kind !== 'recurring')
-      throw new EventError(400, 'VALIDATION_ERROR', 'Ten zakres dotyczy wyłącznie wydarzeń cyklicznych.');
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Ten zakres dotyczy wyłącznie wydarzeń cyklicznych.');
     if (!query.occurrenceDate || !hasEventOccurrence(event, query.occurrenceDate))
-      throw new EventError(400, 'VALIDATION_ERROR', 'Podana data nie jest wystąpieniem tej serii.');
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Podana data nie jest wystąpieniem tej serii.');
   }
   function update(
     familyId: string,
@@ -65,13 +56,13 @@ export function createEventService(database: DatabaseConnection) {
       query.scope === 'this' &&
       Object.keys(patch).some((key) => !['title', 'startDate', 'startTime', 'durationMinutes'].includes(key))
     )
-      throw new EventError(
+      throw new ApiError(
         400,
         'VALIDATION_ERROR',
         'Pojedyncze wystąpienie pozwala zmienić tytuł, datę, godzinę i czas trwania.',
       );
     if (query.scope === 'following' && patch.kind !== undefined && patch.kind !== 'recurring')
-      throw new EventError(400, 'VALIDATION_ERROR', 'Nowa seria musi pozostać wydarzeniem cyklicznym.');
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Nowa seria musi pozostać wydarzeniem cyklicznym.');
     const rules = query.scope === 'following' ? splitEventRule(event, date) : undefined;
     const parsed = eventDataSchema.safeParse({
       title: exception?.overrideTitle ?? event.title,
@@ -86,7 +77,7 @@ export function createEventService(database: DatabaseConnection) {
       participantIds: event.participants.map((user) => user.id),
       ...patch,
     });
-    if (!parsed.success) throw new EventError(400, 'VALIDATION_ERROR', 'Dane wydarzenia są niepoprawne.');
+    if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Dane wydarzenia są niepoprawne.');
     checkParticipants(familyId, parsed.data.participantIds);
     if (query.scope === 'this') return repository.saveException(familyId, event, date, parsed.data);
     if (query.scope === 'following')

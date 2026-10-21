@@ -1,9 +1,9 @@
+import { ApiError } from '../../http/errors.js';
 import type { CreateMyReminder, MyReminderSource } from '@rodzina/shared';
 import { eq } from 'drizzle-orm';
 import { reminders } from '../../db/schema.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import { createEventRepository } from '../events/repository.js';
-import { EventError } from '../events/service.js';
 import { createReminderRepository } from './repository.js';
 import { createTaskListRepository } from '../tasks/repository.js';
 
@@ -13,12 +13,12 @@ export function createReminderService(database: DatabaseConnection) {
   const tasks = createTaskListRepository(database);
   function getSource(familyId: string, eventId: string) {
     const event = events.find(familyId, eventId);
-    if (!event) throw new EventError(404, 'NOT_FOUND', 'Nie znaleziono wydarzenia.');
+    if (!event) throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono wydarzenia.');
     return event;
   }
   function getTask(familyId: string, userId: string, taskId: string) {
     const task = tasks.findTask(familyId, userId, taskId);
-    if (!task) throw new EventError(404, 'NOT_FOUND', 'Nie znaleziono zadania.');
+    if (!task) throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono zadania.');
     return task;
   }
   function listMine(familyId: string, userId: string, source: MyReminderSource) {
@@ -32,7 +32,7 @@ export function createReminderService(database: DatabaseConnection) {
   function createMine(familyId: string, userId: string, data: CreateMyReminder) {
     if (data.taskId) {
       const task = getTask(familyId, userId, data.taskId);
-      if (!task.dueDate) throw new EventError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
+      if (!task.dueDate) throw new ApiError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
       return repository.insertTask(familyId, task, userId, data, 'user', events.timezone(familyId), Date.now(), userId);
     }
     const event = getSource(familyId, data.eventId!);
@@ -42,7 +42,7 @@ export function createReminderService(database: DatabaseConnection) {
     const row = database.db.select().from(reminders).where(eq(reminders.id, id)).get();
     if (row?.taskId) getTask(familyId, userId, row.taskId);
     if (!repository.removeMine(familyId, userId, id))
-      throw new EventError(404, 'NOT_FOUND', 'Nie znaleziono przypomnienia.');
+      throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono przypomnienia.');
   }
   return { listMine, createMine, removeMine };
 }
