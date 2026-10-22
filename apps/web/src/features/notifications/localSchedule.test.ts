@@ -75,6 +75,39 @@ function fixture(items = [reminder('one')], blockedTasks?: (account: string) => 
   return { scheduler, notifications, store, fetch, pending, delivered, snapshot, systemIds };
 }
 
+it('persists document alarms offline and replaces or cancels them after synchronization', async () => {
+  const item: ScheduledReminder = {
+    ...reminder('document'),
+    sourceType: 'document',
+    title: 'Przypomnienie o dokumencie',
+    body: 'OC Skoda — ważne do 15.11.2026',
+    url: '/dokumenty/10000000-0000-4000-8000-000000000002',
+  };
+  const f = fixture([item]);
+  await f.scheduler.sync('family:user');
+  const firstId = [...f.pending.keys()][0]!;
+  expect([...f.pending.values()][0]).toMatchObject({ body: item.body, extra: { reminders: [item], url: item.url } });
+  f.fetch.mockRejectedValueOnce(new Error('offline'));
+  await expect(f.scheduler.sync('family:user')).rejects.toThrow('offline');
+  expect([...f.pending.values()][0]!.extra.reminders).toEqual([item]);
+  const updated = {
+    ...item,
+    key: 'document-renewed',
+    occurrenceDate: '2027-01-15',
+    fireAt: now + 120000,
+    body: 'OC Skoda — ważne do 15.01.2027',
+  };
+  f.snapshot.reminders = [updated];
+  await f.scheduler.sync('family:user');
+  expect(f.notifications.cancel).toHaveBeenCalledWith({ notifications: [{ id: firstId }] });
+  expect([...f.pending.values()][0]!.extra.reminders).toEqual([updated]);
+  expect(f.store.write.mock.calls.at(-1)![0].value).not.toContain(item.body);
+  f.snapshot.reminders = [];
+  await f.scheduler.sync('family:user');
+  expect(f.pending.size).toBe(0);
+  expect(f.store.write.mock.calls.at(-1)![0].value).not.toContain(item.url);
+});
+
 it('durably suppresses a changed task offline while retaining calendar alarms from the same group', async () => {
   let blocked: string[] = [];
   const event = reminder('event');

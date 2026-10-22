@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DOCUMENT_TYPES, getDefaultDocumentReminders, getDocumentStatus } from './documents.js';
 import { createDocumentSchema, patchDocumentSchema } from './schemas/documents.js';
+import { documentUrl } from './urls.js';
+import { scheduledReminderSchema } from './schemas/schedule.js';
 
 describe('document status', () => {
   const thresholds = {
@@ -57,7 +59,6 @@ describe('document inputs', () => {
     { vehicleLabel: '' },
     { notes: 'x'.repeat(10001) },
     { number: '123' },
-    { reminders: [] },
     { familyId: 'ignored' },
     { createdBy: 'ignored' },
   ])('rejects invalid or unsupported fields: %j', (fields) => {
@@ -65,4 +66,36 @@ describe('document inputs', () => {
     expect(patchDocumentSchema.safeParse(fields).success).toBe(false);
   });
   it('rejects empty patches', () => expect(patchDocumentSchema.safeParse({}).success).toBe(false));
+  it('accepts explicit empty reminders and defaults their audience to adults', () => {
+    expect(createDocumentSchema.parse({ ...document, reminders: [] }).reminders).toEqual([]);
+    expect(
+      patchDocumentSchema.parse({ reminders: [{ type: 'offset', offsetValue: 7, offsetUnit: 'day' }] }).reminders?.[0]
+        ?.audience,
+    ).toBe('adults');
+  });
+  it('builds and validates document schedule URLs without accepting another source or external links', () => {
+    const id = '10000000-0000-4000-8000-000000000001';
+    const entry = {
+      key: 'document',
+      reminderId: id,
+      sourceType: 'document',
+      sourceId: id,
+      occurrenceDate: '2026-11-15',
+      fireAt: 1,
+      title: 'Dokument',
+      body: 'Ważne do 15.11.2026',
+      url: documentUrl(id),
+    };
+    expect(entry.url).toBe(`/dokumenty/${id}`);
+    expect(documentUrl('a/b')).toBe('/dokumenty/a%2Fb');
+    expect(scheduledReminderSchema.safeParse(entry).success).toBe(true);
+    for (const url of [
+      'https://example.com',
+      '//example.com',
+      `/zadania/${id}?zadanie=${id}`,
+      '/dokumenty/',
+      `/dokumenty/${id}?url=https://example.com`,
+    ])
+      expect(scheduledReminderSchema.safeParse({ ...entry, url }).success).toBe(false);
+  });
 });

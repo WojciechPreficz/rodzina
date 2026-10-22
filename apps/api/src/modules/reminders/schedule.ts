@@ -3,6 +3,7 @@ import {
   computeNextFireAt,
   eventUrl,
   taskUrl,
+  documentUrl,
   expandEventReminderSchedule,
   type ReminderSchedule,
   type TimeReminder,
@@ -13,6 +14,7 @@ import { createEventRepository } from '../events/repository.js';
 import { resolveRecipients } from './delivery.js';
 import { createReminderRepository } from './repository.js';
 import { createTaskListRepository } from '../tasks/repository.js';
+import { createDocumentRepository } from '../documents/repository.js';
 
 /** A consistent SQLite read snapshot, independent of the cron's reservation state. */
 export function readReminderSchedule(
@@ -20,9 +22,11 @@ export function readReminderSchedule(
   familyId: string,
   userId: string,
   includeTasks = false,
+  includeDocuments = false,
+  now = () => Date.now(),
 ): ReminderSchedule {
   return database.db.transaction(() => {
-    const generatedAt = Date.now();
+    const generatedAt = now();
     const validUntil = generatedAt + 90 * 86400000;
     const repository = createEventRepository(database);
     const reminderRepository = createReminderRepository(database);
@@ -86,6 +90,31 @@ export function readReminderSchedule(
             url: taskUrl(list.id, task.id),
           });
         }
+      }
+    }
+    for (const document of includeDocuments ? createDocumentRepository(database).list(familyId) : []) {
+      for (const reminder of [
+        ...reminderRepository.listDocument(familyId, document.id),
+        ...reminderRepository.listDocument(familyId, document.id, userId),
+      ]) {
+        if (!resolveRecipients(reminder, { document, members }).includes(userId)) continue;
+        const data: TimeReminder =
+          reminder.type === 'absolute'
+            ? { type: 'absolute', remindAt: reminder.remindAt! }
+            : { type: 'offset', offsetValue: reminder.offsetValue!, offsetUnit: reminder.offsetUnit! };
+        const fireAt = computeNextFireAt(data, { date: document.expiresOn }, generatedAt, tz);
+        if (fireAt === null || fireAt > validUntil) continue;
+        reminders.push({
+          key: `document:${document.id}:${reminder.id}:${document.expiresOn}`,
+          reminderId: reminder.id,
+          sourceType: 'document',
+          sourceId: document.id,
+          occurrenceDate: document.expiresOn,
+          fireAt,
+          title: 'Przypomnienie o dokumencie',
+          body: `${document.label} — ważne do ${document.expiresOn.split('-').reverse().join('.')}`,
+          url: documentUrl(document.id),
+        });
       }
     }
     reminders.sort((a, b) => a.fireAt - b.fireAt || a.key.localeCompare(b.key));

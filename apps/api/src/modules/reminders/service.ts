@@ -6,11 +6,18 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { createEventRepository } from '../events/repository.js';
 import { createReminderRepository } from './repository.js';
 import { createTaskListRepository } from '../tasks/repository.js';
+import { createDocumentRepository } from '../documents/repository.js';
 
 export function createReminderService(database: DatabaseConnection) {
   const repository = createReminderRepository(database);
   const events = createEventRepository(database);
   const tasks = createTaskListRepository(database);
+  const documents = createDocumentRepository(database);
+  function getDocument(familyId: string, documentId: string) {
+    const document = documents.find(familyId, documentId);
+    if (!document) throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono dokumentu.');
+    return document;
+  }
   function getSource(familyId: string, eventId: string) {
     const event = events.find(familyId, eventId);
     if (!event) throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono wydarzenia.');
@@ -22,6 +29,10 @@ export function createReminderService(database: DatabaseConnection) {
     return task;
   }
   function listMine(familyId: string, userId: string, source: MyReminderSource) {
+    if (source.documentId) {
+      getDocument(familyId, source.documentId);
+      return repository.listDocument(familyId, source.documentId, userId);
+    }
     if (source.taskId) {
       getTask(familyId, userId, source.taskId);
       return repository.listTask(familyId, source.taskId, userId);
@@ -30,6 +41,19 @@ export function createReminderService(database: DatabaseConnection) {
     return repository.list(familyId, source.eventId!, userId);
   }
   function createMine(familyId: string, userId: string, data: CreateMyReminder) {
+    if (data.documentId) {
+      const document = getDocument(familyId, data.documentId);
+      return repository.insertDocument(
+        familyId,
+        document,
+        userId,
+        data,
+        'user',
+        documents.timezone(familyId),
+        Date.now(),
+        userId,
+      );
+    }
     if (data.taskId) {
       const task = getTask(familyId, userId, data.taskId);
       if (!task.dueDate) throw new ApiError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');

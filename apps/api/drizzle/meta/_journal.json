@@ -148,6 +148,13 @@
       "when": 1792696459802,
       "tag": "0020_aspiring_makkari",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792697627266,
+      "tag": "0021_complete_kylun",
+      "breakpoints": true
     }
   ]
 }

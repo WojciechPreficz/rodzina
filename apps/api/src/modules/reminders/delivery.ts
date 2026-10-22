@@ -1,4 +1,4 @@
-import type { CalendarEvent, Reminder, Task, TaskList } from '@rodzina/shared';
+import type { CalendarEvent, FamilyDocument, Reminder, Task, TaskList } from '@rodzina/shared';
 
 export interface ReminderMember {
   id: string;
@@ -19,7 +19,46 @@ export interface TaskReminderSource {
   members: readonly ReminderMember[];
 }
 
-export function resolveRecipients(reminder: Reminder, source: EventReminderSource | TaskReminderSource): string[] {
+export interface DocumentReminderSource {
+  document: Pick<FamilyDocument, 'id' | 'familyId' | 'holderUserId' | 'createdBy'>;
+  members: readonly ReminderMember[];
+}
+
+export function resolveRecipients(
+  reminder: Reminder,
+  source: EventReminderSource | TaskReminderSource | DocumentReminderSource,
+): string[] {
+  if ('document' in source) {
+    const { document } = source;
+    if (
+      reminder.familyId !== document.familyId ||
+      reminder.documentId !== document.id ||
+      reminder.eventId ||
+      reminder.taskId
+    )
+      return [];
+    const visible = source.members.filter(({ familyId }) => familyId === document.familyId);
+    const adults = visible.filter(({ role }) => role !== 'child');
+    let candidates: readonly (string | null)[];
+    switch (reminder.audience) {
+      case 'family':
+        candidates = visible.map(({ id }) => id);
+        break;
+      case 'adults':
+        candidates = adults.map(({ id }) => id);
+        break;
+      case 'owner':
+        candidates = [document.holderUserId ?? document.createdBy];
+        break;
+      case 'user':
+        candidates = [reminder.userId];
+        break;
+      default:
+        return [];
+    }
+    const recipients = visible.filter(({ id }) => candidates.includes(id));
+    return [...new Set((recipients.length ? recipients : adults).map(({ id }) => id))];
+  }
   if ('task' in source) {
     const { task, list } = source;
     if (

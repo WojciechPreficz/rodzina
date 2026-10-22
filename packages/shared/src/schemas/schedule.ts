@@ -6,7 +6,7 @@ export const scheduledReminderSchema = z
   .object({
     key: z.string().min(1),
     reminderId: z.string().uuid(),
-    sourceType: z.enum(['event', 'task']),
+    sourceType: z.enum(['event', 'task', 'document']),
     sourceId: z.string().uuid(),
     occurrenceDate: calendarDateSchema,
     fireAt: timestamp,
@@ -18,7 +18,9 @@ export const scheduledReminderSchema = z
     (item) =>
       item.sourceType === 'event'
         ? /^\/kalendarz\/wydarzenie\/[a-zA-Z0-9_-]+\?data=\d{4}-\d{2}-\d{2}$/.test(item.url)
-        : /^\/zadania\/[a-zA-Z0-9_-]+\?zadanie=[a-zA-Z0-9_-]+$/.test(item.url),
+        : item.sourceType === 'task'
+          ? /^\/zadania\/[a-zA-Z0-9_-]+\?zadanie=[a-zA-Z0-9_-]+$/.test(item.url)
+          : /^\/dokumenty\/[a-zA-Z0-9_-]+$/.test(item.url),
     'Niepoprawny adres przypomnienia.',
   );
 export const reminderScheduleSchema = z.object({

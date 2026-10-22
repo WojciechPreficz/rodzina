@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   createDocumentSchema,
   patchDocumentSchema,
+  renewDocumentSchema,
   documentResponseSchema,
   documentsResponseSchema,
   documentDeletedResponseSchema,
@@ -41,7 +42,15 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
       const data = parse(patchDocumentSchema, request.body);
       return documentResponseSchema.parse({
         ok: true,
-        document: service.update(request.familyId!, id, request.user!.role, data),
+        document: service.update(request.familyId!, id, request.user!.id, request.user!.role, data),
+      });
+    });
+    routes.post('/api/documents/:id/renew', (request) => {
+      const { id } = parse(idSchema, request.params);
+      const data = parse(renewDocumentSchema, request.body);
+      return documentResponseSchema.parse({
+        ok: true,
+        document: service.update(request.familyId!, id, request.user!.id, request.user!.role, data),
       });
     });
     routes.delete('/api/documents/:id', (request) => {

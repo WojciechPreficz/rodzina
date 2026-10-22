@@ -16,9 +16,20 @@ export const sharedTaskReminderSchema = z.discriminatedUnion('type', [
   offset.extend({ audience: z.enum(['owner', 'list_members']).default('owner') }).strict(),
   absolute.extend({ audience: z.enum(['owner', 'list_members']).default('owner') }).strict(),
 ]);
-const sourceFields = { eventId: z.string().uuid().optional(), taskId: z.string().uuid().optional() };
-const oneSource = (data: { eventId?: string | undefined; taskId?: string | undefined }) =>
-  Number(!!data.eventId) + Number(!!data.taskId) === 1;
+export const sharedDocumentReminderSchema = z.discriminatedUnion('type', [
+  offset.extend({ audience: z.enum(['family', 'adults', 'owner']).default('adults') }).strict(),
+  absolute.extend({ audience: z.enum(['family', 'adults', 'owner']).default('adults') }).strict(),
+]);
+const sourceFields = {
+  eventId: z.string().uuid().optional(),
+  taskId: z.string().uuid().optional(),
+  documentId: z.string().uuid().optional(),
+};
+const oneSource = (data: {
+  eventId?: string | undefined;
+  taskId?: string | undefined;
+  documentId?: string | undefined;
+}) => Number(!!data.eventId) + Number(!!data.taskId) + Number(!!data.documentId) === 1;
 export const myRemindersQuerySchema = z.object(sourceFields).strict().refine(oneSource, 'Wybierz jedno źródło.');
 export const createMyReminderSchema = z
   .discriminatedUnion('type', [offset.extend(sourceFields).strict(), absolute.extend(sourceFields).strict()])
@@ -44,6 +55,7 @@ export const myRemindersResponseSchema = z.object({ ok: z.literal(true), reminde
 export const deleteReminderResponseSchema = z.object({ ok: z.literal(true), deleted: z.literal(true) });
 export type SharedEventReminder = z.infer<typeof sharedEventReminderSchema>;
 export type SharedTaskReminder = z.infer<typeof sharedTaskReminderSchema>;
+export type SharedDocumentReminder = z.infer<typeof sharedDocumentReminderSchema>;
 export type MyReminderSource = z.infer<typeof myRemindersQuerySchema>;
 export type CreateMyReminder = z.infer<typeof createMyReminderSchema>;
 export type Reminder = z.infer<typeof reminderSchema>;

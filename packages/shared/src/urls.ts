@@ -5,3 +5,6 @@ export function eventUrl(eventId: string, occurrenceDate?: string): string {
 export function taskUrl(listId: string, taskId: string): string {
   return `/zadania/${encodeURIComponent(listId)}?zadanie=${encodeURIComponent(taskId)}`;
 }
+export function documentUrl(documentId: string): string {
+  return `/dokumenty/${encodeURIComponent(documentId)}`;
+}

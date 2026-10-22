@@ -27,7 +27,15 @@ export function registerReminderRoutes(app: FastifyInstance, database: DatabaseC
       logMessage: 'Reminder request failed',
     });
     routes.get('/api/reminders/schedule', async (request, reply) => {
-      const query = parse(z.object({ includeTasks: z.enum(['true', 'false']).optional() }).strict(), request.query);
+      const query = parse(
+        z
+          .object({
+            includeTasks: z.enum(['true', 'false']).optional(),
+            includeDocuments: z.enum(['true', 'false']).optional(),
+          })
+          .strict(),
+        request.query,
+      );
       reply.header('Cache-Control', 'no-store');
       return reminderScheduleSchema.parse(
         readReminderSchedule(
@@ -35,6 +43,7 @@ export function registerReminderRoutes(app: FastifyInstance, database: DatabaseC
           requireUser(request).familyId,
           requireUser(request).id,
           query.includeTasks === 'true',
+          query.includeDocuments === 'true',
         ),
       );
     });

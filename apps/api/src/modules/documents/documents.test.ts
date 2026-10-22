@@ -79,7 +79,7 @@ describe('documents API', () => {
     await app?.close();
     database?.sqlite.close();
   });
-  it('supports all types, shared adult edits, sorting and deletion without creating reminders', async () => {
+  it('supports all types, shared adult edits, sorting and deletion', async () => {
     for (const type of DOCUMENT_TYPES)
       await add({ type, ...(type.startsWith('car_') ? { vehicleLabel: 'Skoda' } : {}) });
     const earliest = await add({ expiresOn: '2027-01-01', holderUserId: child.id, notes: ' Notatka ' }, member);
@@ -104,7 +104,7 @@ describe('documents API', () => {
       createdAt: earliest.createdAt,
     });
     expect(response.json().document.updatedAt).toBeGreaterThanOrEqual(earliest.updatedAt);
-    expect(database.db.select().from(schema.reminders).all()).toEqual([]);
+    expect(database.db.select().from(schema.reminders).all().length).toBeGreaterThan(0);
     expect((await request('DELETE', `/api/documents/${earliest.id}`, undefined, member)).json()).toEqual({
       ok: true,
       deleted: true,
@@ -149,7 +149,6 @@ describe('documents API', () => {
       { type: 'unknown' },
       { label: '' },
       { number: '123' },
-      { reminders: [] },
       { familyId },
       { vehicleLabel: 'Skoda' },
       { type: 'car_insurance' },
@@ -160,7 +159,6 @@ describe('documents API', () => {
       { ...data, type: 'other', holderUserId: child.id },
       { ...data, number: '123' },
       { ...data, expiresOn: '2028-04-31' },
-      { ...data, reminders: [] },
     ])
       expect((await request('POST', '/api/documents', payload)).statusCode).toBe(400);
     const response = await request('PATCH', `/api/documents/${document.id}`, {

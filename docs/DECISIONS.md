@@ -1,5 +1,35 @@
 # Decyzje
 
+## 22.10.2026 — przypomnienia dokumentów, krok 8.2 (#19)
+
+- Zakres według `archive/plan-przyszle-fazy.md`: API przypomnień, odnowienie
+  i harmonogram APK, bez UI z kroków 8.3–8.4 i bez joba Web Push.
+- Pominięcie `reminders` przy POST wybiera domyślne offsety typu; pusta tablica
+  wyłącza wspólne przypomnienia. PATCH bez tego pola zachowuje ich konfigurację,
+  także po zmianie typu. PATCH i odnowienie przeliczają wszystkie terminy,
+  również osobiste, bez zmiany ich właścicieli. Zapis dokumentu i przypomnień
+  jest jedną transakcją.
+- Body dokumentu przyjmuje wspólne `family`, `adults` (domyślne), `owner`.
+  Osobiste `user` tworzy wyłącznie `/api/reminders/mine` z `documentId`, zawsze
+  dla zalogowanej osoby, także dziecka. Odczyt dokumentów nie ujawnia cudzych
+  przypomnień osobistych.
+- Nowe APK żąda `includeDocuments=true` obok `includeTasks=true`. Bez tej flagi
+  harmonogram nie zawiera dokumentów, aby starsze APK mogło nadal zwalidować
+  kontrakt. Payload zawiera bezwzględną datę ważności; offsety używają 09:00
+  w strefie rodziny (domyślnie Europe/Warsaw). `documentUrl` wskazuje
+  `/dokumenty/:id`; ekran otwierany z alarmu pozostaje w kroku 8.4.
+- Migracja 0021 dodaje FK dokumentu z kaskadą usuwania i indeks przypomnień
+  dokumentów. Bez nowych zależności runtime, zmiennych środowiskowych ani crona.
+- Testy automatyczne adaptera sprawdzają trwały zapis offline oraz zastąpienie
+  i anulowanie alarmu po synchronizacji. Nie zastępują odbioru alarmu na
+  fizycznym telefonie ani prób po restarcie opisanych w fazie 8.
+- Weryfikacja lokalna 22.10.2026: 234 testy zmiany i zależnych modułów,
+  lint i formatowanie zmienionych plików, typecheck, build WWW/API,
+  `release:smoke` i debug APK przeszły. ADB nie wykrywa podłączonego telefonu;
+  odbiór alarmu offline i próby po restarcie nie zostały wykonane.
+  Na polecenie właściciela kończymy lokalnym commitem na `main`;
+  zweryfikowane lokalnie, oczekuje na CI. Krok nie ma jeszcze pełnego odbioru.
+
 ## 22.10.2026 — CRUD dokumentów, krok 8.1 (#18)
 
 - Zakres wynika z `archive/plan-przyszle-fazy.md`, zgodnie z poleceniem właściciela.
