@@ -212,7 +212,9 @@
   border-top: 1px solid var(--app-border);
 }
 .calendar-agenda-time {
-  flex: 0 0 64px;
+  flex: 0 0 auto;
+  min-width: 64px;
+  white-space: nowrap;
   font-size: 13px;
 }
 .calendar-agenda-time small {

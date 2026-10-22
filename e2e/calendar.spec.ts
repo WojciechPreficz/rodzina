@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { Temporal } from 'temporal-polyfill';
 
 test('filters events by clicking member buttons', async ({ page, baseURL }, testInfo) => {
   const headers = { Origin: baseURL! };
@@ -41,7 +42,39 @@ test('filters events by clicking member buttons', async ({ page, baseURL }, test
     });
     expect(response.ok()).toBe(true);
   }
+  const allDay = await page.request.post('/api/events', {
+    headers,
+    data: {
+      title: 'Wydarzenie całodniowe',
+      kind: 'single',
+      startDate: Temporal.Now.plainDateISO('Europe/Warsaw').toString(),
+      startTime: null,
+      durationMinutes: null,
+      participantIds: [],
+      reminders: [],
+      rrule: null,
+      datePrecision: 'day',
+      description: null,
+      location: null,
+    },
+  });
+  expect(allDay.ok()).toBe(true);
   await page.goto('/kalendarz');
+  if (testInfo.project.name === 'phone') {
+    const time = page.locator('.calendar-agenda-time').filter({ hasText: 'Całodniowe' });
+    await expect(time).toBeVisible();
+    expect(
+      await time.evaluate((element) => {
+        const label = element.querySelector('b')!;
+        const range = document.createRange();
+        range.selectNodeContents(label);
+        return (
+          range.getClientRects().length === 1 &&
+          label.getBoundingClientRect().width <= element.getBoundingClientRect().width + 0.5
+        );
+      }),
+    ).toBe(true);
+  }
   const filters = page.getByRole('group', { name: 'Pokaż tylko', exact: true });
   const anna = filters.getByRole('button', { name: 'Anna', exact: true });
   const piotr = filters.getByRole('button', { name: 'Piotr', exact: true });
@@ -147,7 +180,11 @@ test('warm calendar keeps real periods, responsive views and occurrence links', 
   const input = calendar.getByLabel('Wybierz datę');
   await expect(input).toHaveValue(today);
   await expect(
-    calendar.locator(info.project.name === 'phone' ? '.sx__week-agenda-wrapper' : '.sx__month-grid-wrapper'),
+    calendar.locator(
+      info.project.name === 'phone'
+        ? '.sx__month-agenda-wrapper:not(.sx__week-agenda-wrapper)'
+        : '.sx__month-grid-wrapper',
+    ),
   ).toBeVisible();
   await expect(page.getByText('Wspólne popołudnie', { exact: true })).toBeVisible();
   const month = page.locator('.page-header-description');

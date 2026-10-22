@@ -71,7 +71,7 @@ function CalendarView({
   const occurrences = useOccurrences(range);
   const readOnly = useCalendarReadOnly();
   const calendar = useCalendarApp({
-    views: [createMobileWeekView(), createViewMonthGrid(), createViewMonthAgenda(), createViewWeek(), createViewDay()],
+    views: [createViewMonthAgenda(), createViewMonthGrid(), createMobileWeekView(), createViewWeek(), createViewDay()],
     defaultView: 'month-grid',
     locale: 'pl-PL',
     timezone,

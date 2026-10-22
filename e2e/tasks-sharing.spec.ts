@@ -56,6 +56,18 @@ for (const native of [false, true]) {
       const listId = new URL(page.url()).pathname.split('/').at(-1)!;
       await page.getByRole('button', { name: 'Ustawienia listy' }).click();
       await page.getByLabel('Nazwa listy').fill('Wspólny remont');
+      const sharing = page.getByRole('textbox', { name: 'Udostępnij domownikom' });
+      await expect(sharing).toHaveAttribute('placeholder', 'Wybierz domowników');
+      await expect
+        .poll(() =>
+          sharing.evaluate((element) => {
+            const field = element.getBoundingClientRect();
+            const frame = element.closest('.mantine-MultiSelect-input')!.getBoundingClientRect();
+            return Math.abs(field.y + field.height / 2 - frame.y - frame.height / 2);
+          }),
+        )
+        .toBeLessThan(0.5);
+      await page.screenshot({ path: info.outputPath(`task-sharing-placeholder-${native}.png`), fullPage: true });
       await page.getByRole('textbox', { name: 'Udostępnij domownikom' }).click();
       await page.getByRole('option', { name: 'Zosia', exact: true }).click();
       await page.getByRole('heading', { name: 'Ustawienia listy', exact: true }).click();

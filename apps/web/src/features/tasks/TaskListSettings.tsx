@@ -59,6 +59,7 @@ export function TaskListSettings({
               {t.privacyHint}
             </Text>
             <MultiSelect
+              styles={{ input: { display: 'flex', alignItems: 'center' } }}
               label={t.shareWith}
               placeholder={t.sharePlaceholder}
               searchable

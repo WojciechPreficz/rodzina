@@ -18,6 +18,13 @@ test('navigates calendar periods with touch while preserving taps and vertical s
   const calendar = page.locator('.family-calendar');
   const input = calendar.getByTestId('date-picker-input');
   await expect(input).toBeVisible();
+  await expect(
+    calendar.locator(
+      testInfo.project.name === 'phone'
+        ? '.sx__month-agenda-wrapper:not(.sx__week-agenda-wrapper)'
+        : '.sx__month-grid-wrapper',
+    ),
+  ).toBeVisible();
   const client = await page.context().newCDPSession(page);
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: true });
   const gesture = async (

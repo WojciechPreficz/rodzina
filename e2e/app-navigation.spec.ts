@@ -25,6 +25,10 @@ test('website uses a left sidebar on desktop and a right drawer on phones', asyn
     animations: 'disabled',
   });
   if (phone) {
+    const frame = (await page.locator('.app-menu-toggle').boundingBox())!;
+    const icon = (await page.locator('.app-menu-toggle .mantine-Burger-burger').boundingBox())!;
+    expect(icon.x + icon.width / 2).toBeCloseTo(frame.x + frame.width / 2, 0);
+    expect(icon.y + icon.height / 2).toBeCloseTo(frame.y + frame.height / 2, 0);
     await page.evaluate(() => window.scrollTo(0, 300));
     await expect(page.getByRole('button', { name: 'Otwórz menu' })).toBeInViewport();
     await page.evaluate(() => window.scrollTo(0, 0));

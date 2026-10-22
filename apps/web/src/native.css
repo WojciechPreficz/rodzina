@@ -24,6 +24,10 @@ body {
   border-radius: var(--mantine-radius-md);
   box-shadow: 0 4px 18px #31483508;
 }
+.app-menu-toggle .mantine-Burger-root {
+  display: grid;
+  place-items: center;
+}
 .app-main-mobile {
   padding-top: calc(var(--safe-top) + 68px);
 }
