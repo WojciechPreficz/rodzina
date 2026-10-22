@@ -2,11 +2,11 @@
 
 ## Zakres projektu
 
-- Zanim zaczniesz pracę, przeczytaj aktualny kontekst i zasady z sekcji 1, 1.1 i 1.2 `docs/plan.md` oraz opis bieżącej fazy i kroku. Sekcje 2-5 i inne dokumenty czytaj w zakresie potrzebnym do zmiany i jej zależności. Nie wczytuj rutynowo zapisów historycznych, przyszłych faz ani ponownie treści już przeczytanych w tym czacie, jeśli się nie zmieniły.
+- Zanim zaczniesz pracę, przeczytaj aktualny kontekst i zasady z sekcji 1, 1.1 i 1.2 `docs/plan.md` oraz opis bieżącej fazy i kroku. Dawne sekcje 2-5 w `docs/ARCHITECTURE.md` i inne dokumenty czytaj w zakresie potrzebnym do zmiany i jej zależności. `docs/archive/` czytaj tylko w razie potrzeby, w zakresie zależności zadania. Nie wczytuj rutynowo zapisów historycznych, przyszłych faz ani ponownie treści już przeczytanych w tym czacie, jeśli się nie zmieniły.
 - Realizuj dokładnie jedną wskazaną fazę naraz. Nie implementuj elementów z sekcji „Poza zakresem” ani z kolejnych faz.
 - Kolejność prac: fazy 0-3, pierwszy deploy (wykonany: https://rodzina.preficze.pl), faza 4 (Android i przypomnienia offline), faza 5 (zakupy), faza 6 (obiady), faza 7 (zadania), faza 8 (dokumenty). Nie planujemy wydania open source. Pierwszy deploy ma osobne historyczne kroki D.1-D.4; nie powtarzaj go.
 - Funkcje rozwijamy i sprawdzamy lokalnie w zakresie zmiany; pełną weryfikację końcową wykonuje istniejący `.github/workflows/ci.yml` według sekcji 1.2 planu. Istniejący serwer aktualizujemy sprawdzoną paczką release według `docs/DEPLOY.md`; APK budujemy, podpisujemy i aktualizujemy osobno.
-- Przed fazą 5 wykonujemy kroki 4.8-4.10 wycofania PWA. Docelowo zostają zwykła strona WWW i APK; przypomnienia działają w APK. Starsze wymagania PWA/Web Push ustępują sekcji „Wycofanie PWA” w planie. Zachowujemy API harmonogramu, logikę odbiorców, dane przypomnień i alarmy Androida.
+- Przed fazą 5 wykonujemy kroki 4.8-4.10 wycofania PWA. Docelowo zostają zwykła strona WWW i APK; przypomnienia działają w APK. Starsze wymagania PWA/Web Push ustępują sekcji „Wycofanie PWA” wskazanej przez `docs/plan.md`. Zachowujemy API harmonogramu, logikę odbiorców, dane przypomnień i alarmy Androida.
 - Interfejs użytkownika oraz dokumentacja w `docs/` są po polsku. Kod, nazwy, komentarze i commity są po angielsku.
 
 ## Stack
@@ -45,9 +45,9 @@
 
 - Endpointy pod `/api`, dane JSON walidowane schematem Zod.
 - Błędy API mają kształt `{ "error": { "code": "...", "message": "..." } }`, a komunikaty dla UI są po polsku.
-- Identyfikatory generuj przez `crypto.randomUUID()`. Daty i czasy zapisuj zgodnie z `docs/PLAN.md`.
+- Identyfikatory generuj przez `crypto.randomUUID()`. Daty i czasy zapisuj zgodnie z `docs/plan.md`.
 - Nie dodawaj sekretów do repozytorium; nowe zmienne środowiskowe opisz w `.env.example` i `docs/DEPLOY.md`.
 
 ## Gotowość do deployu
 
-W każdej fazie stosuj wymagania „Gotowość do deployu” z sekcji 1.1 `docs/PLAN.md`: dokumentuj konfigurację i cron, commituj migracje, nie wymagaj kompilacji nowych zależności runtime na serwerze oraz utrzymuj działający `npm run release:smoke`. Nie zakładaj stałego procesu w tle, WebSocketów, Dockera ani Redisa.
+W każdej fazie stosuj wymagania „Gotowość do deployu” z sekcji 1.1 `docs/plan.md`: dokumentuj konfigurację i cron, commituj migracje, nie wymagaj kompilacji nowych zależności runtime na serwerze oraz utrzymuj działający `npm run release:smoke`. Nie zakładaj stałego procesu w tle, WebSocketów, Dockera ani Redisa.
