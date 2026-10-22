@@ -2208,3 +2208,24 @@ Po instalacji nowego APK sprawdź ikonę w launcherze telefonu i na ekranie
 informacji o aplikacji, w tym maskę okrągłą i zaokrąglony kwadrat, jeżeli
 launcher pozwala je wybrać. Podgląd na komputerze nie zastępuje tej próby.
 Aktualizacja ikony na telefonie wymaga zbudowania i zainstalowania nowego APK.
+
+## 22.10.2026 — wielodniowe wydarzenia jednorazowe
+
+Obok „Całodniowe” dostępne jest „Wielodniowe”. Zaznaczenie pokazuje datę
+zakończenia i, dla wydarzeń z godziną, godzinę zakończenia. Dla całodniowych
+wybrana data jest ostatnim dniem wydarzenia. Szczegóły pokazują datę końca,
+a edycja odtwarza zapisany zakres. Przypomnienia pozostają względem początku.
+
+Weryfikacja lokalna: 220 testów Vitest kalendarza, czasu, walidacji oraz API
+wydarzeń i przypomnień, typecheck, lint zmienionych plików i build WWW/API —
+poprawne. Playwright headless: zapis wydarzenia przez zmianę czasu, ponowna
+edycja, zmiana na całodniowe i odczyt po przeładowaniu — 2 testy poprawne,
+przy 390 i 1280 px. Przejrzano zrzuty formularza; przełączniki mieszczą się
+obok siebie, pola końca są czytelne i nie ma poziomego przewijania.
+Build debug APK z nowym frontendem zakończony sukcesem. ADB nie wykrywa
+podłączonego urządzenia, więc próba formularza w uruchomionym APK pozostaje
+do wykonania; build nie zastępuje tej próby.
+
+Stan przed wysłaniem zmian: **zweryfikowane lokalnie, oczekuje na CI**.
+Commit i push nie wdrażają WWW ani nie publikują APK. Próba formularza
+w uruchomionym APK pozostaje do wykonania.

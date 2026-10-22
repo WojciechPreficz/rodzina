@@ -27,6 +27,52 @@ afterEach(() => {
 });
 
 describe('EventForm', () => {
+  it.each([false, true])('saves an explicit end date for all-day=%s', async (allDay) => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider env="test">
+        <EventForm members={[]} initialDate="2026-10-24" pending={false} onSave={save} onCancel={() => {}} />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Wyjazd' } });
+    expect(screen.queryByLabelText('Data zakończenia')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Wielodniowe' }));
+    fireEvent.change(screen.getByLabelText(/^Data zakończenia/), { target: { value: '2026-10-26' } });
+    if (allDay) {
+      fireEvent.click(screen.getByRole('switch', { name: 'Całodniowe' }));
+      expect(screen.queryByLabelText('Godzina zakończenia')).not.toBeInTheDocument();
+    } else {
+      fireEvent.change(screen.getByLabelText(/^Godzina zakończenia/), { target: { value: '12:00' } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startTime: allDay ? null : '09:00',
+          durationMinutes: allDay ? 4320 : 3120,
+        }),
+      ),
+    );
+  });
+
+  it('rejects an end before the start and resets duration when multi-day is disabled', async () => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider env="test">
+        <EventForm members={[]} initialDate="2026-10-24" pending={false} onSave={save} onCancel={() => {}} />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Wyjazd' } });
+    fireEvent.click(screen.getByRole('switch', { name: 'Wielodniowe' }));
+    fireEvent.change(screen.getByLabelText(/^Data zakończenia/), { target: { value: '2026-10-24' } });
+    fireEvent.change(screen.getByLabelText(/^Godzina zakończenia/), { target: { value: '08:00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    expect(save).not.toHaveBeenCalled();
+    expect(screen.getByText(/Koniec musi być późniejszy/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Wielodniowe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ durationMinutes: 60 })));
+  });
   it('uses the family timezone for an absolute shared reminder', async () => {
     const save = vi.fn(async () => {});
     render(

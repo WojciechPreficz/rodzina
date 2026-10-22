@@ -149,11 +149,16 @@ function validateEvent(event: z.infer<typeof eventFields>, ctx: z.RefinementCtx)
       message: 'Termin miesięczny wymaga pierwszego dnia miesiąca i nie może mieć godziny ani czasu trwania.',
     });
   }
-  if ((event.startTime === null) !== (event.durationMinutes === null)) {
+  if (
+    (event.startTime !== null && event.durationMinutes === null) ||
+    (event.startTime === null &&
+      event.durationMinutes !== null &&
+      (event.kind !== 'single' || event.durationMinutes % 1440 !== 0))
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['durationMinutes'],
-      message: 'Wydarzenie z godziną wymaga czasu trwania; całodniowe nie może go mieć.',
+      message: 'Wydarzenie z godziną wymaga czasu trwania; całodniowe jednorazowe może trwać pełną liczbę dni.',
     });
   }
 }

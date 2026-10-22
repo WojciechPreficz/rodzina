@@ -171,7 +171,9 @@ function occurrence(event: TimeEvent, original: Date, tz: string, exception?: Ti
     eventId: event.id,
     occurrenceDate: dateString(original),
     startUtc: zonedStart.getTime(),
-    endUtc: allDay ? addDays(zonedStart, 1).getTime() : zonedStart.getTime() + (duration ?? 0) * MINUTE_MS,
+    endUtc: allDay
+      ? addDays(zonedStart, (duration ?? 1440) / 1440).getTime()
+      : zonedStart.getTime() + (duration ?? 0) * MINUTE_MS,
     allDay,
     isException: exception !== undefined,
   };
@@ -211,8 +213,10 @@ export function expandOccurrences(
       const exception = overrides.get(dateString(original));
       if (exception?.isCancelled) return [];
       const start = effectiveStart(event, original, exception);
-      if (start.date < fromDate || start.date > toDate) return [];
-      return [occurrence(event, original, tz, exception)];
+      if (start.date > toDate) return [];
+      const result = occurrence(event, original, tz, exception);
+      if (start.date < fromDate && (rule || result.endUtc <= localDateTimeToUtc(fromDate, '00:00', tz))) return [];
+      return [result];
     })
     .sort((left, right) => left.startUtc - right.startUtc || left.occurrenceDate.localeCompare(right.occurrenceDate));
 }

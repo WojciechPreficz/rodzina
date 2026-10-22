@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { Temporal } from 'temporal-polyfill';
 import { Alert, Button, Group, NumberInput, Select, Stack, Switch, Text, Textarea, TextInput } from '@mantine/core';
 import {
   calendarDateSchema,
   firstEventOccurrenceDate,
+  localDateTimeToUtc,
   defaultRecurrenceWizard,
   rruleFromWizard,
   wizardFromRrule,
@@ -65,6 +67,18 @@ export function EventForm({
   const [time, setTime] = useState(event?.startTime ?? (eventKind === 'distant' ? '' : '09:00'));
   const hasTime = !allDay && !monthly && (eventKind !== 'distant' || time !== '');
   const [duration, setDuration] = useState<number | string>(event?.durationMinutes ?? 60);
+  const initialStart = Temporal.PlainDate.from(event?.startDate ?? initialDate);
+  const initialEnd = event?.startTime
+    ? Temporal.Instant.fromEpochMilliseconds(
+        localDateTimeToUtc(event.startDate, event.startTime, timezone) + (event.durationMinutes ?? 60) * 60000,
+      ).toZonedDateTimeISO(timezone)
+    : null;
+  const initialEndDate = initialEnd
+    ? initialEnd.toPlainDate()
+    : initialStart.add({ days: Math.max(0, (event?.durationMinutes ?? 1440) / 1440 - 1) });
+  const [multiDay, setMultiDay] = useState(eventKind === 'single' && !initialEndDate.equals(initialStart));
+  const [endDate, setEndDate] = useState(initialEndDate.toString());
+  const [endTime, setEndTime] = useState(initialEnd?.toPlainTime().toString().slice(0, 5) ?? '10:00');
   const [error, setError] = useState<string | null>(null);
   const [reminders, setReminders] = useState<ReminderItem[]>(() =>
     (event?.reminders ?? []).map((reminder) => ({ ...reminderInput(reminder), nextFireAt: reminder.nextFireAt })),
@@ -74,23 +88,37 @@ export function EventForm({
     title?: string | undefined;
     date?: string | undefined;
     time?: string | undefined;
+    endDate?: string | undefined;
   }>({});
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (blocked || isOffline()) return;
+    let selectedDuration: number | null = hasTime ? Number(duration) : null;
+    let endError: string | undefined;
+    if (multiDay) {
+      try {
+        if (!calendarDateSchema.safeParse(endDate).success || !calendarDateSchema.safeParse(date).success)
+          throw new RangeError();
+        selectedDuration = allDay
+          ? (Temporal.PlainDate.from(date).until(Temporal.PlainDate.from(endDate)).days + 1) * 1440
+          : (localDateTimeToUtc(endDate, endTime, timezone) - localDateTimeToUtc(date, time, timezone)) / 60000;
+        if (endDate < date || selectedDuration < 1 || selectedDuration > 525600) throw new RangeError();
+      } catch {
+        endError = text.endInvalid;
+      }
+    }
     const next = {
       title: title.trim() ? undefined : text.titleRequired,
       date: calendarDateSchema.safeParse(date).success ? undefined : text.dateInvalid,
       time:
         hasTime &&
         (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time) ||
-          typeof duration !== 'number' ||
-          !Number.isInteger(duration) ||
-          duration < 1 ||
-          duration > 525600)
+          (!multiDay &&
+            (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 1 || duration > 525600)))
           ? text.timeInvalid
           : undefined,
+      endDate: endError,
     };
     setErrors(next);
     if (Object.values(next).some(Boolean)) return;
@@ -115,7 +143,7 @@ export function EventForm({
         participantIds: participants,
         startDate: date,
         startTime: hasTime ? time : null,
-        durationMinutes: hasTime ? Number(duration) : null,
+        durationMinutes: selectedDuration,
         kind: eventKind,
         datePrecision: precision,
         rrule: rule,
@@ -223,12 +251,26 @@ export function EventForm({
                   }}
                 />
               )}
-              <Switch
-                label={text.allDay}
-                checked={allDay || monthly}
-                disabled={monthly}
-                onChange={(e) => setAllDay(e.currentTarget.checked)}
-              />
+              <Group>
+                <Switch
+                  label={text.allDay}
+                  checked={allDay || monthly}
+                  disabled={monthly}
+                  onChange={(e) => setAllDay(e.currentTarget.checked)}
+                />
+                {eventKind === 'single' && (
+                  <Switch
+                    label={text.multiDay}
+                    checked={multiDay}
+                    onChange={(e) => {
+                      setMultiDay(e.currentTarget.checked);
+                      if (!e.currentTarget.checked) setDuration(60);
+                      if (e.currentTarget.checked && endDate <= date && calendarDateSchema.safeParse(date).success)
+                        setEndDate(Temporal.PlainDate.from(date).add({ days: 1 }).toString());
+                    }}
+                  />
+                )}
+              </Group>
               <TextInput
                 type={monthly ? 'month' : 'date'}
                 label={text.date}
@@ -247,7 +289,7 @@ export function EventForm({
                     onChange={(e) => setTime(e.currentTarget.value)}
                     error={errors.time}
                   />
-                  {hasTime && (
+                  {hasTime && !multiDay && (
                     <NumberInput
                       label={text.duration}
                       styles={{ label: { whiteSpace: 'nowrap' } }}
@@ -260,6 +302,28 @@ export function EventForm({
                         navigation.changed();
                         setDuration(value);
                       }}
+                    />
+                  )}
+                </Group>
+              )}
+              {multiDay && (
+                <Group grow align="start">
+                  <TextInput
+                    type="date"
+                    label={text.endDate}
+                    required
+                    min={date}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.currentTarget.value)}
+                    error={errors.endDate}
+                  />
+                  {!allDay && (
+                    <TextInput
+                      type="time"
+                      label={text.endTime}
+                      required
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.currentTarget.value)}
                     />
                   )}
                 </Group>

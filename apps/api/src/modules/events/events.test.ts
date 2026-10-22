@@ -17,6 +17,22 @@ const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url
 const single = { kind: 'single', title: 'Basen', startDate: '2026-10-13', startTime: '17:00', durationMinutes: 60 };
 
 describe('events API', () => {
+  it.each([null, '09:00'])(
+    'keeps multi-day single events in later date ranges with startTime=%s',
+    async (startTime) => {
+      const event = await create({ ...single, startDate: '2026-10-24', startTime, durationMinutes: 4320 });
+      const response = await request('GET', '/api/occurrences?from=2026-10-26&to=2026-10-26');
+      expect(response.statusCode).toBe(200);
+      expect(response.json().occurrences).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ eventId: event.id, occurrenceDate: '2026-10-24', allDay: startTime === null }),
+        ]),
+      );
+      const changed = await request('PATCH', `/api/events/${event.id}`, { durationMinutes: 5760 });
+      expect(changed.statusCode).toBe(200);
+      expect(changed.json().event.durationMinutes).toBe(5760);
+    },
+  );
   let app: Awaited<ReturnType<typeof buildApp>>;
   let database: ReturnType<typeof createDatabase>;
   let familyId: string;

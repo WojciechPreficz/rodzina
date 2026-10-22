@@ -167,6 +167,16 @@ export function EventDetailsPage() {
               {dateLabel}
               {occurrence.allDay ? ` · ${text.allDay}` : ''}
             </Text>
+            {event.kind === 'single' && (
+              <Text>
+                {text.endDate}:{' '}
+                {new Intl.DateTimeFormat('pl-PL', {
+                  timeZone: family.timezone,
+                  dateStyle: 'long',
+                  ...(occurrence.allDay ? {} : { timeStyle: 'short' as const }),
+                }).format(occurrence.allDay ? occurrence.endUtc - 1 : occurrence.endUtc)}
+              </Text>
+            )}
             {!occurrence.allDay && (
               <Text>
                 {text.duration}: {(occurrence.endUtc - occurrence.startUtc) / 60000}

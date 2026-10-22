@@ -27,6 +27,25 @@ const offset = (offsetValue: number, offsetUnit: 'minute' | 'hour' | 'day' | 'we
 });
 
 describe('expandOccurrences', () => {
+  it('includes an ongoing timed single event and excludes its exclusive end', () => {
+    const source = event({ startDate: '2026-03-28', startTime: '10:00', durationMinutes: 2220 });
+    const result = expandOccurrences(source, [], '2026-03-29', '2026-03-29', TZ);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.endUtc).toBe(utc('2026-03-30T00:00:00+02:00'));
+    expect(expandOccurrences(source, [], '2026-03-30', '2026-03-30', TZ)).toEqual([]);
+  });
+
+  it.each([
+    ['2026-03-28', '2026-03-31T00:00:00+02:00', 71],
+    ['2026-10-24', '2026-10-27T00:00:00+01:00', 73],
+  ])('uses calendar days for multi-day all-day events across DST at %s', (startDate, end, hours) => {
+    const source = event({ startDate, startTime: null, durationMinutes: 4320 });
+    const result = expandOccurrences(source, [], startDate, startDate, TZ)[0]!;
+    expect(result.endUtc).toBe(utc(end));
+    expect((result.endUtc - result.startUtc) / 3600000).toBe(hours);
+    const lastDate = end.slice(0, 10);
+    expect(expandOccurrences(source, [], lastDate, lastDate, TZ)).toEqual([]);
+  });
   it.each([
     ['2026-03-24', '2026-03-31', '2026-03-24T16:00:00Z', '2026-03-31T15:00:00Z'],
     ['2026-10-20', '2026-10-27', '2026-10-20T15:00:00Z', '2026-10-27T16:00:00Z'],

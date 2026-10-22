@@ -1,5 +1,21 @@
 # Decyzje
 
+## 22.10.2026 — wielodniowe wydarzenia jednorazowe
+
+- Obok „Całodniowe” dodajemy przełącznik „Wielodniowe” wyłącznie dla
+  wydarzeń jednorazowych. Pokazuje datę i godzinę końca; dla całodniowych
+  wystarcza data ostatniego dnia, wliczana do wydarzenia.
+- Wykorzystujemy istniejące `durationMinutes`, bez migracji i nowych pól API.
+  Dla wydarzeń z godziną jest to różnica momentów UTC, z uwzględnieniem strefy
+  rodziny. Dla całodniowych jednorazowych pełne wielokrotności 1440 oznaczają
+  dni kalendarzowe, dzięki czemu zmiana czasu nie przesuwa końca poza północ.
+  Dotychczasowe `null` nadal oznacza jeden dzień. Limit pozostaje 525600 minut
+  lub 365 dni kalendarzowych. Starsze APK mogą pokazywać całodniowy zakres
+  jako jeden dzień; poprawny podgląd i edycja wymagają aktualizacji APK.
+- Zapytanie o wystąpienia uwzględnia trwające wydarzenia jednorazowe rozpoczęte
+  przed wyświetlanym zakresem. Koniec API pozostaje wyłączny. Przypomnienia
+  nadal odnoszą się do początku wydarzenia.
+
 ## 21.10.2026 — pozostałe ekrany redesignu, krok R.6
 
 - Ekrany bez osobnej szczegółowej makiety stosują istniejący `PageHeader`,
