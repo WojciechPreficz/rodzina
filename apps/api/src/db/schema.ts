@@ -1,7 +1,7 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { check } from 'drizzle-orm/sqlite-core';
-import type { ShoppingCategory } from '@rodzina/shared';
+import type { DocumentType, ShoppingCategory } from '@rodzina/shared';
 
 export const families = sqliteTable('families', {
   id: text('id').primaryKey(),
@@ -71,6 +71,26 @@ export const jobRuns = sqliteTable('job_runs', {
   job: text('job').notNull(),
   ranAt: integer('ran_at').notNull(),
 });
+
+export const documents = sqliteTable(
+  'documents',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    type: text('type').$type<DocumentType>().notNull(),
+    label: text('label').notNull(),
+    holderUserId: text('holder_user_id').references(() => users.id, { onDelete: 'set null' }),
+    vehicleLabel: text('vehicle_label'),
+    expiresOn: text('expires_on').notNull(),
+    notes: text('notes'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('documents_family_expiry_idx').on(table.familyId, table.expiresOn)],
+);
 
 export const events = sqliteTable(
   'events',

@@ -15,6 +15,7 @@ i reguły pierwszeństwa określa [plan](../plan.md).
 - `passport` (paszport): 120 i 30 dni przed (wyrobienie trwa dłużej)
 - `car_insurance` (OC/AC pojazdu): 30 i 7 dni przed
 - `car_inspection` (przegląd techniczny): 30 i 7 dni przed
+- `car_guarantee_inspection` (przegląd gwarancyjny samochodu): 30 i 7 dni przed (rozszerzenie właściciela 22.10.2026)
 - `other` (inny): 30 dni przed
 
 **Zasady:**
@@ -23,14 +24,14 @@ i reguły pierwszeństwa określa [plan](../plan.md).
   - typ;
   - etykietę, np. "Paszport Zosi" albo "OC Skoda";
   - posiadacza (`holder_user_id`, dla dowodu i paszportu);
-  - pojazd (`vehicle_label`, dla OC i przeglądu);
+  - pojazd (`vehicle_label`, dla OC oraz przeglądu technicznego i gwarancyjnego);
   - datę ważności;
   - opcjonalną notatkę.
 - W UI pokazujemy ostrzeżenie: "Nie wpisuj numerów dokumentów". Pole numeru nie istnieje.
 - Widoczność: cała rodzina. Dziecko ma tylko odczyt.
 - Przypomnienia korzystają ze wspólnej tabeli (`document_id`). Domyślnie `audience=adults`. Można też wybrać `owner`, czyli posiadacza (gdy go brak, twórcę), albo "tylko ja" przez `/api/reminders/mine` z `documentId`. Czas wysyłki to 09:00 lokalnie, przez `computeNextFireAt` z fazy 2.
 - Akcja **"Odnowiono"**: użytkownik podaje nową datę ważności. Przypomnienia `offset` przeliczają się od nowej daty, a `absolute` z przeszłości oznaczane są jako nieaktualne (sekcja 2).
-- Statusy liczone w `shared`: `valid`, `expiring` i `expired`. Próg `expiring` liczymy dla każdego typu osobno: to najwcześniejsze z domyślnych przypomnień danego typu (paszport 120 dni, dowód 90, OC i przegląd 30, inny 30). Status zmienia kolor dokładnie wtedy, gdy przychodzi pierwsze przypomnienie.
+- Statusy liczone w `shared`: `valid`, `expiring` i `expired`. Próg `expiring` liczymy dla każdego typu osobno: to najwcześniejsze z domyślnych przypomnień danego typu (paszport 120 dni, dowód 90, OC i oba przeglądy 30, inny 30). Status zmienia kolor dokładnie wtedy, gdy przychodzi pierwsze przypomnienie.
 
 **Endpointy:**
 

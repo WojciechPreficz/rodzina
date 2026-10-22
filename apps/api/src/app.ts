@@ -14,6 +14,7 @@ import { registerEventRoutes } from './modules/events/routes.js';
 import { registerReminderRoutes } from './modules/reminders/routes.js';
 import { registerShoppingRoutes } from './modules/shopping/routes.js';
 import { registerTaskListRoutes } from './modules/tasks/routes.js';
+import { registerDocumentRoutes } from './modules/documents/routes.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 
 export async function buildApp(config: AppConfig, database: DatabaseConnection): Promise<FastifyInstance> {
@@ -53,6 +54,7 @@ export async function buildApp(config: AppConfig, database: DatabaseConnection):
   registerEventRoutes(app, database);
   registerShoppingRoutes(app, database);
   registerTaskListRoutes(app, database);
+  registerDocumentRoutes(app, database);
   registerAndroidDownloads(app, config);
   app.get('/.well-known/assetlinks.json', async (_request, reply) => {
     reply.header('Cache-Control', 'public, max-age=300');

@@ -11,3 +11,5 @@ export * from './schemas/shopping.js';
 export * from './shopping.js';
 export * from './schemas/tasks.js';
 export * from './schemas/auth.js';
+export * from './documents.js';
+export * from './schemas/documents.js';

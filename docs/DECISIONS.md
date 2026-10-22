@@ -1,5 +1,24 @@
 # Decyzje
 
+## 22.10.2026 — CRUD dokumentów, krok 8.1 (#18)
+
+- Zakres wynika z `archive/plan-przyszle-fazy.md`, zgodnie z poleceniem właściciela.
+  Krok obejmuje typy, statusy, walidację i CRUD; przypomnienia i odnowienie
+  pozostają w 8.2, a UI w 8.3–8.4. POST nie przyjmuje jeszcze `reminders`.
+- Na polecenie właściciela dodajemy `car_guarantee_inspection` (przegląd
+  gwarancyjny samochodu), z pojazdem i domyślnymi offsetami 30 i 7 dni.
+- Dokument zachowuje ważność przez cały `expiresOn`; `expired` zaczyna się
+  następnego dnia w strefie rodziny. Próg `expiring` jest włączny i liczony
+  w dniach kalendarzowych, bez wpływu zmiany czasu.
+- Posiadacz i pojazd pozostają opcjonalne. Posiadacz musi należeć do tej
+  samej rodziny i dotyczy tylko dowodu lub paszportu; pojazd dotyczy tylko
+  trzech typów samochodowych. PATCH waliduje wynik po połączeniu zmian
+  z zapisanym dokumentem; przy zmianie typu niepasujące pola trzeba wyczyścić.
+  Zapobiega to zachowaniu powiązań niezgodnych z typem.
+- Brak nowych zależności runtime, konfiguracji ani crona. Migracja dodaje
+  wyłącznie tabelę dokumentów i indeks; integracja FK przypomnień z dokumentami
+  należy do 8.2.
+
 ## 22.10.2026 — wielodniowe wydarzenia jednorazowe
 
 - Obok „Całodniowe” dodajemy przełącznik „Wielodniowe” wyłącznie dla

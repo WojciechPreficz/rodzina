@@ -172,4 +172,4 @@ rodzina/
 - `task_lists` (faza 7): id, family_id, owner_id, name, is_default, position, created_at, updated_at
 - `task_list_members` (faza 7): list_id, user_id
 - `tasks` (faza 7): id, list_id, title, notes, due_date (nullable), due_time (nullable), assignee_id (nullable), is_done, done_by, done_at, position, created_by, created_at, updated_at
-- `documents` (faza 8): id, family_id, type (`id_card` | `passport` | `car_insurance` | `car_inspection` | `other`), label, holder_user_id (nullable), vehicle_label (nullable), expires_on (`YYYY-MM-DD`), notes, created_by, created_at, updated_at
+- `documents` (faza 8): id, family_id, type (`id_card` | `passport` | `car_insurance` | `car_inspection` | `car_guarantee_inspection` | `other`), label, holder_user_id (nullable), vehicle_label (nullable), expires_on (`YYYY-MM-DD`), notes, created_by, created_at, updated_at

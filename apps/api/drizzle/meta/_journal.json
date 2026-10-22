@@ -141,6 +141,13 @@
       "when": 1792577966241,
       "tag": "0019_medical_mephistopheles",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792696459802,
+      "tag": "0020_aspiring_makkari",
+      "breakpoints": true
     }
   ]
 }
