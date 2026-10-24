@@ -4,6 +4,8 @@ export const DOCUMENT_TYPES = [
   'car_insurance',
   'car_inspection',
   'car_guarantee_inspection',
+  'home_insurance',
+  'rental_agreement',
   'other',
 ] as const;
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
@@ -15,6 +17,8 @@ export const DOCUMENT_DEFAULT_REMINDERS = {
   car_insurance: [30, 7],
   car_inspection: [30, 7],
   car_guarantee_inspection: [30, 7],
+  home_insurance: [30, 7],
+  rental_agreement: [30, 7],
   other: [30],
 } as const satisfies Record<DocumentType, readonly number[]>;
 

@@ -1,5 +1,16 @@
 # Decyzje
 
+## 24.10.2026 — dokumenty dotyczące mieszkania
+
+- Na polecenie właściciela rozszerzamy typy dokumentów o `home_insurance`
+  (ubezpieczenie mieszkania) i `rental_agreement` (umowa najmu mieszkania).
+- Przyjmujemy domyślne przypomnienia 30 i 7 dni przed końcem ważności,
+  analogicznie do ubezpieczenia pojazdu. Próg statusu `expiring` to 30 dni.
+- Nowe typy używają istniejącej etykiety, daty ważności i opcjonalnej notatki,
+  bez posiadacza ani pojazdu. Nie dodajemy pól adresu ani UI z kroku 8.3.
+  Istniejący CRUD, odnowienie i harmonogram APK obsługują je przez wspólny typ.
+- Bez migracji, nowych zależności runtime, konfiguracji i crona.
+
 ## 22.10.2026 — przypomnienia dokumentów, krok 8.2 (#19)
 
 - Zakres według `archive/plan-przyszle-fazy.md`: API przypomnień, odnowienie

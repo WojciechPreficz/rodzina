@@ -11,6 +11,8 @@ describe('document status', () => {
     car_insurance: 30,
     car_inspection: 30,
     car_guarantee_inspection: 30,
+    home_insurance: 30,
+    rental_agreement: 30,
     other: 30,
   };
   it.each(DOCUMENT_TYPES)('%s changes status at its first reminder and after the expiry day', (type) => {
@@ -29,7 +31,7 @@ describe('document status', () => {
     expect(getDocumentStatus('other', '2026-04-28', '2026-03-29')).toBe('expiring');
   });
   it('defines day offsets addressed to adults for every type', () => {
-    const offsets = [[90, 30], [120, 30], [30, 7], [30, 7], [30, 7], [30]];
+    const offsets = [[90, 30], [120, 30], [30, 7], [30, 7], [30, 7], [30, 7], [30, 7], [30]];
     DOCUMENT_TYPES.forEach((type, index) =>
       expect(getDefaultDocumentReminders(type)).toEqual(
         offsets[index]!.map((offsetValue) => ({ type: 'offset', offsetValue, offsetUnit: 'day', audience: 'adults' })),
