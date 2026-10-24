@@ -143,6 +143,18 @@
   }
 }
 @media (max-width: 47.99em) {
+  .documents-mobile-filter .mantine-MultiSelect-input {
+    height: auto;
+  }
+  .documents-mobile-filter .mantine-Pill-root {
+    flex: 0 0 auto;
+    max-width: 100%;
+    height: var(--pill-height);
+  }
+  .documents-mobile-filter .mantine-Pill-label {
+    min-width: 0;
+    white-space: nowrap;
+  }
   .documents-page .page-header {
     align-items: stretch;
   }

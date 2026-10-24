@@ -1,5 +1,16 @@
 # Decyzje
 
+## 24.10.2026 — wielokrotny filtr dokumentów na telefonie
+
+- Na polecenie właściciela poniżej 768 px zastępujemy poziomy pasek filtrów
+  polem wielokrotnego wyboru z grupami „Osoby” i „Kategorie” (Pojazdy, Mieszkanie).
+  Całe znaczniki wybranych pozycji zawijają się w polu; ich nazwy pozostają
+  w jednej linii (długie nazwy skracamy wielokropkiem). Lista opcji ma wyszukiwanie.
+- Dokument pasuje, gdy dotyczy dowolnej wybranej osoby lub kategorii.
+  Pusty wybór pokazuje wszystkie dokumenty. Wyczyszczenie pola przywraca pełną listę.
+- Od 768 px zachowujemy dotychczasowy wygląd i pojedynczy wybór filtra.
+  Zmiana obejmuje wspólny frontend WWW i APK; bez zmian API i przypomnień.
+
 ## 24.10.2026 — lista i formularz dokumentów, krok 8.3 (#20)
 
 - Zakres według `archive/plan-przyszle-fazy.md`: lista, filtry, formularz,

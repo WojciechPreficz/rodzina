@@ -35,6 +35,7 @@ const base: FamilyDocument = {
   reminders: [],
 };
 let client: QueryClient;
+let mobileViewport = false;
 function setup(items = [base], fail = false) {
   let documents = [...items];
   const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -58,6 +59,7 @@ function setup(items = [base], fail = false) {
   return fetchMock;
 }
 beforeEach(() => {
+  mobileViewport = false;
   session.user.role = 'admin';
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-24T10:00:00Z'));
   vi.stubGlobal(
@@ -70,7 +72,9 @@ beforeEach(() => {
   );
   vi.stubGlobal(
     'matchMedia',
-    vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    vi
+      .fn()
+      .mockImplementation(() => ({ matches: mobileViewport, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
   );
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
 });
@@ -156,11 +160,58 @@ describe('document list and form', () => {
     expect(screen.getByText('Paszport Anny')).toBeInTheDocument();
     expect(screen.queryByText('OC Skoda')).not.toBeInTheDocument();
   });
+  it('filters home documents and restores all documents when switching filters', async () => {
+    setup(
+      DOCUMENT_TYPES.map((type) => ({ ...base, id: type, type, label: documentTypeLabels[type], holderUserId: null })),
+    );
+    await screen.findByRole('button', { name: 'Edytuj Ubezpieczenie mieszkania' });
+    fireEvent.click(screen.getByRole('button', { name: 'Mieszkanie' }));
+    expect(screen.getByRole('button', { name: 'Mieszkanie' })).toHaveAttribute('aria-pressed', 'true');
+    const list = screen.getByRole('region', { name: 'Dokumenty rodziny' });
+    expect(within(list).getByRole('heading', { name: 'Mieszkanie' })).toBeInTheDocument();
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(list).getByRole('button', { name: 'Edytuj Ubezpieczenie mieszkania' })).toBeInTheDocument();
+    expect(within(list).getByRole('button', { name: 'Edytuj Umowa najmu mieszkania' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Pojazdy' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(list).queryByText('Ubezpieczenie mieszkania')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Wszyscy' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(DOCUMENT_TYPES.length);
+  });
   it('hides all write actions for a child', async () => {
     session.user.role = 'child';
     setup();
     await screen.findByText('Paszport Anny');
     expect(screen.queryByRole('button', { name: /Dodaj dokument|Edytuj|Usuń/ })).not.toBeInTheDocument();
+  });
+  it('combines people and categories in the phone multiselect and clears back to all documents', async () => {
+    mobileViewport = true;
+    setup([
+      base,
+      { ...base, id: 'home', type: 'home_insurance', label: 'Polisa', holderUserId: null },
+      { ...base, id: 'rent', type: 'rental_agreement', label: 'Najem', holderUserId: null },
+      { ...base, id: 'car', type: 'car_inspection', label: 'Przegląd', holderUserId: null },
+      { ...base, id: 'other', type: 'other', label: 'Inny dokument', holderUserId: null },
+    ]);
+    await screen.findByText('Paszport Anny');
+    expect(screen.queryByRole('navigation', { name: 'Filtr dokumentów' })).not.toBeInTheDocument();
+    const input = screen.getByRole('textbox', { name: 'Filtr dokumentów' });
+    fireEvent.click(input);
+    fireEvent.click(screen.getByRole('option', { name: 'Mieszkanie' }));
+    const list = screen.getByRole('region', { name: 'Dokumenty rodziny' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    fireEvent.click(input);
+    fireEvent.click(screen.getByRole('option', { name: 'Anna' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(list).getByText('Paszport Anny')).toBeInTheDocument();
+    expect(within(list).getByText('Polisa')).toBeInTheDocument();
+    expect(within(list).queryByText('Przegląd')).not.toBeInTheDocument();
+    fireEvent.click(input);
+    fireEvent.click(screen.getByRole('option', { name: 'Pojazdy' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
+    fireEvent.click(screen.getByRole('button', { name: 'Wyczyść filtry' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+    expect(within(list).getByRole('heading', { name: 'Wszyscy' })).toBeInTheDocument();
   });
   it('preserves existing reminders on a label edit and confirms deletion', async () => {
     const mock = setup();

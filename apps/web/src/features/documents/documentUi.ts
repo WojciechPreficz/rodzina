@@ -18,6 +18,7 @@ export const documentStatuses: Record<DocumentStatus, { label: string; color: st
 export const hasHolder = (type: DocumentType) => type === 'id_card' || type === 'passport';
 export const hasVehicle = (type: DocumentType) =>
   ['car_insurance', 'car_inspection', 'car_guarantee_inspection'].includes(type);
+export const hasHome = (type: DocumentType) => type === 'home_insurance' || type === 'rental_agreement';
 
 export function documentExpiry(expiresOn: string, today: string): string {
   const end = new Date(`${expiresOn}T00:00:00Z`);

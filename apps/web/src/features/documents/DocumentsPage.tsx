@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Badge, Button, Group, Loader, Modal, Paper, Stack, Text, Title } from '@mantine/core';
+import { Alert, Badge, Button, Group, Loader, Modal, MultiSelect, Paper, Stack, Text, Title } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDocumentStatus, type CreateDocument, type FamilyDocument } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
@@ -11,7 +12,7 @@ import { useMembersQuery } from '../family/familyQueries.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { DocumentForm, DocumentWarning } from './DocumentForm.js';
-import { documentExpiry, documentStatuses, documentTypeLabels, hasVehicle } from './documentUi.js';
+import { documentExpiry, documentStatuses, documentTypeLabels, hasHome, hasVehicle } from './documentUi.js';
 import './documents.css';
 
 export function DocumentsPage() {
@@ -28,6 +29,8 @@ export function DocumentsPage() {
     refetchInterval: SYNC_INTERVAL_MS,
   });
   const [filter, setFilter] = useState('all');
+  const mobile = useMediaQuery('(max-width: 47.99em)');
+  const [mobileFilters, setMobileFilters] = useState<string[]>([]);
   const [editing, setEditing] = useState<FamilyDocument | 'new' | null>(null);
   const [deleting, setDeleting] = useState<FamilyDocument | null>(null);
   const [clock, setClock] = useState(Date.now());
@@ -80,12 +83,24 @@ export function DocumentsPage() {
     { value: 'all', label: 'Wszyscy' },
     ...(members.data ?? []).map((member) => ({ value: member.id, label: member.displayName })),
     { value: 'vehicles', label: 'Pojazdy' },
+    { value: 'home', label: 'Mieszkanie' },
   ];
   const selected = filters.find((item) => item.value === filter) ?? filters[0]!;
+  const activeFilters = mobile ? filters.filter((item) => mobileFilters.includes(item.value)) : [selected];
+  const filterTitle =
+    activeFilters.length === 1 ? activeFilters[0]!.label : activeFilters.length ? 'Wybrane dokumenty' : 'Wszyscy';
   const visible = documents.filter(
     (item) =>
-      selected.value === 'all' ||
-      (selected.value === 'vehicles' ? hasVehicle(item.type) : item.holderUserId === selected.value),
+      activeFilters.length === 0 ||
+      activeFilters.some(
+        ({ value }) =>
+          value === 'all' ||
+          (value === 'vehicles'
+            ? hasVehicle(item.type)
+            : value === 'home'
+              ? hasHome(item.type)
+              : item.holderUserId === value),
+      ),
   );
   const add = () => {
     save.reset();
@@ -123,18 +138,37 @@ export function DocumentsPage() {
             <Text className="documents-eyebrow">Filtr dokumentów</Text>
             <Title order={2}>Filtruj</Title>
           </div>
-          <nav className="documents-filter-options" aria-label="Filtr dokumentów">
-            {filters.map((item) => (
-              <Button
-                key={item.value}
-                variant={selected.value === item.value ? 'light' : 'subtle'}
-                aria-pressed={selected.value === item.value}
-                onClick={() => setFilter(item.value)}
-              >
-                {item.label}
-              </Button>
-            ))}
-          </nav>
+          {mobile ? (
+            <MultiSelect
+              className="documents-mobile-filter"
+              label="Filtr dokumentów"
+              placeholder={mobileFilters.length ? undefined : 'Wszystkie osoby i kategorie'}
+              description="Wybierz osoby lub kategorie. Brak wyboru pokazuje wszystkie dokumenty."
+              searchable
+              clearable
+              clearButtonProps={{ 'aria-label': 'Wyczyść filtry', 'aria-hidden': false, tabIndex: 0 }}
+              nothingFoundMessage="Brak pasujących osób lub kategorii"
+              data={[
+                { group: 'Osoby', items: filters.filter((item) => !['all', 'vehicles', 'home'].includes(item.value)) },
+                { group: 'Kategorie', items: filters.filter((item) => ['vehicles', 'home'].includes(item.value)) },
+              ]}
+              value={mobileFilters}
+              onChange={setMobileFilters}
+            />
+          ) : (
+            <nav className="documents-filter-options" aria-label="Filtr dokumentów">
+              {filters.map((item) => (
+                <Button
+                  key={item.value}
+                  variant={selected.value === item.value ? 'light' : 'subtle'}
+                  aria-pressed={selected.value === item.value}
+                  onClick={() => setFilter(item.value)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </nav>
+          )}
           <div className="documents-filter-summary">
             <Group justify="space-between">
               <Text size="sm">Wygasa</Text>
@@ -157,7 +191,7 @@ export function DocumentsPage() {
         </Paper>
         <Paper withBorder className="documents-list" component="section" aria-label="Dokumenty rodziny">
           <Text className="documents-eyebrow">Dokumenty rodziny</Text>
-          <Title order={2}>{selected.label}</Title>
+          <Title order={2}>{filterTitle}</Title>
           <DocumentWarning />
           {query.isSuccess && visible.length === 0 && (
             <Text c="dimmed" py="xl">

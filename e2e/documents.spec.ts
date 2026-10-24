@@ -16,12 +16,35 @@ for (const native of [false, true]) {
     });
     expect(response.ok()).toBe(true);
     const session = await response.json();
+    const mobile = info.project.name === 'phone';
+    const relatives = ['Aleksandra', 'Bartłomiej', 'Katarzyna', 'Małgorzata', 'Stanisław', 'Zuzanna'];
+    for (const displayName of relatives) {
+      expect(
+        (
+          await page.request.post('/api/members/child', {
+            headers,
+            data: { displayName, pin: '1234', color: '#1C7ED6' },
+          })
+        ).ok(),
+      ).toBe(true);
+    }
+    const pickFilter = async (label: string) => {
+      if (mobile) {
+        const input = page.getByRole('textbox', { name: 'Filtr dokumentów', exact: true });
+        await input.fill(label);
+        await page.getByRole('option', { name: label, exact: true }).click();
+        await input.press('Escape');
+      } else {
+        await page.getByRole('button', { name: label, exact: true }).click();
+      }
+    };
     const tomorrow = new Date();
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     const fixtures = [
       { type: 'passport', label: 'Paszport Anny', expiresOn: '2030-05-12', holderUserId: session.user.id },
       { type: 'car_insurance', label: 'OC Skoda', expiresOn: '2020-11-15', vehicleLabel: 'Skoda Octavia' },
       { type: 'other', label: 'Bliski termin', expiresOn: tomorrow.toISOString().slice(0, 10) },
+      { type: 'rental_agreement', label: 'Najem mieszkania', expiresOn: '2031-05-12' },
     ];
     for (const data of fixtures) expect((await page.request.post('/api/documents', { headers, data })).ok()).toBe(true);
     if (native) await installNativeTransport(page);
@@ -29,7 +52,7 @@ for (const native of [false, true]) {
     await expect(page.getByRole('heading', { name: 'Dokumenty', exact: true })).toBeVisible();
     await expect(page.getByText('Paszport Anny', { exact: true })).toBeVisible();
     await expect(page.getByText('Wygasł', { exact: true })).toBeVisible();
-    await expect(page.locator('.document-row[data-status="valid"] .document-status-dot')).toHaveCSS(
+    await expect(page.locator('.document-row[data-status="valid"] .document-status-dot').first()).toHaveCSS(
       'background-color',
       'rgb(54, 118, 70)',
     );
@@ -43,9 +66,21 @@ for (const native of [false, true]) {
     );
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`documents-${native}.png`), fullPage: true });
-    await page.getByRole('button', { name: 'Pojazdy', exact: true }).click();
+    if (mobile) {
+      await expect(page.getByRole('navigation', { name: 'Filtr dokumentów' })).toHaveCount(0);
+      for (const name of relatives) await pickFilter(name);
+      for (const label of await page.locator('.documents-mobile-filter .mantine-Pill-label').all()) {
+        await expect(label).toHaveCSS('white-space', 'nowrap');
+        expect((await label.boundingBox())!.height).toBeLessThanOrEqual(28);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: info.outputPath(`documents-large-family-${native}.png`), fullPage: true });
+      await page.getByRole('button', { name: 'Wyczyść filtry' }).click();
+    }
+    await pickFilter('Pojazdy');
     await expect(page.getByText('Paszport Anny', { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Wszyscy', exact: true }).click();
+    if (mobile) await page.getByRole('button', { name: 'Wyczyść filtry' }).click();
+    else await pickFilter('Wszyscy');
     await page.getByRole('button', { name: '＋ Dodaj dokument', exact: true }).first().click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'Typ dokumentu', exact: true }).click();
@@ -59,6 +94,24 @@ for (const native of [false, true]) {
     await dialog.getByRole('button', { name: 'Zapisz', exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByText('Polisa mieszkania', { exact: true })).toBeVisible();
+    await pickFilter('Mieszkanie');
+    await expect(page.getByRole('heading', { name: 'Mieszkanie', exact: true })).toBeVisible();
+    await expect(page.locator('.document-row')).toHaveCount(2);
+    await expect(page.getByText('Polisa mieszkania', { exact: true })).toBeVisible();
+    await expect(page.getByText('Najem mieszkania', { exact: true })).toBeVisible();
+    await expect(page.getByText('OC Skoda', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Paszport Anny', { exact: true })).toHaveCount(0);
+    if (mobile) {
+      await pickFilter('Anna');
+      await expect(page.locator('.document-row')).toHaveCount(3);
+      await expect(page.getByText('Paszport Anny', { exact: true })).toBeVisible();
+      await expect(page.locator('.documents-mobile-filter .mantine-Pill-label').first()).toHaveCSS(
+        'white-space',
+        'nowrap',
+      );
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`documents-home-${native}.png`), fullPage: true });
     await page.getByRole('button', { name: 'Edytuj Polisa mieszkania', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Nazwa dokumentu', exact: false }).fill('Polisa domu');
     await dialog.getByRole('button', { name: 'Zapisz', exact: true }).click();

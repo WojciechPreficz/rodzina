@@ -46,7 +46,7 @@ i reguły pierwszeństwa określa [plan](../plan.md).
 
 - Więcej > **Dokumenty**:
   - lista z kolorowym statusem (zielony, pomarańczowy, czerwony) i tekstem "ważny do 12.05.2028 (za 1 rok i 7 mies.)";
-  - filtr: osoby, pojazdy, wszystkie.
+  - filtr: osoby, pojazdy, mieszkanie (ubezpieczenie mieszkania i umowa najmu), wszystkie.
 - Formularz z wyborem typu, który dopasowuje pola (posiadacz albo pojazd) i podstawia domyślne przypomnienia z możliwością edycji.
 - Plakietka na pozycji "Więcej" w nawigacji, gdy jakiś dokument jest w stanie `expiring` albo `expired`.
 - Payload harmonogramu APK dla dokumentów zawiera bezwzględną datę ważności, np. „OC Skoda — ważne do 15.11.2026”, bez względnego „za 30 dni” zapisanego z wyprzedzeniem.
@@ -67,7 +67,7 @@ i reguły pierwszeństwa określa [plan](../plan.md).
 
 #### Krok 8.3 - UI: lista i formularz dokumentów
 
-- **Zakres:** Więcej > Dokumenty: lista z kolorowym statusem i tekstem "ważny do 12.05.2028 (za 1 rok i 7 mies.)", filtr (osoby, pojazdy, wszystkie). Formularz z wyborem typu, który dopasowuje pola (posiadacz albo pojazd), ostrzeżeniem "Nie wpisuj numerów dokumentów" i domyślnymi przypomnieniami do edycji przez `ReminderPicker`. Edycja i usuwanie. Dziecko widzi tylko odczyt.
+- **Zakres:** Więcej > Dokumenty: lista z kolorowym statusem i tekstem "ważny do 12.05.2028 (za 1 rok i 7 mies.)", filtr (osoby, pojazdy, mieszkanie, wszystkie). Kategoria „Mieszkanie” obejmuje ubezpieczenie mieszkania i umowę najmu (rozszerzenie właściciela 24.10.2026). Formularz z wyborem typu, który dopasowuje pola (posiadacz albo pojazd), ostrzeżeniem "Nie wpisuj numerów dokumentów" i domyślnymi przypomnieniami do edycji przez `ReminderPicker`. Edycja i usuwanie. Dziecko widzi tylko odczyt.
 - **Gotowe, gdy:** testy komponentów (dopasowanie pól do typu, ukrycie edycji dla dziecka, kolory statusów). Ręcznie: dodanie dokumentu każdego typu.
 
 #### Krok 8.4 - UI: odnowienie, plakietka i domknięcie fazy
