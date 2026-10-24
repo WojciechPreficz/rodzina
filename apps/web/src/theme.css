@@ -31,6 +31,7 @@ body {
 }
 
 .mantine-Input-input {
+  min-height: 44px;
   background: var(--app-surface);
   border-color: var(--mantine-color-default-border);
 }

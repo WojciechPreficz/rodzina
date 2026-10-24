@@ -32,6 +32,11 @@ const navigation = [
     icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8 0a4 4 0 0 1 0 8',
   },
   {
+    label: 'Dokumenty',
+    to: '/dokumenty',
+    icon: 'M6 2h8l5 5v15H6ZM14 2v6h5M9 12h7M9 16h7',
+  },
+  {
     label: labels.notificationsUi.title,
     to: '/wiecej/powiadomienia',
     icon: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',

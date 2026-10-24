@@ -18,12 +18,14 @@ export function ReminderList({
   onRemove,
   pending = false,
   task = false,
+  document = false,
 }: {
   value: readonly ReminderItem[];
   timezone: string;
   onRemove?: (index: number) => void;
   pending?: boolean;
   task?: boolean;
+  document?: boolean;
 }) {
   return (
     <Stack gap="xs">
@@ -40,9 +42,11 @@ export function ReminderList({
                 ? labels.tasksUi.onDueDate
                 : describeReminder(reminder, timezone)}{' '}
               ·{' '}
-              {task && reminder.audience === 'owner'
-                ? labels.tasksUi.reminderOwner
-                : text.reminderAudiences[reminder.audience]}
+              {document && reminder.audience === 'owner'
+                ? 'Posiadacz (lub twórca dokumentu)'
+                : task && reminder.audience === 'owner'
+                  ? labels.tasksUi.reminderOwner
+                  : text.reminderAudiences[reminder.audience]}
             </Text>
             {reminder.type === 'absolute' && (reminder.nextFireAt === null || reminder.remindAt <= Date.now()) && (
               <Badge color="orange">{text.reminderStale}</Badge>
@@ -65,6 +69,7 @@ export function ReminderPicker({
   defaultAudience = 'participants',
   pending = false,
   task = false,
+  document = false,
   onAdd,
 }: {
   timezone?: string;
@@ -72,9 +77,10 @@ export function ReminderPicker({
   defaultAudience?: Reminder['audience'];
   pending?: boolean;
   task?: boolean;
+  document?: boolean;
   onAdd: (reminder: ReminderInput) => void | Promise<void>;
 }) {
-  const [mode, setMode] = useState('0');
+  const [mode, setMode] = useState(document ? '3' : '0');
   const [audience, setAudience] = useState(defaultAudience);
   const [value, setValue] = useState<number | string>(1);
   const [unit, setUnit] = useState<'day' | 'week' | 'month'>('day');
@@ -117,12 +123,16 @@ export function ReminderPicker({
         allowDeselect={false}
         disabled={pending || adding}
         data={[
-          ...(task
-            ? [
-                { value: '0', label: labels.tasksUi.onDueDate },
-                { value: '3', label: text.reminderPresets[3] },
-              ]
-            : text.reminderPresets.map((label, index) => ({ value: String(index), label }))),
+          ...(document
+            ? text.reminderPresets
+                .map((label, index) => ({ value: String(index), label }))
+                .filter((_, index) => index >= 3)
+            : task
+              ? [
+                  { value: '0', label: labels.tasksUi.onDueDate },
+                  { value: '3', label: text.reminderPresets[3] },
+                ]
+              : text.reminderPresets.map((label, index) => ({ value: String(index), label }))),
           { value: 'custom', label: text.reminderCustom },
           { value: 'absolute', label: text.reminderAbsolute },
         ]}
@@ -174,7 +184,12 @@ export function ReminderPicker({
         disabled={pending || adding}
         data={audiences.map((value) => ({
           value,
-          label: task && value === 'owner' ? labels.tasksUi.reminderOwner : text.reminderAudiences[value],
+          label:
+            document && value === 'owner'
+              ? 'Posiadacz (lub twórca dokumentu)'
+              : task && value === 'owner'
+                ? labels.tasksUi.reminderOwner
+                : text.reminderAudiences[value],
         }))}
         onChange={(next) => {
           const selected = audiences.find((value) => value === next);

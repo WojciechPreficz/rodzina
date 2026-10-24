@@ -38,7 +38,6 @@ export const theme = createTheme({
     Button: { defaultProps: { size: 'sm' }, styles: { root: { minHeight: 44 } } },
     ActionIcon: { defaultProps: { size: 44 } },
     CloseButton: { defaultProps: { size: 44 } },
-    Input: { styles: { input: { minHeight: 44 } } },
     Paper: { defaultProps: { radius: 'lg' } },
     Card: { defaultProps: { radius: 'lg' } },
     Modal: { defaultProps: { radius: 'xl', padding: 'lg' } },

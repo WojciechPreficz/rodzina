@@ -1,5 +1,36 @@
 # Decyzje
 
+## 24.10.2026 — lista i formularz dokumentów, krok 8.3 (#20)
+
+- Zakres według `archive/plan-przyszle-fazy.md`: lista, filtry, formularz,
+  edycja i usuwanie; dziecko ma tylko podgląd. Dokumenty są bezpośrednią
+  pozycją menu pod `/dokumenty`, zgodnie z bieżącymi zasadami nawigacji.
+- Wzorzec wizualny to załączony projekt „Ciepły i przyjazny — Dokumenty”.
+  Odczyt MagicPath był niedostępny z powodu limitu API. Na komputerze filtr
+  jest bocznym panelem, na telefonie poziomą listą przycisków.
+- Nowy dokument i zmiana typu w formularzu podstawiają domyślne przypomnienia
+  typu. Edycja innych pól zachowuje konfigurację przypomnień; usunięcie
+  wszystkich zapisuje pustą tablicę. `owner` opisujemy jako posiadacza,
+  a przy jego braku twórcę. Osobiste przypomnienia pozostają w kroku 8.4.
+- Filtr osoby wybiera jej dokumenty przez `holderUserId`, filtr pojazdów
+  obejmuje wszystkie trzy typy samochodowe. Pozostałe dokumenty są widoczne
+  w filtrze „Wszyscy”. Daty i statusy liczymy w strefie rodziny; dokument
+  pozostaje ważny w dniu daty ważności. Zarządzanie wymaga połączenia z siecią.
+- Bez migracji, nowych zależności runtime, konfiguracji i crona. Odnowienie,
+  plakietka menu i trasa szczegółów z alarmu pozostają w kroku 8.4.
+- Minimalną wysokość pól przenosimy z inline `Input.styles` do CSS. Biblioteka
+  automatycznej wysokości notatki odrzuca `style.minHeight` w trybie developerskim;
+  wysokość notatki określa `minRows`. Test formularza używa rzeczywistego motywu
+  i aktywnego autosize, aby sprawdzać także tę integrację.
+- Właściciel przeprowadzi ręczne próby dodania każdego typu i próby w APK.
+  Na późniejsze polecenie właściciela zapisujemy zmiany w lokalnym commicie
+  na `main`, bez pusha. Zweryfikowane lokalnie, oczekuje na CI i odbiór ręczny.
+- Weryfikacja lokalna: 29 testów komponentów i logiki, 10 testów Playwright
+  headless przy 390 i 1280 px (WWW i transport Androida), lint i formatowanie
+  zmienionych plików, typecheck, build WWW/API i debug APK przeszły.
+  Przejrzano zrzuty listy i formularza; brak poziomego przepełnienia.
+  Test transportu i build nie oznaczają próby na fizycznym telefonie.
+
 ## 24.10.2026 — dokumenty dotyczące mieszkania
 
 - Na polecenie właściciela rozszerzamy typy dokumentów o `home_insurance`

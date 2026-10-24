@@ -67,7 +67,16 @@ describe('AppShell', () => {
       within(navigation)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Kalendarz', 'Zadania', 'Zakupy', 'Obiady', 'Rodzina', 'Powiadomienia', 'Wersja aplikacji']);
+    ).toEqual([
+      'Kalendarz',
+      'Zadania',
+      'Zakupy',
+      'Obiady',
+      'Rodzina',
+      'Dokumenty',
+      'Powiadomienia',
+      'Wersja aplikacji',
+    ]);
     expect(within(navigation).getByRole('link', { name: 'Kalendarz' })).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByText('Anna')).toBeInTheDocument();
     expect(screen.getByText('Administrator')).toBeInTheDocument();
@@ -79,6 +88,7 @@ describe('AppShell', () => {
   it.each([
     '/kalendarz/wydarzenie/event-1',
     '/zadania',
+    '/dokumenty',
     '/zakupy',
     '/obiady',
     '/wiecej',
