@@ -16,12 +16,19 @@ export class ApiError extends Error {
 
 export function registerApiErrorHandler(
   app: FastifyInstance,
-  options?: { internalMessage: string; logMessage: string },
+  options?: { internalMessage: string; logMessage: string; primaryKeyConflictMessage?: string },
 ) {
   const fallback = app.errorHandler;
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ApiError)
       return reply.code(error.status).send({ error: { code: error.code, message: error.message } });
+    if (
+      options?.primaryKeyConflictMessage &&
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'SQLITE_CONSTRAINT_PRIMARYKEY'
+    )
+      return sendError(reply, 409, 'OPERATION_CONFLICT', options.primaryKeyConflictMessage);
     if (!options) return fallback.call(app, error, request, reply);
     if (
       error instanceof Error &&

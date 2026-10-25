@@ -244,8 +244,12 @@ export const shoppingOperations = sqliteTable(
     fingerprint: text('fingerprint').notNull(),
     response: text('response').notNull(),
     status: integer('status').notNull(),
+    createdAt: integer('created_at').notNull().default(0),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.id] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.id] }),
+    index('shopping_operations_created_at_idx').on(table.createdAt),
+  ],
 );
 
 export const taskLists = sqliteTable(
@@ -324,6 +328,10 @@ export const taskOperations = sqliteTable(
     fingerprint: text('fingerprint').notNull(),
     response: text('response').notNull(),
     status: integer('status').notNull(),
+    createdAt: integer('created_at').notNull().default(0),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.id] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.id] }),
+    index('task_operations_created_at_idx').on(table.createdAt),
+  ],
 );

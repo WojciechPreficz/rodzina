@@ -9,6 +9,7 @@ import {
   type TaskList,
 } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
+import { assertOfflineReplayAge } from '@rodzina/shared';
 
 export const TASK_STORAGE_KEY = 'rodzina:tasks:v1';
 export const taskOfflineText = {
@@ -220,6 +221,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
         for (;;) {
           const op = journal()[0];
           if (!op) break;
+          assertOfflineReplayAge(op.submittedAt);
           try {
             const path =
               op.change.type === 'create'

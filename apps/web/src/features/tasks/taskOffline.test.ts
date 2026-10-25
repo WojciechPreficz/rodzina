@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import type { Task, TaskList } from '@rodzina/shared';
+import { OFFLINE_REPLAY_MAX_AGE_MS, type Task, type TaskList } from '@rodzina/shared';
 import { ApiRequestError } from '../../api.js';
 import { createTaskOfflineStore, offlineTaskPatch, TASK_STORAGE_KEY } from './taskOffline.js';
 
@@ -80,6 +80,24 @@ function fixture() {
 }
 beforeEach(() => {
   localStorage.clear();
+});
+
+it('keeps an expired operation on the device without replaying it after restart', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'update', data: { isDone: true } });
+  const key = Object.keys(localStorage).find((key) => key.includes(':operation:'))!;
+  const operation = JSON.parse(localStorage.getItem(key)!);
+  operation.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
+  localStorage.setItem(key, JSON.stringify(operation));
+  const restored = createTaskOfflineStore(f.request as <T>(path: string, init?: RequestInit) => Promise<T>);
+  restored.activate(account);
+  f.request.mockClear();
+  await restored.synchronize();
+  expect(f.request.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+  expect(restored.getSnapshot().error).toContain('ponad 30 dni');
+  expect(restored.getSnapshot().pending).toHaveLength(1);
+  expect(localStorage.getItem(key)).not.toBeNull();
 });
 
 it('prefetches lists and full tasks, and restores them without a request after process restart', async () => {

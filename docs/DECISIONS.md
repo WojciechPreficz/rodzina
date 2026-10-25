@@ -1,5 +1,29 @@
 # Decyzje
 
+## 25.10.2026 — wspólna idempotencja i retencja odpowiedzi API
+
+- Zakupy i zadania korzystają z jednego wrappera synchronicznych mutacji oraz
+  klasy ApiError. Zapis odpowiedzi i mutacja pozostają w transakcji immediate.
+  Thenable powoduje wycofanie transakcji, HTTP 500 i zapis błędu w logu.
+  Dokumenty mają już wspólną obsługę błędów i nie mają kolejki mutacji offline
+  ani własnego wrappera; nie rozszerzamy ich kontraktu o idempotencję.
+- Przegląd shoppingOffline.ts i taskOffline.ts wykazał brak limitu wieku kolejki:
+  wpisy w localStorage mogły czekać bez końca. Żadna skończona retencja nie była
+  dłuższa od takiej kolejki. Wprowadzamy wspólny limit automatycznego wysyłania
+  30 dni od submittedAt; starsze zmiany pozostają w dzienniku urządzenia
+  z komunikatem o konieczności sprawdzenia danych przed ponownym wprowadzeniem.
+- Pełne odpowiedzi przechowujemy przez 90 dni od pierwszego wykonania, czyli
+  dłużej niż okno wysyłania kolejki, z 60-dniowym zapasem. Powtórzenia nie
+  przedłużają retencji. Przy obsłudze operacji z operationId usuwamy starsze
+  wpisy danego modułu w tej samej transakcji; bez nowego procesu i crona.
+  Indeksy created_at ograniczają koszt wyszukiwania starych wpisów.
+- Migracja nadaje dotychczasowym wpisom czas jej wykonania, aby nie utracić
+  ochrony powtórzeń bezpośrednio po aktualizacji. Nowe operacje zapisują czas
+  serwera w milisekundach UTC; domyślne 0 służy dodaniu kolumny w SQLite.
+- Starsze APK nie znają limitu 30 dni. Zachowują zgodność API, ale po upływie
+  90 dni od wykonania operacji nie gwarantujemy im odtworzenia starej odpowiedzi.
+  Pełna ochrona kolejki wymaga aktualizacji wspólnego frontendu również w APK.
+
 ## 25.10.2026 — wiarygodny status i wersja API health
 
 - `GET /api/health` zwraca `ok` zgodne z `dbOk`; błąd zapytania SQLite daje

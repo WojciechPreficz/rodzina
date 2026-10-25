@@ -3,6 +3,7 @@ import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persist
 import type { PersistedClient } from '@tanstack/query-persist-client-core';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import type { AuthUser, Family } from '@rodzina/shared';
+import { assertOfflineReplayAge, OfflineOperationExpiredError } from '@rodzina/shared';
 
 import { apiFetch, ApiRequestError } from '../../api.js';
 import { changeShopping, type ShoppingChange } from './shoppingApi.js';
@@ -56,13 +57,15 @@ export function configureShoppingMutations(client: QueryClient, account: Shoppin
     gcTime: 300_000,
     networkMode: 'offlineFirst',
     retry: (_count, error) =>
-      error instanceof ApiRequestError ? error.status >= 500 || error.status === 429 : error.name !== 'AbortError',
+      !(error instanceof OfflineOperationExpiredError) &&
+      (error instanceof ApiRequestError ? error.status >= 500 || error.status === 429 : error.name !== 'AbortError'),
     retryDelay: 3000,
     onMutate: async () => {
       await client.cancelQueries({ queryKey: key });
       runtimes.get(client)?.flush();
     },
-    mutationFn: async ({ change, operationId }: QueuedShoppingChange) => {
+    mutationFn: async ({ change, operationId, submittedAt }: QueuedShoppingChange) => {
+      assertOfflineReplayAge(submittedAt);
       if (!client.getQueryState([...key, 'lists'])) throw new DOMException('Session changed', 'AbortError');
       const runtime = runtimes.get(client);
       if (runtime && runtime.account !== identity) throw new DOMException('Session changed', 'AbortError');
@@ -156,6 +159,7 @@ export function restoreShopping(client: QueryClient, session: ShoppingSession) {
       saved.clientState.queries = saved.clientState.queries.filter((query) => matches(query.queryKey));
       saved.clientState.mutations.forEach((mutation) => {
         mutation.state.isPaused = true;
+        mutation.state.status = 'pending';
       });
       hydrate(client, saved.clientState);
     } catch {
@@ -205,6 +209,7 @@ export function restoreShopping(client: QueryClient, session: ShoppingSession) {
     if (
       event.type === 'updated' &&
       ['success', 'error'].includes(event.mutation.state.status) &&
+      !(event.mutation.state.error instanceof OfflineOperationExpiredError) &&
       key.every((part, index) => event.mutation.options.mutationKey?.[index] === part)
     ) {
       try {

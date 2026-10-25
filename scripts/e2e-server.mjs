@@ -18,4 +18,7 @@ Object.assign(process.env, {
   RODZINA_ALLOW_REGISTRATION: 'true',
   RODZINA_ANDROID_DOWNLOAD_DIR: '',
 });
+// Production startup only verifies migrations. Prepare the isolated test database first.
+const { runMigrations } = await import('../apps/api/dist/jobs/migrate-db.js');
+runMigrations();
 await import('../apps/api/dist/server.js');

@@ -1,4 +1,5 @@
 export const packageName = 'rodzina';
+export * from './offline.js';
 
 export * from './time.js';
 export * from './urls.js';

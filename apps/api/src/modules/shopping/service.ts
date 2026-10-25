@@ -1,36 +1,27 @@
+import { ApiError } from '../../http/errors.js';
 import type { CreateShoppingItem, CreateShoppingList, PatchShoppingItem, PatchShoppingList } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import type { FamilyRole } from '../../permissions.js';
 import { createShoppingRepository } from './repository.js';
 
-export class ShoppingError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
 export function createShoppingService(database: DatabaseConnection) {
   const repository = createShoppingRepository(database);
   function getList(familyId: string, id: string) {
     const list = repository.findList(familyId, id);
-    if (!list) throw new ShoppingError(404, 'NOT_FOUND', 'Lista zakupów nie istnieje.');
+    if (!list) throw new ApiError(404, 'NOT_FOUND', 'Lista zakupów nie istnieje.');
     return list;
   }
   function getItem(familyId: string, id: string) {
     const item = repository.findItem(familyId, id);
-    if (!item) throw new ShoppingError(404, 'NOT_FOUND', 'Pozycja zakupów nie istnieje.');
+    if (!item) throw new ApiError(404, 'NOT_FOUND', 'Pozycja zakupów nie istnieje.');
     return item;
   }
   function requireAdult(role: FamilyRole) {
-    if (role === 'child') throw new ShoppingError(403, 'FORBIDDEN', 'Ta czynność jest dostępna tylko dla dorosłych.');
+    if (role === 'child') throw new ApiError(403, 'FORBIDDEN', 'Ta czynność jest dostępna tylko dla dorosłych.');
   }
   function requireItemEdit(role: FamilyRole, actorId: string, createdBy: string | null) {
     if (role === 'child' && actorId !== createdBy)
-      throw new ShoppingError(403, 'FORBIDDEN', 'Możesz edytować i usuwać tylko własne pozycje.');
+      throw new ApiError(403, 'FORBIDDEN', 'Możesz edytować i usuwać tylko własne pozycje.');
   }
   return {
     listLists: repository.listLists,
@@ -42,7 +33,7 @@ export function createShoppingService(database: DatabaseConnection) {
       getList(familyId, id);
       requireAdult(role);
       const updated = repository.updateList(familyId, id, data);
-      if (!updated) throw new ShoppingError(404, 'NOT_FOUND', 'Lista zakupów nie istnieje.');
+      if (!updated) throw new ApiError(404, 'NOT_FOUND', 'Lista zakupów nie istnieje.');
       return updated;
     },
     removeList(familyId: string, id: string, role: FamilyRole) {
@@ -57,14 +48,14 @@ export function createShoppingService(database: DatabaseConnection) {
     createItem(familyId: string, listId: string, actorId: string, data: CreateShoppingItem, id?: string) {
       getList(familyId, listId);
       const item = repository.createItem(familyId, listId, actorId, data, id);
-      if (!item) throw new ShoppingError(404, 'NOT_FOUND', 'Lista zakupów nie istnieje.');
+      if (!item) throw new ApiError(404, 'NOT_FOUND', 'Lista zakupów nie istnieje.');
       return item;
     },
     updateItem(familyId: string, id: string, actorId: string, role: FamilyRole, data: PatchShoppingItem) {
       const item = getItem(familyId, id);
       if (Object.keys(data).some((key) => key !== 'isChecked')) requireItemEdit(role, actorId, item.createdBy);
       const updated = repository.updateItem(familyId, id, actorId, data);
-      if (!updated) throw new ShoppingError(404, 'NOT_FOUND', 'Pozycja zakupów nie istnieje.');
+      if (!updated) throw new ApiError(404, 'NOT_FOUND', 'Pozycja zakupów nie istnieje.');
       return updated;
     },
     removeItem(familyId: string, id: string, actorId: string, role: FamilyRole) {

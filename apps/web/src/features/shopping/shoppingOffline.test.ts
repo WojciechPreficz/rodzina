@@ -1,6 +1,6 @@
 import { onlineManager, QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
+import { OFFLINE_REPLAY_MAX_AGE_MS, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
 import {
   clearShoppingStorage,
   enqueueShopping,
@@ -45,6 +45,37 @@ afterEach(() => {
 });
 
 describe('durable shopping queue', () => {
+  it('retains an expired journal entry and reports it without making a network request', async () => {
+    onlineManager.setOnline(false);
+    const first = start();
+    seed(first);
+    void enqueueShopping(first, account, { type: 'edit', id: 'milk', listId: 'list', data: { isChecked: true } });
+    await vi.waitFor(() => expect(first.getMutationCache().getAll()[0]?.state.isPaused).toBe(true));
+    stopShoppingPersistence(first);
+    first.clear();
+    const journalKey = Object.keys(localStorage).find((name) => name.includes(':operation:'))!;
+    const entry = JSON.parse(localStorage.getItem(journalKey)!);
+    entry.state.variables.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
+    localStorage.setItem(journalKey, JSON.stringify(entry));
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    onlineManager.setOnline(true);
+    const restored = start();
+    await vi.waitFor(() =>
+      expect(restored.getMutationCache().getAll()[0]?.state.error?.message).toContain('ponad 30 dni'),
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    expect(localStorage.getItem(journalKey)).not.toBeNull();
+    stopShoppingPersistence(restored);
+    restored.clear();
+    const again = start();
+    await vi.waitFor(() =>
+      expect(again.getMutationCache().getAll()[0]?.state.error?.message).toContain('ponad 30 dni'),
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    expect(localStorage.getItem(journalKey)).not.toBeNull();
+  });
+
   it('keeps independent tabs from overwriting each other pending changes', () => {
     onlineManager.setOnline(false);
     const first = start();
