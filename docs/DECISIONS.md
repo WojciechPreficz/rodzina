@@ -1,5 +1,38 @@
 # Decyzje
 
+## 25.10.2026 — model i API Kontaktów (krok 9.1, #44)
+
+- Dodano kontrakty shared, tabele `contact_groups` i `contacts` oraz kompletny
+  snapshot `GET /api/contacts` i mutacje kontaktów oraz grup. Rodzina pochodzi
+  z sesji; dziecko ma tylko odczyt. Pola opcjonalne przyjmują `null`, a pusty
+  tekst po przycięciu jest normalizowany do `null`. PATCH zachowuje pola pominięte.
+- Migracja 0023 tworzy cztery grupy dla istniejących rodzin. Nowe rodziny dostają
+  je w transakcji rejestracji. Migracja korzysta z funkcji SQLite `random_uuid()`
+  rejestrowanej w `db/client.ts`, która wywołuje `crypto.randomUUID()`. Dlatego
+  migracje uruchamiamy jobem `dist/jobs/migrate-db.js` z paczki, zgodnie z DEPLOY,
+  zamiast wykonywać sam SQL lub używać bezpośrednio migratora CLI Drizzle.
+  Lokalne `npm run db:migrate` uruchamia ten sam job przez `tsx`, zachowując
+  dotychczasową domyślną ścieżkę bazy i obsługę `RODZINA_DATABASE_PATH`.
+  Autorem grup istniejącej rodziny zostaje najstarszy administrator
+  (przy równym czasie rozstrzyga ID), a przy jego braku autor jest pusty.
+- Częściowy indeks unikalny zapewnia najwyżej jedną grupę domyślną na rodzinę;
+  jej flaga nie jest edytowalna przez API. Nazwę można zmienić. Próba usunięcia
+  grupy domyślnej zwraca 409. Pozostałe grupy można usuwać, także gdy są puste.
+  Kontakty są przenoszone do grupy domyślnej w jednej transakcji z usunięciem
+  grupy; błąd dowolnego zapisu wycofuje całość. Złożony klucz obcy blokuje
+  powiązanie kontaktu z grupą innej rodziny i usunięcie używanej grupy bez
+  przeniesienia kontaktów. Nie ma kaskadowego usuwania kontaktów z grupą.
+- Powód: zachowanie danych przy usuwaniu grup i spójność rodziny również na
+  poziomie bazy. Usunięcie autora pozostawia kontakty i grupy z `createdBy=null`.
+  Nie dodano zależności runtime, konfiguracji, crona ani zmian przypomnień.
+- Zakres obejmuje wyłącznie API. Interfejs, potwierdzenia użytkownika i cache
+  offline pozostają w krokach 9.2–9.3. Próby UI i telefonu nie dotyczą kroku 9.1.
+  Status przed końcowym CI: **zweryfikowane lokalnie, oczekuje na CI**.
+- Kontrole lokalne: 38 testów API/autoryzacji/kontraktów, 9 testów ścieżek
+  migracji, lint i formatowanie zmienionych plików, typecheck, build WWW/API,
+  `npm run db:migrate` na bazie tymczasowej oraz `release:smoke` przeszły.
+  Końcowy wynik CI dla konkretnego commita podaje raport zadania.
+
 ## 25.10.2026 — plan Kontaktów (faza 9) i status dokumentów
 
 - Właściciel potwierdził implementację fazy 8. Aktualizujemy status i indeks archiwum; zachowujemy historyczne wyniki CI, niepotwierdzone próby ręczne i checklistę fizycznego Androida. Implementacja nie oznacza automatycznie odbioru całej fazy. Faza 6 pozostaje do implementacji.

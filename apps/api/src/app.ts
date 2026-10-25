@@ -16,6 +16,7 @@ import { registerReminderRoutes } from './modules/reminders/routes.js';
 import { registerShoppingRoutes } from './modules/shopping/routes.js';
 import { registerTaskListRoutes } from './modules/tasks/routes.js';
 import { registerDocumentRoutes } from './modules/documents/routes.js';
+import { registerContactRoutes } from './modules/contacts/routes.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 
 const { version } = JSON.parse(
@@ -61,6 +62,7 @@ export async function buildApp(config: AppConfig, database: DatabaseConnection):
   registerShoppingRoutes(app, database);
   registerTaskListRoutes(app, database);
   registerDocumentRoutes(app, database);
+  registerContactRoutes(app, database);
   registerAndroidDownloads(app, config);
   app.get('/.well-known/assetlinks.json', async (_request, reply) => {
     reply.header('Cache-Control', 'public, max-age=300');

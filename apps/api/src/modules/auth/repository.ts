@@ -2,6 +2,7 @@ import { and, asc, eq, gt, isNull } from 'drizzle-orm';
 import { generateJoinCode } from '../../auth.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
+import { createInitialContactGroups } from '../contacts/repository.js';
 
 export function createAuthRepository(database: DatabaseConnection) {
   return {
@@ -76,6 +77,7 @@ export function createAuthRepository(database: DatabaseConnection) {
             updatedAt: now,
           })
           .run();
+        createInitialContactGroups(database, familyId, userId, now);
       });
     },
     resetPassword(resetRequest: typeof schema.passwordResets.$inferSelect, passwordHash: string, now: number) {

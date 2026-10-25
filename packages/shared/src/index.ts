@@ -1,4 +1,5 @@
 export const packageName = 'rodzina';
+export * from './schemas/contacts.js';
 export * from './offline.js';
 
 export * from './time.js';

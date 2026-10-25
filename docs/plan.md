@@ -92,9 +92,9 @@ Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani
 niepotwierdzonych prób ręcznych. Zachowujemy ich zapisy w
 [DECISIONS.md](DECISIONS.md) i [checklistę odbioru](DEVELOPMENT.md#odbiór-dokumentów--krok-84).
 
-**Faza 9 — Kontakty: zaplanowana, bez implementacji.** Zakres i kroki są poniżej.
-Dodanie planu nie zmienia statusu fazy 6 ani nie jest poleceniem implementacji
-któregokolwiek kroku.
+**Faza 9 — Kontakty: krok 9.1 zaimplementowany lokalnie, oczekuje na CI.**
+Zakres i kroki są poniżej. UI (9.2) i podgląd offline (9.3) pozostają do
+implementacji. Nie zmienia to statusu fazy 6.
 
 ## 6. Fazy
 
@@ -152,7 +152,9 @@ któregokolwiek kroku.
 
 ### Faza 9 - Kontakty
 
-**Status:** zaplanowana 25.10.2026, bez implementacji.
+**Status:** krok 9.1 (model, kontrakty i API, #44) zaimplementowany lokalnie
+25.10.2026; oczekuje na CI dla końcowego commita. Kroki 9.2–9.3 pozostają
+zaplanowane, bez implementacji.
 
 **Cel:** wspólna książka kontaktów rodziny z adresami, opcjonalnymi numerami
 telefonów, własnymi grupami i podglądem ostatnio pobranych danych offline.
