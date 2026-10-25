@@ -1,3 +1,4 @@
+import { requireUser } from '../../http/session-auth.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ApiError, registerApiErrorHandler } from '../../http/errors.js';
@@ -31,7 +32,7 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
   app.register(async (routes) => {
     const repository = createTaskListRepository(database);
     const checkAccess = (request: import('fastify').FastifyRequest, listId: string) => {
-      if (!service.canAccessList(request.familyId!, request.user!.id, listId))
+      if (!service.canAccessList(requireUser(request).familyId, requireUser(request).id, listId))
         throw new ApiError(404, 'NOT_FOUND', 'Lista zadań nie istnieje.');
     };
     registerIdempotentMutations(routes, database, {
@@ -48,11 +49,13 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
         if ((request.query as { taskId?: string }).taskId && request.method !== 'POST')
           throw new ApiError(400, 'VALIDATION_ERROR', 'Dane żądania są niepoprawne.');
       },
-      fingerprintParts: (request) => [request.familyId, request.method, request.url, request.body],
+      fingerprintParts: (request) => [requireUser(request).familyId, request.method, request.url, request.body],
       resolveScope: (request) => {
         const { id } = parse(idSchema, request.params);
         const listId =
-          request.method === 'POST' ? id : repository.findTask(request.familyId!, request.user!.id, id)?.listId;
+          request.method === 'POST'
+            ? id
+            : repository.findTask(requireUser(request).familyId, requireUser(request).id, id)?.listId;
         if (!listId) throw new ApiError(404, 'NOT_FOUND', 'Lista zadań nie istnieje.');
         checkAccess(request, listId);
         return listId;
@@ -70,15 +73,15 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       const { status } = parse(tasksQuerySchema, request.query);
       return tasksResponseSchema.parse({
         ok: true,
-        tasks: service.listTasks(request.familyId!, request.user!.id, id, status),
+        tasks: service.listTasks(requireUser(request).familyId, requireUser(request).id, id, status),
       });
     });
     routes.post('/api/tasks/lists/:id/tasks', (request, reply) => {
       const { id } = parse(idSchema, request.params);
       const data = parse(createTaskSchema, request.body);
       const task = service.createTask(
-        request.familyId!,
-        request.user!.id,
+        requireUser(request).familyId,
+        requireUser(request).id,
         id,
         data,
         (request.query as { taskId?: string }).taskId,
@@ -91,29 +94,29 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       const data = parse(patchTaskSchema, request.body);
       return taskResponseSchema.parse({
         ok: true,
-        task: service.updateTask(request.familyId!, request.user!.id, id, data),
+        task: service.updateTask(requireUser(request).familyId, requireUser(request).id, id, data),
       });
     });
     routes.delete('/api/tasks/:id', (request) => {
       const { id } = parse(idSchema, request.params);
-      service.removeTask(request.familyId!, request.user!.id, id);
+      service.removeTask(requireUser(request).familyId, requireUser(request).id, id);
       return taskDeletedResponseSchema.parse({ ok: true, deleted: true });
     });
     routes.get('/api/tasks/today', (request) =>
       tasksResponseSchema.parse({
         ok: true,
-        tasks: service.todayTasks(request.familyId!, request.user!.id),
+        tasks: service.todayTasks(requireUser(request).familyId, requireUser(request).id),
       }),
     );
     routes.get('/api/tasks/lists', async (request) =>
       taskListsResponseSchema.parse({
         ok: true,
-        lists: service.listLists(request.familyId!, request.user!.id),
+        lists: service.listLists(requireUser(request).familyId, requireUser(request).id),
       }),
     );
     routes.post('/api/tasks/lists', (request, reply) => {
       const data = parse(createTaskListSchema, request.body);
-      const list = service.createList(request.familyId!, request.user!.id, data);
+      const list = service.createList(requireUser(request).familyId, requireUser(request).id, data);
       reply.code(201);
       return taskListResponseSchema.parse({ ok: true, list });
     });
@@ -122,17 +125,17 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       const data = parse(patchTaskListSchema, request.body);
       return taskListResponseSchema.parse({
         ok: true,
-        list: service.updateList(request.familyId!, request.user!.id, id, data),
+        list: service.updateList(requireUser(request).familyId, requireUser(request).id, id, data),
       });
     });
     routes.delete('/api/tasks/lists/:id', (request) => {
       const { id } = parse(idSchema, request.params);
-      service.removeList(request.familyId!, request.user!.id, id);
+      service.removeList(requireUser(request).familyId, requireUser(request).id, id);
       return taskListDeletedResponseSchema.parse({ ok: true, deleted: true });
     });
     routes.post('/api/tasks/lists/:id/leave', (request) => {
       const { id } = parse(idSchema, request.params);
-      service.leaveList(request.familyId!, request.user!.id, id);
+      service.leaveList(requireUser(request).familyId, requireUser(request).id, id);
       return taskListLeftResponseSchema.parse({ ok: true, left: true });
     });
   });

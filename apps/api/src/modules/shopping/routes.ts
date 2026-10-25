@@ -1,3 +1,4 @@
+import { requireUser } from '../../http/session-auth.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ApiError, registerApiErrorHandler } from '../../http/errors.js';
@@ -30,7 +31,13 @@ export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseC
   app.register(async (routes) => {
     registerIdempotentMutations(routes, database, {
       table: 'shopping_operations',
-      fingerprintParts: (request) => [request.familyId, request.user!.role, request.method, request.url, request.body],
+      fingerprintParts: (request) => [
+        requireUser(request).familyId,
+        requireUser(request).role,
+        request.method,
+        request.url,
+        request.body,
+      ],
     });
     registerApiErrorHandler(routes, {
       primaryKeyConflictMessage: 'Identyfikator zmiany jest już używany.',
@@ -38,7 +45,10 @@ export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseC
       logMessage: 'Shopping request failed',
     });
     routes.get('/api/shopping/lists', async (request) =>
-      shoppingListsResponseSchema.parse({ ok: true, lists: service.listLists(request.familyId!, request.user!.id) }),
+      shoppingListsResponseSchema.parse({
+        ok: true,
+        lists: service.listLists(requireUser(request).familyId, requireUser(request).id),
+      }),
     );
     routes.post('/api/shopping/lists', (request, reply) => {
       const data = parse(createShoppingListSchema, request.body);
@@ -46,9 +56,9 @@ export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseC
       return shoppingListResponseSchema.parse({
         ok: true,
         list: service.createList(
-          request.familyId!,
-          request.user!.id,
-          request.user!.role,
+          requireUser(request).familyId,
+          requireUser(request).id,
+          requireUser(request).role,
           data,
           (request.query as { operationId?: string }).operationId,
         ),
@@ -59,17 +69,20 @@ export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseC
       const data = parse(patchShoppingListSchema, request.body);
       return shoppingListResponseSchema.parse({
         ok: true,
-        list: service.updateList(request.familyId!, id, request.user!.role, data),
+        list: service.updateList(requireUser(request).familyId, id, requireUser(request).role, data),
       });
     });
     routes.delete('/api/shopping/lists/:id', (request) => {
       const { id } = parse(idSchema, request.params);
-      service.removeList(request.familyId!, id, request.user!.role);
+      service.removeList(requireUser(request).familyId, id, requireUser(request).role);
       return shoppingDeletedResponseSchema.parse({ ok: true, deleted: true });
     });
     routes.get('/api/shopping/lists/:id/items', async (request) => {
       const { id } = parse(idSchema, request.params);
-      return shoppingItemsResponseSchema.parse({ ok: true, items: service.listItems(request.familyId!, id) });
+      return shoppingItemsResponseSchema.parse({
+        ok: true,
+        items: service.listItems(requireUser(request).familyId, id),
+      });
     });
     routes.post('/api/shopping/lists/:id/items', (request, reply) => {
       const { id } = parse(idSchema, request.params);
@@ -78,9 +91,9 @@ export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseC
       return shoppingItemResponseSchema.parse({
         ok: true,
         item: service.createItem(
-          request.familyId!,
+          requireUser(request).familyId,
           id,
-          request.user!.id,
+          requireUser(request).id,
           data,
           (request.query as { operationId?: string }).operationId,
         ),
@@ -91,26 +104,32 @@ export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseC
       const data = parse(patchShoppingItemSchema, request.body);
       return shoppingItemResponseSchema.parse({
         ok: true,
-        item: service.updateItem(request.familyId!, id, request.user!.id, request.user!.role, data),
+        item: service.updateItem(
+          requireUser(request).familyId,
+          id,
+          requireUser(request).id,
+          requireUser(request).role,
+          data,
+        ),
       });
     });
     routes.delete('/api/shopping/items/:id', (request) => {
       const { id } = parse(idSchema, request.params);
-      service.removeItem(request.familyId!, id, request.user!.id, request.user!.role);
+      service.removeItem(requireUser(request).familyId, id, requireUser(request).id, requireUser(request).role);
       return shoppingDeletedResponseSchema.parse({ ok: true, deleted: true });
     });
     routes.post('/api/shopping/lists/:id/clear-checked', (request) => {
       const { id } = parse(idSchema, request.params);
       return shoppingClearedResponseSchema.parse({
         ok: true,
-        deletedCount: service.clearChecked(request.familyId!, id, request.user!.role),
+        deletedCount: service.clearChecked(requireUser(request).familyId, id, requireUser(request).role),
       });
     });
     routes.get('/api/shopping/suggestions', async (request) => {
       const { q } = parse(shoppingSuggestionsQuerySchema, request.query);
       return shoppingSuggestionsResponseSchema.parse({
         ok: true,
-        suggestions: service.suggestions(request.familyId!, q),
+        suggestions: service.suggestions(requireUser(request).familyId, q),
       });
     });
   });

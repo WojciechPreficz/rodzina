@@ -16,7 +16,7 @@ import { createSessionFactory } from './session.js';
 export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConnection, config: AppConfig) {
   const service = createAuthService(database, config);
   const createSession = createSessionFactory(database, config);
-  app.post('/api/auth/register-family', async (request, reply) => {
+  app.post('/api/auth/register-family', { config: { auth: 'public' } }, async (request, reply) => {
     return reply
       .code(201)
       .send(
@@ -25,15 +25,15 @@ export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConne
         ),
       );
   });
-  app.post('/api/auth/login', async (request, reply) => {
+  app.post('/api/auth/login', { config: { auth: 'public' } }, async (request, reply) => {
     return loginResponseSchema.parse(
       await service.login(request.body, request.ip ?? 'unknown', (id, now) => createSession(reply, request, id, now)),
     );
   });
-  app.get('/api/auth/family-members', async (request) => {
+  app.get('/api/auth/family-members', { config: { auth: 'public' } }, async (request) => {
     return familyMembersResponseSchema.parse(await service.familyMembers(request.query));
   });
-  app.post('/api/auth/login-child', async (request, reply) => {
+  app.post('/api/auth/login-child', { config: { auth: 'public' } }, async (request, reply) => {
     return loginChildResponseSchema.parse(
       await service.loginChild(request.body, request.ip ?? 'unknown', (id) => createSession(reply, request, id)),
     );
@@ -46,7 +46,7 @@ export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConne
   app.get('/api/auth/me', async (request) => {
     return authMeResponseSchema.parse(await service.me(requireUser(request)));
   });
-  app.post('/api/auth/reset-password', async (request) => {
+  app.post('/api/auth/reset-password', { config: { auth: 'public' } }, async (request) => {
     return authOkResponseSchema.parse(await service.resetPassword(request.body));
   });
 }

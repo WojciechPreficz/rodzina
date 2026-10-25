@@ -1,3 +1,4 @@
+import { requireUser } from '../../http/session-auth.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
@@ -28,12 +29,17 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
     routes.get('/api/documents', async (request) =>
       documentsResponseSchema.parse({
         ok: true,
-        documents: service.list(request.familyId!),
+        documents: service.list(requireUser(request).familyId),
       }),
     );
     routes.post('/api/documents', (request, reply) => {
       const data = parse(createDocumentSchema, request.body);
-      const document = service.create(request.familyId!, request.user!.id, request.user!.role, data);
+      const document = service.create(
+        requireUser(request).familyId,
+        requireUser(request).id,
+        requireUser(request).role,
+        data,
+      );
       reply.code(201);
       return documentResponseSchema.parse({ ok: true, document });
     });
@@ -42,7 +48,13 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
       const data = parse(patchDocumentSchema, request.body);
       return documentResponseSchema.parse({
         ok: true,
-        document: service.update(request.familyId!, id, request.user!.id, request.user!.role, data),
+        document: service.update(
+          requireUser(request).familyId,
+          id,
+          requireUser(request).id,
+          requireUser(request).role,
+          data,
+        ),
       });
     });
     routes.post('/api/documents/:id/renew', (request) => {
@@ -50,12 +62,18 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
       const data = parse(renewDocumentSchema, request.body);
       return documentResponseSchema.parse({
         ok: true,
-        document: service.update(request.familyId!, id, request.user!.id, request.user!.role, data),
+        document: service.update(
+          requireUser(request).familyId,
+          id,
+          requireUser(request).id,
+          requireUser(request).role,
+          data,
+        ),
       });
     });
     routes.delete('/api/documents/:id', (request) => {
       const { id } = parse(idSchema, request.params);
-      service.remove(request.familyId!, id, request.user!.role);
+      service.remove(requireUser(request).familyId, id, requireUser(request).role);
       return documentDeletedResponseSchema.parse({ ok: true, deleted: true });
     });
   });

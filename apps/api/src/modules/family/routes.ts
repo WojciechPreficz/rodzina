@@ -28,12 +28,12 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
   app.post('/api/invitations', async (request) =>
     createInvitationResponseSchema.parse(await service.createInvitation(requireUser(request), request.body)),
   );
-  app.get('/api/invitations/:token', async (request) =>
+  app.get('/api/invitations/:token', { config: { auth: 'public' } }, async (request) =>
     invitationResponseSchema.parse(
       await service.getInvitation((request.params as { token?: string } | undefined)?.token),
     ),
   );
-  app.post('/api/invitations/:token/accept', async (request, reply) =>
+  app.post('/api/invitations/:token/accept', { config: { auth: 'public' } }, async (request, reply) =>
     reply
       .code(201)
       .send(

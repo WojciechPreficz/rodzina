@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest, RouteOptions } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseConnection } from '../db/client.js';
 import { ApiError } from './errors.js';
+import { requireUser } from './session-auth.js';
 
 export const OPERATION_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const querySchema = z
@@ -27,10 +28,11 @@ export function registerIdempotentMutations(app: FastifyInstance, database: Data
     if (!['POST', 'PATCH', 'DELETE'].includes(String(route.method)) || options.matches?.(route) === false) return;
     const handler = route.handler;
     route.handler = function (request, reply) {
+      const user = requireUser(request);
       const parsed = (options.querySchema ?? querySchema).safeParse(request.query);
       if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Dane żądania są niepoprawne.');
       const { operationId, actorId } = parsed.data;
-      if (actorId && actorId !== request.user!.id)
+      if (actorId && actorId !== user.id)
         throw new ApiError(401, 'SESSION_CHANGED', 'Konto zostało zmienione. Zaloguj się ponownie.');
       if (!operationId) return handler.call(this, request, reply);
       options.validate?.(request);
@@ -52,7 +54,7 @@ export function registerIdempotentMutations(app: FastifyInstance, database: Data
           );
           const now = Date.now();
           cleanup.run(now - OPERATION_RETENTION_MS);
-          const previous = previousOperation.get(request.user!.id, operationId) as
+          const previous = previousOperation.get(user.id, operationId) as
             { fingerprint: string; response: string; status: number; list_id: string } | undefined;
           if (previous) {
             options.recheckAccess?.(request, previous.list_id);
@@ -74,7 +76,7 @@ export function registerIdempotentMutations(app: FastifyInstance, database: Data
             void Promise.resolve(response).catch(() => {});
             throw new Error('Idempotent mutation handler returned a thenable; handlers must be synchronous');
           }
-          const values = [request.user!.id, operationId, fingerprint, JSON.stringify(response), reply.statusCode, now];
+          const values = [user.id, operationId, fingerprint, JSON.stringify(response), reply.statusCode, now];
           insert.run(...values, ...(scoped ? [scope] : []));
           return response;
         })

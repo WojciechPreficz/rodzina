@@ -13,36 +13,10 @@ import * as schema from '../db/schema.js';
 import { ApiError, sendError } from './errors.js';
 import { serializeUser, type PublicAuthUser } from './user.js';
 
-function isPublicApiRequest(method: string, url: string): boolean {
-  if (url === '/api/health') {
-    return true;
+declare module 'fastify' {
+  interface FastifyContextConfig {
+    auth?: 'public';
   }
-
-  if (method === 'POST' && url === '/api/auth/register-family') {
-    return true;
-  }
-
-  if (method === 'POST' && url === '/api/auth/login') {
-    return true;
-  }
-
-  if (method === 'POST' && url === '/api/auth/login-child') {
-    return true;
-  }
-
-  if (method === 'GET' && url.startsWith('/api/auth/family-members')) {
-    return true;
-  }
-
-  if ((method === 'GET' || method === 'POST') && url.startsWith('/api/invitations/')) {
-    return true;
-  }
-
-  if (method === 'POST' && url === '/api/auth/reset-password') {
-    return true;
-  }
-
-  return false;
 }
 
 export function requireUser(request: FastifyRequest): PublicAuthUser {
@@ -52,7 +26,8 @@ export function requireUser(request: FastifyRequest): PublicAuthUser {
 
 export function registerSessionAuth(app: FastifyInstance, database: DatabaseConnection, config: AppConfig) {
   app.addHook('onRequest', async (request, reply) => {
-    if (!request.url.startsWith('/api/')) {
+    const routeUrl = request.routeOptions.url;
+    if (routeUrl !== '/api' && !routeUrl?.startsWith('/api/')) {
       return;
     }
 
@@ -60,7 +35,7 @@ export function registerSessionAuth(app: FastifyInstance, database: DatabaseConn
       return sendError(reply, 403, 'FORBIDDEN', 'Żądanie pochodzi z niezweryfikowanego źródła.');
     }
 
-    if (isPublicApiRequest(request.method, request.url)) {
+    if (request.routeOptions.config.auth === 'public') {
       return;
     }
 

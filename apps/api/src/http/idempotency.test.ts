@@ -35,7 +35,8 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
       .run();
     app = Fastify();
     app.addHook('onRequest', async (request) => {
-      request.user = { id: userId } as NonNullable<typeof request.user>;
+      request.familyId = familyId;
+      request.user = { id: userId, familyId } as NonNullable<typeof request.user>;
     });
     registerApiErrorHandler(app, { internalMessage: 'Błąd testu.', logMessage: 'Test failed' });
     registerIdempotentMutations(app, database, {
@@ -49,6 +50,23 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
     database.sqlite.close();
     vi.restoreAllMocks();
   });
+
+  it.each([false, true])(
+    'requires a session even without the global auth hook (operationId: %s)',
+    async (withOperation) => {
+      app.addHook('preHandler', async (request) => {
+        delete request.user;
+        delete request.familyId;
+      });
+      const handler = vi.fn(() => ({ ok: true }));
+      app.post('/mutation', handler);
+      const url = withOperation ? `/mutation?operationId=${crypto.randomUUID()}` : '/mutation';
+      const response = await app.inject({ method: 'POST', url });
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: { code: 'UNAUTHORIZED', message: 'Brak aktywnej sesji.' } });
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['async', 'thenable', 'rejected'] as const)(
     'logs and rolls back a %s response instead of persisting a Promise',

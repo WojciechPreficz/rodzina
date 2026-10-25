@@ -32,6 +32,18 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/api/src/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "TSNonNullExpression > MemberExpression[object.name='request'][property.name=/^(user|familyId)$/]",
+          message: 'Use requireUser(request) to validate the session before accessing user or familyId.',
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.mjs', '**/*.cjs'],
     languageOptions: { globals: globals.node },
     rules: {

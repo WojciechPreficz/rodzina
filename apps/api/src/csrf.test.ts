@@ -20,6 +20,7 @@ describe('API mutation source verification', () => {
     migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
     app = await buildApp(config, database);
     app.post('/outside-api', async () => ({ ok: true }));
+    app.route({ method: ['POST', 'PUT', 'PATCH', 'DELETE'], url: '/api/source-check', handler: () => ({ ok: true }) });
   });
 
   afterEach(async () => {
@@ -28,7 +29,7 @@ describe('API mutation source verification', () => {
   });
 
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('rejects %s without Origin and Referer', async (method) => {
-    const response = await app.inject({ method, url: '/api/auth/logout' });
+    const response = await app.inject({ method, url: '/%61pi/source-check' });
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({
       error: { code: 'FORBIDDEN', message: 'Żądanie pochodzi z niezweryfikowanego źródła.' },

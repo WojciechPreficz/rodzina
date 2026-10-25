@@ -45,7 +45,7 @@ export async function buildApp(config: AppConfig, database: DatabaseConnection):
   registerAuthRoutes(app, database, config);
   registerFamilyRoutes(app, database, config);
 
-  app.get('/api/health', async (_request, reply) => {
+  app.get('/api/health', { config: { auth: 'public' } }, async (_request, reply) => {
     let dbOk = false;
     try {
       database.sqlite.prepare('SELECT 1').get();
@@ -88,7 +88,14 @@ export async function buildApp(config: AppConfig, database: DatabaseConnection):
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', config.RODZINA_WEB_DIR);
     await app.register(fastifyStatic, { root, prefix: '/' });
     app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith('/api/') || request.url.startsWith('/downloads/')) {
+      // Match the router's decoded path before considering the SPA fallback.
+      let pathname: string;
+      try {
+        pathname = decodeURIComponent(request.url.split('?')[0]!);
+      } catch {
+        return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Niepoprawna ścieżka żądania.' } });
+      }
+      if (pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/downloads/')) {
         return reply.code(404).send({
           error: { code: 'NOT_FOUND', message: 'Nie znaleziono zasobu.' },
         });
