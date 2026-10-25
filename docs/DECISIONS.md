@@ -1,5 +1,15 @@
 # Decyzje
 
+## 25.10.2026 — plan Kontaktów (faza 9) i status dokumentów
+
+- Właściciel potwierdził implementację fazy 8. Aktualizujemy status i indeks archiwum; zachowujemy historyczne wyniki CI, niepotwierdzone próby ręczne i checklistę fizycznego Androida. Implementacja nie oznacza automatycznie odbioru całej fazy. Faza 6 pozostaje do implementacji.
+- Kontakty planujemy jako fazę 9: wspólne dla rodziny, odczyt także dla dzieci, mutacje wyłącznie dla administratora i dorosłych. Wymagana jest nazwa; adres wielowierszowy, jeden telefon i opis relacji są opcjonalne. Kontakty są niezależne od kont domowników.
+- Wybrano własne grupy z początkowymi Rodzina, Znajomi, Praca i Inne. Domyślna grupa „Inne” ma trwałą tożsamość niezależną od nazwy i nie może być usunięta; usunięcie innej grupy przenosi jej kontakty do grupy domyślnej, bez utraty danych.
+- Makieta „Ciepły i przyjazny — Kontakty” określa układ grup i listy, inicjały oraz styl. Wykorzystujemy obecny AppShell i Mantine; pomijamy elementy prezentacji makiety. Trasa `/kontakty` i menu po Rodzinie, przed Dokumentami. Telefon otwiera systemową obsługę `tel:`, bez uprawnień do kontaktów i bez bezpośredniego połączenia.
+- Wybrano podgląd ostatniego kompletnego snapshotu offline, z czasem pobrania, izolacją rodziny i użytkownika oraz integracją istniejącego rejestru czyszczenia konta. Brak kolejki zmian. WWW obsługuje utratę sieci w otwartym interfejsie, APK także restart offline. Nie przywracamy PWA.
+- Podział: 9.1 model, kontrakty i API; 9.2 UI online; 9.3 cache odczytu i odbiór fazy. Pełne kryteria, endpointy, limity pól oraz testy zapisano w `docs/plan.md`. Teraz zmieniamy wyłącznie dokumentację, bez implementacji Kontaktów.
+- Powód: wspólna książka adresów i telefonów dostępna także bez sieci, zgodna z przesłanym projektem i obecnymi zasadami WWW/APK. Import, eksport, mapy, zdjęcia, prywatne kontakty, wiele adresów lub telefonów i przypomnienia pozostają poza zakresem.
+
 ## 25.10.2026 — rejestr magazynów konta (etap A)
 
 - `accountStorage.ts` jest jednym miejscem rejestracji magazynów kalendarza,

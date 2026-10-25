@@ -8,15 +8,15 @@ Pełne zakresy wcześniejszych etapów i ich statusy zachowuje
 ## 1. Kontekst dla agenta
 
 - **Produkt.** Aplikacja do zarządzania życiem rodzinnym. Rodzina ma jedno konto, a w nim wielu domowników.
-- **Widoczność.** Wydarzenia, zakupy, obiady i dokumenty widzi cała rodzina. Wyjątkiem są listy zadań (faza 7): widzi je właściciel i domownicy, którym je udostępnił.
+- **Widoczność.** Wydarzenia, zakupy, obiady, dokumenty i planowane kontakty (faza 9) widzi cała rodzina. Wyjątkiem są listy zadań (faza 7): widzi je właściciel i domownicy, którym je udostępnił.
 - **Platformy docelowe: aplikacja Android (APK przez Capacitor) i zwykła strona WWW** ze wspólnym interfejsem React. Przypomnienia, w tym alarmy offline, są funkcją APK. Strona pozwala zarządzać danymi i pobrać APK. APK zawiera lokalny frontend, a nie tylko stronę ładowaną ze zdalnego adresu. Decyzja właściciela z 19.10.2026 wycofuje PWA i Web Push w krokach 4.8-4.10 przed fazą 5.
-- **Pierwszeństwo aktualnego zakresu:** opisy PWA, Web Push i ich kryteriów w fazach 0-4 oraz historycznego deployu dokumentują wcześniejszy projekt. Od kroku 4.8 obowiązuje sekcja „Wycofanie PWA” poniżej. Dla przyszłych faz 7-8 testujemy odbiorców i harmonogram APK zamiast usuniętej wysyłki Web Push i `job --now`; zachowujemy zasady prywatności, dat i uprawnień. Nie przywracamy PWA w kolejnych fazach.
+- **Pierwszeństwo aktualnego zakresu:** opisy PWA, Web Push i ich kryteriów w fazach 0-4 oraz historycznego deployu dokumentują wcześniejszy projekt. Od kroku 4.8 obowiązuje sekcja „Wycofanie PWA” poniżej. Dla zadań i dokumentów (fazy 7-8) testujemy odbiorców i harmonogram APK zamiast usuniętej wysyłki Web Push i `job --now`; zachowujemy zasady prywatności, dat i uprawnień. Nie przywracamy PWA w kolejnych fazach.
 - **Hosting docelowy.** Współdzielony hosting cPanel w vh.pl, aplikacja pod subdomeną istniejącej domeny właściciela, przez HTTPS. Właściciel ma już na tym hostingu aplikację wdrożoną tą samą metodą (zip, aplikacja w cPanel, Phusion Passenger, SQLite w katalogu danych). Wzorzec deployu: [portfel/DEPLOY.md](https://github.com/WojciechPreficz/portfel/blob/main/DEPLOY.md). Wzorujemy się tylko na sposobie wdrożenia, nie na stacku.
-- **Kolejność: fazy 0-3 → pierwszy deploy (wykonany) → faza 4 (Android) → faza 5 (zakupy) → faza 6 (obiady) → faza 7 (zadania) → faza 8 (dokumenty).** Właściciel potwierdził 16.10.2026 działanie aplikacji pod https://rodzina.preficze.pl. Nie powtarzamy pierwszego deployu. Numeracja odpowiada kolejności prac; wykonane wdrożenie ma osobny zapis historyczny i kroki D.1-D.4. Dawny etap wydania open source usunięto. Funkcje rozwijamy i sprawdzamy lokalnie w zakresie zmiany, pełną weryfikację końcową wykonuje CI według sekcji 1.2, a sprawdzone aktualizacje serwera wdrażamy według `docs/DEPLOY.md`. Samo działanie strony nie zalicza niepotwierdzonych testów ani kryteriów wcześniejszych faz.
+- **Kolejność: fazy 0-3 → pierwszy deploy (wykonany) → faza 4 (Android) → faza 5 (zakupy) → faza 6 (obiady) → faza 7 (zadania) → faza 8 (dokumenty) → faza 9 (kontakty, planowana).** Właściciel potwierdził 16.10.2026 działanie aplikacji pod https://rodzina.preficze.pl. Nie powtarzamy pierwszego deployu. Numeracja odpowiada kolejności prac; wykonane wdrożenie ma osobny zapis historyczny i kroki D.1-D.4. Dawny etap wydania open source usunięto. Funkcje rozwijamy i sprawdzamy lokalnie w zakresie zmiany, pełną weryfikację końcową wykonuje CI według sekcji 1.2, a sprawdzone aktualizacje serwera wdrażamy według `docs/DEPLOY.md`. Samo działanie strony nie zalicza niepotwierdzonych testów ani kryteriów wcześniejszych faz.
 - **Język.** UI wyłącznie po polsku. Kod, nazwy, komentarze i commity po angielsku. README i dokumentacja w `docs/` po polsku.
-- **Nawigacja (decyzja właściciela 19.10.2026):** strona WWW od 768 px ma stałe pionowe menu po lewej (240 px). Węższa strona i APK mają hamburger w prawym górnym rogu oraz panel wysuwany z prawej z pozycjami jedna pod drugą. Wspólna kolejność: Kalendarz, Zakupy, Obiady, Rodzina, Powiadomienia, Wersja aplikacji; dane konta i wylogowanie są na dole menu. Nie ma dolnego paska ani pozycji „Więcej”; dotychczasowe adresy `/wiecej`, `/wiecej/rodzina` i `/wiecej/powiadomienia` pozostają zgodne. Ten zapis zastępuje wcześniejsze wymagania dolnej nawigacji i „Więcej” także w opisach przyszłych faz. Zadania i Dokumenty dodajemy dopiero w odpowiednich fazach jako bezpośrednie pozycje menu; przyszłą plakietkę dokumentów umieszczamy przy Dokumentach.
+- **Nawigacja (decyzja właściciela 19.10.2026):** strona WWW od 768 px ma stałe pionowe menu po lewej (240 px). Węższa strona i APK mają hamburger w prawym górnym rogu oraz panel wysuwany z prawej z pozycjami jedna pod drugą. Wspólna kolejność: Kalendarz, Zadania, Zakupy, Obiady, Rodzina, Dokumenty, Powiadomienia, Wersja aplikacji; dane konta i wylogowanie są na dole menu. Nie ma dolnego paska ani pozycji „Więcej”; dotychczasowe adresy `/wiecej`, `/wiecej/rodzina` i `/wiecej/powiadomienia` pozostają zgodne. Ten zapis zastępuje wcześniejsze wymagania dolnej nawigacji i „Więcej” także w opisach przyszłych faz. Zadania i Dokumenty mają już bezpośrednie pozycje menu; plakietka dokumentów jest przy Dokumentach. W fazie 9 dodamy Kontakty po Rodzinie, przed Dokumentami (ustalenie właściciela 25.10.2026).
 - **Podgląd offline (decyzja właściciela 20.10.2026):** po zakupach dodajemy kroki 5.4 (Rodzina) i 5.5 (Kalendarz), przed fazą 6. Oba ekrany pokazują zapisane dane oraz baner offline; kalendarz pozostaje tylko do odczytu, a rodzina zachowuje listę domowników i ostatni znany kod dołączenia. Nie dodajemy kolejki zmian tych modułów. Szczegóły i granice cache opisano przy [krokach 5.4–5.5](archive/plan-fazy-5-7.md); ten zapis rozszerza wcześniejsze ograniczenie podglądu offline do zakupów i harmonogramu APK.
-- **Zasada pracy.** Agent realizuje **jeden krok jednej fazy naraz** (fazy 1-8 są podzielone na kroki, sekcja 1.2; faza 0 jest realizowana w całości). Fazę kończy dopiero wtedy, gdy wszystkie kroki są gotowe, wszystkie kryteria akceptacji są spełnione oraz pełne CI dla końcowego commita przechodzi zgodnie z sekcją 1.2. Każdą decyzję, której plan nie rozstrzyga, zapisuje w `docs/DECISIONS.md` (data, decyzja, powód).
+- **Zasada pracy.** Agent realizuje **jeden krok jednej fazy naraz** (fazy 1-9 są podzielone na kroki, sekcja 1.2; faza 0 jest realizowana w całości). Fazę kończy dopiero wtedy, gdy wszystkie kroki są gotowe, wszystkie kryteria akceptacji są spełnione oraz pełne CI dla końcowego commita przechodzi zgodnie z sekcją 1.2. Każdą decyzję, której plan nie rozstrzyga, zapisuje w `docs/DECISIONS.md` (data, decyzja, powód).
 - **Zakres lektury.** Przed pracą czytamy aktualny kontekst i zasady z sekcji 1, 1.1 i 1.2 oraz opis bieżącej fazy i kroku. Decyzje, konwencje, model danych z sekcji 2-5 w [ARCHITECTURE.md](ARCHITECTURE.md) i pozostałe dokumenty doczytujemy w zakresie zmiany i jej zależności. Nie ma obowiązku czytania całego planu w każdym czacie ani ponownego wczytywania niezmienionych treści już przeczytanych. Zapisy historyczne i przyszłe fazy służą jako odniesienie, gdy są potrzebne.
 
 **Układ ekranów (decyzja właściciela 20.10.2026):** nie wyświetlamy górnego paska z powtórzoną nazwą zakładki. Tytuł pozostaje w treści ekranu. Na telefonie i w APK zachowujemy hamburger w prawym górnym rogu, a na szerokiej stronie pionowe menu po lewej.
@@ -36,7 +36,7 @@ Od fazy 4 zmiany wspólnego frontendu sprawdzamy także w APK. Paczka `release.z
 
 ### 1.2 Kroki w obrębie fazy
 
-Fazy 1-8 są podzielone na **kroki** (np. 1.1, 1.2, 2.1). Opis kroków jest w każdej fazie w sekcji "Kroki realizacji". Zasady:
+Fazy 1-9 są podzielone na **kroki** (np. 1.1, 1.2, 2.1). Opis kroków jest w każdej fazie w sekcji "Kroki realizacji". Zasady:
 
 - Agent realizuje **jeden krok naraz**: jeden krok to jeden czat i jeden commit (Conventional Commits, np. `feat(api): ...`). Kroki wykonujemy w podanej kolejności.
 - Krok jest gotowy, gdy spełnione są warunki "Gotowe, gdy" z jego opisu, wymagane kontrole lokalne i próby ręczne oraz wszystkie wymagane zadania CI zakończyły się sukcesem dla końcowego commita. Pełne kryteria akceptacji fazy i punkty z sekcji 1.1 obowiązują w **ostatnim kroku fazy**. Przesłanie gałęzi do GitHub może poprzedzać pełną weryfikację; nie oznacza zakończenia kroku ani zgody na wdrożenie.
@@ -85,6 +85,16 @@ Przeniesienie nie zalicza brakujących prób odbiorczych ani CI.
 Pierwotne metadane statusów zachowano w archiwum.
 Bieżące dodatkowe plany: [redesign R.1–R.8](REDESIGN_PLAN.md)
 i [reset hasła przez e-mail](RESET_HASLA_PLAN.md). Ich statusów nie zmieniono.
+
+**Faza 8 — dokumenty: zaimplementowana — potwierdzenie właściciela 25.10.2026.**
+Pełny zakres pozostaje w [archiwum fazy 8](archive/plan-przyszle-fazy.md).
+Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani
+niepotwierdzonych prób ręcznych. Zachowujemy ich zapisy w
+[DECISIONS.md](DECISIONS.md) i [checklistę odbioru](DEVELOPMENT.md#odbiór-dokumentów--krok-84).
+
+**Faza 9 — Kontakty: zaplanowana, bez implementacji.** Zakres i kroki są poniżej.
+Dodanie planu nie zmienia statusu fazy 6 ani nie jest poleceniem implementacji
+któregokolwiek kroku.
 
 ## 6. Fazy
 
@@ -140,10 +150,77 @@ i [reset hasła przez e-mail](RESET_HASLA_PLAN.md). Ich statusów nie zmieniono.
 
 ---
 
+### Faza 9 - Kontakty
+
+**Status:** zaplanowana 25.10.2026, bez implementacji.
+
+**Cel:** wspólna książka kontaktów rodziny z adresami, opcjonalnymi numerami
+telefonów, własnymi grupami i podglądem ostatnio pobranych danych offline.
+
+**Dane i uprawnienia:**
+
+- Cała rodzina ma odczyt; administrator i dorosły domownik dodają, edytują i usuwają kontakty oraz grupy. Dziecko nie wykonuje mutacji.
+- Kontakt ma wymaganą nazwę oraz opcjonalny wielowierszowy adres, jeden telefon i krótki opis relacji, np. „Mama”. Nazwa wystarcza do utworzenia kontaktu.
+- Każdy kontakt należy do jednej grupy. Początkowe grupy: Rodzina, Znajomi, Praca i Inne. Dorośli tworzą grupy i zmieniają ich nazwy.
+- „Inne” jest grupą domyślną, której nie można usunąć. Jej tożsamość jest niezależna od edytowalnej nazwy. Usunięcie innej grupy wymaga potwierdzenia i atomowo przenosi jej kontakty do grupy domyślnej, bez kasowania kontaktów.
+- Kontakty są niezależne od kont domowników, bez automatycznych powiązań i synchronizacji książki telefonu.
+
+**UI według makiety „Ciepły i przyjazny — Kontakty”:**
+
+- Trasa `/kontakty`, bezpośrednia pozycja menu po „Rodzinie”, przed „Dokumentami”. Zachowujemy istniejący AppShell, kolory, typografię i Mantine; pomijamy etykiety prezentacji, przełącznik „Komputer/Telefon” i ozdobne oznaczenia makiety.
+- Desktop: grupy z licznikami po lewej, karta wybranej grupy po prawej. Telefon: poziomy przewijany wybór grup nad listą. Obowiązuje obecny próg nawigacji 768 px i hamburger APK.
+- Lista pokazuje inicjały, nazwę, opis relacji, telefon i adres, pomijając brakujące dane. Sortowanie nazw według polskich reguł. Liczniki pokazują pełną liczbę kontaktów w grupach niezależnie od wyszukiwania.
+- Wyszukiwarka filtruje wybraną grupę po nazwie, opisie, adresie i telefonie; ignoruje wielkość liter i polskie znaki, a przy telefonie także separatory.
+- Desktop ma szybkie dodanie samej nazwy do wybranej grupy. Pełny formularz z wyborem grupy jest dostępny na obu rozmiarach. Wiersz otwiera szczegóły; dorośli mają akcje edycji i usunięcia z potwierdzeniem.
+- Numer jest odnośnikiem `tel:` do systemowej obsługi połączeń, bez uprawnień do książki kontaktów i bez bezpośredniego wykonywania połączeń. Akcja numeru nie otwiera jednocześnie szczegółów kontaktu.
+- Stany ładowania, błędu, pustej grupy i braku wyników mają polskie komunikaty. Formularze korzystają z istniejącej ochrony niezapisanych zmian i obsługi przycisku Wstecz w APK.
+
+**Offline:**
+
+- Zachowujemy ostatnią kompletnie pobraną listę kontaktów i grup z czasem synchronizacji. Odczyt, szczegóły, wyszukiwanie i wybór grup działają offline; mutacje wymagają internetu, bez kolejki zmian.
+- Snapshot jest powiązany z rodziną i użytkownikiem. Magazyn rejestrujemy w istniejącym mechanizmie czyszczenia konta; wylogowanie, utrata sesji i zmiana konta usuwają dostęp do danych. Obsługa zmian magazynu między kartami zachowuje istniejące zasady rejestru.
+- Baner podaje czas pobrania i ostrzega o nieaktualności. Brak cache ma osobny komunikat. Błąd lub częściowe pobranie nie zastępuje poprawnego snapshotu; problem trwałego zapisu jest widoczny dla użytkownika.
+- Po mutacji i odzyskaniu sieci odświeżamy kompletny snapshot. Spóźniona odpowiedź poprzedniego konta nie odtwarza jego cache.
+- WWW obsługuje utratę sieci w otwartym interfejsie; APK także ponowny start bez internetu. Nie przywracamy PWA ani pobierania w tle przy zamkniętym APK.
+
+**Kroki realizacji:**
+
+#### Krok 9.1 - model, kontrakty i API
+
+- **Zakres:** schematy Zod i typy `Contact` oraz `ContactGroup` w shared. Migracja tabel `contacts` i `contact_groups`, z rodziną, autorem oraz znacznikami czasu według istniejących konwencji. Grupy początkowe tworzymy w migracji dla istniejących rodzin oraz podczas rejestracji nowych. Identyfikatory generujemy przez `crypto.randomUUID()`.
+- `GET /api/contacts` zwraca kompletny snapshot `{ ok, groups, contacts }`. Mutacje kontaktów: `POST /api/contacts`, `PATCH /api/contacts/:id`, `DELETE /api/contacts/:id`. Grupy: `POST /api/contact-groups`, `PATCH /api/contact-groups/:id`, `DELETE /api/contact-groups/:id`. Odczyt grup jest częścią snapshotu, bez osobnego endpointu.
+- Nazwy kontaktów i grup po przycięciu nie mogą być puste. Limity: nazwa kontaktu 120, grupa 60, opis 120, telefon 50, adres 1000 znaków. Puste pola opcjonalne normalizujemy do `null`; nie wymuszamy polskiego formatu telefonu. Brak grupy przy tworzeniu kontaktu wybiera grupę domyślną; pominięcie pola w PATCH nie zmienia jego wartości.
+- Rodzina pochodzi wyłącznie z sesji, błędy mają obecny kontrakt API. Cudze zasoby i grupa spoza rodziny zwracają 404, mutacje dziecka 403. Przeniesienie kontaktów i usunięcie grupy wykonujemy w jednej transakcji; nie stosujemy kaskadowego usuwania kontaktów przy usuwaniu grupy.
+- **Gotowe, gdy:** testy API i migracji potwierdzają CRUD, role, izolację rodzin, walidację, grupy początkowe dla istniejącej i nowej rodziny, ochronę grupy domyślnej oraz atomowe przenoszenie kontaktów bez utraty danych. Lokalny `release:smoke` sprawdza paczkę po zmianie migracji; pozostałe kontrole według sekcji 1.2.
+
+#### Krok 9.2 - działający interfejs online
+
+- **Zakres:** nawigacja, lista, liczniki grup, wyszukiwarka, szybkie dodawanie i pełne formularze, szczegóły, zarządzanie grupami i potwierdzenia usuwania zgodnie z opisem UI. Obsługa stanów ładowania, błędów i pustych danych oraz ochrony formularzy. W tym kroku bez trwałego cache Kontaktów; brak sieci blokuje mutacje.
+- **Gotowe, gdy:** testy komponentów potwierdzają formularze, wyszukiwanie, sortowanie, liczniki, brakujące pola, puste stany i odczyt dziecka. Playwright headless oraz ręcznie przy 390 i 1280 px: utworzenie grupy i kontaktu, edycja, wyszukanie oraz usunięcie grupy z zachowaniem kontaktu. Sprawdzony wspólny frontend APK, nawigacja klawiaturą, Wstecz i ochrona niezapisanych zmian; brak poziomego przepełnienia strony.
+
+#### Krok 9.3 - podgląd offline i domknięcie fazy
+
+- **Zakres:** trwały snapshot, baner nieaktualności, odświeżanie po mutacji i odzyskaniu sieci, integracja z rejestrem magazynów konta. Uzupełnienie dokumentacji dostępności offline i checklisty odbioru Kontaktów.
+- **Gotowe, gdy:** testy obejmują brak cache, uszkodzony magazyn, odmowę zapisu, ponowne połączenie, wylogowanie, utratę sesji, zmianę konta, zmiany między kartami i spóźnione odpowiedzi. Snapshot nie miesza danych kont ani nie zastępuje pełnych danych częściowymi. Na fizycznym APK sprawdzono restart offline, wyszukiwanie, polskie znaki, długi adres oraz otwarcie numeru w systemowej aplikacji telefonu. Spełnione wszystkie kryteria fazy i sekcje 1.1–1.2, w tym CI dla końcowego commita.
+
+**Kryteria akceptacji:**
+
+- Dorośli zarządzają wspólnymi kontaktami i grupami, dziecko ma wyłącznie odczyt; API egzekwuje izolację rodzin i walidację.
+- Usunięcie grupy zachowuje jej kontakty w grupie domyślnej. Działają wyszukiwanie, liczniki i polskie sortowanie, również dla kontaktu z samą nazwą.
+- UI działa przy 390 i 1280 px oraz w APK, z dostępną obsługą klawiaturą i bez poziomego przepełnienia strony. Playwright działa wyłącznie headless.
+- Po wcześniejszym pobraniu działa odczyt offline, w APK także po restarcie. Edycja offline jest niedostępna, a czyszczenie konta chroni zapisane dane.
+- Próby fizycznego APK potwierdzają podgląd offline i obsługę `tel:`; testowy transport Androida ich nie zastępuje. Zachowujemy zgodność backendu z poprzednią wspieraną wersją APK.
+- Spełnione punkty sekcji 1.1 i wymagania weryfikacji z sekcji 1.2. Nie zakładamy nowych zależności runtime, zmiennych środowiskowych ani crona; ewentualna konieczna zmiana podlega sekcji 1.1.
+
+**Poza zakresem:** import i eksport, zdjęcia, mapy, wiele adresów lub telefonów,
+prywatne kontakty, przypomnienia, integracja z książką telefonu, powiązania z
+domownikami i kolejka edycji offline. W każdym czacie implementujemy tylko
+jeden wskazany krok; zapisanie tego planu nie implementuje funkcji.
+
+---
+
 ## Dalsze zakresy
 
-- Faza 8: sejf rodzinny i terminy ważności dokumentów —
-  [pełny zakres](archive/plan-przyszle-fazy.md).
 - Rozszerzenia po fazach podstawowych (m.in. iCal, przepisy, iOS) —
   [roadmapa](archive/plan-przyszle-fazy.md).
 

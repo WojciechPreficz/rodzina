@@ -149,7 +149,7 @@ rodzina/
   - Host żądania bierzemy z `request.host` Fastify. Przy `trustProxy: true` uwzględnia on `X-Forwarded-Host` za Passengerem.
   - Proxy Vite w `vite.config.ts` **musi mieć `changeOrigin: false`**. Inaczej Vite podmieni `Host` na `localhost:3000` i każda mutacja w dev dostanie 403.
   - Test API: mutacja z obcym `Origin` dostaje 403, a z właściwym przechodzi.
-- Każda encja domenowa (wydarzenie, pozycja zakupów, obiad, zadanie, dokument) ma `createdAt`, `updatedAt` i `createdBy`. Tabele pomocnicze (uczestnicy, składniki, członkostwa) nie muszą.
+- Każda encja domenowa (wydarzenie, pozycja zakupów, obiad, zadanie, dokument; w planowanej fazie 9 także kontakt i grupa kontaktów) ma `createdAt`, `updatedAt` i `createdBy`. Tabele pomocnicze (uczestnicy, składniki, członkostwa) nie muszą.
 
 ## 5. Model danych (całość)
 
@@ -172,4 +172,11 @@ rodzina/
 - `task_lists` (faza 7): id, family_id, owner_id, name, is_default, position, created_at, updated_at
 - `task_list_members` (faza 7): list_id, user_id
 - `tasks` (faza 7): id, list_id, title, notes, due_date (nullable), due_time (nullable), assignee_id (nullable), is_done, done_by, done_at, position, created_by, created_at, updated_at
-- `documents` (faza 8): id, family_id, type (`id_card` | `passport` | `car_insurance` | `car_inspection` | `car_guarantee_inspection` | `other`), label, holder_user_id (nullable), vehicle_label (nullable), expires_on (`YYYY-MM-DD`), notes, created_by, created_at, updated_at
+- `documents` (faza 8): id, family_id, type (`id_card` | `passport` | `car_insurance` | `car_inspection` | `car_guarantee_inspection` | `home_insurance` | `rental_agreement` | `other`), label, holder_user_id (nullable), vehicle_label (nullable), expires_on (`YYYY-MM-DD`), notes, created_by, created_at, updated_at
+
+### Planowany model Kontaktów — faza 9 (bez implementacji)
+
+- `contact_groups`: id, family_id, name, is_default, created_by, created_at, updated_at. Jedna grupa domyślna na rodzinę, początkowo „Inne”; nie można jej usunąć. Pozostałe grupy początkowe: Rodzina, Znajomi, Praca.
+- `contacts`: id, family_id, group_id, name, address (nullable, tekst wielowierszowy), phone (nullable), relationship (nullable), created_by, created_at, updated_at. Każdy kontakt należy do jednej grupy tej samej rodziny; usunięcie grupy przenosi kontakty do grupy domyślnej w jednej transakcji, bez kaskady usuwania kontaktów.
+- Cała rodzina odczytuje dane, role `admin` i `member` wykonują mutacje. Brak powiązań z kontami domowników, przypomnień i synchronizacji książki telefonu.
+- Wspólne typy `Contact` i `ContactGroup`, schematy Zod oraz API opisuje [faza 9 w planie](plan.md#faza-9---kontakty). Snapshot kontaktów i grup jest zapisywany do odczytu offline per rodzina i użytkownik z integracją rejestru magazynów konta; bez kolejki zmian. Model zostanie dodany dopiero podczas implementacji odpowiednich kroków.
