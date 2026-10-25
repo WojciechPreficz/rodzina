@@ -15,7 +15,7 @@ for (const native of [false, true]) {
           data: {
             familyName: 'Katalog zadań',
             displayName: 'Ania',
-            email: `tasks-catalog-${native}-${info.project.name}@example.com`,
+            email: `tasks-catalog-${native}-${info.project.name}-${info.repeatEachIndex}@example.com`,
             password: 'password123',
           },
         })
@@ -90,6 +90,8 @@ for (const native of [false, true]) {
     await page.getByRole('button', { name: 'Dodaj', exact: true }).click();
     const row = page.getByRole('article', { name: 'Zadanie katalogu', exact: true });
     await expect(row).toBeVisible();
+    // The row is optimistic; wait for the submit handler to finish before cutting the network.
+    await expect(page.getByRole('textbox', { name: 'Dodaj zadanie', exact: true })).toHaveValue('');
     await page.context().setOffline(true);
     if (native)
       await page.evaluate(() => {
@@ -101,6 +103,7 @@ for (const native of [false, true]) {
     if (phone && native) await nativeEvent('App:backButton');
     else if (phone) await page.getByRole('button', { name: 'Wróć do list' }).click();
     else await page.goBack();
+    await expect(page).toHaveURL(/\/zadania$/);
     if (phone) {
       await expect(card).toBeFocused();
       await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(scroll, 0);
@@ -125,6 +128,7 @@ for (const native of [false, true]) {
         notification: { extra: { url: taskPath } },
       });
     else await page.goto(taskPath);
+    await expect(page).toHaveURL(new URL(taskPath, baseURL!).href);
     await expect(page.getByRole('dialog', { name: 'Edytuj zadanie' })).toBeVisible();
     if (native) await nativeEvent('App:backButton');
     else await page.getByRole('dialog').getByRole('button', { name: 'Anuluj' }).click();

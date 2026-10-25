@@ -1,5 +1,28 @@
 # Decyzje
 
+## 25.10.2026 — synchronizacja testu katalogu zadań
+
+- Sprawdzono zgłoszony błąd `task catalog restores focus and scroll via Android
+transport` w [CI dla 5d78689](https://github.com/WojciechPreficz/rodzina/actions/runs/40231160219):
+  zadanie Node 24 zakończyło się błędem, Node 22 anulowano, Android przeszedł.
+  Ten przebieg nie udostępnia artefaktu ze stanem strony, więc nie potwierdzamy
+  dokładnej przyczyny braku dialogu. Test przeszedł lokalnie pojedynczo i w
+  dziesięciu powtórzeniach, również próbę z opóźnionym odświeżaniem.
+- W teście znaleziono zbyt wczesne odłączenie sieci: pojawienie się optymistycznego
+  wiersza nie oznacza zakończenia obsługi dodawania ani wyczyszczenia ochrony
+  formularza. To możliwa przyczyna blokady nawigacji, nie potwierdzona reprodukcja
+  zgłoszonego błędu. Test czeka teraz na opróżnienie pola po udanym dodaniu,
+  sprawdza powrót do katalogu oraz adres po kliknięciu powiadomienia. Nie dodano
+  opóźnień ani podwyższonych timeoutów i nie zmieniono kodu aplikacji.
+- Konto scenariusza uwzględnia indeks powtórzenia Playwright, żeby `--repeat-each`
+  sprawdzało scenariusz, zamiast kończyć się konfliktem rejestracji tego samego
+  e-maila. Końcowe potwierdzenie w CI wymaga osobnego pusha, którego właściciel
+  zabronił w tym zadaniu.
+- Po zmianie przeszło 20 prób katalogu: po pięć dla WWW i transportu Androida
+  przy 390 i 1280 px. Lint, formatowanie zmienionych plików i typecheck przeszły.
+  Status: **zweryfikowane lokalnie, oczekuje na CI**. Wynik lokalny nie dowodzi,
+  że dokładny błąd z CI został odtworzony ani usunięty.
+
 ## 25.10.2026 — interfejs Kontaktów online (krok 9.2, #45)
 
 - Dodano `/kontakty` i pozycję menu po Rodzinie, przed Dokumentami. Widok
