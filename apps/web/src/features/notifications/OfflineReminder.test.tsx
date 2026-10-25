@@ -10,7 +10,7 @@ vi.mock('../../auth.js', () => ({ useMe: () => ({ refresh: vi.fn() }) }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => true }));
 import { OfflineReminder } from './OfflineReminder.js';
 const url = '/kalendarz/wydarzenie/10000000-0000-4000-8000-000000000002?data=2026-10-20';
-function show() {
+function show(path = url) {
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
@@ -18,7 +18,7 @@ function show() {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <MantineProvider env="test">
-        <MemoryRouter initialEntries={[url]}>
+        <MemoryRouter initialEntries={[path]}>
           <OfflineReminder />
         </MemoryRouter>
       </MantineProvider>
@@ -63,4 +63,33 @@ it('does not show payload data without a stored native session or after logout',
   show();
   expect(await screen.findByRole('status')).toHaveTextContent('Brak zapisanego przypomnienia');
   expect(screen.getByRole('link', { name: 'Przejdź do logowania' }).getAttribute('href')).toContain('next=');
+});
+
+it('shows only the document named by the alarm with its saved absolute expiry date', async () => {
+  const path = '/dokumenty/10000000-0000-4000-8000-000000000002';
+  const item = {
+    key: 'doc',
+    reminderId: '10000000-0000-4000-8000-000000000001',
+    sourceType: 'document',
+    sourceId: '10000000-0000-4000-8000-000000000002',
+    occurrenceDate: '2026-11-15',
+    fireAt: 1,
+    title: 'Dokument',
+    body: 'OC Skoda — ważne do 15.11.2026',
+    url: path,
+  };
+  f.preview.mockResolvedValue({
+    value: JSON.stringify({
+      snapshot: {
+        ok: true,
+        generatedAt: 0,
+        validUntil: 100,
+        reminders: [item, { ...item, key: 'another', url: path.replace(/2$/, '3'), body: 'Inny dokument' }],
+      },
+    }),
+  });
+  show(path);
+  expect(await screen.findByText('OC Skoda — ważne do 15.11.2026')).toBeVisible();
+  expect(screen.queryByText('Inny dokument')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Odnowiono' })).not.toBeInTheDocument();
 });

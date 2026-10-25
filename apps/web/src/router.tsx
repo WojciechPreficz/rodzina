@@ -17,6 +17,7 @@ import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
 import { ShoppingPage } from './features/shopping/ShoppingPage.js';
 import { TasksPage } from './features/tasks/TasksPage.js';
 import { DocumentsPage } from './features/documents/DocumentsPage.js';
+import { DocumentRoute } from './features/documents/DocumentRoute.js';
 import { NotFoundLayout, NotFoundPage } from './components/NotFoundPage.js';
 
 export const router = createBrowserRouter([
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
         children: [{ path: '*', element: <NotFoundPage /> }],
       },
       { path: 'kalendarz/wydarzenie/:eventId', element: <EventRoute /> },
+      { path: 'dokumenty/:documentId', element: <DocumentRoute /> },
       {
         element: <AuthLayout />,
         children: [

@@ -8,6 +8,7 @@ import { DocumentsPage } from './DocumentsPage.js';
 import { documentExpiry, documentTypeLabels, hasHolder, hasVehicle } from './documentUi.js';
 import { theme, cssVariablesResolver } from '../../theme.js';
 import { DocumentForm } from './DocumentForm.js';
+import { MemoryRouter } from 'react-router';
 
 const session = vi.hoisted(() => ({
   user: { id: '10000000-0000-4000-8000-000000000001', role: 'admin' },
@@ -52,7 +53,9 @@ function setup(items = [base], fail = false) {
   render(
     <QueryClientProvider client={client}>
       <MantineProvider env="test" theme={theme} cssVariablesResolver={cssVariablesResolver}>
-        <DocumentsPage />
+        <MemoryRouter>
+          <DocumentsPage />
+        </MemoryRouter>
       </MantineProvider>
     </QueryClientProvider>,
   );
@@ -182,7 +185,60 @@ describe('document list and form', () => {
     session.user.role = 'child';
     setup();
     await screen.findByText('Paszport Anny');
-    expect(screen.queryByRole('button', { name: /Dodaj dokument|Edytuj|Usuń/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Dodaj dokument|Edytuj|Usuń|Odnowiono/ })).not.toBeInTheDocument();
+  });
+  it('toggles desktop status filters and intersects them with the selected category', async () => {
+    setup([
+      base,
+      { ...base, id: 'soon', type: 'car_insurance', label: 'OC wygasa', expiresOn: '2026-11-01' },
+      { ...base, id: 'old', type: 'car_inspection', label: 'Przegląd wygasł', expiresOn: '2026-10-20' },
+      { ...base, id: 'home', type: 'home_insurance', label: 'Polisa wygasła', expiresOn: '2026-10-20' },
+    ]);
+    await screen.findByText('Paszport Anny');
+    const list = screen.getByRole('region', { name: 'Dokumenty rodziny' });
+    const expiring = screen.getByRole('button', { name: 'Wygasa' });
+    const expired = screen.getByRole('button', { name: 'Wygasło' });
+    fireEvent.click(expiring);
+    expect(expiring).toHaveAttribute('aria-pressed', 'true');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(list).getByText('OC wygasa')).toBeInTheDocument();
+    fireEvent.click(expired);
+    expect(expiring).toHaveAttribute('aria-pressed', 'false');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Pojazdy' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(list).getByText('Przegląd wygasł')).toBeInTheDocument();
+    expect(expired).toHaveTextContent('2');
+    fireEvent.click(expired);
+    expect(expired).toHaveAttribute('aria-pressed', 'false');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Wszyscy' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
+  });
+  it('unions phone statuses, intersects categories and clears all filters', async () => {
+    mobileViewport = true;
+    setup([
+      base,
+      { ...base, id: 'soon', type: 'car_insurance', label: 'OC wygasa', expiresOn: '2026-11-01' },
+      { ...base, id: 'old', type: 'car_inspection', label: 'Przegląd wygasł', expiresOn: '2026-10-20' },
+      { ...base, id: 'home', type: 'home_insurance', label: 'Polisa wygasła', expiresOn: '2026-10-20' },
+    ]);
+    await screen.findByText('Paszport Anny');
+    const list = screen.getByRole('region', { name: 'Dokumenty rodziny' });
+    const input = screen.getByRole('textbox', { name: 'Filtr dokumentów' });
+    const select = (label: string) => {
+      fireEvent.click(input);
+      fireEvent.click(screen.getByRole('option', { name: label }));
+    };
+    select('Wygasa');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    select('Wygasło');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+    select('Pojazdy');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(list).queryByText('Polisa wygasła')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Wyczyść filtry' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
   });
   it('combines people and categories in the phone multiselect and clears back to all documents', async () => {
     mobileViewport = true;

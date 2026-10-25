@@ -52,7 +52,10 @@ export function OfflineReminder() {
       <Button
         onClick={async () => {
           await refresh();
-          await client.invalidateQueries({ queryKey: ['calendar'] });
+          await Promise.all([
+            client.invalidateQueries({ queryKey: ['calendar'] }),
+            client.invalidateQueries({ queryKey: ['documents'] }),
+          ]);
         }}
       >
         {text.refresh}

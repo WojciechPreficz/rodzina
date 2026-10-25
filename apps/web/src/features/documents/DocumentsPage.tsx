@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { Link } from 'react-router';
 import { Alert, Badge, Button, Group, Loader, Modal, MultiSelect, Paper, Stack, Text, Title } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDocumentStatus, type CreateDocument, type FamilyDocument } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { useMe } from '../../auth.js';
@@ -10,10 +11,16 @@ import { PageHeader } from '../../components/PageHeader.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
-import { SYNC_INTERVAL_MS } from '../../queryClient.js';
+import { useDocumentDates, useDocumentsQuery } from './documentQueries.js';
+import { RenewDocument } from './RenewDocument.js';
 import { DocumentForm, DocumentWarning } from './DocumentForm.js';
 import { documentExpiry, documentStatuses, documentTypeLabels, hasHome, hasVehicle } from './documentUi.js';
 import './documents.css';
+
+const statusFilters = [
+  { value: 'status:expiring', status: 'expiring', label: 'Wygasa', color: 'orange' },
+  { value: 'status:expired', status: 'expired', label: 'Wygasło', color: 'red' },
+] as const;
 
 export function DocumentsPage() {
   const { user, family, familyConfirmed } = useMe();
@@ -21,30 +28,15 @@ export function DocumentsPage() {
   const client = useQueryClient();
   const members = useMembersQuery();
   const key = ['documents', family?.id, user?.id];
-  const query = useQuery({
-    queryKey: key,
-    enabled: !!family && !!user && familyConfirmed && !offline,
-    queryFn: async ({ signal }) =>
-      (await apiFetch<{ documents: FamilyDocument[] }>('/api/documents', { signal })).documents,
-    refetchInterval: SYNC_INTERVAL_MS,
-  });
+  const query = useDocumentsQuery();
   const [filter, setFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const mobile = useMediaQuery('(max-width: 47.99em)');
   const [mobileFilters, setMobileFilters] = useState<string[]>([]);
   const [editing, setEditing] = useState<FamilyDocument | 'new' | null>(null);
   const [deleting, setDeleting] = useState<FamilyDocument | null>(null);
-  const [clock, setClock] = useState(Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), 60000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const timezone = family?.timezone ?? 'Europe/Warsaw';
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(clock);
+  const [renewing, setRenewing] = useState<FamilyDocument | null>(null);
+  const { timezone, today } = useDocumentDates();
   const documents = (query.data ?? [])
     .map((item) => ({ ...item, status: getDocumentStatus(item.type, item.expiresOn, today) }))
     .sort((a, b) => a.expiresOn.localeCompare(b.expiresOn));
@@ -87,20 +79,25 @@ export function DocumentsPage() {
   ];
   const selected = filters.find((item) => item.value === filter) ?? filters[0]!;
   const activeFilters = mobile ? filters.filter((item) => mobileFilters.includes(item.value)) : [selected];
-  const filterTitle =
+  const activeStatuses = statusFilters.filter((item) =>
+    mobile ? mobileFilters.includes(item.value) : statusFilter === item.value,
+  );
+  const categoryTitle =
     activeFilters.length === 1 ? activeFilters[0]!.label : activeFilters.length ? 'Wybrane dokumenty' : 'Wszyscy';
+  const filterTitle = [categoryTitle, ...activeStatuses.map((item) => item.label)].join(' · ');
   const visible = documents.filter(
     (item) =>
-      activeFilters.length === 0 ||
-      activeFilters.some(
-        ({ value }) =>
-          value === 'all' ||
-          (value === 'vehicles'
-            ? hasVehicle(item.type)
-            : value === 'home'
-              ? hasHome(item.type)
-              : item.holderUserId === value),
-      ),
+      (activeFilters.length === 0 ||
+        activeFilters.some(
+          ({ value }) =>
+            value === 'all' ||
+            (value === 'vehicles'
+              ? hasVehicle(item.type)
+              : value === 'home'
+                ? hasHome(item.type)
+                : item.holderUserId === value),
+        )) &&
+      (activeStatuses.length === 0 || activeStatuses.some(({ status }) => item.status === status)),
   );
   const add = () => {
     save.reset();
@@ -142,15 +139,16 @@ export function DocumentsPage() {
             <MultiSelect
               className="documents-mobile-filter"
               label="Filtr dokumentów"
-              placeholder={mobileFilters.length ? undefined : 'Wszystkie osoby i kategorie'}
-              description="Wybierz osoby lub kategorie. Brak wyboru pokazuje wszystkie dokumenty."
+              placeholder={mobileFilters.length ? undefined : 'Wszystkie dokumenty'}
+              description="Wybierz osoby, kategorie lub statusy. Status zawęża wyniki. Brak wyboru pokazuje wszystkie dokumenty."
               searchable
               clearable
               clearButtonProps={{ 'aria-label': 'Wyczyść filtry', 'aria-hidden': false, tabIndex: 0 }}
-              nothingFoundMessage="Brak pasujących osób lub kategorii"
+              nothingFoundMessage="Brak pasujących filtrów"
               data={[
                 { group: 'Osoby', items: filters.filter((item) => !['all', 'vehicles', 'home'].includes(item.value)) },
                 { group: 'Kategorie', items: filters.filter((item) => ['vehicles', 'home'].includes(item.value)) },
+                { group: 'Statusy', items: statusFilters.map(({ value, label }) => ({ value, label })) },
               ]}
               value={mobileFilters}
               onChange={setMobileFilters}
@@ -170,18 +168,24 @@ export function DocumentsPage() {
             </nav>
           )}
           <div className="documents-filter-summary">
-            <Group justify="space-between">
-              <Text size="sm">Wygasa</Text>
-              <Badge color="orange" variant="light">
-                {documents.filter((item) => item.status === 'expiring').length}
-              </Badge>
-            </Group>
-            <Group justify="space-between">
-              <Text size="sm">Wygasło</Text>
-              <Badge color="red" variant="light">
-                {documents.filter((item) => item.status === 'expired').length}
-              </Badge>
-            </Group>
+            {statusFilters.map(({ value, status, label, color }) => (
+              <Button
+                key={value}
+                className="documents-status-filter"
+                variant={statusFilter === value ? 'light' : 'subtle'}
+                color={color}
+                aria-label={label}
+                aria-pressed={statusFilter === value}
+                onClick={() => setStatusFilter((current) => (current === value ? null : value))}
+                rightSection={
+                  <Badge color={color} variant="light">
+                    {documents.filter((item) => item.status === status).length}
+                  </Badge>
+                }
+              >
+                {label}
+              </Button>
+            ))}
             {canEdit && (
               <Button disabled={!writable} onClick={add}>
                 ＋ Dodaj dokument
@@ -215,7 +219,9 @@ export function DocumentsPage() {
                   <path d="M6 2h8l5 5v15H6ZM14 2v6h5M9 12h7M9 16h7" />
                 </svg>
                 <div className="document-description">
-                  <Text fw={500}>{item.label}</Text>
+                  <Text component={Link} to={`/dokumenty/${encodeURIComponent(item.id)}`} fw={500} c="inherit">
+                    {item.label}
+                  </Text>
                   <Text size="sm" className="document-expiry">
                     {documentExpiry(item.expiresOn, today)}
                   </Text>
@@ -241,6 +247,15 @@ export function DocumentsPage() {
                 </Badge>
                 {canEdit && (
                   <div className="document-actions">
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      disabled={!writable}
+                      aria-label={`Odnowiono ${item.label}`}
+                      onClick={() => setRenewing(item)}
+                    >
+                      Odnowiono
+                    </Button>
                     <Button
                       size="xs"
                       variant="subtle"
@@ -273,6 +288,7 @@ export function DocumentsPage() {
           </ul>
         </Paper>
       </div>
+      {renewing && <RenewDocument document={renewing} onClose={() => setRenewing(null)} />}
       <Modal
         opened={editing !== null}
         onClose={close}

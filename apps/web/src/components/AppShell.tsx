@@ -1,6 +1,7 @@
 import {
   AppShell as MantineAppShell,
   Avatar,
+  Badge,
   Burger,
   Button,
   Divider,
@@ -20,6 +21,7 @@ import { allowNavigation } from '../nativeNavigation.js';
 import { isAndroid } from '../platform.js';
 import { AndroidUpdateNotice } from '../features/updates/AndroidUpdates.js';
 import { AppBrand } from './AppBrand.js';
+import { useDocumentAttentionCount } from '../features/documents/documentQueries.js';
 
 const navigation = [
   { label: labels.calendar, to: '/kalendarz', icon: 'M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z' },
@@ -67,8 +69,17 @@ function NavigationIcon({ path }: { path: string }) {
   );
 }
 
+function DocumentAttentionBadge() {
+  const count = useDocumentAttentionCount();
+  return count > 0 ? (
+    <Badge color="orange" size="sm" aria-label={`Dokumenty wymagające uwagi: ${count}`}>
+      {count}
+    </Badge>
+  ) : null;
+}
+
 export function AppShell({ children }: { children?: ReactNode }) {
-  const { user, logout } = useMe();
+  const { user, family, familyConfirmed, logout } = useMe();
   const location = useLocation();
   const wide = useMediaQuery('(min-width: 48em)');
   const native = isAndroid();
@@ -94,6 +105,11 @@ export function AppShell({ children }: { children?: ReactNode }) {
               to={to}
               label={label}
               leftSection={<NavigationIcon path={icon} />}
+              rightSection={
+                to === '/dokumenty' && user?.id && family?.id && familyConfirmed ? (
+                  <DocumentAttentionBadge />
+                ) : undefined
+              }
               active={active(to)}
               aria-current={active(to) ? 'page' : undefined}
               className="app-navigation-link"

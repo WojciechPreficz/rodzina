@@ -109,6 +109,35 @@ brak zgód i ograniczenia producenta ograniczają alarmy; pełnego kalendarza of
 
 ## Lokalne budowanie i uruchamianie APK
 
+### Odbiór dokumentów — krok 8.4
+
+Próby właściciela pozostają **do wykonania**. Testy automatyczne i build APK
+nie potwierdzają odbioru alarmu na fizycznym telefonie.
+
+1. Na WWW przy 390 i 1280 px oraz w APK sprawdź dokument każdego typu,
+   statusy i filtry. Otwórz szczegóły przez nazwę dokumentu. Plakietka przy
+   „Dokumentach” liczy wszystkie wygasające i wygasłe dokumenty, niezależnie od filtra.
+2. Użyj „Odnowiono”, podaj nową datę. Sprawdź listę, szczegóły, plakietkę,
+   przeliczone offsety i nieaktywne minione przypomnienia z konkretną datą.
+   Dodaj i usuń „Moje przypomnienia”; drugie konto nie może ich widzieć ani usuwać.
+   Dziecko nie edytuje dokumentów, ale zarządza własnymi przypomnieniami.
+3. Na fizycznym Androidzie dodaj dokument z terminem za 31 dni i przypomnieniem
+   30 dni przed. Udziel zgód, zsynchronizuj online. Sprawdź termin następnego
+   dnia o 09:00 Europe/Warsaw i zapisz odpowiadający mu czas UTC.
+4. Odłącz sieć, zamknij interfejs i zablokuj ekran. Bez wcześniejszego otwierania
+   APK sprawdź alarm o 09:00. Kliknięcie ma otworzyć podgląd właściwego dokumentu
+   z zapisaną datą ważności i ostrzeżeniem o nieaktualności; online aktualne szczegóły.
+   Powtórz z kolejnym alarmem po restarcie i pierwszym odblokowaniu, nadal offline.
+5. Zapisz model telefonu, Android, wersję APK, datę synchronizacji, planowany
+   i rzeczywisty odbiór, opóźnienie oraz wynik kliknięcia dla obu prób.
+   Z drugiego urządzenia odnów/usuń dokument; po synchronizacji APK sprawdź,
+   że stary alarm jest zastąpiony/anulowany. Wylogowanie usuwa dostęp do podglądu.
+
+Nie używamy joba Web Push ani `--now`. Rzeczywisty czas telefonu jest wymagany
+do odbioru fazy; wstrzyknięty czas w testach API sprawdza tylko obliczenia.
+
+### Narzędzia i komendy
+
 APK zawiera lokalny frontend. Potrzebne są Node.js 22 lub 24, JDK 21, SDK 36
 i platform-tools/ADB, a na telefonie debugowanie USB. Ustaw `JAVA_HOME`
 i `ANDROID_HOME`, jeżeli nie korzystasz z narzędzi wykrywanych w `.android-tools`.

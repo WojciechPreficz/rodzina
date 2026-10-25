@@ -38,7 +38,8 @@ export function appLinkPath(raw: unknown): string | null {
 export function notificationPath(raw: unknown): string | null {
   if (typeof raw !== 'string' || sanitizeNextPath(raw) !== raw) return null;
   return /^\/kalendarz\/wydarzenie\/[a-zA-Z0-9_-]+\?data=\d{4}-\d{2}-\d{2}$/.test(raw) ||
-    /^\/zadania\/[a-zA-Z0-9_-]+\?zadanie=[a-zA-Z0-9_-]+$/.test(raw)
+    /^\/zadania\/[a-zA-Z0-9_-]+\?zadanie=[a-zA-Z0-9_-]+$/.test(raw) ||
+    /^\/dokumenty\/[a-zA-Z0-9_-]+$/.test(raw)
     ? raw
     : null;
 }

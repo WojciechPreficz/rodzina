@@ -1,5 +1,57 @@
 # Decyzje
 
+## 25.10.2026 — filtrowanie dokumentów po statusie
+
+- Poprawka wyrównania na telefonie: znaczniki są wyśrodkowane pionowo w polu,
+  a puste pole wyszukiwania może się zwężać. Nie wymusza pustego drugiego wiersza
+  przy dwóch wybranych filtrach; większy wybór nadal zawija całe znaczniki.
+- Na polecenie właściciela „Wygasa” i „Wygasło” z licznikami stają się
+  przyciskami filtrów na komputerze. Ponowne kliknięcie wyłącza wybrany status;
+  kliknięcie drugiego przełącza status. Wybrana osoba lub kategoria pozostaje aktywna.
+- Na telefonie oba statusy są opcjami grupy „Statusy” w istniejącym polu
+  wielokrotnego wyboru. Wybrane statusy łączymy alternatywą, a wynik zawężamy
+  do wybranych osób i kategorii. Brak statusu pokazuje wszystkie statusy;
+  wyczyszczenie pola przywraca całą listę. Liczniki obejmują całą rodzinę.
+- Zmiana dotyczy wspólnego frontendu WWW i APK, bez zmian API i przypomnień.
+- Zweryfikowane lokalnie, oczekuje na CI i odbiór ręczny: 18 testów komponentu,
+  8 testów Playwright headless przy 390 i 1280 px (WWW i transport Androida),
+  lint i formatowanie zmienionych plików, typecheck, build WWW i debug APK.
+  Przejrzano zrzuty aktywnych filtrów na komputerze i telefonie.
+
+## 25.10.2026 — odnowienie i szczegóły dokumentów, krok 8.4 (#21)
+
+- Zakres pochodzi z `archive/plan-przyszle-fazy.md`. Stary opis issue z Web Push
+  ustępuje bieżącym zasadom WWW i alarmów APK. Plakietka jest przy bezpośredniej
+  pozycji „Dokumenty”, zgodnie z aktualną nawigacją.
+- Plakietka liczy dokumenty `expiring` i `expired` całej rodziny niezależnie
+  od filtra listy. Korzysta ze wspólnego zapytania, odświeżania co 20 sekund
+  i statusów liczonych w strefie rodziny; zegar odświeża status co minutę.
+  Ukrywamy plakietkę, gdy przynależność do rodziny nie jest potwierdzona.
+- „Odnowiono” na liście i w szczegółach zapisuje wyłącznie nową datę przez
+  istniejące API. Po zapisie odświeżamy dokumenty, osobiste przypomnienia
+  i lokalny harmonogram. Zarządzanie wymaga internetu; dziecko nie odnawia dokumentu.
+- `/dokumenty/:documentId` otwiera wskazany dokument z listy lub alarmu APK.
+  Brak dokumentu pokazuje komunikat zamiast zastępować go innym dokumentem.
+  Offline APK pokazuje zapisany payload właściwego alarmu (bezwzględna data,
+  ostrzeżenie o nieaktualności) przez istniejący bezpieczny podgląd alarmów.
+  Nie dodajemy trwałego cache całego sejfu ani kolejki zmian dokumentów.
+- Sekcja „Moje przypomnienia” zarządza wyłącznie przypomnieniami zalogowanej
+  osoby przez `/api/reminders/mine` z `documentId`, również dla dziecka.
+  Nie zmienia wspólnych przypomnień dokumentu. Obie operacje synchronizują alarmy.
+- Bez migracji, nowych zależności runtime, zmiennych środowiskowych i crona.
+  Backend zachowuje zgodność z poprzednim APK; nowy frontend APK budujemy osobno.
+- Po lokalnej implementacji bez commita właściciel polecił 25.10.2026 wykonać
+  commit i push na obecnej gałęzi `main`, bez tworzenia nowej gałęzi. Odbiór
+  ręczny i fizyczne próby Androida pozostają do wykonania według `DEVELOPMENT.md`.
+  Domknięcie fazy wymaga również CI końcowego commita.
+- Zweryfikowane lokalnie, oczekuje na CI: testy modułu dokumentów, statusów,
+  przypomnień, harmonogramu, podglądu offline i nawigacji przeszły; również
+  lint i formatowanie zmienionych plików, typecheck, build WWW/API, debug APK
+  oraz `release:smoke`. Osiem testów Playwright headless sprawdza CRUD,
+  odnowienie, osobiste przypomnienia, plakietkę i trasę przy 390 i 1280 px
+  na WWW i z transportem Androida. Przejrzano zrzuty szczegółów i odnowienia;
+  nie stwierdzono poziomego przepełnienia. Transport testowy nie zastępuje telefonu.
+
 ## 24.10.2026 — wielokrotny filtr dokumentów na telefonie
 
 - Na polecenie właściciela poniżej 768 px zastępujemy poziomy pasek filtrów

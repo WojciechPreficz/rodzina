@@ -51,8 +51,15 @@
   display: grid;
   gap: 12px;
 }
-.documents-filter-summary > button {
+.documents-filter-summary > button:not(.documents-status-filter) {
   margin-top: 8px;
+}
+.documents-status-filter {
+  min-height: 44px;
+}
+.documents-status-filter .mantine-Button-inner {
+  justify-content: space-between;
+  width: 100%;
 }
 .document-rows {
   padding: 0;
@@ -124,8 +131,7 @@
     box-shadow: none;
     padding: 0;
   }
-  .documents-filter-heading,
-  .documents-filter-summary {
+  .documents-filter-heading {
     display: none;
   }
   .documents-filter-options {
@@ -143,8 +149,20 @@
   }
 }
 @media (max-width: 47.99em) {
+  .documents-filter-summary {
+    display: none;
+  }
   .documents-mobile-filter .mantine-MultiSelect-input {
     height: auto;
+    display: flex;
+    align-items: center;
+  }
+  .documents-mobile-filter .mantine-MultiSelect-pillsList {
+    width: 100%;
+  }
+  .documents-mobile-filter .mantine-MultiSelect-inputField {
+    min-width: 2ch;
+    flex: 1 1 2ch;
   }
   .documents-mobile-filter .mantine-Pill-root {
     flex: 0 0 auto;
