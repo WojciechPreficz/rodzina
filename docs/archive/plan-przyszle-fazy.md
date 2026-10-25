@@ -5,6 +5,13 @@ przeniesienie nie potwierdza zakończenia faz, CI, prób telefonu ani wdrożenia
 Archiwum czytaj tylko w zakresie potrzebnym do zadania. Bieżące wymagania
 i reguły pierwszeństwa określa [plan](../plan.md).
 
+**Aktualizacja 25.10.2026:** faza 8 jest zaimplementowana — potwierdzenie właściciela.
+Poniższy zakres pozostaje historycznym zapisem wymagań. Nie oznacza to zaliczenia
+końcowego CI ani niepotwierdzonych prób ręcznych; ich zapisy w DECISIONS.md
+i checklista odbioru w [DEVELOPMENT.md](../DEVELOPMENT.md#odbiór-dokumentów--krok-84)
+pozostają bez zmian. Kontakty wydzielono do planowanej
+[fazy 9](../plan.md#faza-9---kontakty); nie należą do implementacji fazy 8.
+
 ### Faza 8 - sejf rodzinny: terminy ważności dokumentów
 
 **Cel:** rodzina wpisuje terminy ważności ważnych dokumentów i dostaje przypomnienia z wyprzedzeniem. To wersja ograniczona sejfu: przechowujemy **tylko daty ważności**, bez skanów i bez numerów dokumentów.
@@ -86,7 +93,7 @@ i reguły pierwszeństwa określa [plan](../plan.md).
 - Manualnie na fizycznym Androidzie: dokument ważny za 31 dni, przypomnienie 30 dni przed, zapis online i alarm następnego dnia o 09:00 Europe/Warsaw offline przy zamkniętym interfejsie; drugi test po restarcie i odblokowaniu. Zapisz faktyczne daty, godziny i opóźnienia. Test sztucznego czasu w API nie zastępuje tych prób; nie ma joba Web Push.
 - Spełnione punkty z sekcji 1.1.
 
-**Poza zakresem:** skany i zdjęcia dokumentów, numery dokumentów, karta zdrowia, kontakty (zostają w roadmapie).
+**Poza zakresem:** skany i zdjęcia dokumentów, numery dokumentów, karta zdrowia, kontakty (obecnie osobna, planowana faza 9 w `docs/plan.md`).
 
 ---
 
@@ -99,7 +106,7 @@ Konkurencja: Cozi, FamilyWall, TimeTree, OurHome, Skylight, Picniic, Maple. Kole
 1. **Subskrypcja iCal**: prywatny URL `.ics` (token per użytkownik) do dodania w Google Calendar.
 2. **Urodziny i rocznice**: wydarzenia roczne z domyślnym przypomnieniem tydzień wcześniej.
 3. **"Kto zawozi / kto odbiera"** przy wydarzeniach i komentarze (TimeTree).
-4. **Rozszerzenie sejfu rodzinnego** (Picniic): karta zdrowia domownika (lekarze, alergie, szczepienia, historia badań, powiązana z wydarzeniami odległymi) oraz ważne kontakty (przedszkole, szkoła, opiekunka).
+4. **Rozszerzenie sejfu rodzinnego** (Picniic): karta zdrowia domownika (lekarze, alergie, szczepienia, historia badań, powiązana z wydarzeniami odległymi). Ważne kontakty (przedszkole, szkoła, opiekunka) wydzielono do osobnej, planowanej fazy 9 w `docs/plan.md`.
 5. **Obowiązki domowe z punktami i nagrodami** dla dzieci (OurHome, Skylight). Może bazować na listach zadań z fazy 7 i dodawać zadania cykliczne.
 6. **Książka przepisów** powiązana z planem obiadów (Cozi).
 7. **Tryb tablicy na tablet w kuchni** (Skylight, Hearth): pełnoekranowy widok "dziś".

@@ -30,7 +30,7 @@
     "test": "vitest run --config apps/web/vite.config.ts",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate --config apps/api/drizzle.config.ts",
-    "db:migrate": "drizzle-kit migrate --config apps/api/drizzle.config.ts",
+    "db:migrate": "tsx apps/api/src/jobs/migrate-db.ts",
     "release": "npm run build && node scripts/build-release.mjs",
     "release:smoke": "node scripts/build-release.mjs && node scripts/smoke-release.mjs"
   },

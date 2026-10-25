@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -17,6 +18,7 @@ export function createDatabase(config: AppConfig): DatabaseConnection {
   }
 
   const sqlite = new Database(filename);
+  sqlite.function('random_uuid', () => randomUUID());
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('busy_timeout = 5000');
 

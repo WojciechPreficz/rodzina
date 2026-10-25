@@ -19,6 +19,14 @@ aktualizacji API. Szczegóły zgodności i migracji zachowuje
 
 ## 2. Zbudowanie i wgranie paczki
 
+Migracja 0023 dodaje Kontakty i cztery początkowe grupy dla każdej istniejącej
+rodziny. Wykonuj ją jobem `dist/jobs/migrate-db.js` z nowej paczki, po backupie,
+według procedury aktualizacji poniżej. Job rejestruje funkcję SQLite
+`random_uuid()` opartą o `crypto.randomUUID()`; bezpośrednie wykonanie pliku
+SQL lub `drizzle-kit migrate` nie rejestruje tej funkcji. Nie ma nowych
+zmiennych środowiskowych, zależności runtime ani zadań crona.
+Lokalne `npm run db:migrate` korzysta z tego samego joba przez `tsx`.
+
 Przed instalacją zatrzymaj lokalną aplikację (`npm run dev`, `npm run dev:api`, `npm start`) i testy w trybie watch. W każdym terminalu, w którym działają, użyj `Ctrl+C` i poczekaj na zakończenie procesu.
 
 Lokalnie, w katalogu repozytorium, uruchom kolejno:
