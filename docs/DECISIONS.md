@@ -1,5 +1,16 @@
 # Decyzje
 
+## 25.10.2026 — wiarygodny status i wersja API health
+
+- `GET /api/health` zwraca `ok` zgodne z `dbOk`; błąd zapytania SQLite daje
+  HTTP 503 oraz oba pola ustawione na `false`.
+- Wersję odczytujemy z `package.json` względem modułu API. Lokalnie jest to
+  plik `apps/api/package.json`, a w release plik już dołączany przez
+  `scripts/build-release.mjs` z tą samą wersją API. Paczka nie zawiera osobnego SHA.
+  Nie polegamy na `npm_package_version`, którego Passenger nie musi ustawiać.
+- Smoke uruchamia `server.cjs` bez tej zmiennej i porównuje wersję odpowiedzi
+  z `package.json` rozpakowanego wydania. Bez nowych zależności i konfiguracji.
+
 ## 25.10.2026 — filtrowanie dokumentów po statusie
 
 - Poprawka wyrównania na telefonie: znaczniki są wyśrodkowane pionowo w polu,

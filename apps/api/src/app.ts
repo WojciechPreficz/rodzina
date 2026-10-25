@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -17,6 +18,12 @@ import { registerTaskListRoutes } from './modules/tasks/routes.js';
 import { registerDocumentRoutes } from './modules/documents/routes.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 
+const { version } = JSON.parse(
+  readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'),
+) as {
+  version: string;
+};
+
 export async function buildApp(config: AppConfig, database: DatabaseConnection): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: true,
@@ -28,7 +35,6 @@ export async function buildApp(config: AppConfig, database: DatabaseConnection):
             serializers: { req: (request) => ({ method: request.method, hostname: request.hostname }) },
           },
   });
-  const version = process.env.npm_package_version ?? '0.1.0';
 
   registerApiErrorHandler(app);
   registerSecurityHeaders(app, config);
@@ -48,7 +54,7 @@ export async function buildApp(config: AppConfig, database: DatabaseConnection):
       app.log.error({ err: error }, 'Health check failed to query SQLite');
     }
 
-    return reply.code(dbOk ? 200 : 503).send({ ok: true, version, dbOk });
+    return reply.code(dbOk ? 200 : 503).send({ ok: dbOk, version, dbOk });
   });
 
   registerEventRoutes(app, database);

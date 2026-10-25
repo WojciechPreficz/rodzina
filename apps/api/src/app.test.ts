@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app.js';
 import { hashToken, randomToken } from './auth.js';
 import { loadConfig } from './config.js';
@@ -48,21 +49,41 @@ describe('auth API', () => {
 
   afterEach(async () => {
     await app?.close();
-    database?.sqlite.close();
+    if (database?.sqlite.open) database.sqlite.close();
+    vi.unstubAllEnvs();
     app = undefined;
     database = undefined;
   });
 
-  it('reports a healthy SQLite database', async () => {
+  it.each([undefined, 'incorrect-npm-version'])(
+    'reports the package version with npm_package_version=%s',
+    async (npmVersion) => {
+      vi.stubEnv('npm_package_version', npmVersion);
+      const testApp = await createTestApp();
+      app = testApp.app;
+      database = testApp.database;
+
+      const response = await app.inject({ method: 'GET', url: '/api/health' });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ ok: true, dbOk: true });
+      const apiPackage = JSON.parse(
+        readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'),
+      );
+      expect(response.json().version).toBe(apiPackage.version);
+    },
+  );
+
+  it('reports an unhealthy SQLite database', async () => {
     const testApp = await createTestApp();
     app = testApp.app;
     database = testApp.database;
+    database.sqlite.close();
 
     const response = await app.inject({ method: 'GET', url: '/api/health' });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ ok: true, dbOk: true });
-    expect(response.json().version).toEqual(expect.any(String));
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ ok: false, dbOk: false });
   });
 
   it('registers a family and logs in', async () => {

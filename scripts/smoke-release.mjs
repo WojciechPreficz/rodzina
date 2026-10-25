@@ -96,15 +96,21 @@ try {
   for (let attempt = 0; attempt < 2; attempt++) {
     await run(process.execPath, ['--env-file', envFile, 'dist/jobs/migrate-db.js'], { cwd: temporaryDirectory });
   }
+  const releasePackage = JSON.parse(await readFile(path.join(temporaryDirectory, 'package.json'), 'utf8'));
+  const serverEnv = { ...process.env, RODZINA_ENV_FILE: envFile };
+  delete serverEnv.npm_package_version;
   server = spawn(process.execPath, ['server.cjs'], {
     cwd: temporaryDirectory,
-    env: { ...process.env, RODZINA_ENV_FILE: envFile },
+    env: serverEnv,
     stdio: 'inherit',
   });
 
   const healthResponse = await waitForHealth(port);
   const health = await healthResponse.json();
   if (health.ok !== true || health.dbOk !== true) fail('health check nie potwierdził sprawnej bazy.');
+  if (typeof health.version !== 'string' || !health.version || health.version !== releasePackage.version) {
+    fail('wersja health check nie odpowiada wersji package.json w paczce release.');
+  }
 
   const pageResponse = await fetch(`http://127.0.0.1:${port}/`);
   const page = await pageResponse.text();
