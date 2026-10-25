@@ -1,5 +1,34 @@
 # Decyzje
 
+## 25.10.2026 — rejestr magazynów konta (etap A)
+
+- `accountStorage.ts` jest jednym miejscem rejestracji magazynów kalendarza,
+  zadań, zakupów i danych rodziny/sesji. `clearAccountData` zastępuje wszystkie
+  pięć ścieżek ręcznego czyszczenia w `auth.tsx`. Kolejny magazyn konta musi
+  zarejestrować obsługę czyszczenia, również gdy nie ma kolejki zmian.
+- Powody `logout`, `session-lost` i `account-changed` usuwają dane z urządzenia.
+  `storage-changed` resetuje tylko bieżącą kartę i zatrzymuje zapisy zakupów:
+  dane zapisane przez inną kartę pozostają. Kalendarz i zadania unieważniają
+  swoje generacje przed zmianą sesji i alarmów. Zapis zakupów zatrzymujemy
+  przed czyszczeniem QueryClient; wylogowanie nadal czeka na anulowanie zapytań.
+  Obsługa natywnej sesji i alarmów pozostaje w dotychczasowych ścieżkach.
+- Test enumeruje wszystkie klucze `rodzina:` po utworzeniu rzeczywistych
+  danych i operacji obu kolejek. Niezależnie od rejestru wyszukuje też pełne
+  literały kluczy w źródłach frontendu i dodaje dla nich wartości kontrolne,
+  aby brak rejestracji nowego magazynu powodował błąd. Nowe klucze konstruowane
+  w całości dynamicznie wymagają rozszerzenia danych testowych. Jedynym
+  wyjątkiem trwałości jest `rodzina:pending-logout`: nie zawiera danych konta
+  i zapobiega przywróceniu sesji cookie przed potwierdzeniem wylogowania WWW.
+- Bez migracji danych, zmiany silników offline, nowych zależności, konfiguracji
+  i crona. Etap B pozostaje osobną propozycją do decyzji właściciela.
+- Weryfikacja lokalna: lint (bez błędów, dwa ostrzeżenia Fast Refresh),
+  formatowanie zmienionych plików, typecheck, 820 testów Vitest, build WWW/API
+  i debug APK oraz 22 testy Playwright headless offline/auth przy 390 i 1280 px
+  przeszły. Przejrzano zrzuty widoków offline; testy obejmują WWW i transport
+  Androida. ADB nie wykrywa urządzeń, więc próby na fizycznym telefonie nie
+  wykonano. Właściciel zlecił lokalny commit etapu A, bez pusha:
+  **zweryfikowane lokalnie, oczekuje na CI** oraz odbiór na urządzeniu.
+
 ## 25.10.2026 — wspólna idempotencja i retencja odpowiedzi API
 
 - Zakupy i zadania korzystają z jednego wrappera synchronicznych mutacji oraz

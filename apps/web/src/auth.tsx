@@ -4,7 +4,6 @@ import { focusManager, onlineManager, QueryClientContext } from '@tanstack/react
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { apiFetch, ApiRequestError, sanitizeNextPath } from './api.js';
 import {
-  clearShoppingStorage,
   stopShoppingPersistence,
   readShoppingSession,
   restoreShopping,
@@ -16,7 +15,6 @@ import { ScheduleSync } from './features/notifications/scheduleSync.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
 import {
   accountId,
-  clearOfflineData,
   familyMembersKey,
   OFFLINE_DATA_KEY,
   readOfflineData,
@@ -33,6 +31,7 @@ import { calendarStore } from './features/calendar/calendarOffline.js';
 import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
 import { taskStore } from './features/tasks/taskOffline.js';
 import { TaskPrefetch } from './features/tasks/taskQueries.js';
+import { clearAccountData } from './accountStorage.js';
 
 export type AuthState = {
   user: AuthUser | null;
@@ -101,11 +100,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       const response = await apiFetch<AuthMeResponse>('/api/auth/me');
       if (!current()) return;
       if (currentSession.current && accountId(currentSession.current) !== accountId(response)) {
-        calendarStore.clear();
-        taskStore.clear();
-        clearShoppingStorage(queryClient);
-        clearOfflineData();
-        queryClient?.clear();
+        clearAccountData('account-changed', { queryClient });
         setFamilySyncedAt(undefined);
         setFamilyConfirmed(false);
       }
@@ -147,11 +142,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       if (error instanceof ApiRequestError && [401, 403].includes(error.status)) {
         generation.current += 1;
         invalidateSessionRequests();
-        clearOfflineData();
-        calendarStore.clear();
-        taskStore.clear();
-        clearShoppingStorage(queryClient);
-        queryClient?.clear();
+        clearAccountData('session-lost', { queryClient });
         currentSession.current = undefined;
         setUser(null);
         setFamily(null);
@@ -190,15 +181,13 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   const identity = user && family ? `${family.id}:${user.id}` : undefined;
   useEffect(() => {
     const loseSession = (removeStored: boolean) => {
-      calendarStore.clear(removeStored);
-      taskStore.clear(removeStored);
-      if (isAndroid()) localScheduler.invalidate();
-      generation.current += 1;
-      if (removeStored) {
-        clearShoppingStorage(queryClient);
-        clearOfflineData();
-      } else if (queryClient) stopShoppingPersistence(queryClient);
-      queryClient?.clear();
+      clearAccountData(removeStored ? 'session-lost' : 'storage-changed', {
+        queryClient,
+        invalidateSession: () => {
+          if (isAndroid()) localScheduler.invalidate();
+          generation.current += 1;
+        },
+      });
       setUser(null);
       setFamily(null);
       currentSession.current = undefined;
@@ -228,21 +217,23 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   }, [queryClient, identity]);
 
   const logout = async () => {
-    calendarStore.clear();
-    taskStore.clear();
-    if (isAndroid()) localScheduler.invalidate();
-    generation.current += 1;
-    invalidateSessionRequests();
-    clearShoppingStorage(queryClient);
-    clearOfflineData();
-    currentSession.current = undefined;
-    setUser(null);
-    setFamily(null);
-    setFamilyConfirmed(false);
-    setFamilySyncedAt(undefined);
-    if (!isAndroid()) pendingWebLogout(true);
-    await queryClient?.cancelQueries();
-    queryClient?.clear();
+    await clearAccountData('logout', {
+      queryClient,
+      invalidateSession: () => {
+        if (isAndroid()) localScheduler.invalidate();
+        generation.current += 1;
+        invalidateSessionRequests();
+      },
+      beforeQueryClear: async () => {
+        currentSession.current = undefined;
+        setUser(null);
+        setFamily(null);
+        setFamilyConfirmed(false);
+        setFamilySyncedAt(undefined);
+        if (!isAndroid()) pendingWebLogout(true);
+        await queryClient?.cancelQueries();
+      },
+    });
     try {
       await apiFetch<AuthOkResponse>('/api/auth/logout', { method: 'POST' });
       pendingWebLogout(false);
@@ -256,17 +247,17 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   };
 
   const setSession = (nextUser: AuthUser, nextFamily: Family) => {
-    calendarStore.clear();
-    taskStore.clear();
-    calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
-    taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
-    if (isAndroid()) localScheduler.invalidate();
-    generation.current += 1;
-    invalidateSessionRequests();
-    pendingWebLogout(false);
-    clearShoppingStorage(queryClient);
-    clearOfflineData();
-    queryClient?.clear();
+    clearAccountData('account-changed', {
+      queryClient,
+      invalidateSession: () => {
+        calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
+        taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
+        if (isAndroid()) localScheduler.invalidate();
+        generation.current += 1;
+        invalidateSessionRequests();
+        pendingWebLogout(false);
+      },
+    });
     if (queryClient) void restoreShopping(queryClient, { user: nextUser, family: nextFamily });
     setUser(nextUser);
     setFamily(nextFamily);
