@@ -29,6 +29,233 @@
   wykonano. Właściciel zlecił lokalny commit etapu A, bez pusha:
   **zweryfikowane lokalnie, oczekuje na CI** oraz odbiór na urządzeniu.
 
+## 25.10.2026 — PROPOZYCJA DO AKCEPTACJI: wspólny outbox i IndexedDB (etap B)
+
+**Status: projekt do decyzji właściciela, bez implementacji.** Proponujemy
+najpierw przenieść istniejące formaty do IndexedDB, a dopiero potem zastępować
+silniki kolejek, po jednym module. Rozdzielenie zmian ułatwia sprawdzenie,
+czy ewentualny błąd dotyczy migracji danych, czy odtwarzania operacji.
+Akceptacji wymagają zakres, kolejność, budżety oraz zasady postępowania
+z niewysłanymi zmianami. Ten wpis nie uruchamia realizacji kolejnej fazy.
+
+### Wspólny silnik operacji
+
+- Jeden outbox dla zakupów i zadań; przyszłe moduły dołączają adapterami
+  dopiero w swoim zaakceptowanym zakresie. Kalendarz i rodzina pozostają
+  podglądem offline. Nie dodajemy teraz kolejek obiadów ani dokumentów.
+- Koperta operacji: `schemaVersion`, `operationId`, `accountId`
+  (`familyId:userId`), `module`, `entityId`, `sequence`, `submittedAt`,
+  `payload`, `status`, `attempts`, `nextAttemptAt` i ostatni błąd. Opcjonalna
+  wersja bazowa służy tylko adapterom, których API rzeczywiście obsługuje
+  kontrolę współbieżności. Dane waliduje wersjonowany schemat modułu.
+- `operationId` powstaje raz przez `crypto.randomUUID()` przed pierwszym
+  zapisem i pozostaje ten sam przy ponowieniu, restarcie oraz migracji.
+  Import zakupów zachowuje obecne `operationId`, import zadań mapuje `id`
+  na `operationId`. Zachowujemy również oryginalne `submittedAt` i identyfikatory
+  tworzonych obiektów; migracja nie odmładza operacji.
+- Przyjęcie zmiany przez UI następuje dopiero po zakończeniu transakcji
+  zapisującej operację i lokalną projekcję. Numer `sequence` nadaje ta sama
+  transakcja. Silnik wysyła operacje kolejno dla konta, bez wyprzedzania
+  zależnego dodania/edycji/usunięcia. Odtworzenie projekcji jest niezależne
+  od komponentów i od stanu mutacji TanStack Query; Query pozostaje cache UI.
+- Jedna karta/WebView wysyła kolejkę konta. Właściciela, dzierżawę i jej
+  generację przechowujemy transakcyjnie w IndexedDB. Wygasła dzierżawa pozwala
+  wznowić pracę po awarii; generacja odrzuca spóźnione odpowiedzi. Powtórzenie
+  żądania po utracie dzierżawy nadal chroni ten sam `operationId` na serwerze.
+  Powiadomienie innych kart tylko przyspiesza odświeżenie, nie zastępuje blokady.
+- Błąd sieci, HTTP 429 i 5xx: rosnący odstęp z losowym rozrzutem, trwałe
+  `nextAttemptAt`, respektowanie dostępnego `Retry-After`. Wznowienie po starcie,
+  odzyskaniu sieci i aktywacji aplikacji; bez wymagania pracy WWW w tle i bez PWA.
+  Zachowujemy obecny limit automatycznego odtwarzania 30 dni oraz retencję
+  odpowiedzi API 90 dni. Starsze operacje pozostają do ręcznego rozstrzygnięcia.
+- Przed wysyłką potwierdzamy konto i uprawnienia. `SESSION_CHANGED`, 401 oraz
+  potwierdzona zmiana tożsamości zatrzymują cały outbox, unieważniają generację
+  i uruchamiają istniejącą obsługę utraty sesji. Operacja nigdy nie przechodzi
+  na nowe konto. Dotychczasowe czyszczenie przy wylogowaniu i zmianie konta
+  nadal usuwa niewysłane zmiany; etap B nie wprowadza ich ukrytego zachowywania.
+  Zmiana sesji w innej karcie zatrzymuje tylko stary kontekst, bez usuwania
+  nowych danych tej karty. Adapter musi rozróżniać kod błędu od samego statusu.
+- HTTP 409 obsługujemy według kodu i semantyki modułu, bez automatycznego
+  nadpisywania serwera i bez tworzenia nowego `operationId`. Blokujemy operację
+  oraz jej zależności, pobieramy bieżący stan i pokazujemy polski komunikat
+  z możliwością odrzucenia zmiany lub świadomego wprowadzenia nowej. Dopiero
+  nowa, zmieniona przez użytkownika intencja dostaje nowy identyfikator.
+  Brak dostępu lub usunięty obiekt wymagają odrębnej obsługi 403/404, zgodnej
+  z prywatnością zadań; nie przechowujemy dalej treści cofniętego udostępnienia.
+- Po sukcesie odpowiedź/projekcję i usunięcie wpisu outbox zapisujemy w jednej
+  transakcji. Awaria przed nią powoduje bezpieczne ponowienie z tym samym ID.
+  Unieważnienie konta po wysłaniu żądania blokuje zastosowanie późnej odpowiedzi.
+
+### IndexedDB i proponowane budżety
+
+- Jedna wersjonowana baza originu z magazynami `outbox`, `cache`, `metadata`
+  i roboczym obszarem migracji. Każdy rekord danych ma konto, moduł i wersję;
+  indeksy umożliwiają wyczyszczenie całego konta przez rejestr z etapu A.
+  Sesja natywna i harmonogram alarmów pozostają w obecnym magazynie Androida;
+  nie kopiujemy tokenów do IndexedDB. W localStorage pozostają wyłącznie
+  małe znaczniki koordynacyjne, w tym oczekujące wylogowanie.
+- Proponowany początkowy budżet aplikacji: **32 MiB**, w tym **8 MiB**
+  rezerwy kolejek (zakupy 4 MiB, zadania 4 MiB) oraz **24 MiB** cache:
+  kalendarz 12 MiB, zadania 6 MiB, zakupy 4 MiB, rodzina/sesja 2 MiB.
+  To wartości projektowe do zatwierdzenia i pomiarów na rzeczywistych danych,
+  a nie gwarancja miejsca przydzielonego przez przeglądarkę. Każdy przyszły
+  moduł wymaga jawnego budżetu; nie zabiera po cichu rezerwy kolejek.
+- Zużycie liczymy dla zapisów modułu w tej samej transakcji, uwzględniając
+  reprezentację danych; margines na narzut bazy ustalamy po pomiarach.
+  Podczas migracji potrzebny jest dodatkowy zapas na źródło i kopię roboczą;
+  brak miejsca zatrzymuje migrację bez usuwania dziennika źródłowego.
+- Cache usuwa najstarsze nieużywane dane przy swoim limicie; kalendarz zachowuje
+  także obecne maksimum 12 miesięcy. Projekcji potrzebnej niewysłanym operacjom
+  nie usuwamy jak zwykłego cache. Kolejki nie podlegają automatycznemu usuwaniu
+  według rozmiaru. Brak miejsca po ograniczeniu cache oznacza odrzucenie nowej
+  zmiany z komunikatem, bez fałszywego potwierdzenia przyjęcia i bez fallbacku
+  do drugiego silnika localStorage.
+- Zgoda na trwałość danych, jeśli dostępna, i oszacowanie miejsca są pomocnicze.
+  Przeglądarka/system nadal mogą usunąć dane originu, a użytkownik może je
+  wyczyścić. IndexedDB i budżety ograniczają ryzyko, lecz nie zastępują synchronizacji
+  i nie zapewniają kopii serwerowej dla jeszcze niewysłanych operacji.
+
+### Kroki realizacji etapu B — propozycja
+
+Po akceptacji realizujemy kolejno B.1–B.7: jeden krok na czat i commit,
+zgodnie z zasadami kontroli lokalnych i CI z sekcji 1.2 `plan.md`.
+Każdy krok implementacyjny pozostawia działającą aplikację. Infrastrukturę
+wprowadzamy razem z pierwszym korzystającym z niej modułem. Ten podział
+nie oznacza akceptacji etapu B ani rozpoczęcia jego implementacji.
+
+#### B.1 — kontrakt migracji i przypadki testowe
+
+- **Zakres:** zinwentaryzować klucze, formaty i reguły obu kolejek. Opisać
+  schemat IDB, protokół wyłączności kart, wersjonowanie, budżety i zasady
+  rollbacku. Przygotować próbki poprawnych/uszkodzonych cache i dzienników,
+  operacji w locie, różnych kont oraz zmian starszych niż 30 dni.
+- **Gotowe, gdy:** uzgodnione są zakres, budżety i zachowanie przy konflikcie,
+  wylogowaniu oraz braku miejsca. Każdy format źródłowy ma opis mapowania,
+  zachowania identyfikatorów i kolejności, także dla wpisów z tym samym czasem.
+  Są wskazane testy awarii wymagane w kolejnych krokach. Ten krok obejmuje
+  dokumentację i dane testowe; produkcyjny zapis nadal działa jak dotychczas.
+
+#### B.2 — IndexedDB dla rodziny, sesji offline i kalendarza
+
+- **Zakres:** uruchomić wersjonowaną bazę i użyć jej od razu dla obu magazynów
+  podglądu. Wdrożyć ich import, budżety cache, usuwanie najstarszych danych
+  oraz obsługę błędów miejsca/dostępu. Zachować limit 12 miesięcy kalendarza.
+  Tokeny i harmonogram Androida pozostają w obecnym magazynie natywnym.
+- W tym kroku wdrożyć wyłączność migracji i koordynację kart. Wszystkie
+  uczestniczące karty muszą potwierdzić wstrzymanie zapisów; starsze wersje
+  trzeba zamknąć/przeładować. Sama blokada IDB nie blokuje zapisu localStorage
+  przez stary kod; bez zapewnionej wyłączności migracja czeka. WWW i APK
+  migrują osobno we własnych originach.
+- Dostosować rejestr etapu A do asynchronicznego czyszczenia: zatrzymać
+  poprzedni kontekst przed oczekiwaniem na IDB i wyczyścić także dane migracji.
+  Zastąpić zależność auth od usunięcia starego klucza jawnym sygnałem zmiany
+  sesji. Zapisy i odczyty zakupów oraz zadań pozostają w localStorage.
+- **Gotowe, gdy:** podgląd obu modułów działa po migracji i restarcie offline,
+  a wylogowanie i zmiana konta usuwają ich dane IDB i stare kopie. Przejście
+  nie wylogowuje przypadkowo innych kart. Brak IDB ma jawny komunikat;
+  nie uruchamia równoległego zapisu do dwóch magazynów. WWW przy 390/1280 px
+  i APK zachowują podgląd; testy obejmują awarię i wylogowanie podczas importu.
+
+#### B.3 — istniejąca kolejka zakupów w IndexedDB
+
+- **Zakres:** przenieść snapshot i dziennik zakupów do IDB, zachowując obecny
+  silnik mutacji TanStack i semantykę operacji. Dostosować przyjęcie zmiany
+  do asynchronicznego trwałego zapisu: UI potwierdza ją dopiero po transakcji.
+  Wprowadzić budżet kolejki i cache zakupów.
+- Importować dziennik jako źródło prawdy, odzyskać brakujące wpisy ze snapshotu,
+  deduplikować po koncie i ID oraz zachować `operationId`, `submittedAt`,
+  identyfikatory obiektów i kolejność. Sprzeczne kopie lub nieczytelny dziennik
+  blokują migrację z komunikatem; nie wolno ich po cichu pomijać.
+- **Gotowe, gdy:** import, weryfikacja i znacznik ukończenia chronią przed
+  pominięciem lub ponownym importem operacji po awarii. Zakupy przeżywają
+  restart offline i utratę odpowiedzi bez duplikatów po synchronizacji.
+  Sprawdzone są pełny magazyn, karty, wylogowanie i zmiana konta. Nie można
+  przyjąć nowej zmiany, której transakcja się nie powiodła. Zadania nadal
+  używają swojego dotychczasowego magazynu i silnika.
+
+#### B.4 — istniejąca kolejka zadań w IndexedDB
+
+- **Zakres:** przenieść snapshot i dziennik zadań do IDB, zachowując obecny
+  silnik synchronizacji, uprawnienia i ograniczenia edycji offline. Zachować
+  `id` operacji, czasy i kolejność; zastosować zweryfikowany protokół migracji
+  z B.3 oraz budżety zadań. Potwierdzać zmianę dopiero po trwałym zapisie.
+- **Gotowe, gdy:** migracja i synchronizacja po restarcie zachowują wszystkie
+  niewysłane zmiany bez duplikatów. Testy sprawdzają cofnięcie udostępnienia,
+  zmianę konta, usunięty obiekt, brak miejsca i awarie importu. W APK nadal
+  działa blokowanie alarmów zmienionych zadań oraz ich uzgodnienie po sync.
+  Wszystkie cztery magazyny danych konta korzystają już z IDB; localStorage
+  zawiera jedynie małe znaczniki koordynacji i wylogowania.
+
+#### B.5 — wspólny silnik outbox z adapterem zakupów
+
+- **Zakres:** wdrożyć wspólny silnik od razu jako obsługę działających zakupów.
+  Dodać kopertę operacji, transakcję operacji i projekcji, kolejność wysyłania,
+  dzierżawę nadawcy, trwały harmonogram retry i obsługę limitu wieku. Przejąć
+  kolejkę zakupów z B.3, zachowując ID i czasy. TanStack pozostaje cache UI.
+- Wprowadzić obsługę `SESSION_CHANGED`, 401, konfliktów 409 i spóźnionych
+  odpowiedzi. Konflikt ma komunikat i możliwość świadomego rozstrzygnięcia;
+  ponowienie tej samej operacji nie dostaje nowego ID. Przełączenie silnika
+  odbywa się transakcyjnie przy zatrzymanej synchronizacji.
+- **Gotowe, gdy:** zakupy działają od początku do końca przez outbox. Testy
+  obejmują utratę odpowiedzi, retry po restarcie, wygaśnięcie dzierżawy,
+  równoległe karty, konflikty i odcięcie poprzedniej sesji. Tylko jeden silnik
+  wysyła zakupy; jego stara ścieżka zostaje wyłączona. Zadania nadal działają
+  na swoim silniku w IDB.
+
+#### B.6 — zadania przez wspólny outbox
+
+- **Zakres:** dodać adapter zadań, mapując dotychczasowe `id` na `operationId`
+  i zachowując daty oraz kolejność. Przełączyć kolejkę z B.4 na silnik z B.5.
+  Zachować prywatność list, zachowanie po cofnięciu dostępu i integrację
+  oczekujących zmian z alarmami Androida.
+- **Gotowe, gdy:** zakupy i zadania korzystają z jednej kolejki konta oraz
+  wspólnych zasad retry, sesji i konfliktów. Testy sprawdzają kolejność także
+  między modułami, blokowanie zależności przez konflikt, utratę uprawnień,
+  restart i zmianę konta. Tylko outbox wysyła zadania; ich stary silnik zostaje
+  wyłączony. Sprawdzone są alarmy zadań na fizycznym Androidzie.
+
+#### B.7 — odbiór migracji i usunięcie starego kodu
+
+- **Zakres:** przeprowadzić wspólny odbiór całej ścieżki aktualizacji od wersji
+  z localStorage do wersji z IDB i outbox. Sprawdzić budżety na rzeczywistych
+  danych i udokumentować wspieraną wersję APK oraz bezpieczny rollback.
+  Po odbiorze usunąć nieużywane persistery, stare silniki i zbędny kod przejściowy;
+  zachować import wersji, z których nadal wspieramy aktualizację.
+- **Gotowe, gdy:** headless WWW przy 390/1280 px i fizyczny Android przechodzą
+  migrację offline, ubicie procesu w punktach przełączenia, restart, równoległe
+  karty, brak miejsca, odmowę IDB i wylogowanie podczas importu/żądania.
+  Test rejestru obejmuje IDB, pozostałości localStorage i obszar migracji.
+  CI dla końcowego commita przechodzi; brakujące próby sprzętowe są raportowane
+  jako niewykonane i nie pozwalają zamknąć odbioru.
+
+### Zasady przełączenia i ryzyko utraty zmian
+
+W B.2–B.4 każdy migrowany moduł zapisuje import i znacznik ukończenia
+w jednej transakcji, a następnie ponownie odczytuje i porównuje wynik ze źródłem.
+Synchronizacja i stare zapisy pozostają zatrzymane do zakończenia weryfikacji.
+Awaria przed zatwierdzeniem importu pozostawia localStorage jako źródło;
+awaria po zatwierdzeniu odczytuje znacznik IDB i nie importuje drugi raz.
+Jeżeli znacznik jest zapisany, ale weryfikacja nie została zakończona,
+start wznawia weryfikację przed uruchomieniem zapisów i synchronizacji.
+Źródło zachowujemy tylko na czas weryfikacji jako nieaktywną kopię, a po niej
+usuwamy, aby nie odtworzyć potwierdzonych już operacji. Brak miejsca lub błąd
+importu nie może powodować usunięcia niewysłanych zmian. Nie stosujemy
+równoległego zapisu dwóch silników. W B.5–B.6 przejęcie kolejki i znacznik
+wersji silnika również zapisujemy transakcyjnie.
+
+Rollback po nowych zapisach w IDB wymaga wersji nadal czytającej IDB;
+powrót do starego APK lub do localStorage bez migracji odwrotnej grozi
+utratą nowych zmian. Każdy krok zachowuje możliwość aktualizacji ze wspieranych
+wcześniejszych wersji, także gdy użytkownik pominie wydanie pośrednie.
+
+Największe ryzyka to pominięcie dziennika, ponowne nadanie ID, stara karta
+dopisująca po imporcie i powrót do starej wersji. Ograniczają je zachowanie
+źródła do weryfikacji, wyłączność, transakcje i jeden aktywny silnik. Nie da się
+wycofać wyczyszczenia danych aplikacji przez system ani odtworzyć zmiany, która
+nigdy nie została trwale zapisana. Jawne wylogowanie nadal usuwa niewysłane
+zmiany zgodnie z obecną polityką; ewentualna zmiana tego zachowania wymaga
+osobnej decyzji właściciela i projektu komunikatu w UI.
+
 ## 25.10.2026 — wspólna idempotencja i retencja odpowiedzi API
 
 - Zakupy i zadania korzystają z jednego wrappera synchronicznych mutacji oraz
