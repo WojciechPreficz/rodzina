@@ -34,6 +34,7 @@ const releaseFiles = {
   'server.cjs': 'new server',
   'dist/server.js': 'new API',
   'dist/jobs/backup-db.js': 'backup job',
+  'dist/jobs/migrate-db.js': 'migration job',
   'public/index.html': '<div id="root"></div>',
   'public/assets/app.js': 'new UI',
   'drizzle/meta/_journal.json': '{}',
@@ -91,7 +92,14 @@ async function fixture() {
     backup: vi.fn(async () => {
       await write(root, 'backups/pre-deploy.db', 'database snapshot');
     }),
-    execute: vi.fn(async (tool, args) => {
+    execute: vi.fn(async (tool, args, cwd) => {
+      if (tool === config.node) {
+        expect(args).toEqual([`--env-file=${config.envFile}`, 'dist/jobs/migrate-db.js']);
+        expect(cwd).toBe(path.join(stage, 'unpacked'));
+        expect(events.at(-1)).toBe('migration');
+        expect(await readFile(path.join(root, 'backups/pre-deploy.db'), 'utf8')).toBe('database snapshot');
+        return;
+      }
       expect(tool).toBe('tar');
       expect(args.slice(2)).toEqual(managed);
       await writeFile(args[1], 'previous application archive');
@@ -396,6 +404,7 @@ describe('local directory with fake SSH transport', () => {
       'dependencies',
       'dependencies-check',
       'backup',
+      'migration',
       'previous-package',
       'promotion',
       'promotion-check-restart',
@@ -448,7 +457,7 @@ describe('local directory with fake SSH transport', () => {
     expect(await readFile(path.join(f.root, 'node_modules/old-package/index.js'), 'utf8')).toBe('old dependency');
     expect(await readFile(path.join(f.root, 'server.cjs'), 'utf8')).toBe('old server.cjs');
   });
-  it.each(['checksum', 'extraction', 'dependencies', 'backup', 'previous-package'])(
+  it.each(['checksum', 'extraction', 'dependencies', 'backup', 'migration', 'previous-package'])(
     'failure at %s leaves the live application unchanged',
     async (failure) => {
       const f = await fixture();
@@ -465,13 +474,22 @@ describe('local directory with fake SSH transport', () => {
         f.options.backup = async () => {
           throw new Error('backup failed');
         };
-      if (failure === 'previous-package')
+      if (failure === 'migration')
         f.options.execute = async () => {
-          throw new Error('archive failed');
+          throw new Error('migration failed');
         };
+      if (failure === 'previous-package') {
+        const execute = f.options.execute;
+        f.options.execute = async (...args) => {
+          if (args[0] === 'tar') throw new Error('archive failed');
+          return execute(...args);
+        };
+      }
       await expect(applyRelease(f.config, f.transaction, f.options)).rejects.toThrow();
+      expect(f.events.at(-1)).toBe(failure);
       expect(await readFile(path.join(f.root, 'dist/server.js'), 'utf8')).toBe('old dist/server.js');
       expect(f.events).not.toContain('promotion');
+      expect(f.events).not.toContain('restart');
       await expect(readFile(path.join(f.root, 'tmp/restart.txt'))).rejects.toThrow();
     },
   );

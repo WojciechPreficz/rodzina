@@ -74,6 +74,28 @@ try {
   await run(process.execPath, [process.env.npm_execpath, 'install', '--omit=dev', '--no-audit', '--no-fund'], {
     cwd: temporaryDirectory,
   });
+  // A production process must refuse an unmigrated database with an actionable error.
+  await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['server.cjs'], {
+      cwd: temporaryDirectory,
+      env: { ...process.env, RODZINA_ENV_FILE: envFile, NODE_ENV: 'production' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 20000,
+    });
+    let output = '';
+    child.stdout.on('data', (data) => (output += data));
+    child.stderr.on('data', (data) => (output += data));
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (code === 1 && output.includes('Baza wymaga migracji') && output.includes('dist/jobs/migrate-db.js'))
+        resolve();
+      else reject(new Error('Produkcja nie odrzuciła bazy bez migracji z czytelnym błędem.'));
+    });
+  });
+  // The runtime job must work from the release, with production dependencies only, and be repeatable.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await run(process.execPath, ['--env-file', envFile, 'dist/jobs/migrate-db.js'], { cwd: temporaryDirectory });
+  }
   server = spawn(process.execPath, ['server.cjs'], {
     cwd: temporaryDirectory,
     env: { ...process.env, RODZINA_ENV_FILE: envFile },

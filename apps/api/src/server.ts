@@ -4,12 +4,19 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { loadConfig } from './config.js';
 import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
+import { assertMigrationsApplied } from './db/migrations.js';
 
 const config = loadConfig();
 const database = createDatabase(config);
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../drizzle');
 
-migrate(database.db, { migrationsFolder });
+try {
+  if (config.NODE_ENV === 'production') assertMigrationsApplied(database, migrationsFolder);
+  else migrate(database.db, { migrationsFolder });
+} catch (error) {
+  database.sqlite.close();
+  throw error;
+}
 
 const app = await buildApp(config, database);
 try {

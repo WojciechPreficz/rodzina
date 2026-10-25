@@ -62,6 +62,7 @@ export function validateArchive(bytes) {
     'package.json',
     'dist/server.js',
     'dist/jobs/backup-db.js',
+    'dist/jobs/migrate-db.js',
     'public/index.html',
     'drizzle/meta/_journal.json',
   ])
@@ -110,6 +111,7 @@ export function failureDiagnostic(stdout, stderr) {
     'dependencies',
     'dependencies-check',
     'backup',
+    'migration',
     'previous-package',
     'promotion',
     'promotion-check-restart',
@@ -380,7 +382,7 @@ export async function deploy({
       await writeFile(frozenApk, apkBytes);
       await execute('scp', [...options, '-P', config.port, frozenApk, `${target}:${transaction.stage}/android.apk`]);
     }
-    phase = 'checksum / staging / dependencies / backup / promotion / restart';
+    phase = 'checksum / staging / dependencies / backup / migration / promotion / restart';
     await remote('apply', transaction);
     phase = 'HTTP verification';
     await checkSite(before, { fetcher, pause });

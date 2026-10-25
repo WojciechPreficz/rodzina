@@ -27,7 +27,7 @@ Każda faza, która to dotyczy, musi:
 
 - dopisać nowe zmienne środowiskowe do `apps/api/.env.example` (z komentarzem) i do sekcji konfiguracji w `docs/DEPLOY.md`;
 - dopisać nowe zadania okresowe do sekcji crona w `docs/DEPLOY.md`, z gotową linią do wklejenia w cPanel;
-- commitować wygenerowane migracje Drizzle, bo serwer uruchamia je przy starcie;
+- commitować wygenerowane migracje Drizzle; produkcja uruchamia je jawnym jobem po backupie podczas deployu, a start API sprawdza ich zastosowanie;
 - zapewnić, że nowe zależności runtime nie wymagają kompilacji na serwerze. Jeśli wymagają, trzeba to oznaczyć w `DECISIONS.md` i dodać jako external w `build-release.mjs`;
 - przejść `npm run release:smoke` w CI dla końcowego commita, a lokalnie w przypadkach z sekcji 1.2: zip jest rozpakowywany do katalogu tymczasowego, instalowane są zależności produkcyjne, startuje `server.cjs` z testowym `.env`, a skrypt sprawdza `/api/health` i serwowanie `index.html`;
 - nie zakładać niczego, czego nie ma na cPanel: brak stałego procesu w tle, brak WebSocketów, brak Dockera, brak Redisa.

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup src/server.ts src/jobs/backup-db.ts --format esm --platform node --target node22 --out-dir dist --clean --external fastify --external @fastify/static --external better-sqlite3 --external drizzle-orm --external zod --sourcemap"
+    "build": "tsup src/server.ts src/jobs/backup-db.ts src/jobs/migrate-db.ts --format esm --platform node --target node22 --out-dir dist --clean --external fastify --external @fastify/static --external better-sqlite3 --external drizzle-orm --external zod --sourcemap"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

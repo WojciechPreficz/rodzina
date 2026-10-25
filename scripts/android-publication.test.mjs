@@ -123,6 +123,7 @@ describe('atomic APK publication', () => {
         'server.cjs': '',
         'package.json': '{"name":"rodzina-release"}',
         'dist/jobs/backup-db.js': '',
+        'dist/jobs/migrate-db.js': '',
         'bin/node': '',
         'bin/npm': '',
         'production.db': '',
@@ -268,6 +269,7 @@ it.each(['success', 'transfer-failure', 'unhealthy-server'])(
       'server.cjs': '',
       'dist/server.js': '',
       'dist/jobs/backup-db.js': '',
+      'dist/jobs/migrate-db.js': '',
       'public/index.html': '',
       'drizzle/meta/_journal.json': '',
     };

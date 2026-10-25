@@ -387,8 +387,11 @@ export async function applyRelease(
   mark('backup');
   if (backup) await backup();
   else await execute(node, [`--env-file=${envFile}`, 'dist/jobs/backup-db.js'], root);
-  // The existing job validates configuration and can run migrations. Preserve its
-  // completed database snapshot and keep code history outside the public tree.
+  // Migrate with the new release and its isolated dependencies, under the deploy lock.
+  // Failure leaves live code and the restart marker untouched; never restore the DB automatically.
+  mark('migration');
+  await execute(node, [`--env-file=${envFile}`, 'dist/jobs/migrate-db.js'], unpacked);
+  // Keep the completed database snapshot and code history outside the public tree.
   mark('previous-package');
   const history = path.join(path.dirname(root), `${path.basename(root)}-deploy-history`);
   await mkdir(history, { recursive: true, mode: 0o700 });

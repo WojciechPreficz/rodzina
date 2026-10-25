@@ -40,7 +40,7 @@ Po buildzie Androida uruchom w `android/` także `./gradlew testDebugUnitTest li
 Jeżeli aktualizujesz instalację sprzed 4.9, przed rozpakowaniem ZIP wykonaj procedurę
 wycofania Web Push w [archiwum wdrożeń](archive/deploy-historia.md), łącznie z zatrzymaniem starego crona.
 
-`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, start serwera i backup na tymczasowej bazie bez VAPID. Wgraj `release.zip` do katalogu `~/rodzina/` i rozpakuj go. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
+`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, odmowę startu produkcji bez migracji, dwukrotne uruchomienie joba migracji, start serwera i backup na tymczasowej bazie bez VAPID. Wgraj `release.zip` do prywatnego stagingu i postępuj według sekcji aktualizacji poniżej. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
 
 ### Windows: `npm ci` kończy się `EPERM ... unlink ... argon2.win32-x64-msvc.node`
 
@@ -129,7 +129,7 @@ bez nowego wpisu crona. Kopia zawiera stan sprzed sprzątania. Zdarzenie
 `session_cleanup_failed` trafia do stderr, ale nie zmienia sukcesu backupu
 ani kodu zakończenia joba. Przy błędzie backupu sprzątanie nie jest wykonywane.
 Migracja zadania #34 dodaje tylko indeks `sessions_user_idx`; uruchamia się
-przy starcie API według istniejącej procedury aktualizacji.
+jawnym jobem migracji według istniejącej procedury aktualizacji.
 
 Lokalnie po buildzie uruchom `npm run job:backup` z katalogu repozytorium.
 Na serwerze przed aktualizacją uruchom ręcznie polecenie z wpisu crona (bez harmonogramu
@@ -158,7 +158,7 @@ API/WWW i Android mają osobne artefakty. Ręczny Deploy publikuje oba; przy rę
 
 1. Lokalnie wykonaj weryfikację i zbuduj ZIP według sekcji 2. Dla zmian wspólnego frontendu sprawdź także build Androida i właściwe scenariusze na telefonie. Sam `release:smoke` nie testuje APK.
 2. Zachowaj poprzedni ZIP i wykonaj backup produkcyjnej bazy jobem z sekcji 5. Zachowaj istniejącą konfigurację `.env`, bazę i cron backupu. Przy przejściu na 4.9 najpierw wykonaj procedurę wycofania Web Push w [archiwum wdrożeń](archive/deploy-historia.md).
-3. Wgraj i rozpakuj sprawdzony ZIP w istniejącym `~/rodzina/`, aktualizując `server.cjs`, `dist/`, `public/`, `drizzle/` i produkcyjny `package.json`. Nie zastępuj produkcyjnej bazy lokalną. Wykonaj **Run NPM Install** i restart przez `tmp/restart.txt`.
+3. Wgraj i rozpakuj sprawdzony ZIP do prywatnego stagingu i przygotuj tam zależności produkcyjne według procedury automatycznej poniżej. Po backupie, przed podmianą plików, uruchom ze stagingu `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/migrate-db.js` (podstaw rzeczywiste ścieżki Node i konfiguracji). Dopiero po sukcesie migracji podmień `server.cjs`, `dist/`, `public/`, `drizzle/`, produkcyjny `package.json` i zależności w istniejącym `~/rodzina/` oraz wykonaj restart przez `tmp/restart.txt`. Nie zastępuj produkcyjnej bazy lokalną. Preferowana procedura automatyczna poniżej wykonuje te kroki w tej kolejności.
 4. Sprawdź `/api/health`, logowanie, odczyt i zapis kalendarza w przeglądarce oraz w poprzedniej wspieranej wersji APK. Nowy backend musi nadal obsługiwać telefony, które nie zainstalowały aktualizacji.
 5. Jeżeli wydanie wymaga nowego APK, opublikuj je dopiero po zgodnym API według sekcji 7. Nie uruchamiaj ponownie konfiguracji pierwszego wdrożenia ani rejestracji rodziny.
 
@@ -567,6 +567,10 @@ nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
 5. Z dotychczasowego katalogu aplikacji uruchamiany jest istniejący job:
    `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/backup-db.js`. Używa produkcyjnej
    konfiguracji i rotacji 14 kopii. Błąd backupu przerywa deploy przed podmianą.
+   Następnie etap `migration` uruchamia z rozpakowanej **nowej** paczki
+   `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/migrate-db.js`, z jej migracjami
+   i zależnościami produkcyjnymi. Nie wymaga `drizzle-kit`. Blokada deployu obejmuje
+   backup i migrację. Błąd migracji przerywa deploy przed promocją i restartem.
    Nie nadpisujemy bazy paczką ani nie cofamy jej automatycznie.
 6. W prywatnym katalogu obok aplikacji, np. `rodzina-deploy-history`, zachowujemy
    `<UUID>-previous.tar.gz` (poprzednie `server.cjs`, `package.json`, `dist`, `public`,
@@ -577,7 +581,9 @@ nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
    wyłącznie pięć zarządzanych ścieżek. Nie usuwamy szeroko zawartości aplikacji;
    stare assety pozostają dla wcześniej otwartych kart. Zachowane są `.env`, baza/WAL/SHM,
    logi, backupy, `.htaccess`, konfiguracja cPanel, crony i trwałe pliki Androida.
-   Zapis `tmp/restart.txt` restartuje Passengera. Migracje wykonuje aplikacja.
+   Zapis `tmp/restart.txt` restartuje Passengera. Produkcyjne API tylko sprawdza,
+   czy wszystkie migracje z `drizzle/meta/_journal.json` mają zapis w bazie.
+   Przy brakach kończy proces z komunikatem wskazującym job migracji.
    Przy pierwszej publikacji przed restartem tworzymy trwały katalog APK i atomowo
    ustawiamy jego ścieżkę w `.env`, zachowując pozostałą konfigurację i uprawnienia pliku.
 8. Maksymalnie sześć prób (odstęp 5 s, limit żądania 20 s) sprawdza HTTPS:
@@ -608,8 +614,12 @@ nadal wymaga zgody instalatora Androida.
   w `android/version.properties` i uruchom Deploy ponownie. Stare linki pozostają
   niezmienne. Zmiana klucza podpisującego jest odrzucana.
 
-- Etapy walidacji, transferu, rozpakowania, zależności, backupu i archiwizacji
-  kończą się przed podmianą aplikacji. Popraw przyczynę i uruchom ponownie.
+- Etapy walidacji, transferu, rozpakowania, zależności, backupu, `migration` i archiwizacji
+  kończą się przed podmianą aplikacji. Błąd `migration` nie powoduje restartu.
+  Migrator SQLite wykonuje migracje w transakcji; po błędzie sprawdź stan bazy
+  i zgodność działającego kodu. Także błąd późniejszego etapu może pozostawić
+  bazę po udanej migracji. Backup pozostaje, ale nie odtwarzamy go automatycznie.
+  Popraw przyczynę i uruchom ponownie.
 - Błąd w etapie `promotion`, `restart` albo kontroli HTTP może oznaczać częściową
   aktualizację. Sprawdź podsumowanie Actions i prywatne logi Passengera/cPanel,
   porównaj health oraz logi cronów. Nie uznawaj samego restartu za udany deploy.
@@ -641,3 +651,12 @@ do paczki sprzed migracji 0013](archive/deploy-historia.md) pozostają dostępne
 dla aktualizacji starszych instalacji i odzyskiwania.
 Pełna lista zaległych prób telefonu jest w
 [DEVELOPMENT.md](DEVELOPMENT.md) i [historii testów](archive/development-historia.md).
+
+### Migracje lokalnie i przy starcie produkcyjnym
+
+Przy `NODE_ENV !== 'production'` (w tym `npm run dev`) API nadal automatycznie
+uruchamia migracje, aby zachować dotychczasową wygodę pracy lokalnej.
+Produkcja nie zmienia schematu przy starcie, także gdy Passenger uruchamia wiele
+procesów. Jawny job zamyka połączenie po sukcesie lub błędzie i zwraca kod 1
+przy niepowodzeniu. Lokalny `npm start` również wymaga wcześniejszego uruchomienia
+`node --env-file=apps/api/.env apps/api/dist/jobs/migrate-db.js` po buildzie.
