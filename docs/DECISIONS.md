@@ -1,5 +1,46 @@
 # Decyzje
 
+## 25.10.2026 — interfejs Kontaktów online (krok 9.2, #45)
+
+- Dodano `/kontakty` i pozycję menu po Rodzinie, przed Dokumentami. Widok
+  korzysta z istniejącego AppShell, Mantine i wspólnego motywu; grupy mają
+  liczniki niezależne od wyszukiwania. Nazwy sortujemy po polsku, wyszukiwarka
+  pomija polskie znaki i wielkość liter, a dla telefonu także separatory.
+- Po lokalnej próbie właściciel uprościł układ: „Dodaj grupę” jest w nagłówku,
+  a „Dodaj kontakt” zajmuje całą szerokość karty grupy i otwiera pełny formularz.
+  Usunięto szybkie dodawanie samej nazwy oraz przycisk pod listą grup.
+  Nazwa nadal wystarcza do zapisania pełnego formularza zgodnie z kontraktem API;
+  telefon, adres i opis relacji pozostają opcjonalne. Powód: bardziej intuicyjny
+  interfejs wskazany przez właściciela; jego decyzja zastępuje ten fragment makiety.
+- Kolejna uwaga właściciela zastępuje poziomy wybór grup na telefonie
+  wyszukiwalnym multiselectem, takim jak w Dokumentach. Kilka grup daje
+  łączną listę, a pusty wybór pokazuje wszystkie kontakty. Liczniki pozostają
+  niezależne od wyszukiwania. Akcje zarządzania grupą dotyczą tylko pojedynczej
+  wybranej grupy. Pełny formularz przy wielu lub braku wyboru proponuje grupę
+  domyślną, którą można zmienić. Desktop zachowuje wybór grup po lewej.
+- Szczegóły, edycja i potwierdzenia korzystają z jednego okna Mantine, żeby
+  animacje przejść nie nakładały dialogów ani obsługi Escape i Wstecz.
+  Formularze korzystają z istniejącej ochrony niezapisanych zmian. Telefon
+  jest niezależnym odnośnikiem `tel:`, bez otwierania szczegółów kontaktu.
+- Dziecko ma tylko odczyt; brak sieci blokuje mutacje także bezpośrednio przed
+  wysłaniem żądania. Dane pozostają jedynie w pamięci zapytań powiązanych
+  z rodziną i użytkownikiem, bez nowego trwałego magazynu. Cache offline
+  pozostaje w kroku 9.3. Bez zmian API, migracji, zależności, konfiguracji i crona.
+- Prace wykonano na `main`; po lokalnej próbie właściciel polecił commit bez pusha. Wcześniejszy istniejący
+  commit API `7769a12` włączono do `main` przez fast-forward. Próby ręczne,
+  fizyczne APK i końcowe CI pozostają do potwierdzenia; checklistę zapisano
+  w [DEVELOPMENT.md](DEVELOPMENT.md#odbiór-kontaktów-online--krok-92).
+- Kontrole lokalne przeszły: 13 testów komponentów Kontaktów oraz powiązane
+  testy menu, ochrony formularzy i natywnej nawigacji; lint, formatowanie,
+  typecheck, build WWW/API i debug APK. Playwright headless: sześć scenariuszy
+  Kontaktów (390 i 1280 px, WWW i testowy transport Androida, w tym multiselect) oraz sześć
+  scenariuszy istniejącej nawigacji. Sprawdzono zrzuty obu szerokości:
+  przyciski są we wskazanych miejscach, pełny formularz zachowany,
+  brak poziomego przepełnienia strony. Próby interaktywne właściciela i na
+  fizycznym APK pozostają niepotwierdzone; ADB nie wykrywa podłączonego telefonu.
+  Status: **zweryfikowane lokalnie, oczekuje na CI** — bez pusha nie ma
+  wyniku CI ani linku do przebiegu weryfikującego tę wersję.
+
 ## 25.10.2026 — model i API Kontaktów (krok 9.1, #44)
 
 - Dodano kontrakty shared, tabele `contact_groups` i `contacts` oraz kompletny

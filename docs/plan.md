@@ -92,9 +92,9 @@ Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani
 niepotwierdzonych prób ręcznych. Zachowujemy ich zapisy w
 [DECISIONS.md](DECISIONS.md) i [checklistę odbioru](DEVELOPMENT.md#odbiór-dokumentów--krok-84).
 
-**Faza 9 — Kontakty: krok 9.1 zaimplementowany lokalnie, oczekuje na CI.**
-Zakres i kroki są poniżej. UI (9.2) i podgląd offline (9.3) pozostają do
-implementacji. Nie zmienia to statusu fazy 6.
+**Faza 9 — Kontakty: kroki 9.1–9.2 zaimplementowane lokalnie, oczekują na CI.**
+Zakres i kroki są poniżej. UI (9.2) wymaga jeszcze prób ręcznych i odbioru APK;
+podgląd offline (9.3) pozostaje do implementacji. Nie zmienia to statusu fazy 6.
 
 ## 6. Fazy
 
@@ -153,8 +153,9 @@ implementacji. Nie zmienia to statusu fazy 6.
 ### Faza 9 - Kontakty
 
 **Status:** krok 9.1 (model, kontrakty i API, #44) zaimplementowany lokalnie
-25.10.2026; oczekuje na CI dla końcowego commita. Kroki 9.2–9.3 pozostają
-zaplanowane, bez implementacji.
+25.10.2026; oczekuje na CI dla końcowego commita. Krok 9.2 (#45) zaimplementowany
+lokalnie, z poleceniem commita bez pusha; oczekuje na próby ręczne, odbiór
+APK i CI. Krok 9.3 pozostaje zaplanowany, bez implementacji.
 
 **Cel:** wspólna książka kontaktów rodziny z adresami, opcjonalnymi numerami
 telefonów, własnymi grupami i podglądem ostatnio pobranych danych offline.
@@ -170,10 +171,10 @@ telefonów, własnymi grupami i podglądem ostatnio pobranych danych offline.
 **UI według makiety „Ciepły i przyjazny — Kontakty”:**
 
 - Trasa `/kontakty`, bezpośrednia pozycja menu po „Rodzinie”, przed „Dokumentami”. Zachowujemy istniejący AppShell, kolory, typografię i Mantine; pomijamy etykiety prezentacji, przełącznik „Komputer/Telefon” i ozdobne oznaczenia makiety.
-- Desktop: grupy z licznikami po lewej, karta wybranej grupy po prawej. Telefon: poziomy przewijany wybór grup nad listą. Obowiązuje obecny próg nawigacji 768 px i hamburger APK.
+- Desktop: grupy z licznikami po lewej, karta wybranej grupy po prawej. Telefon: wyszukiwalny multiselect grup z licznikami, jak w Dokumentach (decyzja właściciela 25.10.2026 zastępuje przewijaną listę). Wybrane grupy łączymy, brak wyboru pokazuje wszystkie kontakty. Akcje zmiany nazwy i usunięcia grupy są dostępne przy jednej wybranej grupie. Nowy kontakt trafia do wybranej pojedynczej grupy, a przy wielu lub braku wyboru formularz proponuje grupę domyślną. Obowiązuje obecny próg nawigacji 768 px i hamburger APK.
 - Lista pokazuje inicjały, nazwę, opis relacji, telefon i adres, pomijając brakujące dane. Sortowanie nazw według polskich reguł. Liczniki pokazują pełną liczbę kontaktów w grupach niezależnie od wyszukiwania.
 - Wyszukiwarka filtruje wybraną grupę po nazwie, opisie, adresie i telefonie; ignoruje wielkość liter i polskie znaki, a przy telefonie także separatory.
-- Desktop ma szybkie dodanie samej nazwy do wybranej grupy. Pełny formularz z wyborem grupy jest dostępny na obu rozmiarach. Wiersz otwiera szczegóły; dorośli mają akcje edycji i usunięcia z potwierdzeniem.
+- Decyzja właściciela 25.10.2026 po próbie UI zastępuje szybkie dodawanie: w nagłówku jest „Dodaj grupę”, pod listą grup nie ma przycisku, a karta wybranej grupy zawiera „Dodaj kontakt” na całą szerokość. Dodawanie kontaktu zawsze otwiera pełny formularz z wyborem grupy na obu rozmiarach; nie ma osobnego pola samej nazwy ani przycisku „Dodaj”. Wiersz otwiera szczegóły; dorośli mają akcje edycji i usunięcia z potwierdzeniem.
 - Numer jest odnośnikiem `tel:` do systemowej obsługi połączeń, bez uprawnień do książki kontaktów i bez bezpośredniego wykonywania połączeń. Akcja numeru nie otwiera jednocześnie szczegółów kontaktu.
 - Stany ładowania, błędu, pustej grupy i braku wyników mają polskie komunikaty. Formularze korzystają z istniejącej ochrony niezapisanych zmian i obsługi przycisku Wstecz w APK.
 
@@ -197,7 +198,7 @@ telefonów, własnymi grupami i podglądem ostatnio pobranych danych offline.
 
 #### Krok 9.2 - działający interfejs online
 
-- **Zakres:** nawigacja, lista, liczniki grup, wyszukiwarka, szybkie dodawanie i pełne formularze, szczegóły, zarządzanie grupami i potwierdzenia usuwania zgodnie z opisem UI. Obsługa stanów ładowania, błędów i pustych danych oraz ochrony formularzy. W tym kroku bez trwałego cache Kontaktów; brak sieci blokuje mutacje.
+- **Zakres:** nawigacja, lista, liczniki grup, wyszukiwarka, pełne formularze (bez szybkiego dodawania — decyzja właściciela powyżej), szczegóły, zarządzanie grupami i potwierdzenia usuwania zgodnie z opisem UI. Obsługa stanów ładowania, błędów i pustych danych oraz ochrony formularzy. W tym kroku bez trwałego cache Kontaktów; brak sieci blokuje mutacje.
 - **Gotowe, gdy:** testy komponentów potwierdzają formularze, wyszukiwanie, sortowanie, liczniki, brakujące pola, puste stany i odczyt dziecka. Playwright headless oraz ręcznie przy 390 i 1280 px: utworzenie grupy i kontaktu, edycja, wyszukanie oraz usunięcie grupy z zachowaniem kontaktu. Sprawdzony wspólny frontend APK, nawigacja klawiaturą, Wstecz i ochrona niezapisanych zmian; brak poziomego przepełnienia strony.
 
 #### Krok 9.3 - podgląd offline i domknięcie fazy

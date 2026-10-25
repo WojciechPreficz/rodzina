@@ -1,0 +1,174 @@
+.contacts-page {
+  width: 100%;
+  max-width: 1100px;
+  min-width: 0;
+  margin-inline: auto;
+}
+.contacts-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.36fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.contacts-groups,
+.contacts-card {
+  min-width: 0;
+}
+.contacts-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 10px;
+}
+.contacts-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.contact-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 12px;
+  min-height: 62px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.contact-group[aria-pressed='true'] {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+  box-shadow: 0 4px 18px #31483505;
+}
+.contact-group-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--app-tint);
+  color: var(--app-accent);
+  font-size: 13px;
+}
+.contact-group-name {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.contact-group-count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--mantine-color-dimmed);
+}
+.contacts-card {
+  padding: 26px;
+  box-shadow: 0 6px 24px #31483505;
+}
+.contact-group-title {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: 30px;
+  overflow-wrap: anywhere;
+}
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 4px;
+  border-bottom: 1px solid var(--app-border);
+}
+.contact-row-content {
+  flex: 1;
+  min-width: 0;
+}
+.contact-open {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  min-height: 36px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.contact-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.contact-row {
+  position: relative;
+}
+.contact-phone {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  min-height: 36px;
+  padding-block: 7px;
+  color: var(--app-accent);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.contact-address {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.contact-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+@media (max-width: 47.99em) {
+  .contacts-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .contacts-groups,
+  .contacts-card {
+    width: 100%;
+  }
+  .contacts-mobile-filter .mantine-MultiSelect-input {
+    min-width: 0;
+    height: auto;
+    display: flex;
+    align-items: center;
+  }
+  .contacts-mobile-filter .mantine-MultiSelect-pillsList {
+    width: 100%;
+    min-width: 0;
+  }
+  .contacts-mobile-filter .mantine-MultiSelect-inputField {
+    min-width: 2ch;
+    flex: 1 1 2ch;
+  }
+  .contacts-mobile-filter .mantine-Pill-root {
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 100%;
+    height: var(--pill-height);
+  }
+  .contacts-mobile-filter .mantine-Pill-label {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .contacts-groups > .contacts-eyebrow {
+    display: none;
+  }
+  .contacts-card {
+    padding: 18px;
+  }
+}

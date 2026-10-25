@@ -73,6 +73,7 @@ describe('AppShell', () => {
       'Zakupy',
       'Obiady',
       'Rodzina',
+      'Kontakty',
       'Dokumenty',
       'Powiadomienia',
       'Wersja aplikacji',
@@ -88,6 +89,7 @@ describe('AppShell', () => {
   it.each([
     '/kalendarz/wydarzenie/event-1',
     '/zadania',
+    '/kontakty',
     '/dokumenty',
     '/zakupy',
     '/obiady',

@@ -34,6 +34,11 @@ const navigation = [
     icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8 0a4 4 0 0 1 0 8',
   },
   {
+    label: 'Kontakty',
+    to: '/kontakty',
+    icon: 'M5 3h14v18H5ZM9 3V1m6 2V1M8 18v-2a4 4 0 0 1 8 0v2M12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+  },
+  {
     label: 'Dokumenty',
     to: '/dokumenty',
     icon: 'M6 2h8l5 5v15H6ZM14 2v6h5M9 12h7M9 16h7',

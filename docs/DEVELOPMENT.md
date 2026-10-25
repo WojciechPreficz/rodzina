@@ -19,6 +19,45 @@ Nie potrzeba VAPID. Nie ma `dev:cron`, `job:reminders` ani `vapid:generate`.
 Backup po buildzie: `npm run job:backup`. Domyślny katalog i 14 kopii opisuje
 `apps/api/.env.example`. Nie używaj lokalnej bazy jako danych produkcyjnych.
 
+## Odbiór Kontaktów online — krok 9.2
+
+Zmiany są lokalnie na `main`; commit pozostaje bez pusha zgodnie z poleceniem
+właściciela. Krok oczekuje na końcowe CI oraz poniższe próby ręczne;
+test transportu Androida w Playwright nie zalicza fizycznego APK.
+
+- [ ] Przy 390 i 1280 px otwórz Kontakty przez menu. „Dodaj grupę” jest
+      w nagłówku, a „Dodaj kontakt” na całą szerokość karty. Nie ma pola
+      szybkiego dodawania samej nazwy ani przycisku pod listą grup.
+- [ ] Dodaj grupę oraz kontakt przez pełny formularz: nazwa, opis relacji,
+      numer z separatorami i długi adres z polskimi znakami w kilku wierszach.
+      Zapisz również kontakt z samą nazwą, bez opcjonalnych danych.
+- [ ] Edytuj kontakt, zmień jego grupę, zmień nazwę grupy. Sprawdź wyszukiwanie
+      bez polskich znaków i separatorów telefonu, sortowanie oraz liczniki.
+- [ ] Usuń grupę po potwierdzeniu: kontakty pozostają w grupie domyślnej.
+      Grupa domyślna może zmienić nazwę, ale nie ma opcji usunięcia.
+      Usuń pojedynczy kontakt z osobnym potwierdzeniem.
+- [ ] Sprawdź klawiaturę (Tab, Enter, Escape), widoczny fokus oraz brak
+      poziomego przepełnienia strony. Na telefonie multiselect zastępuje listę
+      grup: wybierz kilka, wyszukaj grupę i wyczyść wybór. Pusty wybór pokazuje
+      wszystkie kontakty; liczniki grup nie zależą od wyszukiwania kontaktów.
+      Sprawdź długą nazwę grupy oraz dopasowanie wysokości pola z etykietami.
+- [ ] Zmień formularz i odrzuć porzucenie zmian przy Anuluj, Escape oraz Wstecz.
+      Zapisanie formularza nie wyświetla pytania o porzucenie. Dziecko widzi
+      szczegóły, bez akcji dodawania, edycji i usuwania.
+- [ ] W otwartym widoku odłącz internet: mutacje są niedostępne. Bez wcześniej
+      pobranych danych w pamięci pojawia się komunikat o potrzebie połączenia.
+      W tym kroku nie ma trwałego cache ani kolejki zmian Kontaktów.
+- [ ] W debug APK z lokalnym frontendem powtórz dodanie grupy i kontaktu,
+      edycję, wyszukiwanie, usunięcie grupy oraz ochronę formularza i Wstecz.
+      Numer powinien otwierać systemową aplikację telefonu bez automatycznego
+      połączenia; kliknięcie numeru nie otwiera szczegółów kontaktu.
+
+Uruchomienie WWW: `npm run dev`, następnie `/kontakty`. Migracja 0023 API
+musi być zastosowana według instrukcji migracji projektu. Do testów APK
+użyj lokalnego API i poleceń z sekcji „Narzędzia i komendy” poniżej;
+build z domyślną konfiguracją API wskazuje produkcję, której ten krok nie wdraża.
+Bez nowej konfiguracji, zależności runtime ani crona.
+
 ## Kontrole wydania
 
 ```sh

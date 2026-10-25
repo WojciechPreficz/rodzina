@@ -45,6 +45,7 @@ test('website uses a left sidebar on desktop and a right drawer on phones', asyn
     'Zakupy',
     'Obiady',
     'Rodzina',
+    'Kontakty',
     'Dokumenty',
     'Powiadomienia',
     'Wersja aplikacji',

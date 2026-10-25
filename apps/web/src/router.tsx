@@ -17,6 +17,7 @@ import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
 import { ShoppingPage } from './features/shopping/ShoppingPage.js';
 import { TasksPage } from './features/tasks/TasksPage.js';
 import { DocumentsPage } from './features/documents/DocumentsPage.js';
+import { ContactsPage } from './features/contacts/ContactsPage.js';
 import { DocumentRoute } from './features/documents/DocumentRoute.js';
 import { NotFoundLayout, NotFoundPage } from './components/NotFoundPage.js';
 
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
               { path: 'zadania/:listId', element: <TasksPage /> },
               { path: 'zakupy', element: <ShoppingPage /> },
               { path: 'dokumenty', element: <DocumentsPage /> },
+              { path: 'kontakty', element: <ContactsPage /> },
               { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
               { path: 'wiecej', element: <MorePage /> },
               { path: 'wiecej/rodzina', element: <FamilyPage /> },
