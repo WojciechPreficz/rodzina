@@ -3,6 +3,7 @@ import { calendarStore } from './features/calendar/calendarOffline.js';
 import { taskStore } from './features/tasks/taskOffline.js';
 import { clearShoppingStorage, stopShoppingPersistence } from './features/shopping/shoppingOffline.js';
 import { clearOfflineData } from './offlineData.js';
+import { contactsStore } from './features/contacts/contactsOffline.js';
 
 type ClearReason = 'logout' | 'session-lost' | 'account-changed' | 'storage-changed';
 type ClearOptions = { removeStored: boolean; queryClient: QueryClient | undefined };
@@ -13,6 +14,12 @@ type AccountStore = {
   clear: (options: ClearOptions) => void;
 };
 const stores = new Map<string, AccountStore>();
+
+registerAccountStore({
+  name: 'contacts',
+  phase: 'before-invalidation',
+  clear: ({ removeStored }) => contactsStore.clear(removeStored),
+});
 
 export function registerAccountStore(store: AccountStore) {
   if (stores.has(store.name)) throw new Error(`Account store already registered: ${store.name}`);

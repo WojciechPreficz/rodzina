@@ -1,5 +1,37 @@
 # Decyzje
 
+## 26.10.2026 — trwały podgląd Kontaktów offline (krok 9.3, #46)
+
+- Przechowujemy kompletną odpowiedź `/api/contacts` wraz z czasem pobrania
+  w jednym snapshotcie `rodzina:contacts:v1`, związanym z rodziną i użytkownikiem.
+  Walidujemy schemat, rodzinę zasobów, unikalność identyfikatorów, jedną grupę
+  domyślną i przynależność kontaktów do grup. Niepełna lub błędna odpowiedź
+  zachowuje poprzedni poprawny zapis.
+- Odmowa zapisu pozostawia pobrane dane w pamięci i pokazuje ostrzeżenie;
+  poprzedni trwały snapshot pozostaje dostępny po restarcie. Nie dodajemy
+  kolejki mutacji. Udana mutacja i powrót sieci odświeżają pełny snapshot.
+- Rejestr magazynów konta usuwa kontakty przed unieważnieniem sesji. Generacja
+  magazynu blokuje spóźnione odpowiedzi po wylogowaniu, utracie sesji, zmianie
+  konta i zmianie danych w innej karcie. Kolejność zapytań chroni także przed
+  zastąpieniem nowszego pobrania starszą odpowiedzią. Zmiana magazynu między
+  kartami nie usuwa danych zapisanych przez drugą kartę.
+- Bez nowych migracji, zależności runtime, zmiennych środowiskowych i crona;
+  API pozostaje zgodne z poprzednim APK. Nie wykonujemy deployu. Końcowe CI
+  oraz próby fizycznego APK (restart offline, polskie znaki, długi adres i `tel:`)
+  pozostają do potwierdzenia według checklisty w `DEVELOPMENT.md`.
+- Lokalnie przeszły testy Vitest Kontaktów, rejestru magazynów i cyklu sesji,
+  typecheck, formatowanie oraz lint zmienionych plików (dwa istniejące
+  ostrzeżenia Fast Refresh w `auth.tsx`, bez błędów). Build aplikacji i debug APK
+  zakończyły się sukcesem. Playwright headless: 10 zaliczonych scenariuszy,
+  dwa mobilne scenariusze pominięte na desktopie; WWW i atrapa Androida przy
+  390 i 1280 px, CRUD, blokady offline, restart atrapy i odświeżanie po powrocie
+  sieci. Przegląd zrzutów obu szerokości potwierdza czytelny baner i długi adres,
+  bez poziomego przepełnienia. Raport Playwright jest w ignorowanym
+  `playwright-report/`. ADB nie wykrył podłączonego telefonu. Nie zaliczamy
+  prób ręcznych ani fizycznego APK. Status: **zweryfikowane lokalnie, oczekuje
+  na CI**. Właściciel zlecił commit i push; wynik CI dla końcowego commita
+  wymaga osobnego potwierdzenia.
+
 ## 26.10.2026 — synchronizacja wyboru grupy w testach Kontaktów
 
 - Zgłoszone timeouty mobilnego scenariusza CRUD występują przy wyborze grupy

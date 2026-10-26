@@ -32,6 +32,7 @@ import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
 import { taskStore } from './features/tasks/taskOffline.js';
 import { TaskPrefetch } from './features/tasks/taskQueries.js';
 import { clearAccountData } from './accountStorage.js';
+import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 
 export type AuthState = {
   user: AuthUser | null;
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       if (cached) {
         calendarStore.activate(accountId(cached));
         taskStore.activate(accountId(cached));
+        contactsStore.activate(accountId(cached));
         if (queryClient) {
           restoreShopping(queryClient, cached);
           if (saved) restoreOfflineData(queryClient, saved);
@@ -107,6 +109,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       currentSession.current = response;
       calendarStore.activate(accountId(response));
       taskStore.activate(accountId(response));
+      contactsStore.activate(accountId(response));
       if (queryClient) restoreShopping(queryClient, response);
       setUser(response.user);
       setFamily(response.family);
@@ -198,6 +201,14 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     const onSessionLost = () => loseSession(true);
     window.addEventListener('rodzina:session-lost', onSessionLost);
     const onStorage = (event: StorageEvent) => {
+      if (event.key === CONTACTS_STORAGE_KEY) {
+        try {
+          const account = event.newValue ? JSON.parse(event.newValue)?.account : undefined;
+          if (!event.newValue || (typeof account === 'string' && account !== identity)) loseSession(false);
+        } catch {
+          // A corrupt snapshot is handled by the contacts store, not as a new session.
+        }
+      }
       if (
         (event.key === SHOPPING_STORAGE_KEY || event.key === OFFLINE_DATA_KEY || event.key === null) &&
         (!event.newValue ||
@@ -252,6 +263,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       invalidateSession: () => {
         calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
         taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
+        contactsStore.activate(`${nextFamily.id}:${nextUser.id}`);
         if (isAndroid()) localScheduler.invalidate();
         generation.current += 1;
         invalidateSessionRequests();

@@ -11,6 +11,7 @@ import {
   PENDING_LOGOUT_KEY,
 } from './features/shopping/shoppingOffline.js';
 import { accountId, OFFLINE_DATA_KEY, saveOfflineData } from './offlineData.js';
+import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 
 // Discover keys independently of the registry, including stores not yet registered.
 // Dynamic journal keys are also exercised through the real module APIs below.
@@ -94,6 +95,22 @@ async function seedAccount(client: QueryClient) {
     },
   );
   saveOfflineData(session, [user], Date.now());
+  contactsStore.activate(accountId(session));
+  await contactsStore.fetch(accountId(session), async () => ({
+    ok: true,
+    groups: [
+      {
+        id: list.id,
+        familyId: user.familyId,
+        createdBy: user.id,
+        createdAt: 1,
+        updatedAt: 1,
+        name: 'Inne',
+        isDefault: true,
+      },
+    ],
+    contacts: [],
+  }));
   client.setQueryData(['private'], 'cached account data');
 }
 
@@ -112,7 +129,13 @@ describe('account storage cleanup', () => {
       const queryClient = newClient();
       await seedAccount(queryClient);
       expect([...declaredKeys]).toEqual(
-        expect.arrayContaining([CALENDAR_STORAGE_KEY, TASK_STORAGE_KEY, SHOPPING_STORAGE_KEY, OFFLINE_DATA_KEY]),
+        expect.arrayContaining([
+          CALENDAR_STORAGE_KEY,
+          TASK_STORAGE_KEY,
+          SHOPPING_STORAGE_KEY,
+          OFFLINE_DATA_KEY,
+          CONTACTS_STORAGE_KEY,
+        ]),
       );
       expect(Object.keys(localStorage).filter((key) => key.includes(':operation:'))).toHaveLength(2);
       // Canary values make a newly declared storage key fail this test even before
@@ -133,6 +156,7 @@ describe('account storage cleanup', () => {
       expect(localStorage.getItem('unrelated-app')).toBe('keep');
       expect(calendarStore.current(token)).toBe(false);
       expect(taskStore.getSnapshot()).toMatchObject({ account: '', items: {}, pending: [] });
+      expect(contactsStore.snapshot()).toEqual({ account: '' });
       expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
       expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
     },
@@ -150,6 +174,7 @@ describe('account storage cleanup', () => {
     expect({ ...localStorage }).toEqual(saved);
     expect(taskStore.getSnapshot().account).toBe('');
     expect(calendarStore.snapshot().account).toBe('');
+    expect(contactsStore.snapshot()).toEqual({ account: '' });
     expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
   });
 

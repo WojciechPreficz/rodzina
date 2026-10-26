@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   Alert,
   Avatar,
@@ -15,7 +15,7 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { contactsResponseSchema, type Contact, type ContactGroup, type CreateContact } from '@rodzina/shared';
+import { type Contact, type ContactGroup, type CreateContact } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { useMe } from '../../auth.js';
 import { isOffline, useOffline } from '../../connectivity.js';
@@ -25,6 +25,7 @@ import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ContactForm } from './ContactForm.js';
 import { contactInitials, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import './contacts.css';
+import { CONTACTS_STORAGE_KEY, contactsStore } from './contactsOffline.js';
 
 type Editor = { kind: 'contact'; contact?: Contact } | { kind: 'group'; group?: ContactGroup };
 type Removal = { kind: 'contact'; item: Contact } | { kind: 'group'; item: ContactGroup };
@@ -33,11 +34,23 @@ export function ContactsPage() {
   const { user, family, familyConfirmed } = useMe();
   const offline = useOffline();
   const client = useQueryClient();
+  const account = user && family ? `${family.id}:${user.id}` : '';
+  const state = useSyncExternalStore(contactsStore.subscribe, contactsStore.snapshot);
+  useEffect(() => {
+    if (account) contactsStore.activate(account);
+    const reload = (event: StorageEvent) => {
+      if (event.key === CONTACTS_STORAGE_KEY || event.key === null) contactsStore.reload();
+    };
+    window.addEventListener('storage', reload);
+    return () => window.removeEventListener('storage', reload);
+  }, [account]);
+  const saved = state.account === account ? state.saved : undefined;
   const key = ['contacts', family?.id, user?.id];
   const query = useQuery({
     queryKey: key,
+    staleTime: 0,
     enabled: !!user && !!family && familyConfirmed && !offline,
-    queryFn: async ({ signal }) => contactsResponseSchema.parse(await apiFetch('/api/contacts', { signal })),
+    queryFn: ({ signal }) => contactsStore.fetch(account, () => apiFetch('/api/contacts', { signal })),
     refetchInterval: SYNC_INTERVAL_MS,
   });
   const mobile = useMediaQuery('(max-width: 47.99em)');
@@ -47,8 +60,16 @@ export function ContactsPage() {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [details, setDetails] = useState<string | null>(null);
   const [removal, setRemoval] = useState<Removal | null>(null);
-  const groups = query.data?.groups ?? [];
-  const contacts = query.data?.contacts ?? [];
+  useEffect(() => {
+    setEditor(null);
+    setDetails(null);
+    setRemoval(null);
+    setSelectedId(undefined);
+    setMobileFilters([]);
+    setSearch('');
+  }, [account]);
+  const groups = saved?.data.groups ?? [];
+  const contacts = saved?.data.contacts ?? [];
   const selected = groups.find((group) => group.id === selectedId) ?? groups[0];
   const filteredGroups = mobile
     ? groups.filter((group) => mobileFilters.includes(group.id))
@@ -114,11 +135,17 @@ export function ContactsPage() {
       />
       {offline && (
         <Alert color="yellow">
-          Brak połączenia z internetem. Dodawanie, edycja i usuwanie są niedostępne. Kontakty w tym widoku mogą być
-          nieaktualne.
+          Brak połączenia z internetem. Dodawanie, edycja i usuwanie są niedostępne.
+          {saved &&
+            ` Kontakty mogą być nieaktualne. Ostatnie pobranie: ${new Date(saved.syncedAt).toLocaleString('pl-PL')}.`}
         </Alert>
       )}
-      {query.isPending && !offline && (
+      {state.account === account && state.issue && (
+        <Alert color="red" role="alert">
+          {state.issue}
+        </Alert>
+      )}
+      {query.isPending && !saved && !offline && (
         <Group role="status">
           <Loader size="sm" />
           <Text>Ładowanie kontaktów…</Text>
@@ -127,13 +154,18 @@ export function ContactsPage() {
       {query.isError && (
         <Alert color="red" title="Nie udało się pobrać kontaktów" role="alert">
           <Text>Spróbuj ponownie po sprawdzeniu połączenia.</Text>
+          {saved && (
+            <Text>
+              Kontakty mogą być nieaktualne. Ostatnie pobranie: {new Date(saved.syncedAt).toLocaleString('pl-PL')}.
+            </Text>
+          )}
           <Button variant="subtle" onClick={() => void query.refetch()}>
             Spróbuj ponownie
           </Button>
         </Alert>
       )}
-      {offline && !query.data && <Text>Połącz się z internetem, aby pobrać kontakty.</Text>}
-      {query.data && selected && (
+      {offline && !saved && <Text>Brak zapisanych kontaktów. Połącz się z internetem, aby pobrać kontakty.</Text>}
+      {saved && selected && (
         <div className="contacts-layout">
           <div className="contacts-groups">
             <Text className="contacts-eyebrow" size="xs" c="dimmed">

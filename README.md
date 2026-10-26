@@ -34,6 +34,13 @@ Po wcześniejszym pobraniu APK pokazuje też domowników, kod rodziny i kalendar
 tylko do odczytu, z pełnymi szczegółami zapisanych wydarzeń. Kalendarz zachowuje
 bieżący miesiąc i sąsiednie oraz otwarte online zakresy (maksymalnie 12 miesięcy).
 Baner pokazuje czas pobrania, a niezapisany zakres ma osobny komunikat.
+Kontakty zachowują ostatnią kompletnie pobraną listę kontaktów i grup dla
+rodziny i użytkownika. Bez internetu działają wybór grup, wyszukiwanie,
+szczegóły i odnośniki numerów telefonu; dodawanie, edycja i usuwanie wymagają
+połączenia, bez kolejki zmian. Baner pokazuje czas pobrania i ostrzega
+o nieaktualności. Błędy pamięci urządzenia są widoczne; wylogowanie, utrata
+sesji i zmiana konta czyszczą zapisane kontakty. Po powrocie sieci dane
+odświeżają się w otwartym widoku.
 Zakupy zachowują swoją kolejkę zmian offline. Zwykła strona obsługuje utratę sieci
 w otwartym interfejsie; ponowny start bez internetu dotyczy lokalnego frontendu APK.
 Próby alarmów i instalatora na fizycznym telefonie wymagają osobnego potwierdzenia.

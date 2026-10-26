@@ -46,7 +46,7 @@ test transportu Androida w Playwright nie zalicza fizycznego APK.
       szczegóły, bez akcji dodawania, edycji i usuwania.
 - [ ] W otwartym widoku odłącz internet: mutacje są niedostępne. Bez wcześniej
       pobranych danych w pamięci pojawia się komunikat o potrzebie połączenia.
-      W tym kroku nie ma trwałego cache ani kolejki zmian Kontaktów.
+      Krok 9.3 dodaje trwały podgląd opisany poniżej, bez kolejki zmian.
 - [ ] W debug APK z lokalnym frontendem powtórz dodanie grupy i kontaktu,
       edycję, wyszukiwanie, usunięcie grupy oraz ochronę formularza i Wstecz.
       Numer powinien otwierać systemową aplikację telefonu bez automatycznego
@@ -57,6 +57,45 @@ musi być zastosowana według instrukcji migracji projektu. Do testów APK
 użyj lokalnego API i poleceń z sekcji „Narzędzia i komendy” poniżej;
 build z domyślną konfiguracją API wskazuje produkcję, której ten krok nie wdraża.
 Bez nowej konfiguracji, zależności runtime ani crona.
+
+## Odbiór Kontaktów offline — krok 9.3
+
+Implementacja lokalna; końcowe CI oraz próby fizycznego APK pozostają do
+potwierdzenia. Headless Playwright sprawdza WWW i atrapę transportu Androida
+przy 390 i 1280 px. Atrapa nie zalicza restartu prawdziwego APK ani obsługi
+systemowej aplikacji telefonu.
+
+Weryfikacja lokalna 26.10.2026: Vitest Kontaktów, magazynów konta i sesji,
+typecheck, lint i formatowanie przeszły; build WWW/API oraz debug APK udane.
+Playwright: 10 zaliczonych scenariuszy, dwa pominięcia testów mobilnych na
+desktopie. Przejrzano zrzuty offline przy obu szerokościach. Brak podłączonego
+telefonu w ADB; poniższe próby ręczne pozostają otwarte. Właściciel zlecił
+commit i push; status: **zweryfikowane lokalnie, oczekuje na CI**.
+
+- [ ] Pobierz Kontakty online, dodaj grupę i kontakt, edytuj oraz usuń grupę.
+      Po każdej mutacji snapshot obejmuje pełną listę grup i kontaktów.
+- [ ] Przy 390 i 1280 px odłącz sieć w otwartym widoku. Sprawdź czas pobrania
+      i ostrzeżenie o nieaktualności, liczniki, wybór grup, wyszukiwanie po
+      polskich znakach, adresie i telefonie oraz szczegóły. Mutacje są wyłączone.
+- [ ] W fizycznym APK zamknij aplikację po pobraniu danych i uruchom ją ponownie
+      bez Wi-Fi i transmisji danych. Powtórz wyszukiwanie i wybór grup; sprawdź
+      polskie znaki, długi wielowierszowy adres i brak poziomego przepełnienia.
+- [ ] W fizycznym APK wybierz numer: otwiera systemową aplikację telefonu,
+      bez automatycznego połączenia i bez otwierania szczegółów kontaktu.
+- [ ] Bez wcześniejszego pobrania sprawdź komunikat o braku zapisanych kontaktów.
+      Uszkodzony magazyn oraz odmowa zapisu mają widoczne komunikaty. Błąd API
+      i niekompletna odpowiedź nie zastępują poprawnego snapshotu.
+- [ ] Zmień kontakt na drugim urządzeniu i odzyskaj sieć na pierwszym: cały
+      snapshot odświeża się, a mutacje stają się dostępne po potwierdzeniu sesji.
+- [ ] Sprawdź wylogowanie offline, utratę sesji i przełączenie konta: kontakty
+      poprzedniej osoby znikają. Druga karta odbiera zmianę snapshotu tego samego
+      konta; zmiana konta lub wylogowanie w innej karcie odcina poprzednią sesję
+      bez usuwania nowych danych tej karty.
+
+Nie dodano migracji, zależności runtime, konfiguracji ani crona; backend i kontrakt
+API są zgodne z poprzednią wersją APK. Paczkę serwera sprawdza istniejący
+`release:smoke` w CI. WWW obsługuje utratę sieci w otwartym interfejsie, APK
+również ponowny start bez sieci; nie ma PWA ani pobierania przy zamkniętym APK.
 
 ## Kontrole wydania
 

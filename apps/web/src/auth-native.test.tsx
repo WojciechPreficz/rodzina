@@ -10,6 +10,7 @@ vi.mock('@capacitor/core', () => ({
 import type { AuthUser, Family } from '@rodzina/shared';
 import { AuthProvider, useMe } from './auth.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
+import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 import { restoreShopping, stopShoppingPersistence, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingOffline.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined), invalidate: vi.fn() },
@@ -37,6 +38,7 @@ function Harness() {
 }
 afterEach(() => {
   cleanup();
+  contactsStore.clear();
   vi.clearAllMocks();
   localStorage.clear();
 });
@@ -55,6 +57,17 @@ function mount() {
 }
 
 describe('native session lifecycle', () => {
+  it('invalidates contacts on a foreign tab account without deleting its snapshot', async () => {
+    request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
+    mount();
+    await screen.findByText('Anna');
+    const saved = JSON.stringify({ account: 'family:other', version: 1 });
+    localStorage.setItem(CONTACTS_STORAGE_KEY, saved);
+    window.dispatchEvent(new StorageEvent('storage', { key: CONTACTS_STORAGE_KEY, newValue: saved }));
+    await screen.findByText('logged out');
+    expect(contactsStore.snapshot().account).toBe('');
+    expect(localStorage.getItem(CONTACTS_STORAGE_KEY)).toBe(saved);
+  });
   it('drops its own session after an account change in another tab without deleting that new account', async () => {
     request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
     mount();

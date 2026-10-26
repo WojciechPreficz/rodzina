@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,10 +8,11 @@ import { ContactsPage } from './ContactsPage.js';
 import { contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import { allowNavigation, installNativeNavigation } from '../../nativeNavigation.js';
 import { theme, cssVariablesResolver } from '../../theme.js';
+import { CONTACTS_STORAGE_KEY, contactsStore } from './contactsOffline.js';
 
 const session = vi.hoisted(() => ({
-  user: { id: 'user', role: 'admin' },
-  family: { id: 'family' },
+  user: { id: '10000000-0000-4000-8000-000000000002', role: 'admin' },
+  family: { id: '10000000-0000-4000-8000-000000000001' },
   familyConfirmed: true,
 }));
 const connection = vi.hoisted(() => ({ offline: false }));
@@ -120,6 +121,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  contactsStore.clear();
   client?.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -134,6 +136,45 @@ async function addContact() {
 }
 
 describe('contacts online', () => {
+  it('restores persisted contacts offline after remount, with search, details and disabled mutations', async () => {
+    setup();
+    await loaded();
+    expect(localStorage.getItem(CONTACTS_STORAGE_KEY)).not.toBeNull();
+    cleanup();
+    client.clear();
+    contactsStore.clear(false);
+    connection.offline = true;
+    session.familyConfirmed = false;
+    const fetch = setup();
+    await loaded();
+    expect(screen.getByText(/Ostatnie pobranie:/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '＋ Dodaj kontakt' })).toBeDisabled();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Szukaj kontaktu' }), { target: { value: 'lodz' } });
+    fireEvent.click(await loaded());
+    expect(within(screen.getByRole('dialog')).getByRole('link')).toHaveAttribute('href', 'tel:+48600111222');
+    expect(screen.getByRole('button', { name: 'Edytuj' })).toBeDisabled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('shows denied persistence and reloads a same-account snapshot from another tab', async () => {
+    setup();
+    await loaded();
+    const saved = JSON.parse(localStorage.getItem(CONTACTS_STORAGE_KEY)!);
+    saved.data.contacts[0].name = 'Anna';
+    localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(saved));
+    act(() =>
+      window.dispatchEvent(new StorageEvent('storage', { key: CONTACTS_STORAGE_KEY, newValue: JSON.stringify(saved) })),
+    );
+    await screen.findByRole('button', { name: 'Szczegóły kontaktu: Anna' });
+    expect(screen.queryByRole('button', { name: `Szczegóły kontaktu: ${base.name}` })).not.toBeInTheDocument();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Quota');
+    });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['contacts'] });
+    });
+    expect(await screen.findByText(/Nie można zapisać kontaktów na urządzeniu/)).toBeInTheDocument();
+    await loaded();
+  });
   it('combines mobile groups, clears to all contacts and keeps search counts independent', async () => {
     mobileViewport = true;
     setup([base, { ...base, id: id(8), groupId: id(4), name: 'Anna' }]);
@@ -323,7 +364,7 @@ describe('contacts online', () => {
     client.clear();
     connection.offline = true;
     setup([]);
-    expect(screen.getByText('Połącz się z internetem, aby pobrać kontakty.')).toBeInTheDocument();
+    expect(screen.getByText(/Brak zapisanych kontaktów/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '＋ Dodaj grupę' })).toBeDisabled();
   });
 });

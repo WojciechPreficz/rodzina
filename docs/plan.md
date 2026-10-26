@@ -92,9 +92,10 @@ Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani
 niepotwierdzonych prób ręcznych. Zachowujemy ich zapisy w
 [DECISIONS.md](DECISIONS.md) i [checklistę odbioru](DEVELOPMENT.md#odbiór-dokumentów--krok-84).
 
-**Faza 9 — Kontakty: kroki 9.1–9.2 zaimplementowane lokalnie, oczekują na CI.**
-Zakres i kroki są poniżej. UI (9.2) wymaga jeszcze prób ręcznych i odbioru APK;
-podgląd offline (9.3) pozostaje do implementacji. Nie zmienia to statusu fazy 6.
+**Faza 9 — Kontakty: kroki 9.1–9.3 zaimplementowane lokalnie, oczekują na CI.**
+Zakres i kroki są poniżej. UI i podgląd offline wymagają jeszcze prób ręcznych
+i odbioru fizycznego APK według [checklisty](DEVELOPMENT.md#odbiór-kontaktów-offline--krok-93).
+Nie zmienia to statusu fazy 6.
 
 ## 6. Fazy
 
@@ -155,7 +156,8 @@ podgląd offline (9.3) pozostaje do implementacji. Nie zmienia to statusu fazy 6
 **Status:** krok 9.1 (model, kontrakty i API, #44) zaimplementowany lokalnie
 25.10.2026; oczekuje na CI dla końcowego commita. Krok 9.2 (#45) zaimplementowany
 lokalnie, z poleceniem commita bez pusha; oczekuje na próby ręczne, odbiór
-APK i CI. Krok 9.3 pozostaje zaplanowany, bez implementacji.
+APK i CI. Krok 9.3 (#46) zaimplementowany lokalnie 26.10.2026; oczekuje na CI
+oraz próby ręczne, w tym restart offline i obsługę telefonu w fizycznym APK.
 
 **Cel:** wspólna książka kontaktów rodziny z adresami, opcjonalnymi numerami
 telefonów, własnymi grupami i podglądem ostatnio pobranych danych offline.
