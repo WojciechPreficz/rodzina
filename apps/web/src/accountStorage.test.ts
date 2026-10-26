@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthUser, TaskList } from '@rodzina/shared';
 import { clearAccountData, registerAccountStore } from './accountStorage.js';
 import { calendarStore, CALENDAR_STORAGE_KEY } from './features/calendar/calendarOffline.js';
+import { holidayLayersStorageKey, readHolidayLayers, saveHolidayLayers } from './features/calendar/holidayLayers.js';
 import { taskStore, TASK_STORAGE_KEY } from './features/tasks/taskOffline.js';
 import {
   enqueueShopping,
@@ -32,6 +33,8 @@ const logoutSurvivors = new Set([
   // This account-free marker prevents a stale HTTP cookie from restoring a logged-out
   // web session until the server has confirmed an offline logout.
   PENDING_LOGOUT_KEY,
+  // Holiday visibility is a device preference shared across accounts.
+  holidayLayersStorageKey,
 ]);
 const user: AuthUser = {
   id: '10000000-0000-4000-8000-000000000001',
@@ -128,6 +131,8 @@ describe('account storage cleanup', () => {
     async (reason) => {
       const queryClient = newClient();
       await seedAccount(queryClient);
+      const holidayLayers = { publicHoliday: false, observance: true };
+      saveHolidayLayers(holidayLayers);
       expect([...declaredKeys]).toEqual(
         expect.arrayContaining([
           CALENDAR_STORAGE_KEY,
@@ -153,6 +158,8 @@ describe('account storage cleanup', () => {
         Object.keys(localStorage).filter((key) => key.startsWith('rodzina:') && !logoutSurvivors.has(key)),
       ).toEqual([]);
       expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBe('yes');
+      expect(localStorage.getItem(holidayLayersStorageKey)).toBe(JSON.stringify(holidayLayers));
+      expect(readHolidayLayers()).toEqual(holidayLayers);
       expect(localStorage.getItem('unrelated-app')).toBe('keep');
       expect(calendarStore.current(token)).toBe(false);
       expect(taskStore.getSnapshot()).toMatchObject({ account: '', items: {}, pending: [] });
