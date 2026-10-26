@@ -1,7 +1,8 @@
 # Plan wspólnej obsługi offline
 
 Data: 26.10.2026. Status: O.1 opracowany lokalnie, oczekuje na CI;
-O.2–O.7 do realizacji, bez implementacji silnika.
+O.2 zaimplementowany lokalnie, oczekuje na końcowe CI i odbiór fizycznego APK;
+O.3–O.7 do realizacji. Silniki kolejek pozostają dotychczasowe.
 
 ## 1. Cel i kolejność prac
 

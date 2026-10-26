@@ -1,3 +1,4 @@
+import './offline/testSetup.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +16,7 @@ import {
   taskListSchema,
   taskSchema,
 } from '@rodzina/shared';
-import { readOfflineData } from './offlineData.js';
+import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
 import { CalendarOfflineStore, readCalendarRange } from './features/calendar/calendarOffline.js';
 import { createContactsStore } from './features/contacts/contactsOffline.js';
 import { createTaskOfflineStore } from './features/tasks/taskOffline.js';
@@ -141,12 +142,12 @@ function seed(scenario?: (typeof scenarios.cases)[number]) {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
   onlineManager.setOnline(false);
   seed();
 });
-afterEach(() => {
+afterEach(async () => {
   for (const client of clients.splice(0)) {
     stopShoppingPersistence(client);
     client.clear();
@@ -157,7 +158,7 @@ afterEach(() => {
 });
 
 describe('O.1 legacy storage fixtures', () => {
-  it('covers every existing shopping change and task operation using current domain schemas and readers', () => {
+  it('covers every existing shopping change and task operation using current domain schemas and readers', async () => {
     expect(variants.shopping.map((entry) => entry.value.state.variables.change.type)).toEqual([
       'createList',
       'renameList',
@@ -178,7 +179,7 @@ describe('O.1 legacy storage fixtures', () => {
       for (const name of [key('taskEdit'), key('taskDiscarded'), key('discard')]) localStorage.removeItem(name);
       localStorage.setItem(entry.key, JSON.stringify(entry.value));
       const store = createTaskOfflineStore();
-      store.activate(fixture.accountId);
+      await store.activate(fixture.accountId);
       expect(store.getSnapshot().error).toBeUndefined();
       const operation = store.getSnapshot().pending[0]!;
       expect(entry.key).toBe(`rodzina:tasks:v1:operation:${fixture.accountId}:${operation.id}`);
@@ -187,13 +188,15 @@ describe('O.1 legacy storage fixtures', () => {
     expect(types).toEqual(['create', 'update', 'remove']);
   });
 
-  it('restores the five current formats, including calendar details and discard precedence', () => {
-    const saved = readOfflineData();
+  it('restores the five current formats, including calendar details and discard precedence', async () => {
+    const { ensureMigrated } = await import('./offline/database.js');
+    await ensureMigrated(true);
+    const saved = await hydrateOfflineData();
     expect(saved?.session.user.id).toBe(id('user'));
     expect(saved?.session.family.joinCode).toBe('TEST-CODE');
     expect(saved?.members).toHaveLength(1);
     const calendar = new CalendarOfflineStore();
-    calendar.activate(fixture.accountId);
+    await calendar.activate(fixture.accountId);
     expect(calendar.issue).toBeUndefined();
     expect(eventSchema.parse(calendar.snapshot().details[id('event')]?.event).id).toBe(id('event'));
     expect(calendar.snapshot().personal[id('event')]?.[0]?.userId).toBe(id('user'));
@@ -233,7 +236,7 @@ describe('O.1 legacy storage fixtures', () => {
     ).toEqual(fixture.expected.pendingShoppingIds);
   });
 
-  it('keeps fixture identities unique and measures synthetic data within the declared budgets', () => {
+  it('keeps fixture identities unique and measures synthetic data within the declared budgets', async () => {
     expect(new Set(fixture.entries.map((entry) => entry.key)).size).toBe(fixture.entries.length);
     expect(new Set(scenarios.cases.map((scenario) => scenario.id)).size).toBe(scenarios.cases.length);
     const sizes: Record<string, number> = {};
@@ -246,15 +249,15 @@ describe('O.1 legacy storage fixtures', () => {
     console.info('Synthetic legacy fixture charged bytes:', JSON.stringify(sizes));
   });
 
-  it.each(scenarios.cases)('provides a reproducible source case: $id', (scenario) => {
+  it.each(scenarios.cases)('provides a reproducible source case: $id', async (scenario) => {
     seed(scenario);
     switch (scenario.readerCheck) {
       case 'family-invalid':
-        expect(readOfflineData()).toBeUndefined();
+        expect(() => offlineDataSchema.parse(JSON.parse(localStorage.getItem('rodzina:offline-data:v1')!))).toThrow();
         break;
       case 'contacts-invalid': {
         const store = createContactsStore();
-        store.activate(fixture.accountId);
+        await store.activate(fixture.accountId);
         expect(store.snapshot().saved).toBeUndefined();
         expect(store.snapshot().issue).toMatch(/Nie można odczytać/);
         break;
@@ -286,7 +289,7 @@ describe('O.1 legacy storage fixtures', () => {
       case 'task-pending':
       case 'task-expired': {
         const store = createTaskOfflineStore();
-        store.activate(fixture.accountId);
+        await store.activate(fixture.accountId);
         expect(store.getSnapshot().error).toBeUndefined();
         const pending = store.getSnapshot().pending;
         if (scenario.readerCheck === 'task-missing') {

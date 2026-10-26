@@ -1,3 +1,4 @@
+import '../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter, Route, Routes } from 'react-router';

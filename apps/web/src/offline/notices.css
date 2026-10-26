@@ -1,0 +1,48 @@
+.offline-storage-notices {
+  padding: 64px 16px 0;
+  overflow-wrap: anywhere;
+}
+
+.offline-migration-notice,
+.offline-storage-error {
+  padding: 16px;
+  border-radius: 12px;
+  background: #f7edd3;
+  border: 1px solid #d4b567;
+}
+
+.offline-migration-notice p {
+  margin: 0 0 16px;
+}
+
+.offline-migration-notice button {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #436854;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.offline-migration-notice button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.offline-storage-error {
+  background: #fff1ed;
+  border-color: #c56c58;
+}
+
+@media (min-width: 768px) {
+  .offline-storage-notices {
+    padding: 16px 36px 0;
+  }
+
+  .offline-storage-notices.authenticated:not(.native) {
+    margin-left: 240px;
+  }
+}

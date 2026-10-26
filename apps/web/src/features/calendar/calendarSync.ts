@@ -48,7 +48,7 @@ export function fetchPersonal(id: string, token = calendarStore.token()) {
     const { reminders } = await limited(() =>
       apiFetch<{ reminders: Reminder[] }>(`/api/reminders/mine?${new URLSearchParams({ eventId: id })}`),
     );
-    calendarStore.savePersonal(id, reminders, token);
+    await calendarStore.savePersonal(id, reminders, token);
     return reminders;
   });
 }
@@ -56,11 +56,11 @@ export function fetchSavedEvent(id: string, token = calendarStore.token()) {
   return once(`event:${id}`, token, async () => {
     try {
       const event = await limited(() => getEvent(id));
-      calendarStore.saveEvent(event, token);
+      await calendarStore.saveEvent(event, token);
       await fetchPersonal(id, token);
       return event;
     } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 404) calendarStore.forgetEvent(id, token);
+      if (error instanceof ApiRequestError && error.status === 404) await calendarStore.forgetEvent(id, token);
       throw error;
     }
   });
@@ -68,7 +68,7 @@ export function fetchSavedEvent(id: string, token = calendarStore.token()) {
 export function fetchSavedMonth(month: string, token = calendarStore.token(), since = Date.now()) {
   return once(`month:${month}`, token, async () => {
     const occurrences = await listOccurrences(monthWindow(month));
-    calendarStore.saveRange(month, occurrences, token);
+    await calendarStore.saveRange(month, occurrences, token);
     const results = await Promise.allSettled(
       [...new Set(occurrences.map((o) => o.eventId))].map((id) => {
         const saved = calendarStore.snapshot();
@@ -100,7 +100,7 @@ export async function fetchSavedRange(range: CalendarRange) {
 export function fetchSavedDistant(token = calendarStore.token()) {
   return once('distant', token, async () => {
     const events = await listDistantEvents();
-    calendarStore.saveDistant(events, token);
+    await calendarStore.saveDistant(events, token);
     await Promise.all(events.map((event) => fetchPersonal(event.id, token)));
     return events;
   });

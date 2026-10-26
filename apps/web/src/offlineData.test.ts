@@ -1,3 +1,4 @@
+import './offline/testSetup.js';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -5,6 +6,7 @@ import {
   familyMembersKey,
   OFFLINE_DATA_KEY,
   readOfflineData,
+  hydrateOfflineData,
   restoreOfflineData,
   saveOfflineData,
 } from './offlineData.js';
@@ -21,14 +23,14 @@ const user: AuthUser = {
   updatedAt: 2,
 };
 const session = { user, family: { id: 'family', name: 'Rodzina', timezone: 'Europe/Warsaw', joinCode: 'ABC123' } };
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
   localStorage.clear();
-  clearOfflineData();
+  await clearOfflineData();
 });
 
 describe('shared offline data', () => {
-  it('persists an allowlist, including the join code, and restores account-scoped members', () => {
+  it('persists an allowlist, including the join code, and restores account-scoped members', async () => {
     const sensitive = {
       ...user,
       pin: '9876',
@@ -36,8 +38,9 @@ describe('shared offline data', () => {
       token: 'session-token',
       invitation: '/zaproszenie/private',
     };
-    expect(saveOfflineData({ ...session, user: sensitive }, [sensitive], 123)).toBe(true);
-    const raw = localStorage.getItem(OFFLINE_DATA_KEY)!;
+    expect(await saveOfflineData({ ...session, user: sensitive }, [sensitive], 123)).toBe(true);
+    const { readCache } = await import('./offline/database.js');
+    const raw = JSON.stringify((await readCache('family'))?.payload);
     for (const secret of [
       'private@example.com',
       '9876',
@@ -60,18 +63,21 @@ describe('shared offline data', () => {
 
   it.each(['{bad json', '{"version":2}', JSON.stringify({ version: 1, account: 'other', session })])(
     'rejects corrupt or incompatible records: %s',
-    (raw) => {
+    async (raw) => {
       localStorage.setItem(OFFLINE_DATA_KEY, raw);
-      expect(readOfflineData()).toBeUndefined();
+      expect(await hydrateOfflineData()).toBeUndefined();
     },
   );
 
-  it('does not claim success or overwrite the last valid snapshot when storage is full', () => {
-    saveOfflineData(session, [user], 123);
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+  it('does not claim success or overwrite the last valid snapshot when storage is full', async () => {
+    await saveOfflineData(session, [user], 123);
+    const { IDBObjectStore } = await import('fake-indexeddb');
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
       throw new DOMException('Full', 'QuotaExceededError');
     });
-    expect(saveOfflineData({ ...session, family: { ...session.family, joinCode: 'NEW123' } }, [user], 456)).toBe(false);
+    expect(await saveOfflineData({ ...session, family: { ...session.family, joinCode: 'NEW123' } }, [user], 456)).toBe(
+      false,
+    );
     expect(readOfflineData()?.session.family.joinCode).toBe('ABC123');
   });
 });

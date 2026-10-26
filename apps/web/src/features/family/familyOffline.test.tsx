@@ -1,3 +1,4 @@
+import '../../offline/testSetup.js';
 import { MantineProvider } from '@mantine/core';
 import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -90,9 +91,9 @@ async function synced() {
   await waitFor(() => expect(readOfflineData()?.members).toHaveLength(2));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Dodaj dziecko' })).toBeEnabled());
 }
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  clearOfflineData();
+  await clearOfflineData();
   reportTransportFailure(false);
   onlineManager.setOnline(true);
   focusManager.setFocused(true);
@@ -118,7 +119,7 @@ beforeEach(() => {
     })),
   );
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   for (const client of clients.splice(0)) {
     stopShoppingPersistence(client);
@@ -128,7 +129,7 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
-  clearOfflineData();
+  await clearOfflineData();
   reportTransportFailure(false);
   onlineManager.setOnline(true);
   focusManager.setFocused(undefined);
@@ -136,7 +137,7 @@ afterEach(() => {
 
 describe('family offline lifecycle through the Android transport', () => {
   it('restores members and the code on cold start and blocks all visible admin actions', async () => {
-    saveOfflineData(session, [admin, child], 123);
+    await saveOfflineData(session, [admin, child], 123);
     onlineManager.setOnline(false);
     mount();
     expect(await screen.findByText('Zosia')).toBeVisible();
@@ -245,7 +246,7 @@ describe('family offline lifecycle through the Android transport', () => {
     await screen.findByText('logged out');
     expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBeNull();
     expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).toBeNull();
-    expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined();
+    await waitFor(() => expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined());
   });
 
   it('preserves cached data and displays an HTTP server error without calling it offline', async () => {
@@ -268,12 +269,12 @@ describe('family offline lifecycle through the Android transport', () => {
     fireEvent.click(screen.getByText('logout'));
     await screen.findByText('logged out');
     expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBeNull();
-    expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined();
+    await waitFor(() => expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined());
     await waitFor(() => expect(clearSession).toHaveBeenCalled());
   });
 
   it('hides administrator actions for a child restored offline', async () => {
-    saveOfflineData({ ...session, user: child }, [admin, child], 123);
+    await saveOfflineData({ ...session, user: child }, [admin, child], 123);
     onlineManager.setOnline(false);
     mount();
     expect(await screen.findByText('ABC123')).toBeVisible();
@@ -304,7 +305,7 @@ describe('family offline lifecycle through the Android transport', () => {
       finish(reply({ ...session, family: { ...session.family, joinCode: 'RESUME' } }));
     });
     expect(await screen.findByText('RESUME')).toBeVisible();
-    expect(readOfflineData()?.session.family.joinCode).toBe('RESUME');
+    await waitFor(() => expect(readOfflineData()?.session.family.joinCode).toBe('RESUME'));
   });
 
   it('does not let a delayed rejection of the previous account remove the new account', async () => {
@@ -337,7 +338,11 @@ describe('family offline lifecycle through the Android transport', () => {
     fail = 'transport';
     mount();
     expect(await screen.findByText('logged out')).toBeVisible();
-    expect(screen.getByText(/Nie można odczytać danych rodziny/)).toBeVisible();
+    if (failure === 'corrupt') {
+      fireEvent.click(screen.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' }));
+      expect(await screen.findByText(/Nie udało się przenieść danych offline/)).toBeVisible();
+      expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBe('{broken');
+    } else expect(screen.getByText(/Nie można odczytać danych rodziny/)).toBeVisible();
   });
 
   it('isolates a changed account and ignores its predecessor’s delayed member response', async () => {
@@ -360,13 +365,19 @@ describe('family offline lifecycle through the Android transport', () => {
       finish(reply({ members: [{ ...admin, displayName: 'Stale person' }] }));
     });
     expect(screen.queryByText('Stale person')).not.toBeInTheDocument();
-    expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined();
+    await waitFor(() => expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined());
     expect(screen.queryByRole('button', { name: 'Dodaj dziecko' })).not.toBeInTheDocument();
     expect(readOfflineData()?.session.user.id).toBe('child');
   });
 
   it('reports a failed durable save while retaining the online view', async () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    const { IDBObjectStore } = await import('fake-indexeddb');
+    const put = IDBObjectStore.prototype.put;
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: Parameters<IDBObjectStore['put']>
+    ) {
+      if (this.name !== 'cache') return put.apply(this, args);
       throw new DOMException('Full', 'QuotaExceededError');
     });
     mount();

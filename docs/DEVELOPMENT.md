@@ -279,7 +279,50 @@ nie potwierdzają odbioru alarmu na fizycznym telefonie.
 Nie używamy joba Web Push ani `--now`. Rzeczywisty czas telefonu jest wymagany
 do odbioru fazy; wstrzyknięty czas w testach API sprawdza tylko obliczenia.
 
-### Narzędzia i komendy
+### Odbiór pamięci offline — O.2 (#50)
+
+Implementacja obejmuje tylko rodzinę/sesję i kalendarz. Zakupy, zadania
+i kontakty nadal korzystają ze swoich magazynów. Baza `rodzina-offline`
+ma wersję 1; podglądy znajdują się w `cache`, a postęp importu w `migration`.
+WWW i APK mają oddzielną pamięć urządzenia.
+
+1. Uruchom `npm run dev`, zaloguj się i poczekaj na pobranie rodziny
+   i kalendarza. Sprawdź domowników, kod dołączenia, miesiąc oraz szczegóły
+   wydarzenia i własne przypomnienia. Powtórz przy 390 i 1280 px.
+2. Przy aktualizacji ze starego magazynu WWW zamknij wszystkie okna aplikacji
+   i procesy przeglądarki. Uruchom nową stronę bez przywracania starych kart.
+   Dopiero wtedy użyj „Potwierdzam zamknięcie starych kart — przenieś dane”.
+   Nie otwieraj starszej wersji podczas importu. Brak odpowiedzi starej karty
+   nie potwierdza jej zamknięcia. APK aktualizuj po zatrzymaniu starego procesu;
+   przy istniejących danych również potwierdź przeniesienie w aplikacji.
+3. Po imporcie sprawdź w DevTools → Application → IndexedDB dane rodziny
+   i kalendarza. Klucze localStorage `rodzina:offline-data:v1`
+   i `rodzina:calendar:v1` mają zniknąć. Magazyny zakupów, zadań i kontaktów
+   mają pozostać. Nie usuwaj ręcznie danych urządzenia z niewysłanymi zmianami.
+4. W otwartej stronie włącz Offline w DevTools. Rodzina pokazuje domowników
+   i ostatni kod; kalendarz zapisane zakresy i szczegóły. Oba podglądy są tylko
+   do odczytu. Niepobrany zakres nie jest przedstawiany jako pusty.
+   Przywróć sieć i sprawdź nowe dane zmienione na drugim urządzeniu.
+5. W fizycznym APK pobierz dane online, przejdź w tryb samolotowy, zamknij
+   proces i uruchom ponownie. Sprawdź rodzinę, kod, kalendarz i szczegóły,
+   także po aktualizacji ze starszego APK. Zapisz model telefonu, Android,
+   wersję APK i wynik. Ta próba pozostaje **do wykonania**; transport Androida
+   symulowany przez Playwright i build debug nie zastępują telefonu.
+6. Wyloguj się offline i sprawdź brak podglądu po ponownym uruchomieniu.
+   Przy zmianie konta w drugiej karcie pierwsza ma ukryć dane bez usuwania
+   nowej sesji. Błąd usuwania pozostawia `offline-clear-pending:1`, który
+   blokuje odtworzenie do skutecznego czyszczenia.
+7. Na testowym profilu sprawdź odmowę IndexedDB i brak miejsca: komunikat
+   ma wyjaśnić problem, a aplikacja nie tworzy zastępczego zapisu localStorage.
+   Import przerwany przed weryfikacją zachowuje źródło; po ponowieniu kończy
+   zapis lub sprzątanie. Nie wracaj do starego APK po nowych zapisach IDB.
+
+Automatyczne scenariusze: `apps/web/src/offline/database.test.ts`, testy
+rodziny/kalendarza/auth i `e2e/offline-migration.spec.ts`. Playwright działa
+headless w obu szerokościach. Końcowe CI oraz powyższe próby fizycznego APK
+są wymagane do zamknięcia kroku.
+
+### Narzędzia Androida
 
 APK zawiera lokalny frontend. Potrzebne są Node.js 22 lub 24, JDK 21, SDK 36
 i platform-tools/ADB, a na telefonie debugowanie USB. Ustaw `JAVA_HOME`

@@ -53,7 +53,7 @@ export function RegisterPage() {
           email: form.email.trim(),
         }),
       });
-      setSession(response.user, response.family);
+      await setSession(response.user, response.family);
       navigate(next, { replace: true });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : labels.registrationError);
@@ -167,7 +167,7 @@ export function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email: form.email.trim(), password: form.password }),
       });
-      setSession(response.user, response.family);
+      await setSession(response.user, response.family);
       navigate(next, { replace: true });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : labels.loginError);

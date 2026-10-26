@@ -1,3 +1,4 @@
+import '../../offline/testSetup.js';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -20,9 +21,9 @@ vi.mock('../../auth.js', () => ({
     family: { id: 'family', timezone: 'Europe/Warsaw' },
   }),
 }));
-beforeEach(() => {
+beforeEach(async () => {
   calendarStore.clear();
-  calendarStore.activate('family:child');
+  await calendarStore.activate('family:child');
   reportTransportFailure(false);
   vi.stubGlobal(
     'matchMedia',
@@ -38,7 +39,7 @@ beforeEach(() => {
   );
   vi.mocked(apiFetch).mockReset();
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   vi.unstubAllGlobals();
 });
