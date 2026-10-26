@@ -1,5 +1,28 @@
 # Decyzje
 
+## 26.10.2026 — przeterminowane zmiany zadań (punkt 2 przeglądu architektury)
+
+- Zachowujemy 30-dniowy limit automatycznego ponawiania. Trwały stan
+  `needs-review` przechowujemy przy oryginalnej operacji, bez zmiany jej danych,
+  identyfikatora ani daty. Brak stanu w starszym formacie oznacza `pending`;
+  klasyfikacja wieku działa również offline przed zapisaniem nowego stanu.
+- Wstrzymujemy późniejsze zapisy tego samego zadania. Potwierdzone dane serwera
+  są wyświetlane bez tych zmian, a panel pokazuje osobno cały łańcuch.
+  Błąd wysyłania kolejki nie zatrzymuje odczytu potwierdzonych danych.
+- Odrzucenie całego obejrzanego łańcucha wymaga potwierdzenia i jednego trwałego
+  znacznika z identyfikatorami operacji. Znacznik pozostaje w dzienniku konta,
+  aby błąd sprzątania lub druga karta nie odtworzyły odrzuconych wpisów.
+  Chronimy nowo dodane wpisy przed odrzuceniem przez nieaktualny panel.
+- Po odrzuceniu nowe zapisy na tej liście wymagają udanego pobrania jej danych
+  online. Ponowne wprowadzenie odbywa się zwykłym formularzem jako nowy zapis,
+  ze zwykłą kontrolą uprawnień serwera. Nie dodajemy automatycznej zmiany daty,
+  identyfikatora ani przycisku ponowienia starej operacji.
+- Oryginalne wpisy i znaczniki są objęte dotychczasowym czyszczeniem magazynu
+  konta. Wstrzymane zmiany terminu, ukończenia i usunięcia nadal wyłączają
+  odpowiednie alarmy także po odtworzeniu magazynu offline.
+- Po lokalnej implementacji właściciel zlecił commit i push. Zweryfikowane
+  lokalnie, oczekuje na CI oraz ręczny odbiór desktopu i fizycznego APK.
+
 ## 26.10.2026 — powtarzalne zależności release (punkt 1 przeglądu architektury)
 
 - Paczka serwera zawiera dedykowany manifest `rodzina-release` i lockfile v3

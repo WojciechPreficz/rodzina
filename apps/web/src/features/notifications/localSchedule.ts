@@ -306,18 +306,5 @@ export const localScheduler = createLocalScheduler({
   store: alarmStore,
   fetch: () => apiFetch('/api/reminders/schedule?includeTasks=true&includeDocuments=true'),
   now: Date.now,
-  blockedTasks: (account) =>
-    taskStore.getSnapshot().account === account
-      ? taskStore
-          .getSnapshot()
-          .pending.filter(
-            (op) =>
-              op.change.type === 'remove' ||
-              (op.change.type === 'update' &&
-                (op.change.data.isDone !== undefined ||
-                  op.change.data.dueDate !== undefined ||
-                  op.change.data.dueTime !== undefined)),
-          )
-          .map((op) => op.taskId)
-      : [],
+  blockedTasks: (account) => taskStore.blockedTasks(account),
 });

@@ -28,6 +28,7 @@ import type { Member } from '@rodzina/shared';
 
 import { TaskForm } from './TaskForm.js';
 import { TaskListSettings } from './TaskListSettings.js';
+import { TaskReviewPanel } from './TaskReviewPanel.js';
 import { useTasks } from './taskQueries.js';
 import { isTaskOverdue } from './taskRules.js';
 import { taskOfflineText } from './taskOffline.js';
@@ -239,6 +240,15 @@ function TaskListPage() {
           {isAndroid() && data.pendingAlarms && <Text size="sm">{taskOfflineText.alarms}</Text>}
         </Alert>
       )}
+      <TaskReviewPanel
+        operations={data.reviewOperations}
+        lists={lists}
+        items={data.reviewItems}
+        alarms={isAndroid() && data.pendingAlarms}
+        discard={data.discardReview}
+        members={members}
+        timezone={family!.timezone}
+      />
       {data.syncError && (
         <Alert color="red">
           {data.syncError}

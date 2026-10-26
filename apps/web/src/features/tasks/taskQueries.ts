@@ -6,7 +6,7 @@ import { useMe } from '../../auth.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
-import { offlineTaskPatch, taskOfflineText, taskStore } from './taskOffline.js';
+import { offlineTaskPatch, taskOfflineText, taskOperationBlocksAlarm, taskStore } from './taskOffline.js';
 
 export function useTaskData() {
   const { user, family, familyConfirmed } = useMe();
@@ -156,15 +156,14 @@ export function useTasks(listId?: string) {
     active,
     enabled: !!user && !!family,
     offline: data.offline,
-    pendingCount: data.pending.length,
-    pendingAlarms: data.pending.some(
-      (op) =>
-        op.change.type === 'remove' ||
-        (op.change.type === 'update' &&
-          (op.change.data.isDone !== undefined ||
-            op.change.data.dueDate !== undefined ||
-            op.change.data.dueTime !== undefined)),
-    ),
+    pendingCount: data.pending.filter((op) => op.status === 'pending').length,
+    reviewOperations: data.pending.filter((op) => op.status === 'needs-review'),
+    reviewItems: data.items,
+    discardReview: async (operationIds: string[]) => {
+      taskStore.discardReview(operationIds);
+      if (!isOffline()) await sync();
+    },
+    pendingAlarms: data.pending.some(taskOperationBlocksAlarm),
     syncError: data.error,
     syncing: data.syncing,
     createList,

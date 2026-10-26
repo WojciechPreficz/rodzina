@@ -9,7 +9,7 @@ import {
   type TaskList,
 } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
-import { assertOfflineReplayAge } from '@rodzina/shared';
+import { assertOfflineReplayAge, OfflineOperationExpiredError } from '@rodzina/shared';
 
 export const TASK_STORAGE_KEY = 'rodzina:tasks:v1';
 export const taskOfflineText = {
@@ -19,12 +19,18 @@ export const taskOfflineText = {
   empty: 'Połącz się z internetem, aby pobrać zadania.',
   alarms:
     'Zmiany terminów i przywrócenie przypomnień oczekują na synchronizację. Alarmy zmienionych zadań są wstrzymane na tym urządzeniu.',
+  review: 'Zmiany wymagające sprawdzenia',
+  expired: 'Zmiana ma ponad 30 dni i nie zostanie wysłana automatycznie.',
+  dependent: 'Zmiana czeka na rozstrzygnięcie wcześniejszej zmiany tego zadania.',
+  blocked: 'Najpierw sprawdź i odrzuć wstrzymane zmiany tego zadania. Następnie odśwież dane przed nowym zapisem.',
 };
 const operationSchema = z.object({
   id: z.string().uuid(),
   submittedAt: z.number(),
   listId: z.string(),
   taskId: z.string(),
+  status: z.enum(['pending', 'needs-review']).default('pending'),
+  reason: z.enum(['expired', 'dependency']).optional(),
   change: z.discriminatedUnion('type', [
     z.object({ type: z.literal('create'), data: createTaskSchema }),
     z.object({ type: z.literal('update'), data: patchTaskSchema }),
@@ -32,6 +38,43 @@ const operationSchema = z.object({
   ]),
 });
 export type TaskOperation = z.infer<typeof operationSchema>;
+const discardSchema = z.object({
+  operationIds: z.array(z.string().uuid()),
+  listId: z.string(),
+  requiresRefresh: z.boolean(),
+});
+
+// Classification also runs offline, before replay can persist the new status.
+// A clock correction must never revive an operation already marked for review.
+function classify(operations: TaskOperation[]): TaskOperation[] {
+  const blocked = new Set<string>();
+  return operations.map((op) => {
+    const key = `${op.listId}:${op.taskId}`;
+    let reason = op.status === 'needs-review' ? (op.reason ?? 'expired') : undefined;
+    if (!reason) {
+      try {
+        assertOfflineReplayAge(op.submittedAt);
+      } catch (error) {
+        if (!(error instanceof OfflineOperationExpiredError)) throw error;
+        reason = 'expired';
+      }
+    }
+    if (!reason && blocked.has(key)) reason = 'dependency';
+    if (!reason) return op;
+    blocked.add(key);
+    return { ...op, status: 'needs-review', reason };
+  });
+}
+
+export function taskOperationBlocksAlarm(op: TaskOperation) {
+  return (
+    op.change.type === 'remove' ||
+    (op.change.type === 'update' &&
+      (op.change.data.isDone !== undefined ||
+        op.change.data.dueDate !== undefined ||
+        op.change.data.dueTime !== undefined))
+  );
+}
 const snapshotSchema = z.object({
   account: z.string(),
   lists: z.array(taskListSchema).optional(),
@@ -59,11 +102,35 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
     listeners.forEach((listener) => listener());
   };
   const prefix = (account = state.account) => `${TASK_STORAGE_KEY}:operation:${account}:`;
-  const journal = () =>
+  const discardPrefix = () => `${TASK_STORAGE_KEY}:discard:${state.account}:`;
+  const discards = () =>
     Object.keys(storage())
-      .filter((key) => key.startsWith(prefix()))
-      .map((key) => operationSchema.parse(JSON.parse(storage().getItem(key)!)))
-      .sort((a, b) => a.submittedAt - b.submittedAt || a.id.localeCompare(b.id));
+      .filter((key) => key.startsWith(discardPrefix()))
+      .map((key) => ({ key, ...discardSchema.parse(JSON.parse(storage().getItem(key)!)) }));
+  const journal = () => {
+    const discarded = new Set(discards().flatMap((entry) => entry.operationIds));
+    return classify(
+      Object.keys(storage())
+        .filter((key) => key.startsWith(prefix()))
+        .map((key) => operationSchema.parse(JSON.parse(storage().getItem(key)!)))
+        .filter((op) => !discarded.has(op.id))
+        .sort((a, b) => a.submittedAt - b.submittedAt || a.id.localeCompare(b.id)),
+    );
+  };
+  const persistReviews = (operations: TaskOperation[]) => {
+    let issue: string | undefined;
+    for (const op of operations) {
+      if (op.status !== 'needs-review') continue;
+      try {
+        const key = `${prefix()}${op.id}`;
+        const saved = operationSchema.parse(JSON.parse(storage().getItem(key)!));
+        if (saved.status !== op.status || saved.reason !== op.reason) storage().setItem(key, JSON.stringify(op));
+      } catch {
+        issue = storageError().message;
+      }
+    }
+    return issue;
+  };
   const persist = (next: Snapshot) => {
     try {
       storage().setItem(TASK_STORAGE_KEY, JSON.stringify(next));
@@ -92,7 +159,8 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
     }
     emit({ ...saved, pending: [], syncing: false, error: issue });
     try {
-      emit({ ...state, pending: journal() });
+      const pending = journal();
+      emit({ ...state, pending, error: persistReviews(pending) ?? state.error });
     } catch {
       emit({ ...state, error: 'Nie można odczytać kolejki zadań. Niektóre zmiany wymagają sprawdzenia.' });
     }
@@ -113,7 +181,9 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
   function project(): TaskOfflineState {
     const items = Object.fromEntries(Object.entries(state.items).map(([id, tasks]) => [id, [...tasks]]));
     const userId = state.account.split(':')[1]!;
-    for (const op of state.pending) {
+    const pending = classify(state.pending);
+    for (const op of pending) {
+      if (op.status === 'needs-review') continue;
       const tasks = items[op.listId];
       if (!tasks) continue;
       if (op.change.type === 'remove') items[op.listId] = tasks.filter((task) => task.id !== op.taskId);
@@ -157,6 +227,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
     }
     return {
       ...state,
+      pending,
       items,
       lists: state.lists?.map((list) => ({
         ...list,
@@ -167,6 +238,10 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
   function enqueue(listId: string, taskId: string, change: TaskOperation['change']) {
     if (!state.account || !state.lists?.some((list) => list.id === listId) || !state.items[listId])
       throw new Error(taskOfflineText.empty);
+    if (journal().some((op) => op.listId === listId && op.taskId === taskId && op.status === 'needs-review'))
+      throw new Error(taskOfflineText.blocked);
+    if (discards().some((entry) => entry.listId === listId && entry.requiresRefresh))
+      throw new Error('Po odrzuceniu zmian połącz się z internetem i odśwież listę przed nowym zapisem.');
     const op = operationSchema.parse({
       id: crypto.randomUUID(),
       submittedAt: Math.max(Date.now(), (state.pending.at(-1)?.submittedAt ?? 0) + 1),
@@ -183,6 +258,36 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
     }
     emit({ ...state, pending: journal(), error: undefined });
     return project().items[listId]?.find((task) => task.id === taskId);
+  }
+  function discardReview(operationIds: string[]) {
+    const operations = journal();
+    const first = operations.find((op) => op.id === operationIds[0]);
+    const chain = first && operations.filter((op) => op.listId === first.listId && op.taskId === first.taskId);
+    if (
+      !chain?.length ||
+      chain.some((op) => op.status !== 'needs-review') ||
+      chain.length !== operationIds.length ||
+      chain.some((op, index) => op.id !== operationIds[index])
+    )
+      throw new Error('Lista zmian uległa zmianie. Otwórz ją ponownie przed odrzuceniem.');
+    try {
+      // One durable write discards the entire inspected chain, even if cleanup fails.
+      storage().setItem(
+        `${discardPrefix()}${crypto.randomUUID()}`,
+        JSON.stringify({ operationIds, listId: first!.listId, requiresRefresh: true }),
+      );
+    } catch {
+      throw storageError();
+    }
+    for (const id of operationIds) {
+      try {
+        storage().removeItem(`${prefix()}${id}`);
+      } catch {
+        /* The discard marker remains authoritative. */
+      }
+    }
+    emit({ ...state, pending: journal(), error: undefined });
+    window.dispatchEvent(new Event('rodzina:tasks-changed'));
   }
   async function synchronize() {
     if (!state.account) return;
@@ -218,51 +323,67 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
           pending: journal(),
           error: revoked.length ? 'Utracono dostęp do listy. Jej oczekujące zmiany nie zostały wysłane.' : undefined,
         });
-        for (;;) {
-          const op = journal()[0];
-          if (!op) break;
-          assertOfflineReplayAge(op.submittedAt);
-          try {
-            const path =
-              op.change.type === 'create'
-                ? `/api/tasks/lists/${encodeURIComponent(op.listId)}/tasks`
-                : `/api/tasks/${encodeURIComponent(op.taskId)}`;
-            const response = await transport<{ task?: Task }>(
-              `${path}?operationId=${op.id}&actorId=${session.user.id}${op.change.type === 'create' ? `&taskId=${op.taskId}` : ''}`,
-              {
-                method: op.change.type === 'create' ? 'POST' : op.change.type === 'update' ? 'PATCH' : 'DELETE',
-                ...(op.change.type === 'remove' ? {} : { body: JSON.stringify(op.change.data) }),
-              },
-            );
-            current(captured);
-            const tasks = state.items[op.listId] ?? [];
-            const updated = response.task
-              ? [...tasks.filter((task) => task.id !== op.taskId), response.task]
-              : tasks.filter((task) => task.id !== op.taskId);
-            const next = { account, lists: state.lists, items: { ...state.items, [op.listId]: updated } };
-            persist(next);
-            storage().removeItem(`${prefix(account)}${op.id}`);
-            emit({ ...state, ...next, pending: journal() });
-          } catch (error) {
-            current(captured);
-            if (
-              !(error instanceof ApiRequestError) ||
-              error.status === 429 ||
-              error.status >= 500 ||
-              error.status === 401
-            )
-              throw error;
-            // A rejected change cannot roll back subsequent offline changes.
-            storage().removeItem(`${prefix(account)}${op.id}`);
-            emit({
-              ...state,
-              pending: journal(),
-              error: `${errorText(error)} Oczekująca zmiana nie została zapisana na serwerze.`,
-            });
+        try {
+          for (const queued of journal()) {
+            const op = journal().find((entry) => entry.id === queued.id);
+            if (!op) continue;
+            if (op.status === 'needs-review') {
+              emit({ ...state, pending: journal() });
+              try {
+                storage().setItem(`${prefix(account)}${op.id}`, JSON.stringify(op));
+              } catch {
+                emit({ ...state, error: storageError().message });
+              }
+              continue;
+            }
+            try {
+              const path =
+                op.change.type === 'create'
+                  ? `/api/tasks/lists/${encodeURIComponent(op.listId)}/tasks`
+                  : `/api/tasks/${encodeURIComponent(op.taskId)}`;
+              const response = await transport<{ task?: Task }>(
+                `${path}?operationId=${op.id}&actorId=${session.user.id}${op.change.type === 'create' ? `&taskId=${op.taskId}` : ''}`,
+                {
+                  method: op.change.type === 'create' ? 'POST' : op.change.type === 'update' ? 'PATCH' : 'DELETE',
+                  ...(op.change.type === 'remove' ? {} : { body: JSON.stringify(op.change.data) }),
+                },
+              );
+              current(captured);
+              const tasks = state.items[op.listId] ?? [];
+              const updated = response.task
+                ? [...tasks.filter((task) => task.id !== op.taskId), response.task]
+                : tasks.filter((task) => task.id !== op.taskId);
+              const next = { account, lists: state.lists, items: { ...state.items, [op.listId]: updated } };
+              persist(next);
+              storage().removeItem(`${prefix(account)}${op.id}`);
+              emit({ ...state, ...next, pending: journal() });
+            } catch (error) {
+              current(captured);
+              if (
+                !(error instanceof ApiRequestError) ||
+                error.status === 429 ||
+                error.status >= 500 ||
+                error.status === 401
+              )
+                throw error;
+              // A rejected change cannot roll back subsequent offline changes.
+              storage().removeItem(`${prefix(account)}${op.id}`);
+              emit({
+                ...state,
+                pending: journal(),
+                error: `${errorText(error)} Oczekująca zmiana nie została zapisana na serwerze.`,
+              });
+            }
           }
+        } catch (error) {
+          current(captured);
+          if (error instanceof ApiRequestError && [401, 403].includes(error.status)) throw error;
+          // Queue failures do not prevent refreshing the confirmed server state.
+          emit({ ...state, error: errorText(error) });
         }
         for (const list of lists) {
           try {
+            const awaitingRefresh = discards().filter((entry) => entry.listId === list.id && entry.requiresRefresh);
             const result = await transport<{ tasks: Task[] }>(
               `/api/tasks/lists/${encodeURIComponent(list.id)}/tasks?status=all`,
             );
@@ -274,6 +395,8 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
               syncedAt: Date.now(),
             };
             persist(next);
+            for (const { key, ...entry } of awaitingRefresh)
+              storage().setItem(key, JSON.stringify({ ...entry, requiresRefresh: false }));
             emit({ ...state, ...next });
           } catch (error) {
             current(captured);
@@ -281,8 +404,15 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
               const nextItems = { ...state.items };
               delete nextItems[list.id];
               const next = { account, lists: state.lists?.filter((entry) => entry.id !== list.id), items: nextItems };
-              emit({ ...state, ...next, error: 'Utracono dostęp do listy zadań.' });
+              const revoked = journal().filter((op) => op.listId === list.id);
+              emit({
+                ...state,
+                ...next,
+                pending: state.pending.filter((op) => op.listId !== list.id),
+                error: 'Utracono dostęp do listy zadań.',
+              });
               persist(next);
+              for (const op of revoked) storage().removeItem(`${prefix(account)}${op.id}`);
             } else throw error;
           }
         }
@@ -316,6 +446,13 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
     activate,
     clear,
     enqueue,
+    discardReview,
+    blockedTasks: (account: string) =>
+      state.account === account
+        ? classify(state.pending)
+            .filter(taskOperationBlocksAlarm)
+            .map((op) => op.taskId)
+        : [],
     synchronize,
     project,
     getSnapshot: () => state,
@@ -328,7 +465,9 @@ export function createTaskOfflineStore(transport: Transport = apiFetch, storage:
     reload: () => {
       if (state.account) {
         try {
-          emit({ ...state, pending: journal() });
+          const pending = journal();
+          emit({ ...state, pending, error: persistReviews(pending) ?? state.error });
+          window.dispatchEvent(new Event('rodzina:tasks-changed'));
         } catch {
           emit({ ...state, error: 'Nie można odczytać kolejki zadań. Niektóre zmiany wymagają sprawdzenia.' });
         }

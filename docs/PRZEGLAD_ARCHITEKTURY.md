@@ -2,7 +2,7 @@
 
 Data: 26.10.2026. Stan kodu podczas przeglądu: `0a9b7d9`.
 
-**Status: propozycje do zaplanowania; niezaimplementowane.** Dokument opisuje cztery pozostałe problemy
+**Status: propozycje do zaplanowania; niezaimplementowane.** Dokument opisuje trzy pozostałe problemy
 z przeglądu oraz dodatkową rozbieżność w dokumentacji sterownika SQLite. Nie zmienia
 zakresów i statusów faz w [planie](plan.md), nie zatwierdza decyzji architektonicznych
 ani wdrożenia. Każdą przyszłą zmianę należy realizować jako osobny, wskazany krok.
@@ -15,66 +15,15 @@ ograniczenia cPanel i Passengera: bez stałego procesu w tle, Redisa, WebSocket�
 ## Kolejność i zakres
 
 Kolejność poniżej odpowiada przeglądowi i proponowanej kolejności prac.
-Punkty 2–3 dotyczą niezawodności i ochrony logowania. Numeracja pozostałych punktów jest zachowana. Punkt 4 opisuje ryzyko wydajności
+Punkt 3 dotyczy ochrony logowania. Numeracja pozostałych punktów jest zachowana. Punkt 4 opisuje ryzyko wydajności
 wymagające pomiarów, punkt 5 koszt utrzymania, a punkt 6 zgodność dokumentacji z kodem.
 
-| Punkt | Problem                                                   | Oczekiwany rezultat                                                   |
-| ----- | --------------------------------------------------------- | --------------------------------------------------------------------- |
-| 2     | Przeterminowana operacja blokuje kolejkę zadań            | Niezależne zmiany i odczyt działają mimo operacji wymagającej decyzji |
-| 3     | Limity logowania tylko w pamięci                          | Wspólne liczniki przetrwają restart procesu                           |
-| 4     | Synchronizacja pobiera całe zbiory wieloma żądaniami      | Mniej żądań HTTP i zapytań SQL, potwierdzone pomiarami                |
-| 5     | Sesja jest związana z modułami funkcjonalnymi             | Osobne zarządzanie sesją i koordynowanie modułów                      |
-| 6     | Dokumentacja obiecuje prostszą wymianę sterownika niż kod | Jawnie opisane zależności od synchronicznego SQLite                   |
-
-## 2. Przeterminowana operacja blokuje całą kolejkę zadań
-
-### Stan i skutki
-
-W [taskOffline.ts](../apps/web/src/features/tasks/taskOffline.ts) synchronizacja bierze
-zawsze pierwszy wpis dziennika. `assertOfflineReplayAge` jest wywoływane przed obsługą
-błędu pojedynczej operacji. Po przekroczeniu 30 dni wyjątek kończy synchronizację,
-a wpis pozostaje na początku. Nowsze zmiany, także innych zadań, nie są wysyłane.
-Nie dochodzi też do późniejszego pobrania aktualnych zadań z serwera.
-
-Istniejący test potwierdza zachowanie starej operacji bez ponownej wysyłki, ale nie sprawdza
-kontynuacji kolejki ani drogi rozwiązania problemu w UI. Obecny interfejs pokazuje błąd
-i liczbę oczekujących zmian, bez akcji rozstrzygnięcia przeterminowanej operacji.
-
-### Proponowana implementacja
-
-1. Dodać trwały stan operacji wymagającej decyzji, np. `needs-review`, z przyczyną.
-   Zachować oryginalne dane, identyfikator i czas utworzenia. Dostosować odczyt starszego
-   dziennika tak, aby istniejące wpisy były traktowane jako oczekujące.
-2. Przenieść rozpoznawanie przeterminowania do obsługi pojedynczej operacji. Taki wpis
-   wyłączyć z automatycznej wysyłki i kontynuować niezależne operacje. Nie zmieniać
-   automatycznie daty ani identyfikatora, aby ominąć limit bezpiecznego ponawiania.
-3. Wstrzymywać także późniejsze operacje zależne od nierozstrzygniętej zmiany tego samego
-   zadania, zwłaszcza gdy pierwszą zmianą było jego utworzenie. Zachować kolejność tych
-   zmian; nie wysyłać edycji zasobu, którego utworzenie zostało wstrzymane.
-4. Oddzielić pobranie aktualnego stanu serwera od powodzenia całej kolejki. Pokazywać
-   potwierdzone dane i osobno lokalne zmiany wymagające sprawdzenia. Nie nakładać ich
-   na dane serwera tak, jakby były już zaakceptowane.
-5. Dodać w UI listę takich zmian z możliwością obejrzenia danych i odrzucenia wybranego
-   łańcucha po potwierdzeniu. Ponowne wprowadzenie ma wymagać aktualnego odczytu,
-   uprawnień i świadomego zapisu przez użytkownika jako nowej operacji.
-6. Uwzględnić nowy stan w czyszczeniu konta, obsłudze wielu kart i w `blockedTasks`
-   lokalnego harmonogramu. Nierozstrzygnięta zmiana terminu lub usunięcie zadania nadal
-   muszą wstrzymywać odpowiednie alarmy po restarcie APK.
-
-**Pliki:** `apps/web/src/features/tasks/taskOffline.ts`, `taskQueries.ts`, `TasksPage.tsx`,
-powiązane testy, `apps/web/src/features/notifications/localSchedule.ts` i jego testy.
-Wspólny limit w `packages/shared/src/offline.ts` pozostaje zachowany.
-
-### Weryfikacja i kryteria odbioru
-
-- W kolejce ze starą operacją oraz świeżą zmianą innego zadania świeża zmiana trafia
-  na serwer, a stara pozostaje dostępna do sprawdzenia. Pobieranie zadań nadal działa.
-- Łańcuch utworzenie–edycja–usunięcie jednego zadania zachowuje zależności.
-  Żadna przeterminowana zmiana nie jest automatycznie ponawiana z nowym identyfikatorem.
-- Testy obejmują restart, dwie karty, błąd zapisu magazynu, utratę dostępu do listy,
-  wylogowanie i spóźnioną odpowiedź poprzedniego konta.
-- UI przechodzi próby przy 390 i 1280 px oraz w fizycznym APK. Próba telefonu obejmuje
-  restart offline i wstrzymanie alarmów dla nierozstrzygniętych zmian.
+| Punkt | Problem                                                   | Oczekiwany rezultat                                    |
+| ----- | --------------------------------------------------------- | ------------------------------------------------------ |
+| 3     | Limity logowania tylko w pamięci                          | Wspólne liczniki przetrwają restart procesu            |
+| 4     | Synchronizacja pobiera całe zbiory wieloma żądaniami      | Mniej żądań HTTP i zapytań SQL, potwierdzone pomiarami |
+| 5     | Sesja jest związana z modułami funkcjonalnymi             | Osobne zarządzanie sesją i koordynowanie modułów       |
+| 6     | Dokumentacja obiecuje prostszą wymianę sterownika niż kod | Jawnie opisane zależności od synchronicznego SQLite    |
 
 ## 3. Limity logowania są przechowywane tylko w pamięci procesu
 

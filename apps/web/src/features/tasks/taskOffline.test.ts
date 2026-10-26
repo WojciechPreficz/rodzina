@@ -82,6 +82,161 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+function expireFirst() {
+  const key = Object.keys(localStorage).find((key) => key.includes(':operation:'))!;
+  const op = JSON.parse(localStorage.getItem(key)!);
+  op.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
+  localStorage.setItem(key, JSON.stringify(op));
+  return { key, op };
+}
+
+it('quarantines an expired create and its edit/delete chain, but sends an independent task and refreshes', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  const id = crypto.randomUUID();
+  f.store.enqueue(listId, id, { type: 'create', data: { title: 'Stare zadanie' } });
+  const { key, op } = expireFirst();
+  // Legacy journals may contain a full chain written before the replay limit elapsed.
+  const dependent = ['update', 'remove'].map((type, index) => ({
+    id: crypto.randomUUID(),
+    submittedAt: Date.now() + index,
+    listId,
+    taskId: id,
+    change: type === 'update' ? { type, data: { notes: 'Późniejsza notatka' } } : { type },
+  }));
+  for (const entry of dependent) localStorage.setItem(key.replace(op.id, entry.id), JSON.stringify(entry));
+  f.store.enqueue(listId, crypto.randomUUID(), { type: 'create', data: { title: 'Świeże zadanie' } });
+  f.request.mockClear();
+  await f.store.synchronize();
+  expect(f.request.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1);
+  expect(f.tasks().some((entry) => entry.title === 'Świeże zadanie')).toBe(true);
+  expect(f.request.mock.calls.some(([path]) => path.endsWith('?status=all'))).toBe(true);
+  expect(f.store.getSnapshot().pending.map((entry) => [entry.id, entry.status, entry.reason])).toEqual([
+    [op.id, 'needs-review', 'expired'],
+    ...dependent.map((entry) => [entry.id, 'needs-review', 'dependency']),
+  ]);
+  expect(f.store.project().items[listId]?.some((entry) => entry.id === id)).toBe(false);
+  expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({
+    id: op.id,
+    submittedAt: op.submittedAt,
+    change: op.change,
+  });
+  expect(() => f.store.enqueue(listId, id, { type: 'remove' })).toThrow('Najpierw sprawdź');
+});
+
+it('refreshes confirmed data even when replay fails transiently', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'update', data: { notes: 'Lokalna' } });
+  f.setReject(new ApiRequestError('Później', 500));
+  f.request.mockClear();
+  await f.store.synchronize();
+  expect(f.request.mock.calls.some(([path]) => path.endsWith('?status=all'))).toBe(true);
+  expect(f.store.getSnapshot().items[listId]![0]!.notes).toBeNull();
+  expect(f.store.getSnapshot().pending).toHaveLength(1);
+});
+
+it('discards only the inspected chain durably across tabs and requires a fresh read before a new write', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'update', data: { dueDate: '2027-01-01' } });
+  expireFirst();
+  await f.store.synchronize();
+  const other = createTaskOfflineStore(f.request as <T>(path: string, init?: RequestInit) => Promise<T>);
+  other.activate(account);
+  expect(other.blockedTasks(account)).toEqual([taskId]);
+  const ids = f.store.getSnapshot().pending.map((op) => op.id);
+  const failure = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('Quota');
+  });
+  expect(() => f.store.discardReview(ids)).toThrow('Nie można zapisać');
+  expect(f.store.getSnapshot().pending).toHaveLength(1);
+  failure.mockRestore();
+  // Cleanup can fail after the single atomic decision; the old journal must stay excluded.
+  const cleanupFailure = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+    throw new Error('Quota');
+  });
+  f.store.discardReview(ids);
+  cleanupFailure.mockRestore();
+  other.reload();
+  expect(other.getSnapshot().pending).toEqual([]);
+  expect(other.blockedTasks(account)).toEqual([]);
+  const restored = createTaskOfflineStore(f.request as <T>(path: string, init?: RequestInit) => Promise<T>);
+  restored.activate(account);
+  expect(restored.getSnapshot().pending).toEqual([]);
+  expect(() => restored.enqueue(listId, taskId, { type: 'remove' })).toThrow('odśwież listę');
+  await restored.synchronize();
+  restored.enqueue(listId, taskId, { type: 'update', data: { title: 'Świadoma nowa zmiana' } });
+  expect(restored.getSnapshot().pending[0]!.id).not.toBe(ids[0]);
+  restored.clear();
+  expect(localStorage.length).toBe(0);
+});
+
+it('does not revive persisted review after clock correction and restores alarm suppression offline', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'remove' });
+  expireFirst();
+  await f.store.synchronize();
+  const restored = createTaskOfflineStore();
+  vi.spyOn(Date, 'now').mockReturnValue(1);
+  try {
+    restored.activate(account);
+    expect(restored.blockedTasks(account)).toEqual([taskId]);
+    expect(restored.blockedTasks('another:user')).toEqual([]);
+    expect(restored.project().items[listId]).toEqual([task]);
+    expect(restored.getSnapshot().pending[0]!.status).toBe('needs-review');
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+it('persists review discovered on offline startup and protects unseen changes during discard', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'remove' });
+  const { key, op } = expireFirst();
+  const restored = createTaskOfflineStore();
+  restored.activate(account);
+  expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({ status: 'needs-review', reason: 'expired' });
+  const later = {
+    ...op,
+    id: crypto.randomUUID(),
+    submittedAt: Date.now(),
+    change: { type: 'update', data: { notes: 'Druga karta' } },
+  };
+  localStorage.setItem(key.replace(op.id, later.id), JSON.stringify(later));
+  expect(() => restored.discardReview([op.id])).toThrow('Lista zmian uległa zmianie');
+  restored.reload();
+  expect(restored.getSnapshot().pending).toHaveLength(2);
+  restored.clear(false);
+  expect(restored.getSnapshot().pending).toEqual([]);
+  const other = createTaskOfflineStore();
+  other.activate(account);
+  expect(other.getSnapshot().pending).toHaveLength(2);
+});
+
+it('continues independent work when persisting review status fails and never projects the expired edit', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'update', data: { isDone: true } });
+  expireFirst();
+  f.store.enqueue(listId, crypto.randomUUID(), { type: 'create', data: { title: 'Niezależne' } });
+  const original = Storage.prototype.setItem;
+  const failure = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (key.includes(':operation:') && value.includes('needs-review')) throw new Error('Quota');
+    original.call(this, key, value);
+  });
+  try {
+    await f.store.synchronize();
+    expect(f.tasks().some((entry) => entry.title === 'Niezależne')).toBe(true);
+    expect(f.store.getSnapshot().error).toContain('Nie można zapisać');
+    expect(f.store.project().items[listId]![0]!.isDone).toBe(false);
+  } finally {
+    failure.mockRestore();
+  }
+});
+
 it('keeps an expired operation on the device without replaying it after restart', async () => {
   const f = fixture();
   await f.store.synchronize();
@@ -95,7 +250,9 @@ it('keeps an expired operation on the device without replaying it after restart'
   f.request.mockClear();
   await restored.synchronize();
   expect(f.request.mock.calls.every(([, init]) => !init?.method)).toBe(true);
-  expect(restored.getSnapshot().error).toContain('ponad 30 dni');
+  expect(restored.getSnapshot().pending[0]).toMatchObject({ status: 'needs-review', reason: 'expired' });
+  expect(restored.project().items[listId]![0]!.isDone).toBe(false);
+  expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({ status: 'needs-review', reason: 'expired' });
   expect(restored.getSnapshot().pending).toHaveLength(1);
   expect(localStorage.getItem(key)).not.toBeNull();
 });
@@ -158,6 +315,49 @@ it('removes revoked private data and its queued writes before sending any mutati
   expect(f.store.getSnapshot().pending).toHaveLength(0);
   expect(f.request.mock.calls.some(([, init]) => !!init?.method)).toBe(false);
   expect(localStorage.getItem(TASK_STORAGE_KEY)).not.toContain('Farba');
+});
+
+it('purges review data when access is lost during refresh', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'remove' });
+  expireFirst();
+  const original = f.request.getMockImplementation()!;
+  f.request.mockImplementation(async (path, init) => {
+    if (path.endsWith('?status=all')) throw new ApiRequestError('Brak dostępu', 403);
+    return original(path, init);
+  });
+  await f.store.synchronize();
+  expect(f.store.project().items).toEqual({});
+  expect(f.store.getSnapshot().pending).toEqual([]);
+  const restored = createTaskOfflineStore();
+  restored.activate(account);
+  expect(restored.getSnapshot().pending).toEqual([]);
+  expect(restored.project().items).toEqual({});
+});
+
+it('does not restore review data after logout while a confirmed-data request is in flight', async () => {
+  const f = fixture();
+  await f.store.synchronize();
+  f.store.enqueue(listId, taskId, { type: 'remove' });
+  expireFirst();
+  let finish!: (data: unknown) => void;
+  const original = f.request.getMockImplementation()!;
+  f.request.mockImplementation(async (path, init) => {
+    if (path.endsWith('?status=all'))
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    return original(path, init);
+  });
+  const synchronization = f.store.synchronize();
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  f.store.clear();
+  f.store.activate('another:account');
+  finish({ tasks: [task] });
+  await synchronization;
+  expect(f.store.getSnapshot()).toMatchObject({ account: 'another:account', items: {}, pending: [] });
+  expect(localStorage.length).toBe(0);
 });
 it('rejects failed writes independently without rolling back a subsequent valid edit', async () => {
   const f = fixture();

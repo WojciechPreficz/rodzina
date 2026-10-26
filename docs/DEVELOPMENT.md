@@ -19,6 +19,71 @@ Nie potrzeba VAPID. Nie ma `dev:cron`, `job:reminders` ani `vapid:generate`.
 Backup po buildzie: `npm run job:backup`. Domyślny katalog i 14 kopii opisuje
 `apps/api/.env.example`. Nie używaj lokalnej bazy jako danych produkcyjnych.
 
+## Odbiór przeterminowanych zmian zadań — punkt 2 przeglądu architektury
+
+Implementacja zweryfikowana lokalnie: 79 testów Vitest, 4 scenariusze Playwright
+headless (390 i 1280 px, WWW i symulowany transport Androida), lint, formatowanie,
+typecheck i build. Właściciel zlecił commit i push po implementacji.
+Końcowe CI oraz ręczny odbiór desktopu i fizycznego APK pozostają do potwierdzenia.
+
+Dziennik zachowuje identyfikator, datę i dane operacji. Wpisy starsze niż 30 dni
+otrzymują trwały stan `needs-review` z przyczyną; późniejsze zmiany tego samego
+zadania są wstrzymane zależnością. Starszy format dziennika nadal działa.
+Zmiany wymagające sprawdzenia nie są nakładane na dane serwera. Pozostałe
+zadania synchronizują się, a błąd kolejki nie zatrzymuje pobrania potwierdzonych danych.
+
+Próba desktopowa (Chrome, lokalne konto testowe, `npm run dev`):
+
+1. Otwórz `http://localhost:5173`, zaloguj się i wejdź w wybraną listę Zadań.
+   Dodaj dwa zadania: „Stare” i „Świeże”. Poczekaj na wysłanie zmian.
+2. W DevTools → Network zaznacz **Offline**. Edytuj tytuł „Stare” na
+   „Stary lokalny tytuł” i zapisz. Następnie zaznacz to zadanie jako zrobione.
+3. W konsoli DevTools wykonaj poniższy kod. Zmienia on datę najstarszej
+   oczekującej operacji na 31 dni wstecz, wyłącznie w lokalnym magazynie testowej strony.
+   Nie zmieniaj czasu systemowego i nie wykonuj próby na danych produkcyjnych.
+
+   ```js
+   const entries = Object.keys(localStorage)
+     .filter((key) => key.startsWith('rodzina:tasks:v1:operation:'))
+     .map((key) => ({ key, op: JSON.parse(localStorage.getItem(key)) }))
+     .sort((a, b) => a.op.submittedAt - b.op.submittedAt);
+   if (!entries.length) throw new Error('Najpierw zapisz zmianę offline.');
+   const oldest = entries[0];
+   oldest.op.submittedAt = Date.now() - 31 * 86400000;
+   localStorage.setItem(oldest.key, JSON.stringify(oldest.op));
+   window.dispatchEvent(new StorageEvent('storage', { key: oldest.key }));
+   ```
+
+4. Tytuł zadania wraca do potwierdzonego „Stare”; dwa lokalne zapisy trafiają
+   do „Zmian wymagających sprawdzenia”. Kliknij „Sprawdź zmiany”: widać dane,
+   daty oraz przyczynę przeterminowania i zależności. Edytuj osobne zadanie „Świeże”.
+5. Wyłącz **Offline**. Świeża zmiana trafia na serwer, stare dwie pozostają
+   do sprawdzenia. Otwórz drugą kartę z tą samą listą: widzi ten sam łańcuch.
+   Odśwież pierwszą kartę — łańcuch nadal jest dostępny, bez zmiany identyfikatorów.
+6. Kliknij „Odrzuć łańcuch”, a potem „Zamknij”: nic nie jest usunięte.
+   Otwórz panel ponownie i potwierdź odrzucenie. Znikają oba lokalne zapisy,
+   także w drugiej karcie; potwierdzone zadanie pozostaje. Odrzucenie działa
+   również offline, ale nowe zapisy na tej liście wymagają najpierw udanego odczytu online.
+7. Po odświeżeniu online wprowadź potrzebną zmianę zwykłym formularzem i zapisz.
+   Jest to nowa, świadoma operacja; panel nie ma automatycznego ponawiania starej.
+8. Powtórz przy szerokościach 1280 i 390 px. Sprawdź brak poziomego przewijania,
+   czytelność szczegółów oraz obsługę panelu klawiaturą (Tab, Enter, Escape).
+   Wylogowanie usuwa dziennik, decyzje odrzucenia i dostęp do podglądu.
+
+Odrzucenie zapisuje jeden atomowy znacznik całego obejrzanego łańcucha w tym samym
+magazynie konta. Sprzątanie oryginalnych wpisów nie jest warunkiem jego skuteczności;
+znacznik zapobiega ich odtworzeniu po restarcie lub w drugiej karcie. Błąd zapisu
+znacznika pozostawia łańcuch i pokazuje komunikat. Nowe lub zmienione dane w panelu
+wymagają ponownego obejrzenia przed odrzuceniem.
+
+- [ ] Desktop 1280 i 390 px: powyższa próba ręczna.
+- [ ] Fizyczne APK: podgląd i odrzucenie łańcucha, powrót sieci i zmiana konta.
+- [ ] Fizyczne APK: przeterminowana zmiana terminu lub usunięcie nadal wstrzymują
+      alarm po zamknięciu aplikacji i ponownym uruchomieniu offline. Niezależny alarm
+      pozostaje aktywny. Po rozstrzygnięciu i synchronizacji harmonogram jest odświeżony.
+- [ ] CI dla przyszłego końcowego commita. Test transportu Androida i mocki alarmów
+      nie zastępują odbioru fizycznego APK.
+
 ## Odbiór Kontaktów online — krok 9.2
 
 Zmiany są lokalnie na `main`; commit pozostaje bez pusha zgodnie z poleceniem

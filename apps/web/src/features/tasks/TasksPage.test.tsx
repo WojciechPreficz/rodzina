@@ -4,7 +4,7 @@ import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import type { Task, TaskList } from '@rodzina/shared';
+import { OFFLINE_REPLAY_MAX_AGE_MS, type Task, type TaskList } from '@rodzina/shared';
 import { TasksPage } from './TasksPage.js';
 import { TodayTasks } from './TodayTasks.js';
 import { isTaskOverdue } from './taskRules.js';
@@ -146,6 +146,44 @@ afterEach(() => {
 });
 
 describe('tasks UI', () => {
+  it('shows confirmed task data separately from expired changes and discards only after confirmation', async () => {
+    setup();
+    await screen.findByRole('article', { name: task.title });
+    await act(async () => {
+      taskStore.enqueue(list.id, task.id, {
+        type: 'update',
+        data: {
+          title: 'Stary lokalny tytuł',
+          notes: 'Ważna notatka',
+          reminders: [{ type: 'offset', offsetValue: 15, offsetUnit: 'minute', audience: 'owner' }],
+        },
+      });
+      const key = Object.keys(localStorage).find((key) => key.includes(':operation:'))!;
+      const op = JSON.parse(localStorage.getItem(key)!);
+      op.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
+      localStorage.setItem(key, JSON.stringify(op));
+      taskStore.reload();
+      await taskStore.synchronize();
+    });
+    expect(screen.getByRole('article', { name: task.title })).toBeVisible();
+    expect(screen.queryByRole('article', { name: 'Stary lokalny tytuł' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sprawdź zmiany' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Zmiany wymagające sprawdzenia' });
+    expect(within(dialog).getByText('Stary lokalny tytuł', { exact: false })).toBeVisible();
+    expect(within(dialog).getByText('Ważna notatka', { exact: false })).toBeVisible();
+    expect(within(dialog).getByText('15 minut przed — Osoba odpowiedzialna', { exact: false })).toBeVisible();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Odrzuć łańcuch' }));
+    expect(taskStore.getSnapshot().pending).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Zamknij' }));
+    expect(taskStore.getSnapshot().pending).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Sprawdź zmiany' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Odrzuć łańcuch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Potwierdź odrzucenie' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sprawdź zmiany' })).not.toBeInTheDocument());
+    expect(taskStore.getSnapshot().pending).toHaveLength(0);
+    expect(screen.getByRole('article', { name: task.title })).toBeVisible();
+  });
+
   it('protects an unsaved quick task when switching lists', async () => {
     setup();
     fireEvent.change(await screen.findByRole('textbox', { name: 'Dodaj zadanie' }), {

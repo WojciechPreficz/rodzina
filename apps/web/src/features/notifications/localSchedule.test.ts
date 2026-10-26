@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import type { LocalNotificationSchema } from '@capacitor/local-notifications';
 import type { ReminderSchedule, ScheduledReminder } from '@rodzina/shared';
 import { alarmLimit, buildAlarms, createLocalScheduler } from './localSchedule.js';
+import { createTaskOfflineStore, TASK_STORAGE_KEY } from '../tasks/taskOffline.js';
 
 const now = Date.UTC(2026, 9, 16, 12);
 function reminder(key: string, fireAt = now + 60_000): ScheduledReminder {
@@ -132,6 +133,41 @@ it('durably suppresses a changed task offline while retaining calendar alarms fr
   await f.scheduler.sync('family:user');
   expect([...f.pending.values()][0]!.extra.reminders).toHaveLength(2);
 });
+
+it.each(['remove', 'update'] as const)(
+  'keeps alarms suppressed for a review %s after an offline store restart',
+  async (type) => {
+    localStorage.clear();
+    const account = 'family:user';
+    const item = {
+      ...reminder('task-review'),
+      sourceType: 'task' as const,
+      url: '/zadania/10000000-0000-4000-8000-000000000003?zadanie=10000000-0000-4000-8000-000000000002',
+    };
+    let tasks = createTaskOfflineStore();
+    tasks.activate(account);
+    const f = fixture([reminder('event-review'), item], (owner) => tasks.blockedTasks(owner));
+    await f.scheduler.sync(account);
+    const op = {
+      id: crypto.randomUUID(),
+      submittedAt: 1,
+      listId: 'list',
+      taskId: item.sourceId,
+      status: 'needs-review',
+      reason: 'expired',
+      change: type === 'remove' ? { type } : { type, data: { dueDate: '2027-01-01' } },
+    };
+    localStorage.setItem(`${TASK_STORAGE_KEY}:operation:${account}:${op.id}`, JSON.stringify(op));
+    tasks = createTaskOfflineStore();
+    tasks.activate(account);
+    await f.scheduler.retry(account);
+    expect([...f.pending.values()].flatMap((alarm) => alarm.extra.reminders).map((entry) => entry.sourceType)).toEqual([
+      'event',
+    ]);
+    expect(f.store.write.mock.calls.at(-1)![0].value).not.toContain('task-review');
+    tasks.clear();
+  },
+);
 
 it('persists generic task alarms and cancels them after loss of access, completion or deletion', async () => {
   const item: ScheduledReminder = {
