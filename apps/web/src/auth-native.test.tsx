@@ -44,7 +44,7 @@ function Harness() {
 }
 afterEach(async () => {
   cleanup();
-  contactsStore.clear();
+  await contactsStore.clear();
   vi.clearAllMocks();
   localStorage.clear();
 });

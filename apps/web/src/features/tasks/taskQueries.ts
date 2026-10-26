@@ -6,6 +6,7 @@ import { useMe } from '../../auth.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { TASK_SIGNAL } from './taskStorage.js';
 import { offlineTaskPatch, taskOfflineText, taskOperationBlocksAlarm, taskStore } from './taskOffline.js';
 
 export function useTaskData() {
@@ -15,9 +16,9 @@ export function useTaskData() {
   const account = user && family ? `${family.id}:${user.id}` : '';
   useEffect(() => {
     if (!account) return;
-    taskStore.activate(account);
+    const ready = taskStore.activate(account);
     const sync = () => {
-      if (onlineManager.isOnline() && focusManager.isFocused()) void taskStore.synchronize();
+      if (onlineManager.isOnline() && focusManager.isFocused()) void ready.then(() => taskStore.synchronize());
     };
     if (familyConfirmed) sync();
     const stopOnline = onlineManager.subscribe((online) => {
@@ -27,9 +28,8 @@ export function useTaskData() {
       if (focused) sync();
     });
     const storage = (event: StorageEvent) => {
-      if (event.key?.startsWith('rodzina:tasks:')) {
-        taskStore.reload();
-        sync();
+      if (event.key === TASK_SIGNAL) {
+        void taskStore.reload();
       }
     };
     window.addEventListener('storage', storage);
@@ -100,7 +100,7 @@ export function useTasks(listId?: string) {
   });
   const submitChanges = async (changes: { id: string; change: Parameters<typeof taskStore.enqueue>[2] }[]) => {
     try {
-      for (const { id, change } of changes) taskStore.enqueue(listId!, id, change);
+      for (const { id, change } of changes) await taskStore.enqueue(listId!, id, change);
     } finally {
       window.dispatchEvent(new Event('rodzina:tasks-changed'));
     }
@@ -160,7 +160,7 @@ export function useTasks(listId?: string) {
     reviewOperations: data.pending.filter((op) => op.status === 'needs-review'),
     reviewItems: data.items,
     discardReview: async (operationIds: string[]) => {
-      taskStore.discardReview(operationIds);
+      await taskStore.discardReview(operationIds);
       if (!isOffline()) await sync();
     },
     pendingAlarms: data.pending.some(taskOperationBlocksAlarm),

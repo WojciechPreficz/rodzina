@@ -25,7 +25,7 @@ import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ContactForm } from './ContactForm.js';
 import { contactInitials, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import './contacts.css';
-import { CONTACTS_STORAGE_KEY, contactsStore } from './contactsOffline.js';
+import { CONTACTS_SIGNAL, contactsStore } from './contactsOffline.js';
 
 type Editor = { kind: 'contact'; contact?: Contact } | { kind: 'group'; group?: ContactGroup };
 type Removal = { kind: 'contact'; item: Contact } | { kind: 'group'; item: ContactGroup };
@@ -37,9 +37,9 @@ export function ContactsPage() {
   const account = user && family ? `${family.id}:${user.id}` : '';
   const state = useSyncExternalStore(contactsStore.subscribe, contactsStore.snapshot);
   useEffect(() => {
-    if (account) contactsStore.activate(account);
+    if (account) void contactsStore.activate(account);
     const reload = (event: StorageEvent) => {
-      if (event.key === CONTACTS_STORAGE_KEY || event.key === null) contactsStore.reload();
+      if (event.key === CONTACTS_SIGNAL || event.key === null) void contactsStore.reload();
     };
     window.addEventListener('storage', reload);
     return () => window.removeEventListener('storage', reload);

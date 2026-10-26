@@ -366,6 +366,48 @@ Playwright headless obejmuje oba rozmiary, odtwarzanie, dwie karty i błąd
 miejsca. Ręczny przegląd telefonu, migracja rzeczywistego APK i końcowe CI
 pozostają **do potwierdzenia**. Nie ma zmian konfiguracji serwera ani crona.
 
+### Odbiór pamięci zadań i kontaktów — O.4 (#52)
+
+Wspólna baza `rodzina-offline` v1 zawiera teraz wszystkie pięć magazynów konta.
+Rekord `tasks` przechowuje potwierdzony snapshot, operacje i odrzucenia;
+`contacts` pełną ostatnią kopię i czas pobrania. Synchronizator zadań pozostaje
+obecny; wspólny outbox powstanie w O.5/O.6. Kontakty nadal są tylko do odczytu
+bez internetu. Starsze checklisty opisują stan przy realizacji O.2/O.3.
+
+1. WWW przy **390 i 1280 px**: pobierz prywatne i udostępnione listy zadań
+   oraz kontakty. Wyłącz internet w otwartym interfejsie. Dodaj, zmień, odhacz
+   i usuń zadania; wyszukaj kontakt i otwórz szczegóły. Niepobrana lista nie
+   jest pusta; zapis czeka na pobranie jej bazy. Zmiany widoku potwierdzają
+   trwały zapis operacji, a nie tylko zmianę RAM.
+2. Zaktualizuj starszą wersję po zamknięciu jej instancji według O.2. Sprawdź
+   także pominięcie wydań O.2 i O.3, operacje bez statusu, review i wpisy
+   odrzuceń wymagające odświeżenia. Po weryfikacji znikają klucze
+   `rodzina:tasks:v1`, `rodzina:tasks:v1:operation:*`,
+   `rodzina:tasks:v1:discard:*` i `rodzina:contacts:v1`. Przerwanie importu
+   lub sprzątania wznawia proces bez powielenia zmian. Uszkodzony dziennik
+   zatrzymuje import bez kasowania źródła.
+3. W dwóch zgodnych kartach wykonaj niezależne zmiany. Po odświeżeniu widoku
+   i odzyskaniu sieci obie intencje pozostają. Cofnij udostępnienie lub usuń
+   listę na drugim koncie: prywatna treść i jej kolejka znikają przed wysyłką.
+4. Zasymuluj brak miejsca lub odmowę IDB. Zadanie nie jest przyjęte po błędzie
+   transakcji. Kontakty pokazują ostrzeżenie i zachowują poprzednią poprawną
+   kopię trwałą. Nie powstaje drugi dziennik w localStorage. Wylogowanie,
+   utrata sesji i zmiana konta czyszczą wszystkie rekordy i kopie migracji;
+   późna odpowiedź poprzedniej osoby ich nie odtwarza.
+5. **Fizyczny APK — do wykonania:** pobierz oba moduły online, zmień termin
+   zadania albo usuń zadanie offline i sprawdź wstrzymanie jego alarmu.
+   W trybie samolotowym zamknij proces i uruchom APK ponownie: zadania,
+   kolejka, blokady alarmów oraz kontakty z czasem pobrania pozostają.
+   Przywróć sieć i sprawdź uzgodnienie oraz alarmy. Powtórz dla operacji
+   wymagającej sprawdzenia. Zapisz model telefonu, Android, wersję APK i wynik.
+   Build i transport Androida w Playwright nie zastępują tej próby.
+
+Testy automatyczne: `taskStorage`, `taskOffline`, `contactsOffline`,
+`offlineFixtures`, testy sesji/czyszczenia i alarmów oraz scenariusze Playwright
+zadań, review, kontaktów i aktualizacji pamięci. Wynik końcowego CI i odbiór
+fizycznego APK są wymagane do zamknięcia O.4. Nie wdrażamy serwera ani APK
+w ramach tej zmiany; rollback po zapisach wymaga wersji rozumiejącej IDB.
+
 ### Narzędzia Androida
 
 APK zawiera lokalny frontend. Potrzebne są Node.js 22 lub 24, JDK 21, SDK 36

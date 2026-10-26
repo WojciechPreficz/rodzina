@@ -106,6 +106,11 @@ O.3 (#51): pamięć zakupów i dziennik przeniesione lokalnie do IndexedDB,
 bez wymiany silnika TanStack. Wymagane odbiór fizycznego APK i CI końcowej
 wersji; [checklista](DEVELOPMENT.md#odbiór-pamięci-zakupów--o3-51).
 
+O.4 (#52): pamięć zadań (baza, dziennik i odrzucenia) oraz podgląd kontaktów
+przeniesione lokalnie do IndexedDB. Zachowujemy synchronizator zadań i blokady
+alarmów. Wszystkie pięć magazynów używa wspólnej bazy; odbiór fizycznego APK
+i końcowe CI pozostają do potwierdzenia; [checklista](DEVELOPMENT.md#odbiór-pamięci-zadań-i-kontaktów--o4-52).
+
 **Faza 8 — dokumenty: zaimplementowana — potwierdzenie właściciela 25.10.2026.**
 Pełny zakres pozostaje w [archiwum fazy 8](archive/plan-przyszle-fazy.md).
 Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani

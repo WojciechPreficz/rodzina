@@ -179,7 +179,10 @@ export async function clearDatabase(removeStored = true) {
     for (const name of stores) tx.objectStore(name).clear();
     tx.objectStore('metadata').put({ accountId: '__origin__', key: 'boundary', value: crypto.randomUUID() });
   });
-  for (const adapter of adapters.values()) localStorage.removeItem(adapter.legacyKey);
+  for (const adapter of adapters.values()) {
+    for (const key of Object.keys(localStorage))
+      if (key === adapter.legacyKey || key.startsWith(`${adapter.legacyKey}:`)) localStorage.removeItem(key);
+  }
   localStorage.removeItem(CLEAR_PENDING_KEY);
   reportStorageIssue();
 }
@@ -279,10 +282,12 @@ const digest = async (value: unknown) =>
     .join('');
 const sourceEntries = () =>
   Object.fromEntries(
-    [...adapters.values()].flatMap((adapter) => {
-      const raw = localStorage.getItem(adapter.legacyKey);
-      return raw === null ? [] : [[adapter.legacyKey, raw]];
-    }),
+    [...adapters.values()]
+      .filter((adapter) => !adapter.separateMigration)
+      .flatMap((adapter) => {
+        const raw = localStorage.getItem(adapter.legacyKey);
+        return raw === null ? [] : [[adapter.legacyKey, raw]];
+      }),
   );
 function sameSource(state: ImportState, allowRemoved: boolean) {
   if (Object.keys(sourceEntries()).some((key) => !(key in state.source)))
@@ -331,10 +336,12 @@ async function migratePreviews(confirmed = false) {
     localStorage.setItem(PROTOCOL_KEY, 'migrating');
     await freezeParticipants();
     if (!state) {
-      const entries = [...adapters.values()].flatMap((adapter) => {
-        const raw = source[adapter.legacyKey];
-        return raw === undefined ? [] : [makeEntry(adapter.module, adapter.parseCache(JSON.parse(raw)))];
-      });
+      const entries = [...adapters.values()]
+        .filter((adapter) => !adapter.separateMigration)
+        .flatMap((adapter) => {
+          const raw = source[adapter.legacyKey];
+          return raw === undefined ? [] : [makeEntry(adapter.module, adapter.parseCache(JSON.parse(raw)))];
+        });
       const accounts = new Set(entries.map((entry) => entry.accountId));
       if (accounts.size !== 1)
         fail('Nie można połączyć danych offline różnych kont. Wyloguj się i pobierz dane ponownie.');

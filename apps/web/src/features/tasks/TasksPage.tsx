@@ -377,11 +377,12 @@ function TaskListPage() {
               </Group>
               <TaskQuickAdd
                 key={active.id}
-                pending={data.create.isPending}
+                pending={data.create.isPending || data.tasks.isPending}
                 onAdd={(title) => run(() => data.create.mutateAsync({ title }))}
               />
               <Button
                 variant="light"
+                disabled={data.tasks.isPending}
                 onClick={() => {
                   data.create.reset();
                   setAddingTask(true);

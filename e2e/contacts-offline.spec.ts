@@ -1,3 +1,4 @@
+import { readOfflineSnapshot } from './offlineDatabase.js';
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 
@@ -38,7 +39,9 @@ for (const native of [false, true]) {
     await expect(page.getByRole('button', { name: '＋ Dodaj kontakt' })).toBeEnabled();
     await expect
       .poll(() =>
-        page.evaluate(() => JSON.parse(localStorage.getItem('rodzina:contacts:v1') ?? '{}').data?.contacts?.length),
+        readOfflineSnapshot<{ data: { contacts: unknown[] } }>(page, 'contacts').then(
+          (saved) => saved?.data.contacts.length,
+        ),
       )
       .toBe(1);
     if (native) {
@@ -80,7 +83,11 @@ for (const native of [false, true]) {
     await expect(page.getByRole('button', { name: '＋ Dodaj kontakt' })).toBeEnabled();
     await expect(page.getByText(/Ostatnie pobranie:/)).toHaveCount(0);
     await expect
-      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('rodzina:contacts:v1')!).data.contacts[0].name))
+      .poll(() =>
+        readOfflineSnapshot<{ data: { contacts: { name: string }[] } }>(page, 'contacts').then(
+          (saved) => saved?.data.contacts[0]?.name,
+        ),
+      )
       .toBe('Łucja Nowak');
   });
 }

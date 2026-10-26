@@ -1,4 +1,4 @@
-export type CacheModule = 'family' | 'calendar' | 'shopping';
+export type CacheModule = 'family' | 'calendar' | 'shopping' | 'tasks' | 'contacts';
 export type CacheEntry = {
   accountId: string;
   module: CacheModule;
@@ -13,7 +13,8 @@ export type CacheEntry = {
 export type OfflineAdapter = {
   module: CacheModule;
   schemaVersion: 1;
-  capabilities: 'read-only';
+  capabilities: 'read-only' | 'read-write';
+  separateMigration?: boolean;
   legacyKey: string;
   budget: number;
   parseCache: (value: unknown) => { account: string };

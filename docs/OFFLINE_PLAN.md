@@ -3,7 +3,8 @@
 Data: 26.10.2026. Status: O.1 opracowany lokalnie, oczekuje na CI;
 O.2 zaimplementowany lokalnie, oczekuje na końcowe CI i odbiór fizycznego APK;
 O.3 zaimplementowany lokalnie, oczekuje na odbiór fizycznego APK i końcowe CI;
-O.4–O.7 do realizacji. Silniki kolejek pozostają dotychczasowe.
+O.4 zaimplementowany lokalnie, oczekuje na odbiór fizycznego APK i końcowe CI;
+O.5–O.7 do realizacji. Silniki kolejek pozostają dotychczasowe.
 
 ## 1. Cel i kolejność prac
 

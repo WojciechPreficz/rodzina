@@ -1,8 +1,10 @@
+import { updateTaskData } from '../tasks/taskStorage.js';
+import '../../offline/testSetup.js';
 import { expect, it, vi } from 'vitest';
 import type { LocalNotificationSchema } from '@capacitor/local-notifications';
 import type { ReminderSchedule, ScheduledReminder } from '@rodzina/shared';
 import { alarmLimit, buildAlarms, createLocalScheduler } from './localSchedule.js';
-import { createTaskOfflineStore, TASK_STORAGE_KEY } from '../tasks/taskOffline.js';
+import { createTaskOfflineStore } from '../tasks/taskOffline.js';
 
 const now = Date.UTC(2026, 9, 16, 12);
 function reminder(key: string, fireAt = now + 60_000): ScheduledReminder {
@@ -145,7 +147,7 @@ it.each(['remove', 'update'] as const)(
       url: '/zadania/10000000-0000-4000-8000-000000000003?zadanie=10000000-0000-4000-8000-000000000002',
     };
     let tasks = createTaskOfflineStore();
-    tasks.activate(account);
+    await tasks.activate(account);
     const f = fixture([reminder('event-review'), item], (owner) => tasks.blockedTasks(owner));
     await f.scheduler.sync(account);
     const op = {
@@ -157,15 +159,17 @@ it.each(['remove', 'update'] as const)(
       reason: 'expired',
       change: type === 'remove' ? { type } : { type, data: { dueDate: '2027-01-01' } },
     };
-    localStorage.setItem(`${TASK_STORAGE_KEY}:operation:${account}:${op.id}`, JSON.stringify(op));
+    await updateTaskData(account, (data) => {
+      data.operations = [op as Parameters<typeof data.operations.push>[0]];
+    });
     tasks = createTaskOfflineStore();
-    tasks.activate(account);
+    await tasks.activate(account);
     await f.scheduler.retry(account);
     expect([...f.pending.values()].flatMap((alarm) => alarm.extra.reminders).map((entry) => entry.sourceType)).toEqual([
       'event',
     ]);
     expect(f.store.write.mock.calls.at(-1)![0].value).not.toContain('task-review');
-    tasks.clear();
+    await tasks.clear();
   },
 );
 

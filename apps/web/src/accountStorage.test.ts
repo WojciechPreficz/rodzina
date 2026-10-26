@@ -1,3 +1,5 @@
+import { readTaskData } from './features/tasks/taskStorage.js';
+import { readCache } from './offline/database.js';
 import './offline/testSetup.js';
 import { onlineManager, QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -84,9 +86,9 @@ async function seedAccount(client: QueryClient) {
   );
   await calendarStore.activate(accountId(session));
   await calendarStore.saveRange('2026-10', [], calendarStore.token());
-  taskStore.activate(accountId(session));
+  await taskStore.activate(accountId(session));
   await taskStore.synchronize();
-  taskStore.enqueue(list.id, crypto.randomUUID(), { type: 'create', data: { title: 'Farba' } });
+  await taskStore.enqueue(list.id, crypto.randomUUID(), { type: 'create', data: { title: 'Farba' } });
   onlineManager.setOnline(false);
   await restoreShopping(client, session);
   client.setQueryData(['shopping', user.familyId, user.id, 'lists'], []);
@@ -100,7 +102,7 @@ async function seedAccount(client: QueryClient) {
     },
   );
   await saveOfflineData(session, [user], Date.now());
-  contactsStore.activate(accountId(session));
+  await contactsStore.activate(accountId(session));
   await contactsStore.fetch(accountId(session), async () => ({
     ok: true,
     groups: [
@@ -145,7 +147,9 @@ describe('account storage cleanup', () => {
         ]),
       );
       expect((await readShoppingData())?.operations).toHaveLength(1);
-      expect(Object.keys(localStorage).filter((key) => key.includes(':operation:'))).toHaveLength(1);
+      expect((await readTaskData(accountId(session)))?.operations).toHaveLength(1);
+      expect(await readCache('contacts')).toBeDefined();
+      expect(Object.keys(localStorage).filter((key) => key.includes(':operation:'))).toHaveLength(0);
       // Canary values make a newly declared storage key fail this test even before
       // its fixture has been added, unless its store participates in cleanup.
       for (const key of declaredKeys) if (localStorage.getItem(key) === null) localStorage.setItem(key, 'canary');

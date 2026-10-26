@@ -20,7 +20,7 @@ const stores = new Map<string, AccountStore>();
 registerAccountStore({
   name: 'contacts',
   phase: 'before-invalidation',
-  clear: ({ removeStored }) => contactsStore.clear(removeStored),
+  clear: () => contactsStore.clear(false),
 });
 
 export function registerAccountStore(store: AccountStore) {
@@ -37,7 +37,7 @@ registerAccountStore({
 registerAccountStore({
   name: 'tasks',
   phase: 'before-invalidation',
-  clear: ({ removeStored }) => taskStore.clear(removeStored),
+  clear: () => taskStore.clear(false),
 });
 registerAccountStore({
   name: 'shopping',

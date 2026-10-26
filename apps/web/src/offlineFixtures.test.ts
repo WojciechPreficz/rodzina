@@ -1,3 +1,6 @@
+import { importTasks } from './features/tasks/taskStorage.js';
+import { classify } from './features/tasks/taskSchemas.js';
+import { parseContactsSnapshot } from './features/contacts/contactsOffline.js';
 import './offline/testSetup.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -114,6 +117,12 @@ const required = (record: Record<string, string>, name: string) => {
 };
 const key = (name: string) => required(fixture.keys, name);
 const id = (name: string) => required(fixture.ids, name);
+const taskSources = () =>
+  Object.fromEntries(
+    Object.keys(localStorage)
+      .filter((key) => key === 'rodzina:tasks:v1' || key.startsWith('rodzina:tasks:v1:'))
+      .map((key) => [key, localStorage.getItem(key)!]),
+  );
 const clients: QueryClient[] = [];
 const read = (name: string): unknown => JSON.parse(localStorage.getItem(key(name))!);
 const record = (value: unknown) => z.record(z.unknown()).parse(value);
@@ -178,10 +187,7 @@ describe('O.1 legacy storage fixtures', () => {
       seed();
       for (const name of [key('taskEdit'), key('taskDiscarded'), key('discard')]) localStorage.removeItem(name);
       localStorage.setItem(entry.key, JSON.stringify(entry.value));
-      const store = createTaskOfflineStore();
-      await store.activate(fixture.accountId);
-      expect(store.getSnapshot().error).toBeUndefined();
-      const operation = store.getSnapshot().pending[0]!;
+      const operation = importTasks(taskSources(), fixture.accountId).operations[0]!;
       expect(entry.key).toBe(`rodzina:tasks:v1:operation:${fixture.accountId}:${operation.id}`);
       types.push(operation.change.type);
     }
@@ -204,18 +210,18 @@ describe('O.1 legacy storage fixtures', () => {
       readCalendarRange(calendar.snapshot(), { from: '2026-10-26', to: '2026-10-26' }, 'Europe/Warsaw'),
     ).toMatchObject({ coverage: 'complete', data: [expect.objectContaining({ eventId: id('event') })] });
     const contacts = createContactsStore();
-    contacts.activate(fixture.accountId);
+    await contacts.activate(fixture.accountId);
     expect(contacts.snapshot().issue).toBeUndefined();
     expect(contactsResponseSchema.parse(contacts.snapshot().saved?.data).contacts[0]?.id).toBe(id('contact'));
     const tasks = createTaskOfflineStore();
-    tasks.activate(fixture.accountId);
+    await tasks.activate(fixture.accountId);
     expect(tasks.getSnapshot().error).toBeUndefined();
     expect(taskListSchema.parse(tasks.getSnapshot().lists?.[0]).id).toBe(id('taskList'));
     expect(taskSchema.parse(tasks.getSnapshot().items[id('taskList')]?.[0]).isDone).toBe(false);
     expect(tasks.project().items[id('taskList')]?.[0]?.isDone).toBe(true);
     expect(tasks.getSnapshot().pending.map((op) => op.id)).toEqual(fixture.expected.pendingTaskIds);
     expect(tasks.blockedTasks(fixture.accountId)).toEqual(fixture.expected.blockedTaskIds);
-    expect(() => tasks.enqueue(id('taskList'), id('task'), { type: 'update', data: { title: 'New' } })).toThrow(
+    await expect(tasks.enqueue(id('taskList'), id('task'), { type: 'update', data: { title: 'New' } })).rejects.toThrow(
       /odrzuceniu zmian/,
     );
     const client = new QueryClient();
@@ -256,10 +262,7 @@ describe('O.1 legacy storage fixtures', () => {
         expect(() => offlineDataSchema.parse(JSON.parse(localStorage.getItem('rodzina:offline-data:v1')!))).toThrow();
         break;
       case 'contacts-invalid': {
-        const store = createContactsStore();
-        await store.activate(fixture.accountId);
-        expect(store.snapshot().saved).toBeUndefined();
-        expect(store.snapshot().issue).toMatch(/Nie można odczytać/);
+        expect(() => parseContactsSnapshot(JSON.parse(localStorage.getItem(key('contacts'))!))).toThrow();
         break;
       }
       case 'invalid-json':
@@ -288,12 +291,10 @@ describe('O.1 legacy storage fixtures', () => {
       case 'task-tie':
       case 'task-pending':
       case 'task-expired': {
-        const store = createTaskOfflineStore();
-        await store.activate(fixture.accountId);
-        expect(store.getSnapshot().error).toBeUndefined();
-        const pending = store.getSnapshot().pending;
+        const imported = importTasks(taskSources(), fixture.accountId);
+        const pending = imported.operations;
         if (scenario.readerCheck === 'task-missing') {
-          expect(store.project().items[id('taskList')]).toBeUndefined();
+          expect(imported.snapshot.items[id('taskList')]).toBeUndefined();
           expect(pending.map((op) => op.id)).toEqual(fixture.expected.pendingTaskIds);
         } else if (scenario.readerCheck === 'task-tie') {
           expect(pending.map((op) => op.id)).toEqual([id('taskEdit'), id('taskRemove')]);
@@ -305,8 +306,7 @@ describe('O.1 legacy storage fixtures', () => {
           if (scenario.id === 'task-expired')
             expect(fixture.referenceTime - pending[0]!.submittedAt).toBeGreaterThan(OFFLINE_REPLAY_MAX_AGE_MS);
           vi.mocked(Date.now).mockReturnValue(fixture.referenceTime - 40 * 86400000);
-          store.reload();
-          expect(store.getSnapshot().pending[0]?.status).toBe('needs-review');
+          expect(classify(pending)[0]?.status).toBe('needs-review');
         }
         break;
       }

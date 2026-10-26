@@ -91,8 +91,10 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       if (cached) {
         await calendarStore.activate(accountId(cached));
         if (!current()) return;
-        taskStore.activate(accountId(cached));
-        contactsStore.activate(accountId(cached));
+        await taskStore.activate(accountId(cached));
+        if (!current()) return;
+        await contactsStore.activate(accountId(cached));
+        if (!current()) return;
         if (queryClient) {
           await restoreShopping(queryClient, cached);
           if (!current()) return;
@@ -124,8 +126,10 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       if (!current()) return;
       await calendarStore.activate(accountId(response));
       if (!current()) return;
-      taskStore.activate(accountId(response));
-      contactsStore.activate(accountId(response));
+      await taskStore.activate(accountId(response));
+      if (!current()) return;
+      await contactsStore.activate(accountId(response));
+      if (!current()) return;
       if (queryClient) await restoreShopping(queryClient, response);
       if (!current()) return;
       setUser(response.user);
@@ -316,8 +320,10 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       if (!current()) return;
       await calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
       if (!current()) return;
-      taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
-      contactsStore.activate(`${nextFamily.id}:${nextUser.id}`);
+      await taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
+      if (!current()) return;
+      await contactsStore.activate(`${nextFamily.id}:${nextUser.id}`);
+      if (!current()) return;
       announceAccount(`${nextFamily.id}:${nextUser.id}`);
       if (queryClient) await restoreShopping(queryClient, { user: nextUser, family: nextFamily });
       if (!current()) return;

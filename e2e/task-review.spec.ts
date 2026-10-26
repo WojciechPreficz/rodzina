@@ -1,3 +1,4 @@
+import { readOfflineSnapshot, writeOfflineSnapshot } from './offlineDatabase.js';
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 
@@ -34,27 +35,19 @@ for (const native of [false, true]) {
       window.dispatchEvent(new Event('offline'));
     });
     await expect(page.getByText('Jesteś offline', { exact: false })).toBeVisible();
-    await page.evaluate(
-      ({ listId, taskId }) => {
-        const snapshot = JSON.parse(localStorage.getItem('rodzina:tasks:v1')!);
-        const base = { listId, taskId };
-        const ops = [
-          {
-            ...base,
-            id: crypto.randomUUID(),
-            submittedAt: Date.now() - 31 * 86400000,
-            change: { type: 'update', data: { title: 'Stary lokalny tytuł', dueDate: '2027-01-01' } },
-          },
-          { ...base, id: crypto.randomUUID(), submittedAt: Date.now(), change: { type: 'remove' } },
-        ];
-        for (const op of ops) {
-          const key = `rodzina:tasks:v1:operation:${snapshot.account}:${op.id}`;
-          localStorage.setItem(key, JSON.stringify(op));
-          window.dispatchEvent(new StorageEvent('storage', { key }));
-        }
+    const snapshot = await readOfflineSnapshot<{ account: string; operations: unknown[] }>(page, 'tasks');
+    expect(snapshot).toBeDefined();
+    const base = { listId, taskId: task.id as string };
+    const ops = [
+      {
+        ...base,
+        id: crypto.randomUUID(),
+        submittedAt: Date.now() - 31 * 86400000,
+        change: { type: 'update', data: { title: 'Stary lokalny tytuł', dueDate: '2027-01-01' } },
       },
-      { listId, taskId: task.id as string },
-    );
+      { ...base, id: crypto.randomUUID(), submittedAt: Date.now(), change: { type: 'remove' } },
+    ];
+    await writeOfflineSnapshot(page, 'tasks', { ...snapshot, operations: ops });
     await expect(page.getByRole('article', { name: 'Potwierdzone zadanie' })).toBeVisible();
     await expect(page.getByText('Zmiany do sprawdzenia: 2.', { exact: false })).toBeVisible();
     await page.getByRole('textbox', { name: 'Dodaj zadanie', exact: true }).fill('Świeża niezależna zmiana');

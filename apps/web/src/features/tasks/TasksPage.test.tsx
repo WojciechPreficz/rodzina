@@ -1,3 +1,5 @@
+import { updateTaskData } from './taskStorage.js';
+import '../../offline/testSetup.js';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -13,16 +15,18 @@ import { reportTransportFailure } from '../../connectivity.js';
 
 const session = vi.hoisted(() => ({
   user: { id: '10000000-0000-4000-8000-000000000001', displayName: 'Ania', role: 'child', color: '#1C7ED6' },
-  family: { id: 'family', timezone: 'Europe/Warsaw' },
+  family: { id: '10000000-0000-4000-8000-000000000010', timezone: 'Europe/Warsaw' },
   familyConfirmed: true,
 }));
 vi.mock('../../auth.js', () => ({ useMe: () => session }));
 vi.mock('../family/familyQueries.js', () => ({
-  useMembersQuery: () => ({ data: [session.user, { id: 'other', displayName: 'Bartek', color: '#2F9E44' }] }),
+  useMembersQuery: () => ({
+    data: [session.user, { id: '10000000-0000-4000-8000-000000000014', displayName: 'Bartek', color: '#2F9E44' }],
+  }),
 }));
 const list: TaskList = {
-  id: 'list',
-  familyId: 'family',
+  id: '10000000-0000-4000-8000-000000000011',
+  familyId: '10000000-0000-4000-8000-000000000010',
   ownerId: session.user.id,
   name: 'Moje zadania',
   isDefault: true,
@@ -33,7 +37,7 @@ const list: TaskList = {
   updatedAt: 1,
 };
 const task: Task = {
-  id: 'task',
+  id: '10000000-0000-4000-8000-000000000013',
   listId: list.id,
   title: 'Kupić farbę',
   notes: 'Biała',
@@ -50,13 +54,22 @@ const task: Task = {
 };
 let client: QueryClient;
 function setup(
-  path = '/zadania/list',
+  path = '/zadania/10000000-0000-4000-8000-000000000011',
   initial = [task],
   failPatch = false,
   override?: (url: string, method: string, data: Record<string, unknown>) => object | Response | undefined,
 ) {
   let items = [...initial];
-  let lists = [{ ...list, id: 'second', name: 'Remont', isDefault: false, memberIds: ['other'] }, list];
+  let lists = [
+    {
+      ...list,
+      id: '10000000-0000-4000-8000-000000000012',
+      name: 'Remont',
+      isDefault: false,
+      memberIds: ['10000000-0000-4000-8000-000000000014'],
+    },
+    list,
+  ];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const rawUrl = String(input);
     const url = rawUrl.split('?operationId=')[0]!;
@@ -71,24 +84,27 @@ function setup(
     if (url.startsWith('/api/reminders/mine')) body = { reminders: [] };
     else if (url === '/api/tasks/lists' && method === 'GET') body = { lists };
     else if (url === '/api/tasks/lists' && method === 'POST') {
-      const created = { ...list, id: 'new-list', name: data.name, isDefault: false };
+      const created = { ...list, id: '10000000-0000-4000-8000-000000000015', name: data.name, isDefault: false };
       lists = [...lists, created];
       body = { list: created };
     } else if (method === 'POST') {
       const created = {
         ...task,
         ...data,
-        id: new URL(rawUrl, 'https://test').searchParams.get('taskId') ?? 'new-task',
+        reminders: [],
+        id: new URL(rawUrl, 'https://test').searchParams.get('taskId') ?? '10000000-0000-4000-8000-000000000016',
       };
       items = [...items, created];
       body = { task: created };
     } else if (method === 'PATCH') {
-      items = items.map((item) => (item.id === 'task' ? { ...item, ...data } : item));
+      items = items.map((item) =>
+        item.id === '10000000-0000-4000-8000-000000000013' ? { ...item, ...data, reminders: [] } : item,
+      );
       body = { task: items[0] };
     } else if (method === 'DELETE') {
       items = items.filter((item) => url !== `/api/tasks/${item.id}`);
       body = { deleted: true };
-    } else body = { tasks: url.includes('/lists/second/') ? [] : items };
+    } else body = { tasks: url.includes('/lists/10000000-0000-4000-8000-000000000012/') ? [] : items };
     return new Response(JSON.stringify({ ok: true, ...body }));
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -108,8 +124,9 @@ function setup(
   );
   return fetchMock;
 }
-beforeEach(() => {
-  taskStore.clear();
+beforeEach(async () => {
+  taskStore.clear(false);
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
   reportTransportFailure(false);
   session.familyConfirmed = true;
@@ -133,10 +150,10 @@ beforeEach(() => {
     })),
   );
 });
-afterEach(() => {
+afterEach(async () => {
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
   cleanup();
-  taskStore.clear();
+  taskStore.clear(false);
   client?.clear();
   onlineManager.setOnline(true);
   reportTransportFailure(false);
@@ -150,7 +167,7 @@ describe('tasks UI', () => {
     setup();
     await screen.findByRole('article', { name: task.title });
     await act(async () => {
-      taskStore.enqueue(list.id, task.id, {
+      await taskStore.enqueue(list.id, task.id, {
         type: 'update',
         data: {
           title: 'Stary lokalny tytuł',
@@ -158,11 +175,10 @@ describe('tasks UI', () => {
           reminders: [{ type: 'offset', offsetValue: 15, offsetUnit: 'minute', audience: 'owner' }],
         },
       });
-      const key = Object.keys(localStorage).find((key) => key.includes(':operation:'))!;
-      const op = JSON.parse(localStorage.getItem(key)!);
-      op.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
-      localStorage.setItem(key, JSON.stringify(op));
-      taskStore.reload();
+      await updateTaskData(`${session.family.id}:${session.user.id}`, (data) => {
+        data.operations[0]!.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
+      });
+      await taskStore.reload();
       await taskStore.synchronize();
     });
     expect(screen.getByRole('article', { name: task.title })).toBeVisible();
@@ -208,10 +224,10 @@ describe('tasks UI', () => {
   });
 
   it('confirms clearing only completed tasks and preserves open tasks', async () => {
-    const fetchMock = setup('/zadania/list', [
+    const fetchMock = setup('/zadania/10000000-0000-4000-8000-000000000011', [
       task,
-      { ...task, id: 'done-1', title: 'Gotowe 1', isDone: true },
-      { ...task, id: 'done-2', title: 'Gotowe 2', isDone: true },
+      { ...task, id: '10000000-0000-4000-8000-000000000017', title: 'Gotowe 1', isDone: true },
+      { ...task, id: '10000000-0000-4000-8000-000000000018', title: 'Gotowe 2', isDone: true },
     ]);
     fireEvent.click(await screen.findByRole('button', { name: 'Wyczyść zrobione' }));
     const dialog = await screen.findByRole('dialog', { name: 'Wyczyść zrobione' });
@@ -225,15 +241,17 @@ describe('tasks UI', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Zrobione (0)' })).toBeInTheDocument());
     expect(screen.getByRole('article', { name: task.title })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Wyczyść zrobione' })).not.toBeInTheDocument();
-    expect(
-      fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([url]) => String(url).split('?')[0]),
-    ).toEqual(['/api/tasks/done-1', '/api/tasks/done-2']);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([url]) => String(url).split('?')[0]),
+      ).toEqual(['/api/tasks/10000000-0000-4000-8000-000000000017', '/api/tasks/10000000-0000-4000-8000-000000000018']),
+    );
   });
   it('queues clearing completed tasks offline without sending requests', async () => {
-    const fetchMock = setup('/zadania/list', [
+    const fetchMock = setup('/zadania/10000000-0000-4000-8000-000000000011', [
       task,
-      { ...task, id: 'done-1', isDone: true },
-      { ...task, id: 'done-2', isDone: true },
+      { ...task, id: '10000000-0000-4000-8000-000000000017', isDone: true },
+      { ...task, id: '10000000-0000-4000-8000-000000000018', isDone: true },
     ]);
     await screen.findByRole('button', { name: 'Wyczyść zrobione' });
     await act(async () => {
@@ -246,14 +264,14 @@ describe('tasks UI', () => {
     );
     await waitFor(() => expect(screen.getByRole('button', { name: 'Zrobione (0)' })).toBeInTheDocument());
     expect(taskStore.getSnapshot().pending.map((op) => [op.taskId, op.change.type])).toEqual([
-      ['done-1', 'remove'],
-      ['done-2', 'remove'],
+      ['10000000-0000-4000-8000-000000000017', 'remove'],
+      ['10000000-0000-4000-8000-000000000018', 'remove'],
     ]);
     expect(fetchMock.mock.calls).toHaveLength(calls);
     expect(screen.getByRole('article', { name: task.title })).toBeInTheDocument();
   });
   it('shows a rejected deletion and retains the completed task for retry', async () => {
-    setup('/zadania/list', [{ ...task, isDone: true }], false, (_url, method) =>
+    setup('/zadania/10000000-0000-4000-8000-000000000011', [{ ...task, isDone: true }], false, (_url, method) =>
       method === 'DELETE'
         ? new Response(JSON.stringify({ error: { message: 'Nie udało się usunąć.' } }), { status: 400 })
         : undefined,
@@ -287,9 +305,11 @@ describe('tasks UI', () => {
     expect(checkbox).toBeChecked();
     fireEvent.click(checkbox);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Zrobione (0)' })).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/api\/tasks\/task\?operationId=/),
-      expect.objectContaining({ method: 'PATCH', body: '{"isDone":false}' }),
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/api\/tasks\/10000000-0000-4000-8000-000000000013\?operationId=/),
+        expect.objectContaining({ method: 'PATCH', body: '{"isDone":false}' }),
+      ),
     );
   });
   it('marks an overdue deadline in red and shows the assignee', async () => {
@@ -300,26 +320,30 @@ describe('tasks UI', () => {
     expect(within(article).getByLabelText('Ania')).toBeInTheDocument();
   });
   it('keeps the unchecked task on a rejected write and offers the server error', async () => {
-    setup('/zadania/list', [task], true);
+    setup('/zadania/10000000-0000-4000-8000-000000000011', [task], true);
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Zrobione: Kupić farbę' }));
     expect((await screen.findAllByText(/Nie udało się zapisać/)).length).toBeGreaterThan(0);
     expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
   });
   it('quick-adds a trimmed title and keeps the form clear after success', async () => {
-    const fetchMock = setup('/zadania/list', []);
+    const fetchMock = setup('/zadania/10000000-0000-4000-8000-000000000011', []);
     const input = await screen.findByRole('textbox', { name: 'Dodaj zadanie' });
+    await waitFor(() => expect(input).toBeEnabled());
     fireEvent.change(input, { target: { value: '  Odebrać paczkę  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj' }));
     expect(await screen.findByRole('article', { name: 'Odebrać paczkę' })).toBeInTheDocument();
-    expect(input).toHaveValue('');
+    await waitFor(() => expect(input).toHaveValue(''));
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/api\/tasks\/lists\/list\/tasks\?operationId=/),
+      expect.stringMatching(/^\/api\/tasks\/lists\/10000000-0000-4000-8000-000000000011\/tasks\?operationId=/),
       expect.objectContaining({ method: 'POST', body: '{"title":"Odebrać paczkę"}' }),
     );
   });
   it('opens a task URL, limits assignment to list members and clears both deadline fields without touching reminders', async () => {
     const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    const fetchMock = setup('/zadania/list?zadanie=task', [{ ...task, dueTime: '16:45' }]);
+    const fetchMock = setup(
+      '/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013',
+      [{ ...task, dueTime: '16:45' }],
+    );
     const dialog = await screen.findByRole('dialog', { name: 'Edytuj zadanie' });
     await within(dialog).findByLabelText('Notatka');
     expect(within(dialog).getByLabelText('Notatka')).toHaveValue('Biała');
@@ -332,7 +356,7 @@ describe('tasks UI', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument(), { timeout: 4000 });
     expect(confirmation).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/api\/tasks\/task\?operationId=/),
+      expect.stringMatching(/^\/api\/tasks\/10000000-0000-4000-8000-000000000013\?operationId=/),
       expect.objectContaining({
         body: JSON.stringify({
           title: 'Nowy tytuł',
@@ -343,7 +367,7 @@ describe('tasks UI', () => {
     );
   });
   it('keeps saved private content available offline and explains disabled actions', async () => {
-    setup('/zadania/list?zadanie=task');
+    setup('/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013');
     await screen.findByLabelText('Notatka');
     act(() => onlineManager.setOnline(false));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -369,15 +393,18 @@ describe('tasks UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/tasks/lists/list',
-        expect.objectContaining({ method: 'PATCH', body: '{"name":"Nowa nazwa","memberIds":["other"]}' }),
+        '/api/tasks/lists/10000000-0000-4000-8000-000000000011',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: '{"name":"Nowa nazwa","memberIds":["10000000-0000-4000-8000-000000000014"]}',
+        }),
       ),
     );
   });
   it('offers leaving to a member without owner settings', async () => {
-    const fetchMock = setup('/zadania/list', [task], false, (url, method) =>
+    const fetchMock = setup('/zadania/10000000-0000-4000-8000-000000000011', [task], false, (url, method) =>
       url === '/api/tasks/lists' && method === 'GET'
-        ? { lists: [{ ...list, ownerId: 'other', memberIds: [session.user.id] }] }
+        ? { lists: [{ ...list, ownerId: '10000000-0000-4000-8000-000000000014', memberIds: [session.user.id] }] }
         : undefined,
     );
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -385,15 +412,18 @@ describe('tasks UI', () => {
     expect(screen.queryByRole('button', { name: 'Ustawienia listy' })).not.toBeInTheDocument();
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/tasks/lists/list/leave',
+        '/api/tasks/lists/10000000-0000-4000-8000-000000000011/leave',
         expect.objectContaining({ method: 'POST' }),
       ),
     );
   });
   it('hides an open task when the next list poll reports revoked access', async () => {
     let revoked = false;
-    setup('/zadania/list?zadanie=task', [task], false, (url, method) =>
-      revoked && url === '/api/tasks/lists' && method === 'GET' ? { lists: [] } : undefined,
+    setup(
+      '/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013',
+      [task],
+      false,
+      (url, method) => (revoked && url === '/api/tasks/lists' && method === 'GET' ? { lists: [] } : undefined),
     );
     await screen.findByLabelText('Notatka');
     revoked = true;
@@ -405,7 +435,9 @@ describe('tasks UI', () => {
     expect(await screen.findByText('Lista jest niedostępna lub nie masz do niej dostępu.')).toBeInTheDocument();
   });
   it('uses task presets and limits the audience on a private list', async () => {
-    const fetchMock = setup('/zadania/list?zadanie=task');
+    const fetchMock = setup(
+      '/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013',
+    );
     fireEvent.click(await screen.findByRole('textbox', { name: 'Kiedy przypomnieć' }));
     expect(screen.getByRole('option', { name: 'W dniu terminu' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '15 minut przed' })).not.toBeInTheDocument();
@@ -419,7 +451,7 @@ describe('tasks UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/api\/tasks\/task\?operationId=/),
+        expect.stringMatching(/^\/api\/tasks\/10000000-0000-4000-8000-000000000013\?operationId=/),
         expect.objectContaining({
           body: expect.stringContaining(
             '"reminders":[{"type":"offset","offsetValue":0,"offsetUnit":"minute","audience":"owner"}]',
@@ -430,7 +462,7 @@ describe('tasks UI', () => {
   });
   it('retries personal reminders after a partial failure without creating the task twice', async () => {
     let attempts = 0;
-    const fetchMock = setup('/zadania/list', [], false, (url, method) => {
+    const fetchMock = setup('/zadania/10000000-0000-4000-8000-000000000011', [], false, (url, method) => {
       if (url === '/api/reminders/mine' && method === 'POST') {
         attempts++;
         return attempts === 1
@@ -439,7 +471,9 @@ describe('tasks UI', () => {
       }
       return undefined;
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Dodaj zadanie ze szczegółami' }));
+    const add = await screen.findByRole('button', { name: 'Dodaj zadanie ze szczegółami' });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.click(add);
     fireEvent.change(await screen.findByRole('textbox', { name: /^Tytuł/ }), { target: { value: 'Nowe zadanie' } });
     fireEvent.change(screen.getByLabelText('Termin'), { target: { value: '2030-01-01' } });
     fireEvent.click(screen.getByRole('textbox', { name: 'Odbiorcy' }));
@@ -447,12 +481,14 @@ describe('tasks UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj przypomnienie' }));
     await screen.findByText(/W dniu terminu · Tylko ja/);
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
-    await screen.findByText(/Zadanie zapisano, ale nie wszystkie/);
+    await screen.findByText(/Zadanie zapisano, ale nie wszystkie/, {}, { timeout: 4000 });
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(
       fetchMock.mock.calls.filter(
-        ([url, init]) => String(url).startsWith('/api/tasks/lists/list/tasks?') && init?.method === 'POST',
+        ([url, init]) =>
+          String(url).startsWith('/api/tasks/lists/10000000-0000-4000-8000-000000000011/tasks?') &&
+          init?.method === 'POST',
       ),
     ).toHaveLength(1);
     expect(attempts).toBe(2);
@@ -470,7 +506,9 @@ describe('tasks UI', () => {
     expect(screen.getByLabelText('Wczytywanie zadań…')).toBeInTheDocument();
   });
   it('hides cached details when a later access check is rejected', async () => {
-    const fetchMock = setup('/zadania/list?zadanie=task');
+    const fetchMock = setup(
+      '/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013',
+    );
     await screen.findByRole('dialog');
     fetchMock.mockImplementation(
       async () => new Response(JSON.stringify({ error: { message: 'Nie znaleziono listy.' } }), { status: 404 }),
@@ -486,7 +524,7 @@ describe('tasks UI', () => {
 
 describe('today tasks card', () => {
   it('recomputes today after midnight offline in the family timezone', async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(new Date('2026-10-20T21:59:30Z'));
     setup('/', [{ ...task, dueDate: '2026-10-21' }]);
     await vi.waitFor(() => expect(screen.getByText('Na dziś wszystko zrobione.')).toBeInTheDocument());
@@ -503,7 +541,10 @@ describe('today tasks card', () => {
   it('links visible due tasks and keeps them available offline', async () => {
     setup('/');
     const link = await screen.findByRole('link', { name: task.title });
-    expect(link).toHaveAttribute('href', '/zadania/list?zadanie=task');
+    expect(link).toHaveAttribute(
+      'href',
+      '/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013',
+    );
     expect(screen.getByText(/po terminie/)).toBeInTheDocument();
     act(() => onlineManager.setOnline(false));
     expect(screen.getByRole('link', { name: task.title })).toBeInTheDocument();
@@ -512,7 +553,9 @@ describe('today tasks card', () => {
   it('replaces removed tasks with the empty state on refresh', async () => {
     let removed = false;
     setup('/', [task], false, (url) =>
-      url.includes('/tasks?status=all') ? { tasks: removed ? [] : [task] } : undefined,
+      url.includes('/10000000-0000-4000-8000-000000000011/tasks?status=all')
+        ? { tasks: removed ? [] : [task] }
+        : undefined,
     );
     await screen.findByText(task.title);
     removed = true;

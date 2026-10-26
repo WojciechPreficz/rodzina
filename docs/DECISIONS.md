@@ -1,5 +1,38 @@
 # Decyzje
 
+## 26.10.2026 — IndexedDB zadań i kontaktów, O.4 (#52)
+
+- Wszystkie pięć magazynów konta używa `rodzina-offline` v1. Zadania zapisują
+  potwierdzony snapshot, uporządkowane operacje i znaczniki odrzucenia w jednym
+  wersjonowanym rekordzie `tasks` w `cache`. Powód: transakcyjne przyjęcie zmiany,
+  zachowanie bazy i atomowe zatwierdzenie odpowiedzi bez wdrażania outbox O.6.
+  Projekcja pozostaje wyliczana. Dotychczasowy synchronizator i transport API
+  zadań pozostają aktywne; kontakty nie otrzymują kolejki edycji offline.
+- Rekord zadań jest konserwatywnie przypięty: maksymalnie 6 MiB zwykłego cache
+  albo 6 MiB rezerwy obejmującej operacje, bazę i odrzucenia, według miary
+  kontraktu. Nie usuwamy operacji, ich bazy ani wymaganych blokad odświeżenia
+  dla zwolnienia miejsca. Przekroczenie limitu odrzuca zapis. Kontakty mają
+  2 MiB, zachowują ostatnią poprawną kopię i czas pobrania. Po błędzie nowy
+  podgląd może pozostać w RAM z ostrzeżeniem, bez zastępczego localStorage.
+- Importery zadań i kontaktów korzystają ze wspólnego protokołu wyłączności,
+  skrótów SHA-256, etapów staged/committed/verified i granicy sesji. Mają osobne
+  znaczniki, dzięki czemu aktualizacja działa także z pominięciem O.2/O.3.
+  Wymagana jest procedura zamknięcia starych instancji. Nieznany/uszkodzony
+  format lub obce konto zatrzymują import i zachowują źródło.
+- Kolejność zadań zachowuje dotychczasowy porządek: `submittedAt`, a przy
+  remisie ID według `localeCompare`. Zachowujemy ID, daty, lokalne `taskId`,
+  wpisy odrzuceń i stany review; brak statusu w starej wersji oznacza pending.
+  Odrzucenie ma pierwszeństwo przed pozostałym dziennikiem. Klasyfikacja wieku
+  jest trwała, więc korekta zegara nie wznawia wstrzymanych operacji.
+- Auth oczekuje na odtworzenie obu modułów przed udostępnieniem sesji alarmom.
+  Zmiana konta odcina pamięć i późne odpowiedzi przed czyszczeniem wspólnej bazy.
+  Sygnały kart zawierają tylko nonce; transakcje chronią dziennik przed utratą
+  równoległych zapisów. Przy niepobranej bazie formularze dodawania czekają
+  na dane, zamiast przyjmować zapis do nieznanej listy.
+- Bez nowych zależności, migracji API, zmiennych środowiskowych ani crona.
+  Odbiór fizycznego APK, restart obu modułów offline i wstrzymanie alarmów
+  pozostają do wykonania; symulacja transportu Androida ich nie zalicza.
+
 ## 26.10.2026 — IndexedDB zakupów, O.3 (#51)
 
 - Snapshot bazy Query, uporządkowany dziennik i licznik sekwencji zakupów są

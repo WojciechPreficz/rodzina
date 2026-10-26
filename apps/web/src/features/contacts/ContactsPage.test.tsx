@@ -1,3 +1,6 @@
+import { IDBObjectStore } from 'fake-indexeddb';
+import { readCache, writeCache } from '../../offline/database.js';
+import '../../offline/testSetup.js';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MantineProvider } from '@mantine/core';
@@ -8,7 +11,7 @@ import { ContactsPage } from './ContactsPage.js';
 import { contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import { allowNavigation, installNativeNavigation } from '../../nativeNavigation.js';
 import { theme, cssVariablesResolver } from '../../theme.js';
-import { CONTACTS_STORAGE_KEY, contactsStore } from './contactsOffline.js';
+import { CONTACTS_SIGNAL, contactsStore } from './contactsOffline.js';
 
 const session = vi.hoisted(() => ({
   user: { id: '10000000-0000-4000-8000-000000000002', role: 'admin' },
@@ -99,7 +102,7 @@ function setup(initial = [base], loadError = false) {
   );
   return fetchMock;
 }
-beforeEach(() => {
+beforeEach(async () => {
   mobileViewport = false;
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
   fail = '';
@@ -119,9 +122,9 @@ beforeEach(() => {
     vi.fn(() => ({ matches: mobileViewport, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
   );
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
-  contactsStore.clear();
+  contactsStore.clear(false);
   client?.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -139,10 +142,10 @@ describe('contacts online', () => {
   it('restores persisted contacts offline after remount, with search, details and disabled mutations', async () => {
     setup();
     await loaded();
-    expect(localStorage.getItem(CONTACTS_STORAGE_KEY)).not.toBeNull();
+    expect(await readCache('contacts')).toBeDefined();
     cleanup();
     client.clear();
-    contactsStore.clear(false);
+    await contactsStore.clear(false);
     connection.offline = true;
     session.familyConfirmed = false;
     const fetch = setup();
@@ -158,15 +161,15 @@ describe('contacts online', () => {
   it('shows denied persistence and reloads a same-account snapshot from another tab', async () => {
     setup();
     await loaded();
-    const saved = JSON.parse(localStorage.getItem(CONTACTS_STORAGE_KEY)!);
-    saved.data.contacts[0].name = 'Anna';
-    localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(saved));
+    const saved = (await readCache('contacts'))!.payload as { account: string; data: { contacts: { name: string }[] } };
+    saved.data.contacts[0]!.name = 'Anna';
+    await writeCache('contacts', saved);
     act(() =>
-      window.dispatchEvent(new StorageEvent('storage', { key: CONTACTS_STORAGE_KEY, newValue: JSON.stringify(saved) })),
+      window.dispatchEvent(new StorageEvent('storage', { key: CONTACTS_SIGNAL, newValue: JSON.stringify(saved) })),
     );
     await screen.findByRole('button', { name: 'Szczegóły kontaktu: Anna' });
     expect(screen.queryByRole('button', { name: `Szczegóły kontaktu: ${base.name}` })).not.toBeInTheDocument();
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
       throw new Error('Quota');
     });
     await act(async () => {
