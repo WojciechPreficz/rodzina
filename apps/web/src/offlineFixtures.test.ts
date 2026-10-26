@@ -220,7 +220,7 @@ describe('O.1 legacy storage fixtures', () => {
     );
     const client = new QueryClient();
     clients.push(client);
-    restoreShopping(client, saved!.session);
+    await restoreShopping(client, saved!.session);
     const prefix = ['shopping', id('family'), id('user')];
     expect(shoppingListSchema.parse(client.getQueryData<unknown[]>([...prefix, 'lists'])?.[0]).id).toBe(
       id('shoppingList'),

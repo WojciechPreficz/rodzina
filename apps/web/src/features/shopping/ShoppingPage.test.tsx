@@ -1,3 +1,4 @@
+import '../../offline/testSetup.js';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -6,11 +7,11 @@ import '@testing-library/jest-dom/vitest';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { ShoppingPage } from './ShoppingPage.js';
 import { MemoryRouter } from 'react-router';
-import { configureShoppingMutations } from './shoppingOffline.js';
+import { restoreShopping, stopShoppingPersistence, type ShoppingSession } from './shoppingOffline.js';
 import { shoppingKey } from './shoppingOptimistic.js';
 
 const session = vi.hoisted(() => ({
-  user: { id: 'adult', role: 'member', displayName: 'Ania' },
+  user: { id: 'adult', familyId: 'family', role: 'member', displayName: 'Ania' },
   family: { id: 'family' },
 }));
 vi.mock('../../auth.js', () => ({ useMe: () => session }));
@@ -43,7 +44,7 @@ const item: ShoppingItem = {
 };
 let client: QueryClient;
 
-function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>) {
+async function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>) {
   let items = [...initial];
   let lists = [list];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -51,7 +52,8 @@ function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>
     const method = init?.method ?? 'GET';
     let body: unknown;
     const data = init?.body ? JSON.parse(String(init.body)) : {};
-    if (url.includes('/suggestions')) body = { suggestions: [{ name: 'Mleko', category: 'dairy' }] };
+    if (url === '/api/auth/me') body = session;
+    else if (url.includes('/suggestions')) body = { suggestions: [{ name: 'Mleko', category: 'dairy' }] };
     else if (url === '/api/shopping/lists' && method === 'GET') body = { lists };
     else if (url === '/api/shopping/lists' && method === 'POST') {
       lists = [...lists, { ...list, id: 'second', name: data.name }];
@@ -77,7 +79,7 @@ function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>
   });
   vi.stubGlobal('fetch', fetchMock);
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  configureShoppingMutations(client, { familyId: session.family.id, userId: session.user.id });
+  await restoreShopping(client, session as ShoppingSession);
   render(
     <QueryClientProvider client={client}>
       <MantineProvider env="test">
@@ -101,7 +103,7 @@ describe('shopping UI', () => {
         disconnect() {}
       },
     );
-    session.user = { id: 'adult', role: 'member', displayName: 'Ania' };
+    session.user = { id: 'adult', familyId: 'family', role: 'member', displayName: 'Ania' };
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((media: string) => ({
@@ -115,6 +117,7 @@ describe('shopping UI', () => {
     );
   });
   afterEach(() => {
+    stopShoppingPersistence(client);
     focusManager.setFocused(undefined);
     cleanup();
     client?.clear();
@@ -126,7 +129,7 @@ describe('shopping UI', () => {
     ['mleko 2l', 'mleko', '2l'],
     ['jajka 10 szt', 'jajka', '10 szt'],
   ])('quick-adds %s with a separate quantity', async (input, name, quantity) => {
-    const fetchMock = setup([]);
+    const fetchMock = await setup([]);
     const field = await screen.findByRole('textbox', { name: 'Dodaj produkt' });
     await waitFor(() => expect(field).toBeEnabled());
     fireEvent.change(field, { target: { value: input } });
@@ -142,7 +145,7 @@ describe('shopping UI', () => {
   });
 
   it('offers history suggestions and sends their category while keeping the quantity', async () => {
-    const fetchMock = setup([]);
+    const fetchMock = await setup([]);
     const field = await screen.findByRole('textbox', { name: 'Dodaj produkt' });
     await waitFor(() => expect(field).toBeEnabled());
     fireEvent.change(field, { target: { value: 'ml 2l' } });
@@ -158,8 +161,8 @@ describe('shopping UI', () => {
   });
 
   it('hides management and other authors item actions from children', async () => {
-    session.user = { id: 'child', role: 'child', displayName: 'Zosia' };
-    setup([
+    session.user = { id: 'child', familyId: 'family', role: 'child', displayName: 'Zosia' };
+    await setup([
       item,
       { ...item, id: 'own', name: 'Jabłka', createdBy: 'child', category: 'fruit_vegetables' },
       { ...item, id: 'checked', name: 'Chleb', isChecked: true, checkedBy: null },
@@ -176,7 +179,7 @@ describe('shopping UI', () => {
 
   it('checks optimistically, moves to the bottom and rolls back a failed save', async () => {
     let finish!: (response: Response) => void;
-    setup(
+    await setup(
       [item, { ...item, id: 'bread', name: 'Chleb', category: 'bakery' }],
       () =>
         new Promise((resolve) => {
@@ -203,7 +206,7 @@ describe('shopping UI', () => {
   });
 
   it('requires confirmation before clearing checked items', async () => {
-    const fetchMock = setup([{ ...item, isChecked: true, checkedBy: 'adult' }]);
+    const fetchMock = await setup([{ ...item, isChecked: true, checkedBy: 'adult' }]);
     fireEvent.click(await screen.findByRole('button', { name: 'Wyczyść kupione' }));
     const modal = await screen.findByRole('dialog');
     expect(modal).toHaveTextContent('Usunąć wszystkie kupione produkty');
@@ -213,7 +216,7 @@ describe('shopping UI', () => {
   });
 
   it('edits a product name, quantity and category', async () => {
-    const fetchMock = setup();
+    const fetchMock = await setup();
     fireEvent.click(await screen.findByRole('button', { name: 'Opcje: Mleko' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edytuj' }));
     const dialog = await screen.findByRole('dialog');
@@ -230,7 +233,7 @@ describe('shopping UI', () => {
   });
 
   it('creates a list and renames the selected list', async () => {
-    setup();
+    await setup();
     fireEvent.click(await screen.findByRole('button', { name: 'Dodaj listę' }));
     fireEvent.change(await screen.findByRole('textbox', { name: /^Nazwa listy/ }), { target: { value: 'Drogeria' } });
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zapisz' }));
@@ -244,7 +247,7 @@ describe('shopping UI', () => {
   });
 
   it('creates a list, adds and checks a product offline without blocking the next action', async () => {
-    const fetchMock = setup();
+    const fetchMock = await setup();
     await screen.findByRole('article', { name: 'Mleko' });
     onlineManager.setOnline(false);
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj listę' }));
@@ -262,7 +265,7 @@ describe('shopping UI', () => {
   });
 
   it('returns to the catalog with focus and scroll restored', async () => {
-    setup();
+    await setup();
     const card = await screen.findByRole('button', { name: 'Zakupy' });
     vi.stubGlobal('scrollY', 320);
     fireEvent.click(card);
@@ -275,7 +278,7 @@ describe('shopping UI', () => {
   });
 
   it('distinguishes an uncached offline list from an empty list and blocks adding', async () => {
-    setup();
+    await setup();
     await screen.findByRole('article', { name: 'Mleko' });
     act(() => {
       client.setQueryData(

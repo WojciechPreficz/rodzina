@@ -11,6 +11,8 @@ vi.mock('@capacitor/core', () => ({
 import type { AuthUser, Family } from '@rodzina/shared';
 import { AuthProvider, useMe } from './auth.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
+import { ACCOUNT_SIGNAL_KEY, clearDatabase } from './offline/database.js';
+import { readShoppingData } from './features/shopping/shoppingStorage.js';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 import { restoreShopping, stopShoppingPersistence, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingOffline.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({
@@ -18,7 +20,10 @@ vi.mock('./features/notifications/localSchedule.js', () => ({
 }));
 vi.mock('./features/notifications/scheduleSync.js', () => ({ ScheduleSync: () => null }));
 
-const session = { user: { id: 'adult', displayName: 'Anna' } as AuthUser, family: { id: 'family' } as Family };
+const session = {
+  user: { id: 'adult', familyId: 'family', displayName: 'Anna' } as AuthUser,
+  family: { id: 'family' } as Family,
+};
 function Harness() {
   const auth = useMe();
   return (
@@ -73,21 +78,20 @@ describe('native session lifecycle', () => {
     request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
     mount();
     await screen.findByText('Anna');
+    await clearDatabase();
     const other = new QueryClient();
-    restoreShopping(other, { ...session, user: { ...session.user, id: 'other' } });
+    await restoreShopping(other, { ...session, user: { ...session.user, id: 'other' } });
     await new Promise((resolve) => setTimeout(resolve, 10));
     stopShoppingPersistence(other);
     other.clear();
-    window.dispatchEvent(
-      new StorageEvent('storage', { key: SHOPPING_STORAGE_KEY, newValue: localStorage.getItem(SHOPPING_STORAGE_KEY) }),
-    );
+    window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_SIGNAL_KEY, newValue: 'changed' }));
     await screen.findByText('logged out');
-    expect(JSON.parse(localStorage.getItem(SHOPPING_STORAGE_KEY)!).session.user.id).toBe('other');
+    expect((await readShoppingData())?.session.user.id).toBe('other');
   });
 
   it('restores the shopping account after a cold offline start', async () => {
     const previous = new QueryClient();
-    restoreShopping(previous, session);
+    await restoreShopping(previous, session);
     previous.setQueryData(['shopping', 'family', 'adult', 'lists'], []);
     await new Promise((resolve) => setTimeout(resolve, 10));
     stopShoppingPersistence(previous);
@@ -99,7 +103,7 @@ describe('native session lifecycle', () => {
 
   it('discards offline data when the server rejects an expired session', async () => {
     const previous = new QueryClient();
-    restoreShopping(previous, session);
+    await restoreShopping(previous, session);
     await new Promise((resolve) => setTimeout(resolve, 10));
     stopShoppingPersistence(previous);
     previous.clear();

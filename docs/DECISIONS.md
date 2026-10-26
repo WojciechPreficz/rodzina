@@ -1,5 +1,41 @@
 # Decyzje
 
+## 26.10.2026 — IndexedDB zakupów, O.3 (#51)
+
+- Snapshot bazy Query, uporządkowany dziennik i licznik sekwencji zakupów są
+  jednym wersjonowanym rekordem `shopping` w `cache` wspólnej bazy. Powód:
+  atomowe przyjęcie intencji wraz z jej bazą bez przedwczesnego wdrażania
+  outbox O.5. Projekcja jest wyliczana do widoku, nigdy zapisywana jako baza.
+  TanStack nadal wykonuje mutacje i retry; Web Locks serializuje transport
+  kart, a odczyt dziennika pod blokadą pomija już zatwierdzone operacje.
+- Nowa akcja otrzymuje stałe ID i czas przed zapisem. UI potwierdza ją dopiero
+  po transakcji IDB. Odpowiedź API, uzgodniona baza i usunięcie intencji są
+  zatwierdzane atomowo. Nieudany zapis po sukcesie API pozostawia to samo ID
+  do idempotentnego retry. Zatrzymanie instancji przerywa jej żądania; generacja
+  konta chroni transakcje i spóźnione odpowiedzi. Sygnał kart zawiera tylko nonce.
+- Import zakupów ma własny znacznik, fazy staged/committed/verified, skróty
+  SHA-256, kontrolę granicy konta i wznowienie sprzątania. Wymaga tej samej
+  jawnej procedury zamknięcia starszych instancji co O.2, również przy aktualizacji
+  z pominięciem O.2. Nieczytelny dziennik, obce konto i sprzeczna intencja
+  zatrzymują import bez kasowania źródła. Zbiór operacji jest sumą snapshotu
+  i dziennika; kolejność łańcucha pochodzi z kompletnego snapshotu albo czasu.
+- Snapshot-only, brak bazy, niejednoznaczny remis i stare operacje zachowują
+  trwały stan wymagający sprawdzenia. Pokazujemy projekcję i komunikat, bez
+  automatycznej wysyłki lub przyjmowania dalszych zmian do takiej kolejki.
+  Nie nadajemy nowego ID ani czasu. Docelowa obsługa rozstrzygania pozostaje O.5.
+- Budżet zwykłego cache wynosi 4 MiB; najstarsze zakresy produktów można
+  usunąć, zachowując brak pokrycia zamiast pustej listy. W obecnym pomoście
+  cały snapshot z pending/review jest konserwatywnie przypięty do rezerwy
+  6 MiB. Nie usuwamy jego bazy ani operacji. Licznik i dane zmieniają się
+  w jednej transakcji. Przekroczenie limitu lub odmowa IDB odrzuca nową akcję.
+- Stare klucze zakupów są wyłącznie źródłem importu i znikają po weryfikacji.
+  Nie działa persister localStorage ani drugi nadawca. Zadania i kontakty
+  pozostają w dotychczasowych magazynach. Nie zmieniamy API, SQLite, migracji
+  serwera, konfiguracji, crona, zależności runtime ani alarmów Androida.
+- Implementacja i kontrole lokalne nie zamykają kroku: odbiór fizycznego APK
+  i końcowe CI pozostają do potwierdzenia. Bez commita/pusha na tym etapie,
+  zgodnie z poleceniem właściciela. Checklistę zapisano w DEVELOPMENT.md.
+
 ## 26.10.2026 — IndexedDB rodziny/sesji i kalendarza, O.2 (#50)
 
 - Wspólna baza `rodzina-offline` w wersji 1 i adaptery rodziny oraz kalendarza

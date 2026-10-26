@@ -1,3 +1,4 @@
+import { readOfflineSnapshot } from './offlineDatabase.js';
 import { expect, test, type Page } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 
@@ -195,7 +196,7 @@ test('offline shopping survives restarting the bundled frontend and syncs to ano
     await expect(page.getByText('Jesteś offline - zmiany zostaną wysłane po odzyskaniu połączenia')).toBeVisible();
     await expect
       .poll(() =>
-        page.evaluate(() => JSON.parse(localStorage.getItem('rodzina:shopping:v1')!).clientState.mutations.length),
+        readOfflineSnapshot<{ operations: unknown[] }>(page, 'shopping').then((data) => data?.operations.length),
       )
       .toBe(4);
     await page.screenshot({ path: testInfo.outputPath('shopping-offline.png'), fullPage: true });
@@ -221,7 +222,7 @@ test('offline shopping survives restarting the bundled frontend and syncs to ano
     });
     await expect
       .poll(() =>
-        reopened.evaluate(() => JSON.parse(localStorage.getItem('rodzina:shopping:v1')!).clientState.mutations.length),
+        readOfflineSnapshot<{ operations: unknown[] }>(reopened, 'shopping').then((data) => data?.operations.length),
       )
       .toBe(0);
     await expect(reopened.getByRole('alert')).toHaveCount(0);
@@ -231,7 +232,7 @@ test('offline shopping survives restarting the bundled frontend and syncs to ano
     await expect(other.getByRole('article', { name: 'masło', exact: true })).toContainText('2 szt');
     await reopened.getByRole('button', { name: 'Otwórz menu' }).click();
     await reopened.getByRole('button', { name: 'Wyloguj się', exact: true }).click();
-    await expect.poll(() => reopened.evaluate(() => localStorage.getItem('rodzina:shopping:v1'))).toBeNull();
+    await expect.poll(() => readOfflineSnapshot(reopened, 'shopping')).toBeUndefined();
     await reopened.close();
   } finally {
     await otherContext.close();

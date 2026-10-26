@@ -128,7 +128,7 @@ export async function transact<T>(
   }
 }
 type Active = { accountId: '__origin__'; key: 'active'; value: { accountId: string; generation: string } };
-async function assertContext(tx: IDBTransaction, captured = context) {
+export async function assertContext(tx: IDBTransaction, captured = context) {
   const active = await requestValue<Active | undefined>(tx.objectStore('metadata').get(['__origin__', 'active']));
   if (!captured || active?.value.accountId !== captured.accountId || active.value.generation !== captured.generation)
     throw changed();
@@ -293,7 +293,15 @@ function sameSource(state: ImportState, allowRemoved: boolean) {
       fail('Dane starej karty zmieniły się podczas importu. Zamknij starsze karty i ponów aktualizację.');
   }
 }
+const migrations = new Map<string, (confirmed: boolean) => Promise<void>>();
+export function registerMigration(name: string, migrate: (confirmed: boolean) => Promise<void>) {
+  migrations.set(name, migrate);
+}
 export async function ensureMigrated(confirmed = false) {
+  await migratePreviews(confirmed);
+  for (const migrate of migrations.values()) await migrate(confirmed);
+}
+async function migratePreviews(confirmed = false) {
   checkPendingClear();
   const token = epoch;
   // Web Locks serializes new clients. Pre-protocol clients require the explicit maintenance procedure.
@@ -304,7 +312,7 @@ export async function ensureMigrated(confirmed = false) {
       async (tx) => requestValue<ImportState[]>(tx.objectStore('migration').getAll()),
       token,
     );
-    let state = states[0];
+    let state = states.find((state) => state.module === 'preview');
     const source = sourceEntries();
     if (!state && !Object.keys(source).length) {
       requireMigration(false);

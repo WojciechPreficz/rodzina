@@ -1,4 +1,4 @@
-export type CacheModule = 'family' | 'calendar';
+export type CacheModule = 'family' | 'calendar' | 'shopping';
 export type CacheEntry = {
   accountId: string;
   module: CacheModule;

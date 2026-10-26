@@ -33,9 +33,17 @@ export async function shoppingSuggestions(q: string, signal: AbortSignal) {
   ).suggestions;
 }
 
-export async function changeShopping(change: ShoppingChange, operationId?: string, actorId?: string) {
+export async function changeShopping(
+  change: ShoppingChange,
+  operationId?: string,
+  actorId?: string,
+  signal?: AbortSignal,
+) {
   const send = (path: string, init: RequestInit) =>
-    apiFetch(path + (operationId ? `?operationId=${operationId}${actorId ? `&actorId=${actorId}` : ''}` : ''), init);
+    apiFetch(path + (operationId ? `?operationId=${operationId}${actorId ? `&actorId=${actorId}` : ''}` : ''), {
+      ...init,
+      ...(signal ? { signal } : {}),
+    });
   switch (change.type) {
     case 'createList':
       return send('/api/shopping/lists', { method: 'POST', body: JSON.stringify({ name: change.name }) });

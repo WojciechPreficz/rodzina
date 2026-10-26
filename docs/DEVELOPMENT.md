@@ -322,6 +322,50 @@ rodziny/kalendarza/auth i `e2e/offline-migration.spec.ts`. Playwright działa
 headless w obu szerokościach. Końcowe CI oraz powyższe próby fizycznego APK
 są wymagane do zamknięcia kroku.
 
+### Odbiór pamięci zakupów — O.3 (#51)
+
+Zakupy korzystają z rekordu `shopping` w `cache` bazy `rodzina-offline` v1.
+Rekord zawiera bazę Query, `operations`, `nextSequence` i sesję offline.
+Dziennik pozostaje obsługiwany przez TanStack; wspólny outbox powstanie w O.5.
+Starszy opis O.2 powyżej dokumentuje zakres tamtego kroku.
+
+1. Uruchom `npm run dev`. Na WWW przy **390 i 1280 px** sprawdź dodawanie
+   produktu z ilością, odhaczanie, edycję, usuwanie, czyszczenie kupionych oraz
+   tworzenie i zmianę nazwy listy. Dziecko zachowuje dotychczasowe uprawnienia.
+2. W otwartym interfejsie wyłącz internet. Dodaj listę i kilka produktów,
+   odhacz produkt i popraw ilość. Formularz zamyka się po trwałym zapisie,
+   a następna akcja nie czeka na sieć. Otwórz drugą zgodną kartę przed
+   odłączeniem i wykonaj różne zmiany w obu: żadna nie może nadpisać dziennika
+   drugiej. Po powrocie sieci wszystkie zmiany docierają dokładnie raz.
+3. W **fizycznym APK z tymi zmianami** pobierz listy online. Włącz tryb
+   samolotowy, wykonaj powyższe zmiany, zamknij proces aplikacji i uruchom
+   ponownie nadal offline. Lista, ilości, odhaczenia i nowa lista pozostają.
+   Przywróć sieć: sprawdź wynik także na innym urządzeniu, bez duplikatów.
+   Zapisz model telefonu, Android, wersję APK i wynik. Build debug i symulacja
+   transportu w Playwright nie zaliczają tej próby.
+4. Przy aktualizacji ze starego localStorage zastosuj procedurę zamknięcia
+   instancji z O.2 i potwierdź przeniesienie. Dotyczy także pominięcia O.2.
+   Sprawdź lokalnie utworzone listy/produkty i kolejność zmian. W DevTools
+   klucze `rodzina:shopping:v1` i `rodzina:shopping:v1:operation:*` znikają
+   po weryfikacji; zadania i kontakty zachowują swoje magazyny. Przerwany
+   import ma się wznowić bez utraty lub powielenia intencji. Nie czyść pamięci
+   urządzenia z niewysłanymi zmianami i nie wracaj do starego APK po zapisach IDB.
+5. Na testowym profilu odmów dostępu do IDB albo zasymuluj brak miejsca.
+   Sprawdź polski komunikat; niezapisany produkt nie pojawia się jako przyjęty,
+   a tekst formularza pozostaje. Nie powstaje zastępczy dziennik localStorage.
+   Uszkodzony lub sprzeczny dziennik blokuje import i zachowuje źródło;
+   niejednoznaczne/stare operacje pozostają do sprawdzenia bez automatycznej wysyłki.
+6. Wyloguj się z niewysłanymi zmianami i uruchom ponownie: stare dane znikają.
+   Zmień konto w drugiej karcie podczas wysyłki: pierwsza ukrywa podgląd,
+   późna odpowiedź nie przywraca poprzedniego konta ani nie usuwa nowego.
+
+Automatycznie sprawdzamy importer, awarie transakcji, restart, stałe ID,
+sekwencje, dwa klienty, budżet i granicę konta w testach `shoppingStorage`
+i `shoppingOffline`; integracje auth/rodziny i istniejące testy zakupów.
+Playwright headless obejmuje oba rozmiary, odtwarzanie, dwie karty i błąd
+miejsca. Ręczny przegląd telefonu, migracja rzeczywistego APK i końcowe CI
+pozostają **do potwierdzenia**. Nie ma zmian konfiguracji serwera ani crona.
+
 ### Narzędzia Androida
 
 APK zawiera lokalny frontend. Potrzebne są Node.js 22 lub 24, JDK 21, SDK 36

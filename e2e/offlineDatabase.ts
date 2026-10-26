@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-export function readOfflineSnapshot<T>(page: Page, module: 'family' | 'calendar'): Promise<T | undefined> {
+export function readOfflineSnapshot<T>(page: Page, module: 'family' | 'calendar' | 'shopping'): Promise<T | undefined> {
   return page.evaluate(async (module) => {
     if (!(await indexedDB.databases()).some((database) => database.name === 'rodzina-offline')) return;
     const db = await new Promise<IDBDatabase>((resolve, reject) => {

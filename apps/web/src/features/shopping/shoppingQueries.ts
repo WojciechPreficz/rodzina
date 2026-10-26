@@ -5,6 +5,7 @@ import { useMe } from '../../auth.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { listShoppingItems, listShoppingLists, type ShoppingChange } from './shoppingApi.js';
 import { enqueueShopping, type QueuedShoppingChange } from './shoppingOffline.js';
+import type { StoredShoppingOperation } from './shoppingStorage.js';
 import { applyShoppingChange, shoppingKey } from './shoppingOptimistic.js';
 
 export function useShopping(selected: string | null) {
@@ -20,6 +21,11 @@ export function useShopping(selected: string | null) {
   const failures = useMutationState({
     filters: { mutationKey: key, status: 'error' },
     select: (mutation) => mutation.state.error,
+  });
+  const operationsQuery = useQuery<StoredShoppingOperation[]>({
+    queryKey: [...key, 'operations'],
+    queryFn: () => client.getQueryData<StoredShoppingOperation[]>([...key, 'operations']) ?? [],
+    enabled: false,
   });
   const refresh = {
     refetchInterval: () => (client.isMutating({ mutationKey: key }) ? (false as const) : SYNC_INTERVAL_MS),
@@ -44,7 +50,9 @@ export function useShopping(selected: string | null) {
       return value;
     },
   } as Pick<QueryClient, 'setQueryData'>;
-  for (const entry of changes) applyShoppingChange(optimistic, account, entry.change, entry.submittedAt);
+  const review = operationsQuery.data?.filter((op) => op.review) ?? [];
+  for (const entry of operationsQuery.data ?? changes)
+    applyShoppingChange(optimistic, account, entry.change, entry.submittedAt);
   const visibleLists = projected.get(JSON.stringify([...key, 'lists'])) as ShoppingList[] | undefined;
   const active = visibleLists?.find((list) => list.id === selected) ?? visibleLists?.[0];
   const listId = active?.id;
@@ -63,12 +71,14 @@ export function useShopping(selected: string | null) {
     // Acceptance is local. Network completion is reported separately and must
     // not block the next checkbox or leave a quick-add dialog open offline.
     queueChange: async (change: ShoppingChange) => {
-      void enqueueShopping(client, account, change).catch(() => {});
+      await enqueueShopping(client, account, change);
     },
     active,
     online,
     pendingCount: changes.length,
-    syncError: failures.at(-1)?.message,
+    syncError: review.length
+      ? 'Zapisane zmiany zakupów wymagają sprawdzenia. Nie będą wysyłane automatycznie; zachowano je na urządzeniu.'
+      : failures.at(-1)?.message,
     dismissSyncError: () =>
       client
         .getMutationCache()

@@ -31,6 +31,7 @@ import {
   SHOPPING_STORAGE_KEY,
   stopShoppingPersistence,
 } from '../shopping/shoppingOffline.js';
+import { readShoppingData } from '../shopping/shoppingStorage.js';
 import { FamilyPage } from './FamilyPage.js';
 
 const admin: AuthUser = {
@@ -151,7 +152,7 @@ describe('family offline lifecycle through the Android transport', () => {
 
   it('shows the no-cache message and does not treat a legacy empty code as valid', async () => {
     const previous = new QueryClient();
-    restoreShopping(previous, session);
+    await restoreShopping(previous, session);
     previous.setQueryData(['shopping', 'family', 'admin', 'lists'], []);
     await new Promise((resolve) => setTimeout(resolve, 10));
     stopShoppingPersistence(previous);
@@ -164,20 +165,19 @@ describe('family offline lifecycle through the Android transport', () => {
     expect(screen.queryByText('ABC123')).not.toBeInTheDocument();
   });
 
-  it('migrates a legacy account without dropping pending shopping operations', async () => {
+  it('restores an account without dropping IndexedDB shopping operations', async () => {
     onlineManager.setOnline(false);
     const previous = new QueryClient();
-    restoreShopping(previous, session);
+    await restoreShopping(previous, session);
     previous.setQueryData(['shopping', 'family', 'admin', 'lists'], []);
-    void enqueueShopping(
+    await enqueueShopping(
       previous,
       { familyId: 'family', userId: 'admin' },
       { type: 'createList', id: 'pending', name: 'Sklep' },
     ).catch(() => {});
     stopShoppingPersistence(previous);
     previous.clear();
-    const journal = Object.keys(localStorage).find((key) => key.includes(':operation:'))!;
-    const savedOperation = localStorage.getItem(journal);
+    const savedOperation = (await readShoppingData())?.operations;
     const view = mount();
     await screen.findByText(/Brak danych rodziny zapisanych/);
     expect(view.client.getMutationCache().getAll()).toHaveLength(1);
@@ -187,8 +187,8 @@ describe('family offline lifecycle through the Android transport', () => {
     act(() => onlineManager.setOnline(true));
     fireEvent.click(screen.getByText('refresh'));
     await synced();
-    expect(localStorage.getItem(journal)).toBe(savedOperation);
-    expect(readShoppingSession()?.user.id).toBe('admin');
+    expect((await readShoppingData())?.operations).toEqual(savedOperation);
+    expect((await readShoppingSession())?.user.id).toBe('admin');
   });
 
   it.each(['add', 'edit-child', 'edit-adult'])(

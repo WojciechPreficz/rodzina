@@ -7,7 +7,6 @@ import {
   stopShoppingPersistence,
   readShoppingSession,
   restoreShopping,
-  SHOPPING_STORAGE_KEY,
   PENDING_LOGOUT_KEY,
 } from './features/shopping/shoppingOffline.js';
 import { clearNativeSession, invalidateSessionRequests, isAndroid } from './platform.js';
@@ -87,14 +86,16 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
     if (!currentSession.current && !pendingWebLogout()) {
       const saved = await hydrateOfflineData();
       if (!current()) return;
-      const cached = saved?.session ?? (hasPendingClear() ? undefined : readShoppingSession());
+      const cached = saved?.session ?? (hasPendingClear() ? undefined : await readShoppingSession());
+      if (!current()) return;
       if (cached) {
         await calendarStore.activate(accountId(cached));
         if (!current()) return;
         taskStore.activate(accountId(cached));
         contactsStore.activate(accountId(cached));
         if (queryClient) {
-          restoreShopping(queryClient, cached);
+          await restoreShopping(queryClient, cached);
+          if (!current()) return;
           if (saved) restoreOfflineData(queryClient, saved);
         }
         currentSession.current = cached;
@@ -125,7 +126,8 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       if (!current()) return;
       taskStore.activate(accountId(response));
       contactsStore.activate(accountId(response));
-      if (queryClient) restoreShopping(queryClient, response);
+      if (queryClient) await restoreShopping(queryClient, response);
+      if (!current()) return;
       setUser(response.user);
       setFamily(response.family);
       setIsLoading(false);
@@ -237,16 +239,7 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
           // A corrupt snapshot is handled by the contacts store, not as a new session.
         }
       }
-      if (
-        (event.key === SHOPPING_STORAGE_KEY || event.key === null) &&
-        (!event.newValue ||
-          (identity &&
-            (() => {
-              const stored = readShoppingSession();
-              return !stored || accountId(stored) !== identity;
-            })()))
-      )
-        loseSession(false);
+      if (event.key === null) loseSession(false);
     };
     window.addEventListener('storage', onStorage);
     const onInvalidated = () => loseSession(false);
@@ -326,7 +319,8 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
       contactsStore.activate(`${nextFamily.id}:${nextUser.id}`);
       announceAccount(`${nextFamily.id}:${nextUser.id}`);
-      if (queryClient) restoreShopping(queryClient, { user: nextUser, family: nextFamily });
+      if (queryClient) await restoreShopping(queryClient, { user: nextUser, family: nextFamily });
+      if (!current()) return;
       currentSession.current = { user: nextUser, family: nextFamily };
       setUser(nextUser);
       setFamily(nextFamily);

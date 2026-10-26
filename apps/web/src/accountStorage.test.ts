@@ -12,6 +12,7 @@ import {
   SHOPPING_STORAGE_KEY,
   PENDING_LOGOUT_KEY,
 } from './features/shopping/shoppingOffline.js';
+import { readShoppingData } from './features/shopping/shoppingStorage.js';
 import { accountId, OFFLINE_DATA_KEY, saveOfflineData } from './offlineData.js';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 
@@ -87,9 +88,9 @@ async function seedAccount(client: QueryClient) {
   await taskStore.synchronize();
   taskStore.enqueue(list.id, crypto.randomUUID(), { type: 'create', data: { title: 'Farba' } });
   onlineManager.setOnline(false);
-  restoreShopping(client, session);
+  await restoreShopping(client, session);
   client.setQueryData(['shopping', user.familyId, user.id, 'lists'], []);
-  void enqueueShopping(
+  await enqueueShopping(
     client,
     { familyId: user.familyId, userId: user.id },
     {
@@ -143,7 +144,8 @@ describe('account storage cleanup', () => {
           CONTACTS_STORAGE_KEY,
         ]),
       );
-      expect(Object.keys(localStorage).filter((key) => key.includes(':operation:'))).toHaveLength(2);
+      expect((await readShoppingData())?.operations).toHaveLength(1);
+      expect(Object.keys(localStorage).filter((key) => key.includes(':operation:'))).toHaveLength(1);
       // Canary values make a newly declared storage key fail this test even before
       // its fixture has been added, unless its store participates in cleanup.
       for (const key of declaredKeys) if (localStorage.getItem(key) === null) localStorage.setItem(key, 'canary');
@@ -196,7 +198,7 @@ describe('account storage cleanup', () => {
     const invalidateSession = vi.fn(() => {
       expect(taskStore.getSnapshot().account).toBe('');
       expect(calendarStore.snapshot().account).toBe('');
-      expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).not.toBeNull();
+      expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).toBeNull();
     });
     const clearing = clearAccountData('logout', {
       queryClient,
