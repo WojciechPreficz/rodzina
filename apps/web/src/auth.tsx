@@ -16,8 +16,7 @@ import { localScheduler } from './features/notifications/localSchedule.js';
 import {
   accountId,
   familyMembersKey,
-  OFFLINE_DATA_KEY,
-  readOfflineData,
+  hydrateOfflineData,
   restoreOfflineData,
   saveOfflineData,
   useOfflineStorageIssue,
@@ -26,12 +25,21 @@ import {
 import { reportTransportFailure } from './connectivity.js';
 import { listMembers } from './features/family/familyApi.js';
 import { SYNC_INTERVAL_MS } from './queryClient.js';
-import { Alert } from '@mantine/core';
 import { calendarStore } from './features/calendar/calendarOffline.js';
 import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
 import { taskStore } from './features/tasks/taskOffline.js';
 import { TaskPrefetch } from './features/tasks/taskQueries.js';
 import { clearAccountData } from './accountStorage.js';
+import { MigrationNotice } from './offline/MigrationNotice.js';
+import {
+  ACCOUNT_SIGNAL_KEY,
+  activateOfflineAccount,
+  announceAccount,
+  recoverPendingClear,
+  hasPendingClear,
+} from './offline/database.js';
+import { reportStorageIssue, storageError, useMigrationRequired } from './offline/status.js';
+import './offline/notices.css';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 
 export type AuthState = {
@@ -39,7 +47,7 @@ export type AuthState = {
   family: Family | null;
   isLoading: boolean;
   refresh: () => Promise<void>;
-  setSession: (user: AuthUser, family: Family) => void;
+  setSession: (user: AuthUser, family: Family) => Promise<void>;
   logout: () => Promise<void>;
   familySyncedAt: number | undefined;
   familySyncError: string | undefined;
@@ -70,16 +78,19 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   const [familySyncError, setFamilySyncError] = useState<string>();
   const [familyConfirmed, setFamilyConfirmed] = useState(false);
   const storageIssue = useOfflineStorageIssue();
+  const migrationRequired = useMigrationRequired();
 
   const refresh = useCallback(async () => {
     const requestGeneration = generation.current;
     const revision = ++refreshRevision.current;
     const current = () => requestGeneration === generation.current && revision === refreshRevision.current;
     if (!currentSession.current && !pendingWebLogout()) {
-      const saved = readOfflineData();
-      const cached = saved?.session ?? readShoppingSession();
+      const saved = await hydrateOfflineData();
+      if (!current()) return;
+      const cached = saved?.session ?? (hasPendingClear() ? undefined : readShoppingSession());
       if (cached) {
-        calendarStore.activate(accountId(cached));
+        await calendarStore.activate(accountId(cached));
+        if (!current()) return;
         taskStore.activate(accountId(cached));
         contactsStore.activate(accountId(cached));
         if (queryClient) {
@@ -102,12 +113,16 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       const response = await apiFetch<AuthMeResponse>('/api/auth/me');
       if (!current()) return;
       if (currentSession.current && accountId(currentSession.current) !== accountId(response)) {
-        clearAccountData('account-changed', { queryClient });
+        await clearAccountData('account-changed', { queryClient });
+        if (!current()) return;
         setFamilySyncedAt(undefined);
         setFamilyConfirmed(false);
       }
       currentSession.current = response;
-      calendarStore.activate(accountId(response));
+      await recoverPendingClear();
+      if (!current()) return;
+      await calendarStore.activate(accountId(response));
+      if (!current()) return;
       taskStore.activate(accountId(response));
       contactsStore.activate(accountId(response));
       if (queryClient) restoreShopping(queryClient, response);
@@ -134,8 +149,9 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
         : await listMembers();
       if (!current()) return;
       const syncedAt = Date.now();
-      saveOfflineData(response, members, syncedAt);
-      setFamilySyncedAt(syncedAt);
+      const persisted = await saveOfflineData(response, members, syncedAt);
+      if (!current()) return;
+      if (persisted) setFamilySyncedAt(syncedAt);
       setFamilySyncError(undefined);
       setFamilyConfirmed(true);
       reportTransportFailure(false);
@@ -144,13 +160,15 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       setFamilyConfirmed(false);
       if (error instanceof ApiRequestError && [401, 403].includes(error.status)) {
         generation.current += 1;
+        const cleanupGeneration = generation.current;
         invalidateSessionRequests();
-        clearAccountData('session-lost', { queryClient });
+        const clearing = clearAccountData('session-lost', { queryClient });
         currentSession.current = undefined;
         setUser(null);
         setFamily(null);
         setFamilySyncedAt(undefined);
-        setIsLoading(false);
+        await clearing.catch(() => {});
+        if (generation.current === cleanupGeneration) setIsLoading(false);
       } else if (error instanceof ApiRequestError) {
         reportTransportFailure(false);
         setFamilySyncError(error.message);
@@ -184,23 +202,33 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
   const identity = user && family ? `${family.id}:${user.id}` : undefined;
   useEffect(() => {
     const loseSession = (removeStored: boolean) => {
-      clearAccountData(removeStored ? 'session-lost' : 'storage-changed', {
+      const clearing = clearAccountData(removeStored ? 'session-lost' : 'storage-changed', {
         queryClient,
         invalidateSession: () => {
           if (isAndroid()) localScheduler.invalidate();
           generation.current += 1;
         },
       });
+      const cleanupGeneration = generation.current;
       setUser(null);
       setFamily(null);
       currentSession.current = undefined;
       setFamilyConfirmed(false);
       setFamilySyncedAt(undefined);
-      setIsLoading(false);
+      setIsLoading(true);
+      void clearing
+        .catch(() => {})
+        .finally(() => {
+          if (generation.current === cleanupGeneration) setIsLoading(false);
+        });
     };
     const onSessionLost = () => loseSession(true);
     window.addEventListener('rodzina:session-lost', onSessionLost);
     const onStorage = (event: StorageEvent) => {
+      if (event.key === ACCOUNT_SIGNAL_KEY) {
+        loseSession(false);
+        return;
+      }
       if (event.key === CONTACTS_STORAGE_KEY) {
         try {
           const account = event.newValue ? JSON.parse(event.newValue)?.account : undefined;
@@ -210,24 +238,33 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
         }
       }
       if (
-        (event.key === SHOPPING_STORAGE_KEY || event.key === OFFLINE_DATA_KEY || event.key === null) &&
+        (event.key === SHOPPING_STORAGE_KEY || event.key === null) &&
         (!event.newValue ||
           (identity &&
             (() => {
-              const stored = event.key === OFFLINE_DATA_KEY ? readOfflineData()?.session : readShoppingSession();
+              const stored = readShoppingSession();
               return !stored || accountId(stored) !== identity;
             })()))
       )
         loseSession(false);
     };
     window.addEventListener('storage', onStorage);
+    const onInvalidated = () => loseSession(false);
+    window.addEventListener('offline-context-invalidated', onInvalidated);
+    const onResumed = () => {
+      void refresh();
+    };
+    window.addEventListener('offline-storage-resumed', onResumed);
     return () => {
       window.removeEventListener('rodzina:session-lost', onSessionLost);
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener('offline-context-invalidated', onInvalidated);
+      window.removeEventListener('offline-storage-resumed', onResumed);
     };
-  }, [queryClient, identity]);
+  }, [queryClient, identity, refresh]);
 
   const logout = async () => {
+    let cleanupError: unknown;
     await clearAccountData('logout', {
       queryClient,
       invalidateSession: () => {
@@ -244,6 +281,8 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
         if (!isAndroid()) pendingWebLogout(true);
         await queryClient?.cancelQueries();
       },
+    }).catch((error: unknown) => {
+      cleanupError = error;
     });
     try {
       await apiFetch<AuthOkResponse>('/api/auth/logout', { method: 'POST' });
@@ -255,30 +294,50 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       setUser(null);
       setFamily(null);
     }
+    if (cleanupError) throw cleanupError;
   };
 
-  const setSession = (nextUser: AuthUser, nextFamily: Family) => {
-    clearAccountData('account-changed', {
+  const setSession = async (nextUser: AuthUser, nextFamily: Family) => {
+    const clearing = clearAccountData('account-changed', {
       queryClient,
       invalidateSession: () => {
-        calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
-        taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
-        contactsStore.activate(`${nextFamily.id}:${nextUser.id}`);
         if (isAndroid()) localScheduler.invalidate();
         generation.current += 1;
         invalidateSessionRequests();
         pendingWebLogout(false);
       },
     });
-    if (queryClient) void restoreShopping(queryClient, { user: nextUser, family: nextFamily });
-    setUser(nextUser);
-    setFamily(nextFamily);
-    currentSession.current = { user: nextUser, family: nextFamily };
-    saveOfflineData(currentSession.current);
-    setFamilyConfirmed(false);
-    setFamilySyncedAt(undefined);
-    setIsLoading(false);
-    void refresh();
+    currentSession.current = undefined;
+    setUser(null);
+    setFamily(null);
+    const requestGeneration = generation.current;
+    const current = () => generation.current === requestGeneration;
+    try {
+      await clearing;
+      if (!current()) return;
+      try {
+        await activateOfflineAccount(`${nextFamily.id}:${nextUser.id}`);
+      } catch (error) {
+        reportStorageIssue(storageError(error));
+      }
+      if (!current()) return;
+      await calendarStore.activate(`${nextFamily.id}:${nextUser.id}`);
+      if (!current()) return;
+      taskStore.activate(`${nextFamily.id}:${nextUser.id}`);
+      contactsStore.activate(`${nextFamily.id}:${nextUser.id}`);
+      announceAccount(`${nextFamily.id}:${nextUser.id}`);
+      if (queryClient) restoreShopping(queryClient, { user: nextUser, family: nextFamily });
+      currentSession.current = { user: nextUser, family: nextFamily };
+      setUser(nextUser);
+      setFamily(nextFamily);
+      setFamilyConfirmed(false);
+      setFamilySyncedAt(undefined);
+      setIsLoading(false);
+      await saveOfflineData(currentSession.current);
+      if (current()) void refresh();
+    } catch (error) {
+      reportStorageIssue(`Nie można zmienić konta. ${storageError(error)}`);
+    }
   };
 
   const value: AuthState = {
@@ -300,7 +359,22 @@ export function AuthProvider({ children }: { children?: ReactNode }) {
       {queryClient && family && familyConfirmed && familySyncedAt && (
         <CalendarPrefetch confirmedAt={familySyncedAt} timezone={family.timezone} />
       )}
-      {!user && storageIssue && <Alert color="red">{storageIssue}</Alert>}
+      {(storageIssue || migrationRequired) && (
+        <div className={`offline-storage-notices${user ? ' authenticated' : ''}${isAndroid() ? ' native' : ''}`}>
+          <MigrationNotice
+            onMigrated={async () => {
+              calendarStore.clear(false);
+              currentSession.current = undefined;
+              await refresh();
+            }}
+          />
+          {storageIssue && (!migrationRequired || !storageIssue.includes('wymagają przeniesienia')) && (
+            <div className="offline-storage-error" role="alert">
+              {storageIssue}
+            </div>
+          )}
+        </div>
+      )}
       {children ?? <Outlet />}
     </AuthContext.Provider>
   );

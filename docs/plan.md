@@ -97,6 +97,11 @@ O.1 (#49): kontrakty i próbki przygotowane lokalnie w
 [OFFLINE_CONTRACT.md](OFFLINE_CONTRACT.md), oczekują na CI końcowego commita.
 Produkcja nadal używa dotychczasowych magazynów i synchronizatorów.
 
+O.2 (#50): wspólna pamięć rodziny/sesji i kalendarza przygotowana lokalnie.
+Import wymaga potwierdzenia zamknięcia starszych instancji. Zakupy, zadania
+i kontakty zachowują dotychczasowe magazyny. Odbiór fizycznego APK oraz
+CI końcowej wersji pozostają do potwierdzenia; [checklista](DEVELOPMENT.md#odbiór-pamięci-offline--o2-50).
+
 **Faza 8 — dokumenty: zaimplementowana — potwierdzenie właściciela 25.10.2026.**
 Pełny zakres pozostaje w [archiwum fazy 8](archive/plan-przyszle-fazy.md).
 Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani

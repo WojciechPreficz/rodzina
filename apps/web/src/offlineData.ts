@@ -1,5 +1,16 @@
 import { z } from 'zod';
-import { useSyncExternalStore } from 'react';
+import { registerAdapter } from './offline/registry.js';
+import {
+  activateOfflineAccount,
+  accountToken,
+  clearDatabase,
+  ensureMigrated,
+  isAccountCurrent,
+  readCache,
+  writeCache,
+} from './offline/database.js';
+import { reportStorageIssue, storageError } from './offline/status.js';
+export { useOfflineStorageIssue } from './offline/status.js';
 import type { QueryClient } from '@tanstack/react-query';
 import type { AuthUser, Family } from '@rodzina/shared';
 
@@ -13,7 +24,7 @@ const person = z.object({
   role: z.enum(['admin', 'member', 'child']),
 });
 const family = z.object({ id: z.string().min(1), name: z.string(), timezone: z.string(), joinCode: z.string() });
-const schema = z
+export const offlineDataSchema = z
   .object({
     version: z.literal(1),
     account: z.string(),
@@ -33,52 +44,71 @@ export const accountId = (session: { user: { id: string }; family: { id: string 
 export type OfflineData = { session: OfflineSession; members?: AuthUser[] | undefined; syncedAt?: number | undefined };
 const toUser = (value: z.infer<typeof person>): AuthUser => ({ ...value, email: null, createdAt: 0, updatedAt: 0 });
 const minimalUser = (user: AuthUser) => person.parse(user);
-let issue: string | undefined;
-const listeners = new Set<() => void>();
-function report(message?: string) {
-  if (issue === message) return;
-  issue = message;
-  listeners.forEach((listener) => listener());
-}
-export function useOfflineStorageIssue() {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => issue,
-  );
-}
+registerAdapter({
+  module: 'family',
+  schemaVersion: 1,
+  capabilities: 'read-only',
+  legacyKey: OFFLINE_DATA_KEY,
+  budget: 2 * 1048576,
+  parseCache: (value) => offlineDataSchema.parse(value),
+  trim: (value) => value,
+  describe: (value) => {
+    const data = offlineDataSchema.parse(value);
+    return { syncedAt: data.syncedAt ?? null, coverage: data.members === undefined ? 'partial' : 'complete' };
+  },
+});
+let savedData: OfflineData | undefined;
 export function readOfflineData(): OfflineData | undefined {
+  return savedData;
+}
+export async function hydrateOfflineData(): Promise<OfflineData | undefined> {
+  const token = accountToken();
   try {
-    const raw = localStorage.getItem(OFFLINE_DATA_KEY);
-    if (!raw) return;
-    const data = schema.parse(JSON.parse(raw));
-    return {
+    await ensureMigrated();
+    if (!isAccountCurrent(token)) return;
+    const record = await readCache('family');
+    if (!isAccountCurrent(token)) return;
+    if (!record) return;
+    if (record.schemaVersion !== 1) throw new Error('Nieobsługiwana wersja danych rodziny. Zaktualizuj aplikację.');
+    const data = offlineDataSchema.parse(record.payload);
+    await activateOfflineAccount(data.account);
+    if (!isAccountCurrent(token)) return;
+    savedData = {
       session: { user: toUser(data.session.user), family: data.session.family },
       members: data.members?.map(toUser),
       syncedAt: data.syncedAt,
     };
-  } catch {
-    report('Nie można odczytać danych rodziny na urządzeniu. Połącz się z internetem, aby pobrać je ponownie.');
+    return savedData;
+  } catch (error) {
+    if (isAccountCurrent(token)) reportStorageIssue(`Nie można odczytać danych rodziny. ${storageError(error)}`);
   }
 }
-export function saveOfflineData(session: OfflineSession, members?: AuthUser[], syncedAt?: number) {
+export async function saveOfflineData(session: OfflineSession, members?: AuthUser[], syncedAt?: number) {
+  const token = accountToken();
   try {
-    const value = schema.parse({
+    await ensureMigrated();
+    if (!isAccountCurrent(token)) return false;
+    await activateOfflineAccount(accountId(session));
+    if (!isAccountCurrent(token)) return false;
+    const value = offlineDataSchema.parse({
       version: 1,
       account: accountId(session),
       session: { user: minimalUser(session.user), family: session.family },
       members: members?.map(minimalUser),
       syncedAt,
     });
-    localStorage.setItem(OFFLINE_DATA_KEY, JSON.stringify(value));
-    report();
+    await writeCache('family', value, token);
+    if (!isAccountCurrent(token)) return false;
+    savedData = {
+      session: { user: toUser(value.session.user), family: value.session.family },
+      members: value.members?.map(toUser),
+      syncedAt: value.syncedAt,
+    };
+    reportStorageIssue();
     return true;
-  } catch {
-    report(
-      'Nie można zapisać danych rodziny na urządzeniu. Zwolnij miejsce lub włącz pamięć przeglądarki. Dane mogą być niedostępne po zamknięciu aplikacji.',
-    );
+  } catch (error) {
+    if (isAccountCurrent(token))
+      reportStorageIssue(`Nie można zapisać danych rodziny na urządzeniu. ${storageError(error)}`);
     return false;
   }
 }
@@ -90,11 +120,15 @@ export function restoreOfflineData(client: QueryClient, data: OfflineData) {
       data.syncedAt === undefined ? undefined : { updatedAt: data.syncedAt },
     );
 }
-export function clearOfflineData() {
+export function forgetOfflineData() {
+  savedData = undefined;
+}
+export async function clearOfflineData() {
+  forgetOfflineData();
   try {
-    localStorage.removeItem(OFFLINE_DATA_KEY);
-    report();
-  } catch {
-    report('Nie można usunąć danych rodziny z pamięci urządzenia. Włącz dostęp do pamięci i wyloguj się ponownie.');
+    await clearDatabase();
+  } catch (error) {
+    reportStorageIssue(`Nie można usunąć danych rodziny. ${storageError(error)}`);
+    throw error;
   }
 }

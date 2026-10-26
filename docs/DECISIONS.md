@@ -1,5 +1,54 @@
 # Decyzje
 
+## 26.10.2026 — IndexedDB rodziny/sesji i kalendarza, O.2 (#50)
+
+- Wspólna baza `rodzina-offline` w wersji 1 i adaptery rodziny oraz kalendarza
+  zastępują zapis tych dwóch modułów do localStorage. Na tym etapie każdy
+  adapter zachowuje jeden wersjonowany snapshot, z czasem pobrania,
+  kompletnością, budżetem i znacznikiem `legacy-idb`. Powód: zachowanie
+  atomowego podglądu bez wymiany silników zakupów i zadań. Rejestr odrzuca
+  drugą rejestrację tego samego modułu. Outbox nie wysyła jeszcze operacji.
+- Limity wynoszą 2 MiB dla rodziny i 10 MiB dla kalendarza. Kalendarz usuwa
+  najmniej używane zakresy wraz z niepowiązanymi szczegółami i przypomnieniami,
+  zachowując maksimum 12 miesięcy. Rodzina zachowuje ostatni poprawny zapis
+  przy przekroczeniu limitu. Licznik budżetu i snapshot są zapisywane jedną
+  transakcją; nie ma trwałego sukcesu przed jej zakończeniem.
+- Import WWW i istniejących danych APK wymaga jawnego potwierdzenia procedury
+  zamknięcia starych instancji. `offline-protocol:1` oznacza tryb przejścia;
+  Web Locks koordynuje zgodne instancje, a komunikaty storage `freeze/frozen`
+  wymagają ACK żywych uczestników. Timeout blokuje przejście. Sam protokół
+  nie wykrywa niezgodnych starych kart; obowiązuje konserwacyjna procedura
+  z kontraktu O.1. Nie wdrażamy automatycznej zgody na podstawie ciszy.
+- Import zachowuje źródło, kopię roboczą i skróty SHA-256, zapisuje stan
+  `staged`, następnie cel i `committed`, sprawdza odczyt i `verified`,
+  kończy usuwanie źródła i usuwa kopię roboczą. Wznowienie nie importuje
+  resztek ponownie. Niezmienność źródła, konto i granica czyszczenia są
+  sprawdzane przed zatwierdzeniem; brak miejsca zatrzymuje import.
+- Auth odtwarza dane asynchronicznie. Wylogowanie i utrata sesji najpierw
+  unieważniają kontekst oraz transakcje i ukrywają dane, potem czekają
+  na czyszczenie rejestru. Jawny sygnał konta zastępuje wnioskowanie ze
+  skasowania starego klucza rodziny. `clear-pending` blokuje restart po awarii
+  usuwania; znacznik granicy originu odcina opóźniony import innej karty.
+- Brak zmian API, migracji SQLite, crona, zmiennych środowiskowych i zależności
+  runtime. `fake-indexeddb` służy wyłącznie testom. Dotychczasowe natywne sesje
+  i alarmy pozostają w swoich magazynach. Po aktywacji IDB rollback wymaga
+  wersji czytającej ten format, bez powrotu do starszego APK/localStorage.
+- Odbiór fizycznego APK, w tym aktualizacja i ponowny start w trybie samolotowym,
+  pozostaje **do wykonania**: ADB nie wykazało podłączonego telefonu.
+  [Instrukcja odbioru](DEVELOPMENT.md#odbiór-pamięci-offline--o2-50).
+  Status przed końcowym commitem/CI: **zweryfikowane lokalnie, oczekuje na CI**;
+  nie oznaczamy kroku ani brakujących prób telefonu jako zakończonych.
+- Kontrole lokalne: 165 testów w 16 zestawach zależnych od zmiany
+  (po poprawce komunikatu importu ponowiono zestaw rodziny), typecheck,
+  lint bez błędów i formatowanie zmienionych plików. Build WWW/API i debug APK
+  przeszły. Playwright: 12 prób przy 390 i 1280 px — podglądy, odświeżenie,
+  migracja, restart przez transport Androida i odmowa IDB. Przegląd zrzutów
+  wykrył zasłanianie błędu pamięci przez menu; komunikaty przesunięto poza menu.
+  Po poprawce przeszły ponownie cztery próby migracji/błędu pamięci oraz
+  przegląd zrzutów obu szerokości; kalendarz przy odmowie IDB zachowuje
+  pobrany podgląd wyłącznie w pamięci otwartej aplikacji, z jawnym błędem
+  trwałego zapisu. Końcowe CI nadal musi dotyczyć końcowego commita.
+
 ## 26.10.2026 — kontrakt O.1 wspólnej obsługi offline (#49)
 
 - Specyfikacja [OFFLINE_CONTRACT.md](OFFLINE_CONTRACT.md) inwentaryzuje pięć

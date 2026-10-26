@@ -66,7 +66,7 @@ export function ChildLoginPage() {
         method: 'POST',
         body: JSON.stringify({ joinCode, userId: selected.id, pin }),
       });
-      setSession(response.user, response.family);
+      await setSession(response.user, response.family);
       navigate(sanitizeNextPath(searchParams.get('next')), { replace: true });
     } catch (requestError) {
       setError(errorMessage(requestError, labels.loginError));
@@ -232,7 +232,7 @@ export function InvitationPage() {
         body: JSON.stringify({ ...form, displayName: form.displayName.trim(), email: form.email.trim() }),
       });
       queryClient.clear();
-      setSession(response.user, response.family);
+      await setSession(response.user, response.family);
       navigate('/', { replace: true });
     } catch (requestError) {
       setError(errorMessage(requestError, labels.invitationError));

@@ -1,3 +1,4 @@
+import './offline/testSetup.js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
@@ -36,7 +37,7 @@ function Harness() {
     </>
   );
 }
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   contactsStore.clear();
   vi.clearAllMocks();
@@ -115,7 +116,7 @@ describe('native session lifecycle', () => {
     request.mockRejectedValueOnce(new Error('offline'));
     fireEvent.click(screen.getByText('logout'));
     await screen.findByText('logged out');
-    expect(clearSession).toHaveBeenCalledOnce();
+    await waitFor(() => expect(clearSession).toHaveBeenCalledOnce());
     expect(localScheduler.clear).toHaveBeenCalled();
     expect(client.getQueryData(['events'])).toBeUndefined();
   });
@@ -130,6 +131,7 @@ describe('native session lifecycle', () => {
     );
     const client = mount();
     client.setQueryData(['events'], ['old account']);
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
     fireEvent.click(screen.getByText('switch'));
     await screen.findByText('Zosia');
     finish({ status: 200, body: JSON.stringify(session) });

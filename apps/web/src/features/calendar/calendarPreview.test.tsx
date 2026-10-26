@@ -1,3 +1,4 @@
+import '../../offline/testSetup.js';
 import { MantineProvider } from '@mantine/core';
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -64,10 +65,10 @@ const reminder: Reminder = {
   lastSentAt: null,
 };
 const clients: QueryClient[] = [];
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
   calendarStore.clear();
-  calendarStore.activate(`${state.familyId}:${state.userId}`);
+  await calendarStore.activate(`${state.familyId}:${state.userId}`);
   onlineManager.setOnline(false);
   reportTransportFailure(false);
   vi.stubGlobal(
@@ -83,7 +84,7 @@ beforeEach(() => {
     },
   );
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   clients.forEach((c) => c.clear());
   clients.length = 0;
@@ -108,9 +109,9 @@ function show(details = false) {
     </QueryClientProvider>,
   );
 }
-function save() {
+async function save() {
   const startUtc = localDateTimeToUtc(date, '00:00', 'Europe/Warsaw');
-  calendarStore.saveRange(
+  await calendarStore.saveRange(
     date.slice(0, 7),
     [
       {
@@ -129,10 +130,10 @@ function save() {
     ],
     calendarStore.token(),
   );
-  calendarStore.saveEvent(event, calendarStore.token());
-  calendarStore.savePersonal(event.id, [reminder], calendarStore.token());
+  await calendarStore.saveEvent(event, calendarStore.token());
+  await calendarStore.savePersonal(event.id, [reminder], calendarStore.token());
 }
-it('shows the offline notice and missing coverage without an infinite loader or a false empty state', () => {
+it('shows the offline notice and missing coverage without an infinite loader or a false empty state', async () => {
   show();
   expect(screen.getByRole('status')).toHaveTextContent('kalendarz jest dostępny tylko do odczytu');
   expect(screen.getByText(/Ten zakres nie został zapisany offline/)).toBeVisible();
@@ -140,28 +141,28 @@ it('shows the offline notice and missing coverage without an infinite loader or 
   expect(screen.queryByLabelText('Ładowanie…')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Dodaj wydarzenie' })).toBeDisabled();
 });
-it('distinguishes a downloaded empty month from a partially saved range', () => {
-  calendarStore.saveRange(date.slice(0, 7), [], calendarStore.token());
+it('distinguishes a downloaded empty month from a partially saved range', async () => {
+  await calendarStore.saveRange(date.slice(0, 7), [], calendarStore.token());
   show();
   expect(screen.getByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).toBeVisible();
   cleanup();
-  calendarStore.saveEvent(event, calendarStore.token());
-  calendarStore.forgetEvent(event.id, calendarStore.token());
+  await calendarStore.saveEvent(event, calendarStore.token());
+  await calendarStore.forgetEvent(event.id, calendarStore.token());
   show();
   expect(screen.getByText(/Zapisane dane są częściowe/)).toBeVisible();
   expect(screen.queryByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).not.toBeInTheDocument();
 });
-it('filters saved occurrences locally by member while offline', () => {
-  save();
+it('filters saved occurrences locally by member while offline', async () => {
+  await save();
   show();
   expect(screen.queryByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Ania' }));
   expect(screen.getByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).toBeVisible();
 });
-it('restores complete details and personal reminders before fetching and disables every write', () => {
-  save();
+it('restores complete details and personal reminders before fetching and disables every write', async () => {
+  await save();
   calendarStore.clear(false);
-  calendarStore.activate(`${state.familyId}:${state.userId}`);
+  await calendarStore.activate(`${state.familyId}:${state.userId}`);
   show(true);
   expect(screen.getByRole('heading', { name: event.title })).toBeVisible();
   expect(screen.getByText('Zapisany opis')).toBeVisible();
@@ -169,7 +170,7 @@ it('restores complete details and personal reminders before fetching and disable
     expect(screen.getByRole('button', { name })).toBeDisabled();
   expect(screen.getByRole('status')).toHaveTextContent('Ostatnie udane pobranie');
 });
-it('provides a specific missing detail message and a calendar link without a loader', () => {
+it('provides a specific missing detail message and a calendar link without a loader', async () => {
   show(true);
   expect(screen.getByText(/Brak szczegółów tego wydarzenia zapisanych offline/)).toBeVisible();
   expect(screen.getByRole('link', { name: 'Wróć do kalendarza' })).toHaveAttribute('href', '/kalendarz');

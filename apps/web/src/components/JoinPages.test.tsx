@@ -1,15 +1,19 @@
+import '../offline/testSetup.js';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { AuthProvider } from '../auth.js';
+import { AuthProvider, useMe } from '../auth.js';
 import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './JoinPages.js';
 
 const session = { user: { id: 'c1', displayName: 'Zosia', role: 'child' }, family: { id: 'f1', name: 'Kowalscy' } };
 function response(payload: object, status = 200) {
   return { ok: status < 400, status, text: async () => JSON.stringify(payload) } as Response;
+}
+function AuthReady() {
+  return <span data-testid="auth-state">{useMe().isLoading ? 'loading' : 'ready'}</span>;
 }
 async function renderPage(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -20,6 +24,7 @@ async function renderPage(path: string) {
         <MantineProvider>
           <MemoryRouter initialEntries={[path]}>
             <AuthProvider>
+              <AuthReady />
               <Routes>
                 <Route path="/login-child" element={<ChildLoginPage />} />
                 <Route path="/zaproszenie/:token" element={<InvitationPage />} />
@@ -33,6 +38,7 @@ async function renderPage(path: string) {
       </QueryClientProvider>,
     ),
   );
+  await waitFor(() => expect(screen.getByTestId('auth-state')).toHaveTextContent('ready'));
   return client;
 }
 

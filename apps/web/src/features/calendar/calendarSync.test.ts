@@ -1,3 +1,4 @@
+import '../../offline/testSetup.js';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import type { CalendarEvent } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
@@ -30,14 +31,14 @@ const event: CalendarEvent = {
   reminders: [],
   exceptions: [],
 };
-beforeEach(() => {
+beforeEach(async () => {
   calendarStore.clear();
-  calendarStore.activate(`${familyId}:user`);
+  await calendarStore.activate(`${familyId}:user`);
   vi.mocked(apiFetch).mockResolvedValue({ reminders: [] });
   vi.mocked(getEvent).mockResolvedValue(event);
   vi.mocked(listDistantEvents).mockResolvedValue([]);
 });
-afterEach(() => {
+afterEach(async () => {
   calendarStore.clear();
   vi.restoreAllMocks();
 });
@@ -53,7 +54,7 @@ it('bounds detail concurrency at four and deduplicates IDs and simultaneous rang
   });
   vi.mocked(listOccurrences).mockResolvedValue(
     Array.from({ length: 20 }, (_, i) => ({
-      eventId: `event-${i % 10}`,
+      eventId: `33333333-3333-4333-8333-${String(i % 10).padStart(12, '0')}`,
       occurrenceDate: '2026-10-24',
       title: 'Zajęcia',
       startUtc: 1,
@@ -87,14 +88,14 @@ it('retains the old preview after transport failure and refreshes it on the next
   expect(calendarStore.snapshot().details[event.id]?.event.title).toBe('Nowy tytuł');
 });
 it('removes 404 details and invalidates ranges', async () => {
-  calendarStore.saveEvent(event, calendarStore.token());
+  await calendarStore.saveEvent(event, calendarStore.token());
   vi.mocked(getEvent).mockRejectedValueOnce(new ApiRequestError('Usunięte', 404));
   await expect(fetchSavedEvent(event.id)).rejects.toThrow('Usunięte');
   expect(calendarStore.snapshot().details[event.id]).toBeUndefined();
   expect(calendarStore.snapshot().ranges[0]?.complete).toBe(false);
 });
 it.each([401, 403])('revokes offline access on %i without falling back to old data', async (status) => {
-  calendarStore.saveEvent(event, calendarStore.token());
+  await calendarStore.saveEvent(event, calendarStore.token());
   const lost = () => calendarStore.clear();
   window.addEventListener('rodzina:session-lost', lost);
   try {
@@ -114,7 +115,7 @@ it('ignores late responses from another account', async () => {
   );
   const work = fetchSavedEvent(event.id);
   calendarStore.clear();
-  calendarStore.activate(`${familyId}:other`);
+  await calendarStore.activate(`${familyId}:other`);
   finish(event);
   await expect(work).rejects.toThrow('Session changed');
   expect(calendarStore.snapshot().details).toEqual({});

@@ -1,3 +1,5 @@
+import { readOfflineSnapshot } from './offlineDatabase.js';
+import type { Snapshot } from '../apps/web/src/features/calendar/calendarOffline.js';
 import { expect, test, type Page } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 
@@ -61,14 +63,11 @@ for (const native of [false, true]) {
       // The account bootstrap downloads calendar details without visiting either calendar screen.
       await expect
         .poll(() =>
-          page.evaluate(() => {
-            const saved = JSON.parse(localStorage.getItem('rodzina:calendar:v1') ?? '{}');
-            return [
-              saved.ranges?.filter((r: { complete: boolean }) => r.complete).length,
-              Object.keys(saved.details ?? {}).length,
-              Object.keys(saved.personal ?? {}).length,
-            ];
-          }),
+          readOfflineSnapshot<Snapshot>(page, 'calendar').then((saved) => [
+            saved?.ranges.filter((r) => r.complete).length,
+            Object.keys(saved?.details ?? {}).length,
+            Object.keys(saved?.personal ?? {}).length,
+          ]),
         )
         .toEqual([3, 3, 3]);
       await navigate(page, 'Kalendarz');
@@ -145,9 +144,7 @@ for (const native of [false, true]) {
       await expect(page.getByText('Zmienione na drugim urządzeniu', { exact: true }).first()).toBeVisible();
       await expect(page.getByText('Do usunięcia', { exact: true })).toHaveCount(0);
       await expect
-        .poll(() =>
-          page.evaluate((id) => JSON.parse(localStorage.getItem('rodzina:calendar:v1')!).details[id], ids[1]!),
-        )
+        .poll(() => readOfflineSnapshot<Snapshot>(page, 'calendar').then((saved) => saved?.details[ids[1]!]))
         .toBeUndefined();
       await expect
         .poll(() =>

@@ -1,3 +1,4 @@
+import './offline/testSetup.js';
 import { onlineManager, QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthUser, TaskList } from '@rodzina/shared';
@@ -80,8 +81,8 @@ async function seedAccount(client: QueryClient) {
         ),
     })),
   );
-  calendarStore.activate(accountId(session));
-  calendarStore.saveRange('2026-10', [], calendarStore.token());
+  await calendarStore.activate(accountId(session));
+  await calendarStore.saveRange('2026-10', [], calendarStore.token());
   taskStore.activate(accountId(session));
   await taskStore.synchronize();
   taskStore.enqueue(list.id, crypto.randomUUID(), { type: 'create', data: { title: 'Farba' } });
@@ -97,7 +98,7 @@ async function seedAccount(client: QueryClient) {
       name: 'Zakupy',
     },
   );
-  saveOfflineData(session, [user], Date.now());
+  await saveOfflineData(session, [user], Date.now());
   contactsStore.activate(accountId(session));
   await contactsStore.fetch(accountId(session), async () => ({
     ok: true,
@@ -174,7 +175,7 @@ describe('account storage cleanup', () => {
     await seedAccount(queryClient);
     const saved = { ...localStorage };
 
-    clearAccountData('storage-changed', { queryClient });
+    await clearAccountData('storage-changed', { queryClient });
     queryClient.setQueryData(['private'], 'late response');
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -213,13 +214,13 @@ describe('account storage cleanup', () => {
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
   });
 
-  it('includes newly registered stores and passes the storage ownership option', () => {
+  it('includes newly registered stores and passes the storage ownership option', async () => {
     const clear = vi.fn();
     const unregister = registerAccountStore({ name: 'future-module', clear });
     try {
-      clearAccountData('storage-changed');
+      await clearAccountData('storage-changed');
       expect(clear).toHaveBeenLastCalledWith({ removeStored: false, queryClient: undefined });
-      clearAccountData('logout');
+      await clearAccountData('logout');
       expect(clear).toHaveBeenLastCalledWith({ removeStored: true, queryClient: undefined });
       expect(() => registerAccountStore({ name: 'future-module', clear })).toThrow('already registered');
     } finally {

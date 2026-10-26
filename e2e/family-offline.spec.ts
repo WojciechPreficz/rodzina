@@ -1,3 +1,5 @@
+import { readOfflineSnapshot } from './offlineDatabase.js';
+import type { OfflineData } from '../apps/web/src/offlineData.js';
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 
@@ -44,9 +46,7 @@ for (const native of [false, true]) {
       // Family is prefetched without visiting its page.
       await page.goto('/zakupy');
       await expect
-        .poll(() =>
-          page.evaluate(() => JSON.parse(localStorage.getItem('rodzina:offline-data:v1') ?? '{}').members?.length),
-        )
+        .poll(() => readOfflineSnapshot<OfflineData>(page, 'family').then((saved) => saved?.members?.length))
         .toBe(2);
       await page.goto('/wiecej/rodzina');
       await expect(page.getByRole('button', { name: 'Dodaj dziecko' })).toBeEnabled();
@@ -98,7 +98,10 @@ for (const native of [false, true]) {
       await expect(page.getByText(joinCode, { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Dodaj dziecko' })).toBeEnabled();
       await page.screenshot({ path: testInfo.outputPath('family-reconnected.png'), fullPage: true });
-      const stored = await page.evaluate(() => localStorage.getItem('rodzina:offline-data:v1'));
+      await expect
+        .poll(() => readOfflineSnapshot<OfflineData>(page, 'family').then((saved) => saved?.session.family.joinCode))
+        .toBe(joinCode);
+      const stored = JSON.stringify(await readOfflineSnapshot<OfflineData>(page, 'family'));
       expect(stored).toContain(joinCode);
       expect(stored).not.toContain(email);
     } finally {

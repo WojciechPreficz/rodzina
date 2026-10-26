@@ -1,6 +1,16 @@
 import { useSyncExternalStore } from 'react';
 import { Temporal } from 'temporal-polyfill';
 import { z } from 'zod';
+import { registerAdapter } from '../../offline/registry.js';
+import {
+  activateOfflineAccount,
+  accountToken,
+  isAccountCurrent,
+  readCache,
+  writeCache,
+  ensureMigrated,
+} from '../../offline/database.js';
+import { storageError } from '../../offline/status.js';
 import {
   eventSchema,
   calendarDateSchema,
@@ -34,7 +44,7 @@ const rangeSchema = z
       return false;
     }
   });
-const snapshotSchema = z.object({
+export const calendarSnapshotSchema = z.object({
   version: z.literal(1),
   account: z.string(),
   ranges: z.array(rangeSchema).max(12),
@@ -42,7 +52,7 @@ const snapshotSchema = z.object({
   personal: z.record(z.string(), z.array(reminderSchema)),
   distant: z.object({ ids: z.array(z.string()), syncedAt: z.number() }).optional(),
 });
-type Snapshot = z.infer<typeof snapshotSchema>;
+export type Snapshot = z.infer<typeof calendarSnapshotSchema>;
 export type SavedRange = z.infer<typeof rangeSchema>;
 const empty = (account: string): Snapshot => ({ version: 1, account, ranges: [], details: {}, personal: {} });
 
@@ -80,53 +90,73 @@ export class CalendarOfflineStore {
   private emit() {
     this.listeners.forEach((listener) => listener());
   }
+  private ready: Promise<void> = Promise.resolve();
+  private writes: Promise<unknown> = Promise.resolve();
   activate(account: string) {
-    if (this.value.account === account) return;
+    if (this.value.account === account) return this.ready;
     this.epoch++;
+    const token = this.epoch;
+    const sessionToken = accountToken();
     this.value = empty(account);
     this.issue = undefined;
-    try {
-      const raw = localStorage.getItem(CALENDAR_STORAGE_KEY);
-      if (raw) {
-        const data = snapshotSchema.parse(JSON.parse(raw));
-        const [familyId, userId] = account.split(':');
-        if (
-          data.account === account &&
-          Object.values(data.details).every(({ event }) => event.familyId === familyId) &&
-          Object.values(data.personal)
-            .flat()
-            .every((r) => r.familyId === familyId && r.userId === userId)
-        ) {
-          this.value = data;
-        } else localStorage.removeItem(CALENDAR_STORAGE_KEY);
+    this.ready = (async () => {
+      try {
+        await ensureMigrated();
+        if (!this.current(token) || !isAccountCurrent(sessionToken)) return;
+        await activateOfflineAccount(account);
+        if (!this.current(token) || !isAccountCurrent(sessionToken)) return;
+        const saved = await readCache('calendar', account);
+        if (!this.current(token) || !isAccountCurrent(sessionToken)) return;
+        if (saved) {
+          if (saved.schemaVersion !== 1) throw new Error('Nieobsługiwana wersja kalendarza. Zaktualizuj aplikację.');
+          this.value = parseCalendarSnapshot(saved.payload, account);
+        }
+      } catch (error) {
+        if (this.current(token)) this.issue = `Nie można odczytać kalendarza. ${storageError(error)}`;
       }
-    } catch {
-      this.issue =
-        'Nie można odczytać kalendarza z pamięci urządzenia. Połącz się z internetem, aby pobrać go ponownie.';
-    }
-    this.emit();
+      if (this.current(token)) this.emit();
+    })();
+    return this.ready;
   }
   clear(removeStored = true) {
     this.epoch++;
     this.value = empty('');
     this.issue = undefined;
-    try {
-      if (removeStored) localStorage.removeItem(CALENDAR_STORAGE_KEY);
-    } catch {
-      this.issue = 'Nie można usunąć kalendarza z pamięci urządzenia. Włącz dostęp do pamięci i wyloguj się ponownie.';
+    // The account registry owns durable deletion of the shared database.
+    if (removeStored) {
+      try {
+        localStorage.removeItem(CALENDAR_STORAGE_KEY);
+      } catch {
+        this.issue = 'Nie można usunąć starego kalendarza z pamięci urządzenia.';
+      }
     }
     this.emit();
   }
-  private commit(value: Snapshot) {
-    this.value = value;
-    try {
-      localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify(value));
-      this.issue = undefined;
-    } catch {
-      this.issue =
-        'Nie można zapisać kalendarza na urządzeniu. Zwolnij miejsce lub włącz pamięć przeglądarki. Dane mogą być niedostępne po zamknięciu aplikacji.';
-    }
-    this.emit();
+  private commit(update: (value: Snapshot) => Snapshot) {
+    const token = this.epoch;
+    const sessionToken = accountToken();
+    const ready = this.ready;
+    const work = this.writes.then(async () => {
+      await ready;
+      if (!this.current(token) || !isAccountCurrent(sessionToken)) return;
+      let preview: Snapshot | undefined;
+      try {
+        preview = parseCalendarSnapshot(update(this.value), this.value.account);
+        const saved = await writeCache('calendar', preview, sessionToken);
+        if (!this.current(token) || !isAccountCurrent(sessionToken)) return;
+        this.value = parseCalendarSnapshot(saved, this.value.account);
+        this.issue = undefined;
+      } catch (error) {
+        if (this.current(token) && isAccountCurrent(sessionToken)) {
+          // Downloaded data may remain visible in memory; it is never a second durable store.
+          if (preview && !(error instanceof DOMException && error.name === 'AbortError')) this.value = preview;
+          this.issue = `Nie można zapisać kalendarza na urządzeniu. ${storageError(error)} Nowy podgląd może być niedostępny po zamknięciu aplikacji.`;
+        }
+      }
+      if (this.current(token)) this.emit();
+    });
+    this.writes = work;
+    return work;
   }
   private prune(value: Snapshot) {
     value.ranges = [...value.ranges].sort((a, b) => b.usedAt - a.usedAt).slice(0, 12);
@@ -151,89 +181,147 @@ export class CalendarOfflineStore {
       syncedAt: now,
       usedAt: now,
     };
-    this.commit(this.prune({ ...this.value, ranges: [...this.value.ranges.filter((r) => r.month !== month), range] }));
+    return this.commit((value) =>
+      this.prune({ ...value, ranges: [...value.ranges.filter((r) => r.month !== month), range] }),
+    );
   }
   touch(range: CalendarRange) {
     const months = new Set(monthsForRange(range));
     if (!this.value.ranges.some((r) => months.has(r.month))) return;
-    this.commit({
-      ...this.value,
-      ranges: this.value.ranges.map((r) => (months.has(r.month) ? { ...r, usedAt: Date.now() } : r)),
-    });
+    return this.commit((value) => ({
+      ...value,
+      ranges: value.ranges.map((r) => (months.has(r.month) ? { ...r, usedAt: Date.now() } : r)),
+    }));
   }
   markStale() {
-    this.commit({ ...this.value, ranges: this.value.ranges.map((r) => ({ ...r, stale: true })) });
+    return this.commit((value) => ({ ...value, ranges: value.ranges.map((r) => ({ ...r, stale: true })) }));
   }
   saveEvent(event: CalendarEvent, token: number) {
     if (!this.current(token) || event.familyId !== this.value.account.split(':')[0]) return;
-    const month = event.startDate.slice(0, 7);
-    const now = Date.now();
-    const linked =
-      this.value.ranges.some((r) => r.occurrences.some((o) => o.eventId === event.id)) ||
-      this.value.distant?.ids.includes(event.id);
-    const ranges = linked
-      ? this.value.ranges
-      : this.value.ranges.some((r) => r.month === month)
-        ? this.value.ranges.map((r) =>
-            r.month === month ? { ...r, detailIds: [...new Set([...r.detailIds, event.id])], usedAt: now } : r,
-          )
-        : [
-            ...this.value.ranges,
-            {
-              month,
-              ...monthWindow(month),
-              occurrences: [],
-              detailIds: [event.id],
-              complete: false,
-              stale: true,
-              syncedAt: 0,
-              usedAt: now,
-            },
-          ];
-    this.commit(
-      this.prune({ ...this.value, ranges, details: { ...this.value.details, [event.id]: { event, syncedAt: now } } }),
-    );
+    return this.commit((value) => {
+      const month = event.startDate.slice(0, 7);
+      const now = Date.now();
+      const linked =
+        value.ranges.some((r) => r.occurrences.some((o) => o.eventId === event.id)) ||
+        value.distant?.ids.includes(event.id);
+      const ranges = linked
+        ? value.ranges
+        : value.ranges.some((r) => r.month === month)
+          ? value.ranges.map((r) =>
+              r.month === month ? { ...r, detailIds: [...new Set([...r.detailIds, event.id])], usedAt: now } : r,
+            )
+          : [
+              ...value.ranges,
+              {
+                month,
+                ...monthWindow(month),
+                occurrences: [],
+                detailIds: [event.id],
+                complete: false,
+                stale: true,
+                syncedAt: 0,
+                usedAt: now,
+              },
+            ];
+      return this.prune({ ...value, ranges, details: { ...value.details, [event.id]: { event, syncedAt: now } } });
+    });
   }
+
   savePersonal(id: string, reminders: Reminder[], token: number) {
     if (!this.current(token)) return;
-    this.commit({ ...this.value, personal: { ...this.value.personal, [id]: reminders } });
+    return this.commit((value) => ({ ...value, personal: { ...value.personal, [id]: reminders } }));
   }
   saveDistant(events: CalendarEvent[], token: number) {
     if (!this.current(token)) return;
-    const now = Date.now();
-    const details = { ...this.value.details };
-    events.forEach((event) => {
-      details[event.id] = { event, syncedAt: now };
+    return this.commit((value) => {
+      const now = Date.now();
+      const details = { ...value.details };
+      events.forEach((event) => {
+        details[event.id] = { event, syncedAt: now };
+      });
+      return this.prune({ ...value, details, distant: { ids: events.map((e) => e.id), syncedAt: now } });
     });
-    this.commit(this.prune({ ...this.value, details, distant: { ids: events.map((e) => e.id), syncedAt: now } }));
   }
+
   forgetEvent(id: string, token: number) {
     if (!this.current(token)) return;
-    const details = { ...this.value.details };
-    const personal = { ...this.value.personal };
-    delete details[id];
-    delete personal[id];
-    this.commit({
-      ...this.value,
-      details,
-      personal,
-      ...(this.value.distant
-        ? { distant: { ...this.value.distant, ids: this.value.distant.ids.filter((v) => v !== id) } }
-        : {}),
-      ranges: this.value.ranges.map((r) =>
-        r.occurrences.some((o) => o.eventId === id) || r.detailIds.includes(id)
-          ? {
-              ...r,
-              complete: false,
-              stale: true,
-              detailIds: r.detailIds.filter((v) => v !== id),
-              occurrences: r.occurrences.filter((o) => o.eventId !== id),
-            }
-          : r,
-      ),
+    return this.commit((value) => {
+      const details = { ...value.details };
+      const personal = { ...value.personal };
+      delete details[id];
+      delete personal[id];
+      return {
+        ...value,
+        details,
+        personal,
+        ...(value.distant ? { distant: { ...value.distant, ids: value.distant.ids.filter((v) => v !== id) } } : {}),
+        ranges: value.ranges.map((r) =>
+          r.occurrences.some((o) => o.eventId === id) || r.detailIds.includes(id)
+            ? {
+                ...r,
+                complete: false,
+                stale: true,
+                detailIds: r.detailIds.filter((v) => v !== id),
+                occurrences: r.occurrences.filter((o) => o.eventId !== id),
+              }
+            : r,
+        ),
+      };
     });
   }
 }
+export function parseCalendarSnapshot(input: unknown, account?: string): Snapshot {
+  const data = calendarSnapshotSchema.parse(input);
+  const [familyId, userId] = data.account.split(':');
+  if (
+    (account && data.account !== account) ||
+    !familyId ||
+    !userId ||
+    Object.entries(data.details).some(([id, { event }]) => id !== event.id || event.familyId !== familyId) ||
+    Object.entries(data.personal).some(([id, reminders]) =>
+      reminders.some((r) => r.familyId !== familyId || r.userId !== userId || r.eventId !== id),
+    )
+  )
+    throw new Error('Dane kalendarza należą do innego konta.');
+  return data;
+}
+registerAdapter({
+  module: 'calendar',
+  schemaVersion: 1,
+  capabilities: 'read-only',
+  legacyKey: CALENDAR_STORAGE_KEY,
+  budget: 10 * 1048576,
+  parseCache: parseCalendarSnapshot,
+  describe: (input) => {
+    const data = parseCalendarSnapshot(input);
+    const timestamps = [
+      ...data.ranges.map((range) => range.syncedAt),
+      ...(data.distant ? [data.distant.syncedAt] : []),
+    ].filter((time) => time > 0);
+    return {
+      syncedAt: timestamps.length ? Math.min(...timestamps) : null,
+      coverage: !data.ranges.length ? 'missing' : data.ranges.every((range) => range.complete) ? 'complete' : 'partial',
+    };
+  },
+  trim: (input, fits) => {
+    const value = parseCalendarSnapshot(input);
+    value.ranges.sort((a, b) => b.usedAt - a.usedAt);
+    const prune = () => {
+      const ids = new Set([
+        ...value.ranges.flatMap((r) => [...r.detailIds, ...r.occurrences.map((o) => o.eventId)]),
+        ...(value.distant?.ids ?? []),
+      ]);
+      value.details = Object.fromEntries(Object.entries(value.details).filter(([id]) => ids.has(id)));
+      value.personal = Object.fromEntries(Object.entries(value.personal).filter(([id]) => id in value.details));
+    };
+    prune();
+    while (!fits(value) && value.ranges.length) {
+      value.ranges.pop();
+      prune();
+    }
+    return value;
+  },
+});
 export const calendarStore = new CalendarOfflineStore();
 export const useCalendarSnapshot = () => useSyncExternalStore(calendarStore.subscribe, calendarStore.snapshot);
 

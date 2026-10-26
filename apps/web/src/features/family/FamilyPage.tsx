@@ -11,7 +11,6 @@ import { useCreateInvitation, useMembersQuery, useRotateJoinCode } from './famil
 import { canEditProfile, errorMessage, isFamilyAdmin } from './familyRules.js';
 import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';
 import { useOffline } from '../../connectivity.js';
-import { useOfflineStorageIssue } from '../../offlineData.js';
 
 function InviteCard() {
   const [role, setRole] = useState<'admin' | 'member'>('member');
@@ -117,7 +116,6 @@ export function FamilyPage() {
   const { user, family, familySyncedAt, familySyncError } = useMe();
   const offline = useOffline();
   const readOnly = useFamilyReadOnly();
-  const storageIssue = useOfflineStorageIssue();
   const membersQuery = useMembersQuery();
   const [editedMember, setEditedMember] = useState<Member | null>(null);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
@@ -140,7 +138,6 @@ export function FamilyPage() {
           )}
         </Alert>
       )}
-      {storageIssue && <Alert color="red">{storageIssue}</Alert>}
       {!offline && (familySyncError || membersQuery.error) ? (
         <Alert color="red">{familySyncError || errorMessage(membersQuery.error, labels.membersLoadError)}</Alert>
       ) : null}
