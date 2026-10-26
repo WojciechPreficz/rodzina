@@ -45,6 +45,109 @@ test('shopping uses the Android native API transport', async ({ page, baseURL },
   await page.screenshot({ path: testInfo.outputPath('shopping-native.png'), fullPage: true });
 });
 
+test('outbox replays a lost server response with the same ID after restart', async ({ page, baseURL }, info) => {
+  const headers = { Origin: baseURL! };
+  expect(
+    (
+      await page.request.post('/api/auth/register-family', {
+        headers,
+        data: {
+          familyName: 'Outbox',
+          displayName: 'Ania',
+          email: `outbox-${info.project.name}@example.com`,
+          password: 'password123',
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  const lists = await page.request.get('/api/shopping/lists');
+  const listId = (await lists.json()).lists[0].id;
+  await page.goto('/zakupy');
+  await openInitialList(page);
+  const attempts: string[] = [];
+  await page.route('**/api/shopping/lists/*/items?operationId=*', async (route) => {
+    attempts.push(new URL(route.request().url()).searchParams.get('operationId')!);
+    if (attempts.length === 1) {
+      expect((await route.fetch()).ok()).toBe(true);
+      // Model a proxy losing the successful response after the server commits.
+      await route.fulfill({
+        status: 503,
+        headers: { 'Retry-After': '3' },
+        json: { error: { code: 'PROXY_FAILURE', message: 'Spróbuj ponownie.' } },
+      });
+    } else await route.continue();
+  });
+  await page.getByRole('textbox', { name: 'Dodaj produkt' }).fill('Mleko 2l');
+  await page.getByRole('button', { name: 'Dodaj', exact: true }).click();
+  await expect
+    .poll(() =>
+      readOfflineSnapshot<{ operations: { status: string }[] }>(page, 'shopping').then(
+        (data) => data?.operations[0]?.status,
+      ),
+    )
+    .toBe('retry-wait');
+  // pagehide cannot guarantee releasing a transaction after a killed renderer;
+  // allow the persisted 15-second lease to expire before a successor sends.
+  await page.reload();
+  await expect.poll(() => attempts.length, { timeout: 20000 }).toBeGreaterThan(1);
+  await expect
+    .poll(
+      () => readOfflineSnapshot<{ operations: unknown[] }>(page, 'shopping').then((data) => data?.operations.length),
+      { timeout: 20000 },
+    )
+    .toBe(0);
+  expect(new Set(attempts).size).toBe(1);
+  const items = await page.request.get(`/api/shopping/lists/${listId}/items`);
+  expect((await items.json()).items).toHaveLength(1);
+  await expect(page.getByRole('article', { name: 'Mleko', exact: true })).toHaveCount(1);
+});
+
+test('outbox conflict survives reload and requires confirmation before discarding', async ({ page, baseURL }, info) => {
+  const headers = { Origin: baseURL! };
+  expect(
+    (
+      await page.request.post('/api/auth/register-family', {
+        headers,
+        data: {
+          familyName: 'Konflikt',
+          displayName: 'Ania',
+          email: `conflict-${info.project.name}@example.com`,
+          password: 'password123',
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  const listId = (await (await page.request.get('/api/shopping/lists')).json()).lists[0].id;
+  expect(
+    (await page.request.post(`/api/shopping/lists/${listId}/items`, { headers, data: { name: 'Mleko' } })).ok(),
+  ).toBe(true);
+  await page.goto('/zakupy');
+  await openInitialList(page);
+  await page.route('**/api/shopping/items/*?operationId=*', (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: { code: 'OPERATION_CONFLICT', message: 'Zmiana wymaga sprawdzenia.' } },
+    }),
+  );
+  await page.getByRole('checkbox', { name: 'Kupione: Mleko', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Zmiana wymaga sprawdzenia.');
+  await page.reload();
+  await expect(page.getByRole('alert')).toContainText('Zmiana wymaga sprawdzenia.');
+  await page.getByRole('button', { name: 'Odrzuć zmiany wymagające sprawdzenia' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('późniejsze zmiany tych samych list');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('shopping-review.png'), fullPage: true, animations: 'disabled' });
+  await dialog.getByRole('button', { name: 'Odrzuć zmiany', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      readOfflineSnapshot<{ operations: unknown[] }>(page, 'shopping').then((data) => data?.operations.length),
+    )
+    .toBe(0);
+});
+
 test('shopping CRUD, permissions, layout and polling synchronize two household members', async ({
   page,
   browser,

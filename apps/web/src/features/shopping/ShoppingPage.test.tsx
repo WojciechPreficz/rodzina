@@ -8,6 +8,7 @@ import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { ShoppingPage } from './ShoppingPage.js';
 import { MemoryRouter } from 'react-router';
 import { restoreShopping, stopShoppingPersistence, type ShoppingSession } from './shoppingOffline.js';
+import { readShoppingData } from './shoppingStorage.js';
 import { shoppingKey } from './shoppingOptimistic.js';
 
 const session = vi.hoisted(() => ({
@@ -196,13 +197,20 @@ describe('shopping UI', () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
     });
     expect(screen.getByRole('checkbox', { name: 'Kupione: Mleko' })).toBeChecked();
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
     finish({
       ok: false,
       status: 400,
       text: async () => JSON.stringify({ error: { message: 'Błąd zapisu' } }),
     } as Response);
     expect(await screen.findByRole('alert')).toHaveTextContent('Błąd zapisu');
-    expect(screen.getByRole('checkbox', { name: 'Kupione: Mleko' })).not.toBeChecked();
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Kupione: Mleko' })).not.toBeChecked());
+    expect((await readShoppingData('family:adult'))?.operations[0]?.review).toBe('rejected');
+    fireEvent.click(screen.getByRole('button', { name: 'Odrzuć zmiany wymagające sprawdzenia' }));
+    const confirmation = await screen.findByRole('dialog');
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Odrzuć zmiany' }));
+    await waitFor(async () => expect((await readShoppingData('family:adult'))?.operations).toHaveLength(0));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 
   it('requires confirmation before clearing checked items', async () => {
@@ -260,7 +268,8 @@ describe('shopping UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj' }));
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Kupione: Chleb' }));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Kupione: Chleb' })).toBeChecked());
-    expect(client.isMutating()).toBe(3);
+    await waitFor(async () => expect((await readShoppingData('family:adult'))?.operations).toHaveLength(3));
+    expect(client.isMutating()).toBe(0);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method && init.method !== 'GET')).toHaveLength(0);
   });
 

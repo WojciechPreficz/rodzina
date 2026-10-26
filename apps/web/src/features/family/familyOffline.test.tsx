@@ -180,10 +180,13 @@ describe('family offline lifecycle through the Android transport', () => {
     const savedOperation = (await readShoppingData())?.operations;
     const view = mount();
     await screen.findByText(/Brak danych rodziny zapisanych/);
-    expect(view.client.getMutationCache().getAll()).toHaveLength(1);
+    expect(view.client.getMutationCache().getAll()).toHaveLength(0);
+    expect((await readShoppingData())?.operations).toHaveLength(1);
     // Keep the write in flight while refreshing the independent read snapshot.
-    const queued = view.client.getMutationCache().getAll()[0]!;
-    queued.setOptions({ ...queued.options, mutationFn: () => new Promise(() => {}) });
+    const previousRequest = request.getMockImplementation()!;
+    request.mockImplementation((options: { path: string }) =>
+      options.path.startsWith('/api/shopping') ? new Promise(() => {}) : previousRequest(options),
+    );
     act(() => onlineManager.setOnline(true));
     fireEvent.click(screen.getByText('refresh'));
     await synced();

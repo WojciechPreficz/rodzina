@@ -54,10 +54,11 @@ export function ShoppingPage() {
     if (location.state?.shoppingCatalog) void navigate(-1);
     else setParams({}, { replace: true });
   };
-  const { lists, items, queueChange, active, online, pendingCount, syncError, dismissSyncError } =
+  const { lists, items, queueChange, active, online, pendingCount, syncError, reviewCount, discardReview } =
     useShopping(selected);
   const members = useMembersQuery();
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const adult = user?.role !== 'child';
   useEffect(() => {
@@ -194,10 +195,36 @@ export function ShoppingPage() {
       )}
       {online && pendingCount > 0 && <Text role="status">{t.syncing(pendingCount)}</Text>}
       {syncError && syncError !== error && (
-        <Alert color="red" role="alert" withCloseButton onClose={dismissSyncError}>
+        <Alert color="red" role="alert">
           {syncError}
+          {reviewCount > 0 && (
+            <Button variant="subtle" onClick={() => setDiscardOpen(true)}>
+              Odrzuć zmiany wymagające sprawdzenia
+            </Button>
+          )}
         </Alert>
       )}
+      <Modal opened={discardOpen} onClose={() => setDiscardOpen(false)} title="Odrzucić zapisane zmiany?">
+        <Text>
+          Usuniemy zmiany wymagające sprawdzenia oraz późniejsze zmiany tych samych list. Dane serwera pozostaną bez
+          zmian.
+        </Text>
+        <Group mt="md">
+          <Button variant="default" onClick={() => setDiscardOpen(false)}>
+            Anuluj
+          </Button>
+          <Button
+            color="red"
+            onClick={() => {
+              void discardReview()
+                .then(() => setDiscardOpen(false))
+                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : t.failed));
+            }}
+          >
+            Odrzuć zmiany
+          </Button>
+        </Group>
+      </Modal>
       {error && (
         <Alert color="red" role="alert" withCloseButton onClose={() => setError(null)}>
           {error}

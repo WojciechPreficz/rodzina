@@ -7,17 +7,26 @@ export function readOfflineSnapshot<T>(
   return page.evaluate(async (module) => {
     if (!(await indexedDB.databases()).some((database) => database.name === 'rodzina-offline')) return;
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('rodzina-offline', 1);
+      const request = indexedDB.open('rodzina-offline');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
     try {
       if (!db.objectStoreNames.contains('cache')) return;
       return await new Promise((resolve, reject) => {
-        const transaction = db.transaction('cache');
+        const transaction = db.transaction(['cache', 'outbox']);
         const request = transaction.objectStore('cache').getAll();
-        request.onsuccess = () =>
-          resolve(request.result.find((entry: { module: string }) => entry.module === module)?.payload);
+        request.onsuccess = () => {
+          const record = request.result.find((entry: { module: string }) => entry.module === module);
+          if (module !== 'shopping' || !record) return resolve(record?.payload);
+          const pending = transaction.objectStore('outbox').index('accountId').getAll(record.accountId);
+          pending.onsuccess = () =>
+            resolve({
+              ...record.payload,
+              operations: pending.result.filter((op: { module: string }) => op.module === 'shopping'),
+            });
+          pending.onerror = () => reject(pending.error);
+        };
         request.onerror = () => reject(request.error);
       });
     } finally {
@@ -30,7 +39,7 @@ export async function writeOfflineSnapshot<T>(page: Page, module: 'tasks' | 'con
   await page.evaluate(
     async ({ module, payload }) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('rodzina-offline', 1);
+        const request = indexedDB.open('rodzina-offline');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });

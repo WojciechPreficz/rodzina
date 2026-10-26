@@ -1,10 +1,11 @@
-import { onlineManager, useMutationState, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { useMe } from '../../auth.js';
+import { useOfflineSyncStatus } from '../../offline/status.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { listShoppingItems, listShoppingLists, type ShoppingChange } from './shoppingApi.js';
-import { enqueueShopping, type QueuedShoppingChange } from './shoppingOffline.js';
+import { enqueueShopping, discardShoppingReview } from './shoppingOffline.js';
 import type { StoredShoppingOperation } from './shoppingStorage.js';
 import { applyShoppingChange, shoppingKey } from './shoppingOptimistic.js';
 
@@ -14,23 +15,17 @@ export function useShopping(selected: string | null) {
   const account = { familyId: family!.id, userId: user!.id };
   const key = shoppingKey(account);
   const online = useSyncExternalStore(onlineManager.subscribe, () => onlineManager.isOnline());
-  const changes = useMutationState({
-    filters: { mutationKey: key, status: 'pending' },
-    select: (mutation) => mutation.state.variables as QueuedShoppingChange,
-  });
-  const failures = useMutationState({
-    filters: { mutationKey: key, status: 'error' },
-    select: (mutation) => mutation.state.error,
-  });
+  const status = useOfflineSyncStatus(`${account.familyId}:${account.userId}`, 'shopping');
   const operationsQuery = useQuery<StoredShoppingOperation[]>({
     queryKey: [...key, 'operations'],
     queryFn: () => client.getQueryData<StoredShoppingOperation[]>([...key, 'operations']) ?? [],
     enabled: false,
   });
+  const changes = operationsQuery.data ?? [];
   const refresh = {
-    refetchInterval: () => (client.isMutating({ mutationKey: key }) ? (false as const) : SYNC_INTERVAL_MS),
-    refetchOnWindowFocus: () => (client.isMutating({ mutationKey: key }) === 0 ? ('always' as const) : false),
-    refetchOnReconnect: () => (client.isMutating({ mutationKey: key }) === 0 ? ('always' as const) : false),
+    refetchInterval: () => (status.syncing ? (false as const) : SYNC_INTERVAL_MS),
+    refetchOnWindowFocus: () => (status.syncing ? false : ('always' as const)),
+    refetchOnReconnect: () => (status.syncing ? false : ('always' as const)),
   };
   const lists = useQuery({
     queryKey: [...key, 'lists'],
@@ -50,8 +45,7 @@ export function useShopping(selected: string | null) {
       return value;
     },
   } as Pick<QueryClient, 'setQueryData'>;
-  const review = operationsQuery.data?.filter((op) => op.review) ?? [];
-  for (const entry of operationsQuery.data ?? changes)
+  for (const entry of changes.filter((op) => !op.review))
     applyShoppingChange(optimistic, account, entry.change, entry.submittedAt);
   const visibleLists = projected.get(JSON.stringify([...key, 'lists'])) as ShoppingList[] | undefined;
   const active = visibleLists?.find((list) => list.id === selected) ?? visibleLists?.[0];
@@ -75,14 +69,11 @@ export function useShopping(selected: string | null) {
     },
     active,
     online,
-    pendingCount: changes.length,
-    syncError: review.length
-      ? 'Zapisane zmiany zakupów wymagają sprawdzenia. Nie będą wysyłane automatycznie; zachowano je na urządzeniu.'
-      : failures.at(-1)?.message,
-    dismissSyncError: () =>
-      client
-        .getMutationCache()
-        .findAll({ mutationKey: key, status: 'error' })
-        .forEach((mutation) => client.getMutationCache().remove(mutation)),
+    pendingCount: status.pendingCount,
+    syncError: status.reviewCount
+      ? (status.lastError ?? 'Zapisane zmiany zakupów wymagają sprawdzenia. Zachowano je na urządzeniu.')
+      : status.storageIssue,
+    reviewCount: status.reviewCount,
+    discardReview: () => discardShoppingReview(client, account),
   };
 }

@@ -4,9 +4,10 @@ import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
 import { enqueueShopping, restoreShopping, stopShoppingPersistence, type ShoppingSession } from './shoppingOffline.js';
-import { readShoppingData, updateShoppingData } from './shoppingStorage.js';
+import { readShoppingData, updateShoppingData, notifyShopping } from './shoppingStorage.js';
+import { readOperations } from '../../offline/outbox.js';
 import { shoppingKey } from './shoppingOptimistic.js';
-import { clearDatabase, closeDatabase } from '../../offline/database.js';
+import { clearDatabase, closeDatabase, transact } from '../../offline/database.js';
 
 const session = {
   user: { id: 'user', familyId: 'family', displayName: 'Ania' },
@@ -70,7 +71,46 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-describe('IndexedDB bridge for the TanStack shopping sender', () => {
+describe('shopping adapter for the shared outbox', () => {
+  it('keeps an observed range that is not yet persisted while refreshing queue state', async () => {
+    onlineManager.setOnline(false);
+    const client = await start(true);
+    const range = client
+      .getQueryCache()
+      .build(client, { queryKey: [...key, 'items', 'loading'], queryFn: () => new Promise(() => {}) });
+    notifyShopping();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.getQueryCache().find({ queryKey: [...key, 'items', 'loading'], exact: true })).toBe(range);
+  });
+  it.each([403, 404])(
+    'interprets shopping %s without restoring a missing item or hiding readable family data',
+    async (status) => {
+      onlineManager.setOnline(false);
+      const client = await start(true);
+      await enqueueShopping(client, account, edit);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (path: string) =>
+          path === '/api/auth/me'
+            ? { ok: true, status: 200, text: async () => JSON.stringify(session) }
+            : {
+                ok: false,
+                status,
+                text: async () =>
+                  JSON.stringify({
+                    error: { code: status === 403 ? 'FORBIDDEN' : 'NOT_FOUND', message: 'Nie można zapisać zmiany.' },
+                  }),
+              },
+        ),
+      );
+      onlineManager.setOnline(true);
+      await vi.waitFor(async () => expect((await data())?.operations[0]?.review).toBe('rejected'));
+      await vi.waitFor(() =>
+        expect(client.getQueryData([...key, 'items', 'list'])).toEqual(status === 403 ? [item] : []),
+      );
+      expect(client.getQueryData([...key, 'lists'])).toEqual([list]);
+    },
+  );
   it('commits before acknowledging, persists only shopping and restores a killed process', async () => {
     onlineManager.setOnline(false);
     const first = await start(true);
@@ -87,7 +127,8 @@ describe('IndexedDB bridge for the TanStack shopping sender', () => {
     await closeDatabase();
     const restored = await start();
     expect(restored.getQueryData([...key, 'items', 'list'])).toEqual([item]);
-    expect(restored.getMutationCache().getAll()).toHaveLength(2);
+    expect(restored.getMutationCache().getAll()).toHaveLength(0);
+    expect(restored.getQueryData([...key, 'operations'])).toHaveLength(2);
     expect((await data())?.operations).toEqual(saved?.operations);
   });
   it('refuses a full store without rendering or sending an uncommitted operation', async () => {
@@ -175,10 +216,11 @@ describe('IndexedDB bridge for the TanStack shopping sender', () => {
     await enqueueShopping(first, account, edit);
     stopShoppingPersistence(first);
     first.clear();
-    await updateShoppingData('family:user', (old) => ({
-      ...old!,
-      operations: old!.operations.map((op) => ({ ...op, submittedAt: Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000 })),
-    }));
+    await transact('readwrite', async (tx) => {
+      const operations = await readOperations(tx, 'family:user');
+      for (const op of operations)
+        tx.objectStore('outbox').put({ ...op, submittedAt: Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000 });
+    });
     api();
     onlineManager.setOnline(true);
     const restored = await start();

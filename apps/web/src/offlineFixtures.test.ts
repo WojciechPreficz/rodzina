@@ -23,11 +23,8 @@ import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
 import { CalendarOfflineStore, readCalendarRange } from './features/calendar/calendarOffline.js';
 import { createContactsStore } from './features/contacts/contactsOffline.js';
 import { createTaskOfflineStore } from './features/tasks/taskOffline.js';
-import {
-  restoreShopping,
-  stopShoppingPersistence,
-  type QueuedShoppingChange,
-} from './features/shopping/shoppingOffline.js';
+import { restoreShopping, stopShoppingPersistence } from './features/shopping/shoppingOffline.js';
+import { readShoppingData } from './features/shopping/shoppingStorage.js';
 
 const fixture = z
   .object({
@@ -234,12 +231,10 @@ describe('O.1 legacy storage fixtures', () => {
     expect(
       shoppingItemSchema.parse(client.getQueryData<unknown[]>([...prefix, 'items', id('shoppingList')])?.[0]).id,
     ).toBe(id('milk'));
-    expect(
-      client
-        .getMutationCache()
-        .getAll()
-        .map((entry) => (entry.state.variables as QueuedShoppingChange).operationId),
-    ).toEqual(fixture.expected.pendingShoppingIds);
+    expect((await readShoppingData(fixture.accountId))?.operations.map((entry) => entry.operationId)).toEqual(
+      fixture.expected.pendingShoppingIds,
+    );
+    expect(client.getMutationCache().getAll()).toHaveLength(0);
   });
 
   it('keeps fixture identities unique and measures synthetic data within the declared budgets', async () => {

@@ -7,6 +7,8 @@ export class ApiRequestError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly code?: string,
+    public readonly retryAfterMs = 0,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -86,7 +88,16 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
       (payload as { error?: { message?: string } } | undefined)?.error?.message ??
       (payload as { message?: string } | undefined)?.message ??
       'Wystąpił błąd żądania.';
-    throw new ApiRequestError(message, response.status);
+    const retryAfter = response.headers?.get('Retry-After');
+    const retryAfterMs = retryAfter
+      ? Math.max(0, /^\d+(\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now())
+      : 0;
+    throw new ApiRequestError(
+      message,
+      response.status,
+      (payload as ApiError)?.error?.code,
+      Number.isFinite(retryAfterMs) ? retryAfterMs : 0,
+    );
   }
 
   return (payload ?? {}) as T;

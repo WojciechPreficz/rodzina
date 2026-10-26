@@ -212,7 +212,7 @@ describe('shared IndexedDB previews', () => {
   it('closes an older connection and invalidates its writer on versionchange', async () => {
     await saveOfflineData(family.session);
     await new Promise<void>((resolve, reject) => {
-      const upgrade = indexedDB.open('rodzina-offline', 2);
+      const upgrade = indexedDB.open('rodzina-offline', 3);
       upgrade.onsuccess = () => {
         upgrade.result.close();
         resolve();

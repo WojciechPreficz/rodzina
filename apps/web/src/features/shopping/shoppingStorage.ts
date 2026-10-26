@@ -21,6 +21,7 @@ import { chargedBytes, type CacheEntry } from '../../offline/registry.js';
 import { requireMigration } from '../../offline/status.js';
 import { freezeParticipants, resumeParticipants } from '../../offline/coordinator.js';
 import type { QueuedShoppingChange, ShoppingSession } from './shoppingOffline.js';
+import { readOperations, type Operation } from '../../offline/outbox.js';
 
 export const SHOPPING_STORAGE_KEY = 'rodzina:shopping:v1';
 export const JOURNAL_PREFIX = `${SHOPPING_STORAGE_KEY}:operation:`;
@@ -53,7 +54,9 @@ const snapshotSchema = z.object({
 });
 const operationSchema = variablesSchema.extend({
   sequence: z.number().int().positive(),
-  review: z.enum(['snapshot-only', 'missing-base', 'ambiguous-order', 'expired']).optional(),
+  review: z
+    .enum(['snapshot-only', 'missing-base', 'ambiguous-order', 'expired', 'conflict', 'rejected', 'dependency'])
+    .optional(),
 });
 export type StoredShoppingOperation = QueuedShoppingChange & { sequence: number; review?: string };
 export type ShoppingData = {
@@ -64,6 +67,7 @@ export type ShoppingData = {
   operations: StoredShoppingOperation[];
   nextSequence: number;
   legacyCache: boolean;
+  revokedLists?: string[];
 };
 const canonical = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -94,33 +98,38 @@ function parseQueries(input: unknown[], account: string): DehydratedState['queri
     return query;
   });
 }
-function entry(data: ShoppingData): CacheEntry {
+function entry(data: ShoppingData, outboxBytes = 0, outbox = false): CacheEntry {
   const record = {
     accountId: data.account,
     module: 'shopping' as const,
     key: 'snapshot',
     schemaVersion: 1 as const,
-    payload: data,
+    payload: outbox ? { ...data, operations: [] } : data,
     syncedAt: Math.max(0, ...data.queries.map((q) => q.state.dataUpdatedAt)) || null,
     coverage: data.queries.length ? ('partial' as const) : ('missing' as const),
     usedAt: Date.now(),
     chargedBytes: 0,
   };
-  const bytes = chargedBytes([data.account, 'shopping', 'snapshot'], record);
+  const bytes = chargedBytes([data.account, 'shopping', 'snapshot'], record) + outboxBytes;
   // Pending work and its base are pinned together. Never trim an operation or manufacture an empty list.
   const pendingBytes = data.operations.length ? bytes : 0;
   if (pendingBytes > 6 * 1048576 || (!pendingBytes && bytes > 4 * 1048576))
     error('Nie można zapisać zakupów: przekroczono budżet pamięci. Zsynchronizuj zmiany lub zwolnij miejsce.');
   record.chargedBytes = bytes;
-  while (record.chargedBytes !== chargedBytes([data.account, 'shopping', 'snapshot'], record))
-    record.chargedBytes = chargedBytes([data.account, 'shopping', 'snapshot'], record);
+  while (record.chargedBytes !== chargedBytes([data.account, 'shopping', 'snapshot'], record) + outboxBytes)
+    record.chargedBytes = chargedBytes([data.account, 'shopping', 'snapshot'], record) + outboxBytes;
   return record;
 }
-function put(tx: IDBTransaction, data: ShoppingData) {
+export async function putShoppingTransaction(tx: IDBTransaction, data: ShoppingData, outbox = false) {
+  const outboxBytes = outbox
+    ? (await readOperations(tx, data.account))
+        .filter((op) => op.module === 'shopping')
+        .reduce((sum, op) => sum + chargedBytes([data.account, op.operationId], op), 0)
+    : 0;
   let record: CacheEntry;
   for (;;) {
     try {
-      record = entry(data);
+      record = entry(data, outboxBytes, outbox);
       break;
     } catch (cause) {
       if (data.operations.length) throw cause;
@@ -133,7 +142,38 @@ function put(tx: IDBTransaction, data: ShoppingData) {
   }
   tx.objectStore('cache').put(record);
   tx.objectStore('metadata').put({ accountId: data.account, key: 'budget:shopping', value: record.chargedBytes });
-  tx.objectStore('metadata').put({ accountId: data.account, key: 'engine:shopping', value: 'legacy-idb' });
+  tx.objectStore('metadata').put({
+    accountId: data.account,
+    key: 'engine:shopping',
+    value: outbox ? 'outbox-v1' : 'legacy-idb',
+  });
+}
+export const shoppingOperation = (op: Operation): StoredShoppingOperation => ({
+  operationId: op.operationId,
+  submittedAt: op.submittedAt,
+  change: changeSchema.parse(op.payload),
+  sequence: op.sequence,
+  ...(op.status === 'needs-review' ? { review: op.reviewReason ?? 'conflict' } : {}),
+});
+export async function shoppingUsesOutbox(tx: IDBTransaction, account: string) {
+  return (
+    (await requestValue<{ value: string } | undefined>(tx.objectStore('metadata').get([account, 'engine:shopping'])))
+      ?.value === 'outbox-v1'
+  );
+}
+export async function readShoppingTransaction(tx: IDBTransaction, account: string) {
+  const record = await requestValue<CacheEntry | undefined>(
+    tx.objectStore('cache').get([account, 'shopping', 'snapshot']),
+  );
+  if (!record) return;
+  const data = record.payload as ShoppingData;
+  if (record.schemaVersion !== 1 || data.version !== 1 || data.account !== account)
+    error('Nieobsługiwana wersja pamięci zakupów.');
+  if (!(await shoppingUsesOutbox(tx, account))) return data;
+  const operations = (await readOperations(tx, account))
+    .filter((op) => op.module === 'shopping')
+    .map(shoppingOperation);
+  return { ...data, operations, nextSequence: Math.max(data.nextSequence, ...operations.map((op) => op.sequence + 1)) };
 }
 export async function readShoppingData(account?: string) {
   return transact('readonly', async (tx) => {
@@ -145,13 +185,8 @@ export async function readShoppingData(account?: string) {
           )
         )?.value;
     if (!active || (account && active.accountId !== account)) return;
-    const record = await requestValue<CacheEntry | undefined>(
-      tx.objectStore('cache').get([active.accountId, 'shopping', 'snapshot']),
-    );
-    if (!record) return;
-    const data = record.payload as ShoppingData;
-    if (record.schemaVersion !== 1 || data.version !== 1 || data.account !== active.accountId)
-      error('Nieobsługiwana wersja pamięci zakupów.');
+    const data = await readShoppingTransaction(tx, active.accountId);
+    if (!data) return;
     const session = snapshotSchema.shape.session.parse(data.session);
     if (`${session.family.id}:${session.user.id}` !== data.account || session.user.familyId !== session.family.id)
       error('Zapisane zakupy należą do innego konta.');
@@ -180,14 +215,9 @@ export async function updateShoppingData(
     async (tx) => {
       const active = await assertContext(tx);
       if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
-      const record = await requestValue<CacheEntry | undefined>(
-        tx.objectStore('cache').get([account, 'shopping', 'snapshot']),
-      );
-      if (record && (record.schemaVersion !== 1 || (record.payload as ShoppingData).version !== 1))
-        error('Nieobsługiwana wersja pamięci zakupów.');
-      const value = update(record?.payload as ShoppingData | undefined);
+      const value = update(await readShoppingTransaction(tx, account));
       if (value.account !== account) throw new DOMException('Session changed', 'AbortError');
-      put(tx, value);
+      await putShoppingTransaction(tx, value, await shoppingUsesOutbox(tx, account));
       return value;
     },
     token,
@@ -424,7 +454,7 @@ async function migrateShopping(confirmed: boolean) {
           );
           if (active && active.value.accountId !== staged.accountId)
             throw new DOMException('Session changed', 'AbortError');
-          put(tx, staged.data);
+          await putShoppingTransaction(tx, staged.data);
           if (!active)
             tx.objectStore('metadata').put({
               accountId: '__origin__',

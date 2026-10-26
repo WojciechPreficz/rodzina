@@ -408,6 +408,50 @@ zadań, review, kontaktów i aktualizacji pamięci. Wynik końcowego CI i odbió
 fizycznego APK są wymagane do zamknięcia O.4. Nie wdrażamy serwera ani APK
 w ramach tej zmiany; rollback po zapisach wymaga wersji rozumiejącej IDB.
 
+### Odbiór wspólnego outbox zakupów — O.5 (#53)
+
+Zakupy zapisują operacje w `outbox` bazy `rodzina-offline` v2. Snapshot
+`shopping` zawiera bazę, a Query jest cache widoku. Zadania pozostają przy
+synchronizatorze O.4. Aktualizacja zachowuje dotychczasowy import localStorage;
+przejęcie O.3 jest atomowe, bez drugiego nadawcy i zmiany ID/czasów.
+Starsze klienty wersji 1 są zamykane przez `versionchange` i nie mogą ponownie
+otworzyć bazy. Zamknij starsze karty przed aktualizacją; nie obchodź blokady
+usuwaniem danych. Rollback wymaga klienta obsługującego IDB v2 i outbox.
+
+1. WWW **390 i 1280 px**: dodaj listę i produkty, odhacz kilka pozycji offline,
+   zamknij i odtwórz frontend z tego samego magazynu. Po powrocie sieci sprawdź
+   brak duplikatów oraz odświeżenie w sesji drugiego domownika. Przejrzyj
+   katalog, produkt, formularz i komunikaty. Transport natywny sprawdzamy
+   również przez testową integrację Playwright.
+2. Dwie karty tego samego konta: zapisz zmiany równolegle, zamknij nadawcę
+   podczas żądania, poczekaj na przejęcie dzierżawy (do 15 s). Operacje
+   zachowują ID i kolejność zasobu. Późna odpowiedź starego nadawcy nie zapisuje
+   cache; serwer rozpoznaje ponowienie po niezmiennym ID.
+3. Zasymuluj 429/5xx i restart: termin retry oraz licznik pozostają.
+   Konflikt blokuje daną listę i jej zależności, lecz nie niezależną listę.
+   Po ponad 30 dniach zmiana wymaga sprawdzenia także po cofnięciu zegara.
+   Przycisk odrzucenia wymaga potwierdzenia i usuwa zależny łańcuch.
+4. Odmów zapisu IDB lub zasymuluj brak miejsca: formularz nie zgłasza
+   sukcesu, nie powstaje operacja widoczna tylko w RAM. Wyloguj się podczas
+   żądania i zmień konto w drugiej karcie: poprzednie dane nie wracają.
+5. **Fizyczny APK — do wykonania:** pobierz zakupy, zapisz kilka operacji
+   w trybie samolotowym, zakończ proces i uruchom ponownie. Sprawdź bazę,
+   kolejkę i statusy, przywróć sieć i sprawdź brak duplikatów. Powtórz po
+   przerwaniu wysyłki i po zmianie konta. Zapisz model telefonu, Android,
+   wersję APK i wyniki. Build debug i testowy transport nie zaliczają tej próby.
+
+Testy automatyczne: `outbox`, `sync`, `shoppingStorage`, `shoppingOffline`,
+`ShoppingPage`, importery, granica sesji oraz Playwright zakupów. Końcowe CI
+i odbiór fizycznego APK pozostają do potwierdzenia; nie zamykamy #53 wyłącznie
+na podstawie kontroli lokalnych. Bez deployu i publikacji APK w tym kroku.
+
+Weryfikacja lokalna 26.10.2026: **180 testów Vitest i 12 scenariuszy
+Playwright headless** (390/1280 px) zakończonych sukcesem, w tym utrata
+odpowiedzi po zapisie serwera, restart z tym samym ID i trwały konflikt.
+Lint i formatowanie zmienionych plików, typecheck, build WWW, debug APK
+i `release:smoke` przeszły. Fizycznego telefonu nie sprawdzono;
+wynik końcowego CI pozostaje do potwierdzenia po publikacji commita.
+
 ### Narzędzia Androida
 
 APK zawiera lokalny frontend. Potrzebne są Node.js 22 lub 24, JDK 21, SDK 36

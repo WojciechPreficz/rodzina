@@ -111,6 +111,12 @@ przeniesione lokalnie do IndexedDB. Zachowujemy synchronizator zadań i blokady
 alarmów. Wszystkie pięć magazynów używa wspólnej bazy; odbiór fizycznego APK
 i końcowe CI pozostają do potwierdzenia; [checklista](DEVELOPMENT.md#odbiór-pamięci-zadań-i-kontaktów--o4-52).
 
+O.5 (#53): zakupy korzystają lokalnie ze wspólnego outbox, dzierżawy nadawcy,
+trwałego retry i stanów wymagających sprawdzenia. TanStack Query przechowuje
+cache widoku. Baza urządzenia ma wersję 2, odcinającą starszy silnik zakupów.
+Odbiór fizycznego APK oraz końcowe CI pozostają do potwierdzenia;
+[checklista](DEVELOPMENT.md#odbiór-wspólnego-outbox-zakupów--o5-53).
+
 **Faza 8 — dokumenty: zaimplementowana — potwierdzenie właściciela 25.10.2026.**
 Pełny zakres pozostaje w [archiwum fazy 8](archive/plan-przyszle-fazy.md).
 Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani

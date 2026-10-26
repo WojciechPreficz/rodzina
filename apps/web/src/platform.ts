@@ -52,5 +52,10 @@ export async function nativeRequest(input: string, init: RequestInit) {
   }
   if (generation !== sessionGeneration) throw new DOMException('Session changed', 'AbortError');
   init.signal?.throwIfAborted();
-  return { ok: result.status >= 200 && result.status < 300, status: result.status, text: async () => result.body };
+  return {
+    ok: result.status >= 200 && result.status < 300,
+    status: result.status,
+    headers: new Headers(),
+    text: async () => result.body,
+  };
 }

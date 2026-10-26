@@ -1,5 +1,37 @@
 # Decyzje
 
+## 26.10.2026 — wspólny outbox zakupów, O.5 (#53)
+
+- Wersja 2 bazy `rodzina-offline` zachowuje magazyny wersji 1, ale wymusza
+  `versionchange` w starszych klientach. Starsze otwarcie wersji 1 kończy się
+  błędem, więc nadawca O.3 nie może ponownie wystartować po przejęciu kolejki.
+  Aktualizacja ze starego localStorage nadal wymaga procedury zamknięcia
+  starszych instancji i potwierdzenia importu. Rollback wymaga klienta
+  obsługującego wersję 2 i `outbox-v1`; nie kasujemy bazy dla obejścia blokady.
+- Przejęcie dziennika O.3 zapisuje koperty, globalną sekwencję i znacznik
+  `engine:shopping=outbox-v1` w jednej transakcji. Nie zmienia ID, czasu,
+  intencji ani ich kolejności. Snapshot nie przechowuje drugiego dziennika;
+  odczyt łączy potwierdzoną bazę z kolejką. Projekcja UI jest wyliczana raz.
+  Przed pierwszą wysyłką starego cache adapter potwierdza bazę w API.
+- Dzierżawa konta trwa 15 s, odnowienie co 5 s; odpowiedź wymaga zgodności
+  właściciela, epoki i generacji sesji. Bezczynny nadawca zwalnia dzierżawę.
+  Polling IDB co 500 ms pozwala przejąć pracę po awarii bez polegania na
+  zdarzeniu storage. Status i widok zmieniamy tylko po zmianie danych kolejki,
+  aby nie zerować interwału odświeżania Query.
+- Retry zachowuje kopertę i trwały termin, stosuje jitter do 5 min oraz
+  `Retry-After`, gdy transport udostępnia nagłówek. Obecny transport natywny
+  udostępnia status i treść, więc używa jittera. Żądanie ma limit 60 s;
+  przerwane lub nieuzgodnione powoduje retry z tym samym ID. Wiek sprawdzamy
+  przed próbą i po potwierdzeniu sesji. Stan wygaśnięcia nie znika po korekcie zegara.
+- Konflikt i trwałe odrzucenie pozostają do sprawdzenia; blokują późniejsze
+  operacje zasobu i jawne zależności. Inne listy synchronizują się dalej.
+  Potwierdzone odrzucenie w UI usuwa cały zależny łańcuch, bez zmiany ID
+  i automatycznej ponownej wysyłki. Przekroczenie budżetu nie usuwa kolejki:
+  zakupowe koperty i chroniona baza dzielą rezerwę 6 MiB.
+- Zadania, kontakty i planowanie alarmów zachowują dotychczasową obsługę.
+  Nie ma zmian API serwera, SQLite, konfiguracji, crona ani zależności runtime.
+  Fizyczny Android i końcowe CI pozostają do potwierdzenia.
+
 ## 26.10.2026 — IndexedDB zadań i kontaktów, O.4 (#52)
 
 - Wszystkie pięć magazynów konta używa `rodzina-offline` v1. Zadania zapisują

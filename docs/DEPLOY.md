@@ -19,6 +19,15 @@ aktualizacji API. Szczegóły zgodności i migracji zachowuje
 
 ## 2. Zbudowanie i wgranie paczki
 
+O.5 (#53) aktualizuje bazę urządzenia `rodzina-offline` do wersji 2
+i przejmuje zakupy do `outbox-v1`. Nie zmienia bazy serwera, konfiguracji,
+crona ani zależności runtime. WWW i APK aktualizujemy osobno; zamknij starsze
+karty/proces APK przed przejściem, a przy źródłach localStorage potwierdź
+procedurę importu opisaną w [DEVELOPMENT.md](DEVELOPMENT.md).
+Po przejęciu nie wracaj do klienta wersji 1 i nie usuwaj pamięci urządzenia
+z niewysłanymi operacjami. Rollback wymaga klienta rozumiejącego wersję 2
+i wspólny outbox; backup serwera nie zawiera lokalnej kolejki urządzenia.
+
 Migracja 0023 dodaje Kontakty i cztery początkowe grupy dla każdej istniejącej
 rodziny. Wykonuj ją jobem `dist/jobs/migrate-db.js` z nowej paczki, po backupie,
 według procedury aktualizacji poniżej. Job rejestruje funkcję SQLite

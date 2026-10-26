@@ -40,13 +40,16 @@ export function openDatabase(): Promise<IDBDatabase> {
   const opening = new Promise<IDBDatabase>((resolve, reject) => {
     let request: IDBOpenDBRequest;
     try {
-      request = indexedDB.open(DATABASE_NAME, 1);
+      request = indexedDB.open(DATABASE_NAME, 2);
     } catch {
       reject(new Error('Pamięć IndexedDB jest niedostępna. Włącz dostęp do pamięci urządzenia.'));
       return;
     }
     request.onupgradeneeded = () => {
       const db = request.result;
+      // Version 2 fences the O.3 sender: version-1 clients close on versionchange
+      // and cannot reopen version 1 after the outbox takeover.
+      if (db.objectStoreNames.contains('cache')) return;
       const cache = db.createObjectStore('cache', { keyPath: ['accountId', 'module', 'key'] });
       cache.createIndex('accountId', 'accountId');
       cache.createIndex('module', ['accountId', 'module']);
