@@ -1,5 +1,14 @@
 # Decyzje
 
+## 26.10.2026 — CI wyłącznie na Node 24
+
+- Na polecenie właściciela usuwamy macierz Node 22 i 24 z joba `checks`
+  w `.github/workflows/ci.yml` i ustawiamy Node 24, zgodnie z wersją używaną
+  na serwerze. Zachowujemy wszystkie dotychczasowe kontrole; osobny job
+  Androida już korzysta z Node 24.
+- Aktualizujemy opis CI w bieżącym planie i planie redesignu. Historyczne
+  wyniki kontroli zachowujemy bez zmian.
+
 ## 25.10.2026 — synchronizacja testu katalogu zadań
 
 - Sprawdzono zgłoszony błąd `task catalog restores focus and scroll via Android

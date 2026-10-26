@@ -266,7 +266,7 @@ kompilacji i podpisania. Wdrożenie następuje na osobne polecenie według
 - Przykładowo: `npm test -- apps/web/src/features/calendar` oraz
   `npm run test:e2e -- e2e/calendar.spec.ts`. Dobierać zakres do kroku.
 - Build lokalny potrzebny do prób produkcyjnego UI/APK, kontrole natywne według
-  ryzyka zmiany. Pełny zestaw zapewnia istniejące CI na Node 22 i 24,
+  ryzyka zmiany. Pełny zestaw zapewnia istniejące CI na Node 24,
   z Playwright, `release:smoke` i osobnym jobem Androida.
 - Nie uruchamiać rutynowo lokalnego `release:smoke` dla samych stylów.
   Wykonać go, jeżeli zmieni się pakowanie, konfiguracja lub zależności runtime.
