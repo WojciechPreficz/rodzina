@@ -6,10 +6,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { unzipSync } from 'fflate';
-import { validateAndroidPublication } from './deploy-remote.mjs';
+import { names, validateAndroidPublication, validateReleasePackage } from './deploy-remote.mjs';
 
 export const origin = 'https://rodzina.preficze.pl';
-export const managed = ['server.cjs', 'package.json', 'dist', 'public', 'drizzle'];
+export const managed = names;
 
 export function validateConfig(env) {
   if (env.GITHUB_REF !== 'refs/heads/main') throw new Error('Deploy requires refs/heads/main.');
@@ -53,13 +53,14 @@ export function validateArchive(bytes) {
       parts.some((part) => !part || part === '.' || part === '..') ||
       !managed.includes(parts[0]) ||
       parts.some((part) => part.startsWith('.') || /\.(?:db|sqlite|apk|jks|pem|key)(?:[.-]|$)/i.test(part)) ||
-      (parts.length === 1 && !name.endsWith('/') && !['server.cjs', 'package.json'].includes(name))
+      (parts.length === 1 && !name.endsWith('/') && !['server.cjs', 'package.json', 'package-lock.json'].includes(name))
     )
       throw new Error(`Unexpected release entry: ${name}`);
   }
   for (const required of [
     'server.cjs',
     'package.json',
+    'package-lock.json',
     'dist/server.js',
     'dist/jobs/backup-db.js',
     'dist/jobs/migrate-db.js',
@@ -69,6 +70,10 @@ export function validateArchive(bytes) {
     if (!names.includes(required)) throw new Error(`Missing release entry: ${required}`);
   if (JSON.parse(Buffer.from(entries['package.json']).toString()).name !== 'rodzina-release')
     throw new Error('Wrong release application.');
+  validateReleasePackage(
+    JSON.parse(Buffer.from(entries['package.json']).toString()),
+    JSON.parse(Buffer.from(entries['package-lock.json']).toString()),
+  );
   return createHash('sha256').update(bytes).digest('hex');
 }
 
@@ -121,6 +126,7 @@ export function failureDiagnostic(stdout, stderr) {
     'promotion-copy-dependencies',
     'promotion-copy-server',
     'promotion-copy-package',
+    'promotion-copy-lockfile',
     'promotion-copy-dist',
     'promotion-copy-public',
     'promotion-copy-drizzle',

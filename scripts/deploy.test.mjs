@@ -15,7 +15,14 @@ import {
   validateArchive,
   validateConfig,
 } from './deploy.mjs';
-import { applyRelease, preflight, runNpm, safeErrorCode } from './deploy-remote.mjs';
+import {
+  applyRelease,
+  installedNames,
+  preflight,
+  prepareDependencies,
+  runNpm,
+  safeErrorCode,
+} from './deploy-remote.mjs';
 
 const sha = 'a'.repeat(40);
 const env = {
@@ -31,6 +38,11 @@ const env = {
 };
 const releaseFiles = {
   'package.json': JSON.stringify({ name: 'rodzina-release' }),
+  'package-lock.json': JSON.stringify({
+    name: 'rodzina-release',
+    lockfileVersion: 3,
+    packages: { '': { name: 'rodzina-release' } },
+  }),
   'server.cjs': 'new server',
   'dist/server.js': 'new API',
   'dist/jobs/backup-db.js': 'backup job',
@@ -116,7 +128,7 @@ const http = async (url) => {
 };
 
 describe('isolated npm execution', () => {
-  it.each([['--version'], ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']])(
+  it.each([['--version'], ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']])(
     'executes the real npm CLI with an explicit temporary prefix (%s)',
     async (...args) => {
       const execute = vi.fn();
@@ -159,9 +171,43 @@ describe('isolated npm execution', () => {
         fs.writeFileSync(path.join(prefix, 'node_modules/installed.txt'), 'new dependency');
       `,
     );
-    await runNpm({ node: wrapper, runtimeNode: process.execPath, npm }, ['install', '--ignore-scripts'], unpacked);
+    await runNpm({ node: wrapper, runtimeNode: process.execPath, npm }, ['ci', '--ignore-scripts'], unpacked);
     expect(await readFile(path.join(unpacked, 'node_modules/installed.txt'), 'utf8')).toBe('new dependency');
     expect(await readFile(live, 'utf8')).toBe('old production dependency');
+  });
+  it('uses locked installation and only explicit native binary preparation in smoke and deploy', async () => {
+    const f = await fixture();
+    const unpacked = path.join(f.stage, 'unpacked');
+    for (const name of ['package.json', 'package-lock.json']) await write(unpacked, name, releaseFiles[name]);
+    const execute = vi.fn(async (tool, args) => {
+      if (args[1] !== 'ci') return;
+      await write(unpacked, 'node_modules/better-sqlite3/package.json', '{"name":"better-sqlite3"}');
+      await write(unpacked, 'node_modules/@node-rs/argon2/index.js', '');
+      await write(unpacked, 'node_modules/prebuild-install/bin.js', '');
+    });
+    const config = { npm: '/runtime/npm-cli.js', runtimeNode: process.execPath };
+    await prepareDependencies(config, unpacked, execute);
+    expect(execute.mock.calls[0][1]).toEqual([
+      config.npm,
+      'ci',
+      '--omit=dev',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--prefix',
+      unpacked,
+    ]);
+    expect(execute.mock.calls[1].slice(0, 3)).toEqual([
+      process.execPath,
+      [path.join(unpacked, 'node_modules/prebuild-install/bin.js')],
+      path.join(unpacked, 'node_modules/better-sqlite3'),
+    ]);
+    expect(execute.mock.calls[2][1][2]).toContain("require('@node-rs/argon2')");
+    expect(execute).toHaveBeenCalledTimes(3);
+    execute.mockClear();
+    await write(unpacked, 'package.json', '{"name":"rodzina-release","dependencies":{"missing":"1"}}');
+    await expect(prepareDependencies(config, unpacked, execute)).rejects.toThrow('incompatible');
+    expect(execute).not.toHaveBeenCalled();
   });
 });
 
@@ -259,6 +305,10 @@ describe('deploy configuration and archive', () => {
     const incomplete = { ...releaseFiles };
     delete incomplete['public/index.html'];
     expect(() => validateArchive(archive(incomplete))).toThrow();
+    const legacy = { ...releaseFiles };
+    delete legacy['package-lock.json'];
+    expect(() => validateArchive(archive(legacy))).toThrow('package-lock.json');
+    expect(() => validateArchive(archive({ ...releaseFiles, 'package-lock.json': '{}' }))).toThrow('lockfile');
   });
   it('workflow is manual only, rejects other branches before checkout and checks before deploy', async () => {
     const workflow = await readFile(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8');
@@ -414,6 +464,7 @@ describe('local directory with fake SSH transport', () => {
       'promotion-copy-dependencies',
       'promotion-copy-server',
       'promotion-copy-package',
+      'promotion-copy-lockfile',
       'promotion-copy-dist',
       'promotion-copy-public',
       'promotion-copy-drizzle',
@@ -423,6 +474,36 @@ describe('local directory with fake SSH transport', () => {
     ]);
     expect(await readdir(path.join(f.directory, 'app-deploy-history'))).toHaveLength(3);
     expect(execute.mock.calls.some(([tool]) => tool === 'scp')).toBe(true);
+    expect(await readFile(path.join(f.root, 'package-lock.json'), 'utf8')).toBe(releaseFiles['package-lock.json']);
+  });
+  it('archives a legacy installation without inventing a lockfile and promotes the new locked pair', async () => {
+    const f = await fixture();
+    await rm(path.join(f.root, 'package-lock.json'));
+    expect(await installedNames(f.root)).toEqual(managed.filter((name) => name !== 'package-lock.json'));
+    const execute = f.options.execute;
+    f.options.execute = vi.fn(async (tool, args, cwd) => {
+      if (tool !== 'tar') return execute(tool, args, cwd);
+      expect(args.slice(2)).toEqual(managed.filter((name) => name !== 'package-lock.json'));
+      await writeFile(args[1], 'legacy archive without lockfile');
+    });
+    await applyRelease(f.config, f.transaction, f.options);
+    const metadata = JSON.parse(
+      await readFile(path.join(f.directory, 'app-deploy-history', `${f.transaction.id}.json`), 'utf8'),
+    );
+    expect(metadata.previousHasLockfile).toBe(false);
+    expect(await installedNames(f.root)).toEqual(managed);
+    expect(await readFile(path.join(f.root, 'package-lock.json'), 'utf8')).toBe(releaseFiles['package-lock.json']);
+  });
+  it('rejects an unlocked archive remotely before installation, backup or promotion', async () => {
+    const f = await fixture();
+    const extract = f.options.extract;
+    f.options.extract = async (unpacked) => {
+      await extract(unpacked);
+      await rm(path.join(unpacked, 'package-lock.json'));
+    };
+    await expect(applyRelease(f.config, f.transaction, f.options)).rejects.toThrow('Unexpected archive roots');
+    expect(f.events).not.toContain('dependencies');
+    expect(f.options.backup).not.toHaveBeenCalled();
   });
   it('identifies dependency copy failure before application files are overwritten', async () => {
     const f = await fixture();

@@ -15,10 +15,10 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { parseEnv } from 'node:util';
+import { isDeepStrictEqual, parseEnv } from 'node:util';
 import path from 'node:path';
 
-const names = ['server.cjs', 'package.json', 'dist', 'public', 'drizzle'];
+export const names = ['server.cjs', 'package.json', 'package-lock.json', 'dist', 'public', 'drizzle'];
 const inside = (parent, candidate) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
 
 export function validateAndroidPublication(android) {
@@ -188,6 +188,53 @@ export async function checkDependencies(unpacked) {
   return modules;
 }
 
+export function validateReleasePackage(manifest, lock) {
+  if (
+    manifest.name !== 'rodzina-release' ||
+    lock?.lockfileVersion !== 3 ||
+    lock.name !== manifest.name ||
+    lock.version !== manifest.version ||
+    lock.packages?.['']?.name !== manifest.name ||
+    lock.packages[''].version !== manifest.version ||
+    !isDeepStrictEqual(lock.packages[''].dependencies ?? {}, manifest.dependencies ?? {})
+  )
+    throw new Error('Missing or incompatible release lockfile.');
+}
+
+export async function prepareDependencies(config, unpacked, execute = command) {
+  const manifest = JSON.parse(await readFile(path.join(unpacked, 'package.json'), 'utf8'));
+  const lock = JSON.parse(await readFile(path.join(unpacked, 'package-lock.json'), 'utf8'));
+  validateReleasePackage(manifest, lock);
+  await runNpm(config, ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], unpacked, execute);
+  await checkDependencies(unpacked);
+  const require = createRequire(path.join(unpacked, 'package.json'));
+  const resolveLocal = async (name) => {
+    const resolved = await realpath(require.resolve(name));
+    if (!inside(path.join(unpacked, 'node_modules'), resolved))
+      throw new Error('Dependency resolved outside the temporary release directory.');
+    return resolved;
+  };
+  const sqlite = path.dirname(await resolveLocal('better-sqlite3/package.json'));
+  await resolveLocal('@node-rs/argon2');
+  await execute(config.runtimeNode ?? process.execPath, [await resolveLocal('prebuild-install/bin.js')], sqlite);
+  await execute(
+    config.runtimeNode ?? process.execPath,
+    [
+      '--input-type=commonjs',
+      '-e',
+      "const db = require('better-sqlite3')(':memory:'); db.close(); require('@node-rs/argon2');",
+    ],
+    unpacked,
+    { ...process.env, NODE_PATH: '' },
+  );
+}
+
+// Existing installations may predate locked releases. New archives always require the lockfile.
+export async function installedNames(root) {
+  const lock = await optionalFile(path.join(root, 'package-lock.json'));
+  return lock === null ? names.filter((name) => name !== 'package-lock.json') : names;
+}
+
 export async function checkTree(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory()))
@@ -225,7 +272,7 @@ export async function preflight(
   if (JSON.parse(await readFile(path.join(config.root, 'package.json'), 'utf8')).name !== 'rodzina-release')
     throw new Error('Target is not the existing Rodzina release.');
   mark('preflight-tree');
-  for (const name of names) {
+  for (const name of await installedNames(config.root)) {
     const info = await lstat(path.join(config.root, name));
     if (info.isSymbolicLink()) throw new Error('Managed path is a symlink.');
     if (info.isDirectory()) await checkTree(path.join(config.root, name));
@@ -354,34 +401,13 @@ export async function applyRelease(
   const entries = await readdir(unpacked);
   if (entries.length !== names.length || entries.some((name) => !names.includes(name)))
     throw new Error('Unexpected archive roots.');
-  if (JSON.parse(await readFile(path.join(unpacked, 'package.json'), 'utf8')).name !== 'rodzina-release')
-    throw new Error('Wrong archive.');
+  validateReleasePackage(
+    JSON.parse(await readFile(path.join(unpacked, 'package.json'), 'utf8')),
+    JSON.parse(await readFile(path.join(unpacked, 'package-lock.json'), 'utf8')),
+  );
   mark('dependencies');
   if (dependencies) await dependencies(unpacked);
-  else {
-    // Install outside the live application, disabling all lifecycle compilation.
-    await runNpm(config, ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], unpacked, execute);
-    await checkDependencies(unpacked);
-    const require = createRequire(path.join(unpacked, 'package.json'));
-    const resolveLocal = async (name) => {
-      const resolved = await realpath(require.resolve(name));
-      if (!inside(path.join(unpacked, 'node_modules'), resolved))
-        throw new Error('Dependency resolved outside the temporary release directory.');
-      return resolved;
-    };
-    const sqlite = path.dirname(await resolveLocal('better-sqlite3/package.json'));
-    await resolveLocal('@node-rs/argon2');
-    await execute(config.runtimeNode, [await resolveLocal('prebuild-install/bin.js')], sqlite);
-    await execute(
-      config.runtimeNode,
-      [
-        '--input-type=commonjs',
-        '-e',
-        "const db = require('better-sqlite3')(':memory:'); db.close(); require('@node-rs/argon2');",
-      ],
-      unpacked,
-    );
-  }
+  else await prepareDependencies(config, unpacked, execute);
   mark('dependencies-check');
   await checkDependencies(unpacked);
   mark('backup');
@@ -397,11 +423,17 @@ export async function applyRelease(
   await mkdir(history, { recursive: true, mode: 0o700 });
   if ((await lstat(history)).isSymbolicLink()) throw new Error('Unsafe history path.');
   const previous = path.join(history, `${transaction.id}-previous.tar.gz`);
-  await execute('tar', ['-czf', previous, ...names], root);
+  await execute('tar', ['-czf', previous, ...(await installedNames(root))], root);
   await cp(path.join(stage, 'release.zip'), path.join(history, `${transaction.id}-release.zip`));
   await writeFile(
     path.join(history, `${transaction.id}.json`),
-    JSON.stringify({ sha: config.sha, digest, previous, createdAt: new Date().toISOString() }),
+    JSON.stringify({
+      sha: config.sha,
+      digest,
+      previous,
+      previousHasLockfile: (await installedNames(root)).includes('package-lock.json'),
+      createdAt: new Date().toISOString(),
+    }),
     { mode: 0o600 },
   );
   mark('promotion');
@@ -416,7 +448,9 @@ export async function applyRelease(
   mark('promotion-copy-dependencies');
   await cp(path.join(unpacked, 'node_modules'), config.modules, { recursive: true, verbatimSymlinks: true });
   for (const name of names) {
-    mark(`promotion-copy-${name === 'server.cjs' ? 'server' : name === 'package.json' ? 'package' : name}`);
+    mark(
+      `promotion-copy-${name === 'server.cjs' ? 'server' : name === 'package.json' ? 'package' : name === 'package-lock.json' ? 'lockfile' : name}`,
+    );
     await cp(path.join(unpacked, name), path.join(root, name), { recursive: true });
   }
   mark('promotion-restart-directory');

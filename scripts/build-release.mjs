@@ -3,8 +3,10 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { zipSync } from 'fflate';
+import { validateReleaseFiles } from './release-lock.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+await validateReleaseFiles();
 const stage = await mkdtemp(path.join(tmpdir(), 'rodzina-release-'));
 
 try {
@@ -14,21 +16,8 @@ try {
   await cp(path.join(root, 'apps/api/drizzle'), path.join(stage, 'drizzle'), { recursive: true });
   await cp(path.join(root, 'apps/web/dist'), path.join(stage, 'public'), { recursive: true });
 
-  const apiPackage = JSON.parse(await readFile(path.join(root, 'apps/api/package.json'), 'utf8'));
-  const productionPackage = {
-    name: 'rodzina-release',
-    version: apiPackage.version,
-    private: true,
-    type: 'module',
-    engines: { node: '>=22' },
-    // Workspace code and its time libraries are bundled into the API output.
-    dependencies: Object.fromEntries(
-      Object.entries(apiPackage.dependencies).filter(([name]) => name !== '@rodzina/shared'),
-    ),
-  };
-  await import('node:fs/promises').then(({ writeFile }) =>
-    writeFile(path.join(stage, 'package.json'), `${JSON.stringify(productionPackage, null, 2)}\n`),
-  );
+  for (const name of ['package.json', 'package-lock.json'])
+    await cp(path.join(root, 'scripts/release', name), path.join(stage, name));
 
   const archiveFiles = {};
   async function addDirectory(directory, prefix = '') {

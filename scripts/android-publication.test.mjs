@@ -266,6 +266,11 @@ it.each(['success', 'transfer-failure', 'unhealthy-server'])(
     const f = await fixture();
     const files = {
       'package.json': '{"name":"rodzina-release"}',
+      'package-lock.json': JSON.stringify({
+        name: 'rodzina-release',
+        lockfileVersion: 3,
+        packages: { '': { name: 'rodzina-release' } },
+      }),
       'server.cjs': '',
       'dist/server.js': '',
       'dist/jobs/backup-db.js': '',

@@ -48,7 +48,28 @@ Po buildzie Androida uruchom w `android/` także `./gradlew testDebugUnitTest li
 Jeżeli aktualizujesz instalację sprzed 4.9, przed rozpakowaniem ZIP wykonaj procedurę
 wycofania Web Push w [archiwum wdrożeń](archive/deploy-historia.md), łącznie z zatrzymaniem starego crona.
 
-`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, odmowę startu produkcji bez migracji, dwukrotne uruchomienie joba migracji, start serwera i backup na tymczasowej bazie bez VAPID. Wgraj `release.zip` do prywatnego stagingu i postępuj według sekcji aktualizacji poniżej. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjny `package.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
+`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, odmowę startu produkcji bez migracji, dwukrotne uruchomienie joba migracji, start serwera i backup na tymczasowej bazie bez VAPID. Wgraj `release.zip` do prywatnego stagingu i postępuj według sekcji aktualizacji poniżej. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjne `package.json` i `package-lock.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
+
+### Utrzymanie zależności paczki release
+
+Źródłowa para produkcyjnego manifestu i lockfile jest w `scripts/release/`.
+Po zmianie zależności API najpierw zaktualizuj główny lockfile przez npm,
+następnie uruchom `npm run release:lock` i commituj oba pliki produkcyjne razem
+z manifestem API i głównym lockfile. Polecenie wydziela drzewo runtime z już
+zablokowanych wersji monorepo: zachowuje zależności zagnieżdżone, integralność
+archiwów i opcjonalne warianty platformowe; pomija bundlowany `@rodzina/shared`.
+Nie odpytuje rejestru ani nie rozwiązuje zakresów wersji ponownie. Niezgodność
+manifestów lub drzewa zależności zatrzymuje pakowanie; build sam nie poprawia lockfile.
+
+Smoke i deploy używają tej samej procedury: `npm ci --omit=dev --ignore-scripts
+--no-audit --no-fund`, jawne pobranie gotowego binarium `better-sqlite3` przez
+`prebuild-install` i sprawdzenie SQLite oraz Argon2. Brak binarium kończy procedurę
+bez próby kompilacji. Smoke wykonuje dwie instalacje w pustych katalogach,
+porównuje rzeczywiste wersje z lockfile i między instalacjami oraz sprawdza,
+że instalacja nie zmieniła lockfile. CI wykonuje tę próbę na Linuksie i Node 24,
+zgodnie z hostingiem. Lokalne smoke na Windows sprawdza wariant Windows;
+pakiety opcjonalne Argon2 zależą od OS, CPU i libc, a binarium SQLite także od ABI Node.
+Powtarzalność wersji dotyczy tej samej platformy i wersji Node.
 
 ### Windows: `npm ci` kończy się `EPERM ... unlink ... argon2.win32-x64-msvc.node`
 
@@ -166,7 +187,7 @@ API/WWW i Android mają osobne artefakty. Ręczny Deploy publikuje oba; przy rę
 
 1. Lokalnie wykonaj weryfikację i zbuduj ZIP według sekcji 2. Dla zmian wspólnego frontendu sprawdź także build Androida i właściwe scenariusze na telefonie. Sam `release:smoke` nie testuje APK.
 2. Zachowaj poprzedni ZIP i wykonaj backup produkcyjnej bazy jobem z sekcji 5. Zachowaj istniejącą konfigurację `.env`, bazę i cron backupu. Przy przejściu na 4.9 najpierw wykonaj procedurę wycofania Web Push w [archiwum wdrożeń](archive/deploy-historia.md).
-3. Wgraj i rozpakuj sprawdzony ZIP do prywatnego stagingu i przygotuj tam zależności produkcyjne według procedury automatycznej poniżej. Po backupie, przed podmianą plików, uruchom ze stagingu `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/migrate-db.js` (podstaw rzeczywiste ścieżki Node i konfiguracji). Dopiero po sukcesie migracji podmień `server.cjs`, `dist/`, `public/`, `drizzle/`, produkcyjny `package.json` i zależności w istniejącym `~/rodzina/` oraz wykonaj restart przez `tmp/restart.txt`. Nie zastępuj produkcyjnej bazy lokalną. Preferowana procedura automatyczna poniżej wykonuje te kroki w tej kolejności.
+3. Wgraj i rozpakuj sprawdzony ZIP do prywatnego stagingu i przygotuj tam zależności produkcyjne według procedury automatycznej poniżej. Po backupie, przed podmianą plików, uruchom ze stagingu `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/migrate-db.js` (podstaw rzeczywiste ścieżki Node i konfiguracji). Dopiero po sukcesie migracji podmień `server.cjs`, `dist/`, `public/`, `drizzle/`, produkcyjne `package.json` i `package-lock.json` oraz zależności w istniejącym `~/rodzina/` i wykonaj restart przez `tmp/restart.txt`. Nie zastępuj produkcyjnej bazy lokalną. Preferowana procedura automatyczna poniżej wykonuje te kroki w tej kolejności.
 4. Sprawdź `/api/health`, logowanie, odczyt i zapis kalendarza w przeglądarce oraz w poprzedniej wspieranej wersji APK. Nowy backend musi nadal obsługiwać telefony, które nie zainstalowały aktualizacji.
 5. Jeżeli wydanie wymaga nowego APK, opublikuj je dopiero po zgodnym API według sekcji 7. Nie uruchamiaj ponownie konfiguracji pierwszego wdrożenia ani rejestracji rodziny.
 
@@ -562,8 +583,10 @@ nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
    i rozpakowuje paczkę. Błąd transferu nie zmienia plików aplikacji.
    Osobno przesyłamy APK do tego samego prywatnego stagingu; jego suma, rozmiar,
    wersja i zgodność certyfikatu z poprzednią publikacją są sprawdzane przed backupem.
-4. Właściwy npm CLI używanej wersji Node instaluje zależności produkcyjne w katalogu
-   tymczasowym z `--ignore-scripts` i jawnym `--prefix`, z pominięciem wrappera cPanel.
+4. Walidacja ZIP lokalnie i po rozpakowaniu na serwerze wymaga produkcyjnego
+   lockfile zgodnego z manifestem. Właściwy npm CLI używanej wersji Node instaluje
+   zależności produkcyjne przez `npm ci --omit=dev --ignore-scripts --no-audit --no-fund`
+   w katalogu tymczasowym z jawnym `--prefix`, z pominięciem wrappera cPanel.
    Sprawdzamy, czy `node_modules` jest rzeczywistym katalogiem tej paczki, oraz czy
    SQLite, Argon2 i prebuild-install są rozwiązywane z niego, bez użycia produkcyjnych
    zależności. Etap `dependencies-check` powtarza kontrolę przed backupem i podmianą.
@@ -581,12 +604,14 @@ nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
    backup i migrację. Błąd migracji przerywa deploy przed promocją i restartem.
    Nie nadpisujemy bazy paczką ani nie cofamy jej automatycznie.
 6. W prywatnym katalogu obok aplikacji, np. `rodzina-deploy-history`, zachowujemy
-   `<UUID>-previous.tar.gz` (poprzednie `server.cjs`, `package.json`, `dist`, `public`,
-   `drizzle`), `<UUID>-release.zip` oraz `<UUID>.json` z commitem i sumą. Historia
+   `<UUID>-previous.tar.gz` (poprzednie `server.cjs`, `package.json`, `package-lock.json`,
+   jeśli istniał, oraz `dist`, `public`, `drizzle`), `<UUID>-release.zip` oraz
+   `<UUID>.json` z commitem, sumą i polem `previousHasLockfile`. Pierwsza aktualizacja
+   starszej instalacji bez lockfile pozostaje obsługiwana. Historia
    nie zawiera `.env`, bazy ani kluczy. Nie jest dostępna przez HTTP; administrator
    okresowo usuwa starsze paczki po ocenie okresu potrzebnego do odzyskiwania.
 7. Kopiowane są przygotowane zależności do docelowego `node_modules`, następnie
-   wyłącznie pięć zarządzanych ścieżek. Nie usuwamy szeroko zawartości aplikacji;
+   wyłącznie sześć zarządzanych ścieżek, w tym parę manifest–lockfile. Nie usuwamy szeroko zawartości aplikacji;
    stare assety pozostają dla wcześniej otwartych kart. Zachowane są `.env`, baza/WAL/SHM,
    logi, backupy, `.htaccess`, konfiguracja cPanel, crony i trwałe pliki Androida.
    Zapis `tmp/restart.txt` restartuje Passengera. Produkcyjne API tylko sprawdza,
@@ -636,6 +661,18 @@ nadal wymaga zgody instalatora Androida.
   `node_modules`; zależności trzeba przygotować ponownie dla jej `package.json`
   w prywatnym katalogu tymczasowym, właściwym npm CLI tej samej wersji Node,
   z jawnym `--prefix` i pominięciem wrappera cPanel, bez kompilacji ze źródeł.
+- **Wycofanie do paczki z lockfile:** przygotuj ją przez `npm ci --omit=dev
+--ignore-scripts --no-audit --no-fund`, potem jawny `prebuild-install` i sprawdzenie
+  obu modułów natywnych. Przywróć zgodną parę manifest–lockfile z tej paczki.
+- **Starsza paczka bez lockfile:** automatyczny deploy jej nie przyjmie. Odzyskiwanie
+  jest osobną ręczną procedurą w prywatnym stagingu: zachowaj kopię obecnej pary
+  manifest–lockfile, użyj właściwego npm CLI z `install --omit=dev --ignore-scripts
+--no-audit --no-fund --prefix KATALOG_STAGINGU`, potem jawnego pobrania binarium
+  SQLite i sprawdzenia modułów jak wyżej. Taka instalacja ponownie rozwiązuje zakresy
+  i **nie odtwarza gwarantowanie poprzednich wersji**. Zachowaj wygenerowany lockfile
+  z przygotowanym manifestem jako zapis odzyskiwania; nie łącz starszego manifestu
+  z lockfile aktualnie działającego wydania. W razie braku gotowych binariów przerwij
+  odzyskiwanie i przygotuj poprawkę do przodu. Nie uruchamiaj kompilacji na hostingu.
 - Przed cofnięciem kodu porównaj `drizzle/meta/_journal.json` obu paczek i oceń
   zgodność starszego API z obecną bazą. Przy niezgodnej migracji preferuj poprawkę
   do przodu. Nie uruchamiaj starego kodu bez tej oceny. Cofnięcie produkcyjnej bazy

@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { unzipSync } from 'fflate';
+import { prepareDependencies } from './deploy-remote.mjs';
+import { validateArchive } from './deploy.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseFile = path.join(root, 'release.zip');
@@ -41,6 +43,7 @@ async function run(command, args, options = {}) {
 
 try {
   const archive = new Uint8Array(await readFile(releaseFile));
+  validateArchive(archive);
   const entries = unzipSync(archive);
   if (Object.keys(entries).some((name) => /^dist\/jobs\/(?:heartbeat|send-reminders)\./.test(name))) {
     fail('paczka nadal zawiera usunięty job heartbeat lub send-reminders.');
@@ -71,9 +74,39 @@ try {
   );
 
   if (!process.env.npm_execpath) fail('nie można ustalić ścieżki do npm CLI.');
-  await run(process.execPath, [process.env.npm_execpath, 'install', '--omit=dev', '--no-audit', '--no-fund'], {
-    cwd: temporaryDirectory,
-  });
+  const config = { npm: process.env.npm_execpath, runtimeNode: process.execPath };
+  const execute = (tool, args, cwd, env = process.env) => run(tool, args, { cwd, env });
+  await prepareDependencies(config, temporaryDirectory, execute);
+  // Repeat in an empty directory and compare actual installed versions on this platform.
+  const second = await mkdtemp(path.join(tmpdir(), 'rodzina-smoke-repeat-'));
+  try {
+    for (const name of ['package.json', 'package-lock.json'])
+      await cp(path.join(temporaryDirectory, name), path.join(second, name));
+    await prepareDependencies(config, second, execute);
+    const lock = JSON.parse(await readFile(path.join(second, 'package-lock.json'), 'utf8'));
+    const snapshot = async (directory) => {
+      const versions = {};
+      for (const [name, node] of Object.entries(lock.packages)) {
+        if (!name) continue;
+        try {
+          const installed = JSON.parse(await readFile(path.join(directory, name, 'package.json'), 'utf8'));
+          if (installed.version !== node.version) fail(`wersja ${name} różni się od lockfile.`);
+          versions[name] = installed.version;
+        } catch (error) {
+          if (error.code !== 'ENOENT' || !node.optional) throw error;
+        }
+      }
+      return JSON.stringify(versions);
+    };
+    if ((await snapshot(temporaryDirectory)) !== (await snapshot(second))) fail('instalacje mają różne wersje.');
+    if (
+      (await readFile(path.join(second, 'package-lock.json'), 'utf8')) !==
+      Buffer.from(entries['package-lock.json']).toString()
+    )
+      fail('instalacja zmieniła lockfile.');
+  } finally {
+    await rm(second, { recursive: true, force: true });
+  }
   // A production process must refuse an unmigrated database with an actionable error.
   await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['server.cjs'], {
@@ -165,21 +198,31 @@ try {
     fail('serwer nie dostarczył skryptu wycofującego stare PWA bez cache.');
   }
 
-  const { default: Database } = await import('better-sqlite3');
   await run(process.execPath, ['--env-file', envFile, 'dist/jobs/backup-db.js'], { cwd: temporaryDirectory });
   const copies = await readdir(path.join(temporaryDirectory, 'backups'));
   if (copies.length !== 1 || !/^rodzina-\d{4}-\d{2}-\d{2}\.db$/.test(copies[0])) {
     fail('job nie utworzył dziennej kopii bazy.');
   }
-  const sqlite = new Database(path.join(temporaryDirectory, 'backups', copies[0]), { readonly: true });
-  try {
-    if (sqlite.pragma('integrity_check', { simple: true }) !== 'ok') fail('kopia bazy jest uszkodzona.');
-    sqlite.prepare('SELECT id FROM reminders LIMIT 1').all();
-    if (sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'push_subscriptions'").get())
-      fail('kopia nadal zawiera tabelę subskrypcji Web Push.');
-  } finally {
-    sqlite.close();
-  }
+  // A child releases the native DLL before temporary files are removed on Windows.
+  await run(
+    process.execPath,
+    [
+      '--input-type=commonjs',
+      '-e',
+      `
+    const Database = require('better-sqlite3');
+    const sqlite = new Database(process.argv[1], { readonly: true });
+    try {
+      if (sqlite.pragma('integrity_check', { simple: true }) !== 'ok') throw new Error('Corrupt backup.');
+      sqlite.prepare('SELECT id FROM reminders LIMIT 1').all();
+      if (sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'push_subscriptions'").get())
+        throw new Error('Backup still contains Web Push subscriptions.');
+    } finally { sqlite.close(); }
+  `,
+      path.join(temporaryDirectory, 'backups', copies[0]),
+    ],
+    { cwd: temporaryDirectory },
+  );
 
   console.log('release:smoke zakończony pomyślnie.');
 } finally {

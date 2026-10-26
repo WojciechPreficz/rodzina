@@ -1,5 +1,27 @@
 # Decyzje
 
+## 26.10.2026 — powtarzalne zależności release (punkt 1 przeglądu architektury)
+
+- Paczka serwera zawiera dedykowany manifest `rodzina-release` i lockfile v3
+  z `scripts/release/`. `npm run release:lock` wydziela drzewo runtime z głównego
+  lockfile, bez ponownego rozwiązywania wersji. Zachowuje wersje przechodnie,
+  integralność i warianty platformowe. Bundlowany workspace shared jest pomijany.
+  Pakowanie odrzuca rozbieżność z manifestem API lub głównym lockfile i nigdy
+  nie aktualizuje automatycznie plików zależności.
+- Smoke i hosting korzystają z jednej funkcji przygotowania zależności:
+  `npm ci --omit=dev --ignore-scripts`, jawny `prebuild-install` dla SQLite,
+  następnie sprawdzenie ładowania SQLite i Argon2. Brak binarium oznacza błąd,
+  bez kompilacji runtime. Smoke porównuje dwie puste instalacje i wersje lockfile;
+  linuksowy smoke w istniejącym CI na Node 24 sprawdza procedurę hostingu.
+- Deploy wymaga nowej pary manifest–lockfile przed instalacją i promocją.
+  Archiwizacja poprzedniej instalacji dopuszcza brak starego lockfile i zapisuje
+  ten fakt w metadanych historii. Ręczny powrót do starszej paczki bez lockfile
+  opisuje `DEPLOY.md`; nie traktujemy ponownego `npm install` jako odtworzenia
+  dawnych wersji. Nowe wydania zawsze promują i archiwizują lockfile.
+- Zakres nie zmienia danych, konfiguracji, crona ani kontraktu API/APK.
+  Nie wymaga prób UI ani fizycznego telefonu. Końcowy odbiór automatyczny
+  wymaga CI dla końcowego commita zgodnie z sekcją 1.2 planu.
+
 ## 26.10.2026 — święta i dni okolicznościowe w kalendarzu (K.1)
 
 - Właściciel zatwierdził lokalne warstwy świąt ustawowych i 12 dni
