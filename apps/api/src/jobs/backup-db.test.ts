@@ -49,6 +49,15 @@ describe('SQLite backup', () => {
       RODZINA_DATABASE_PATH: path.join(directory, 'source.db'),
       RODZINA_BACKUP_DIR: path.join(directory, 'backups'),
     });
+  const seedRateLimits = () => {
+    database.db
+      .insert(schema.authRateLimits)
+      .values([
+        { scopeKey: 'expired', count: 10, expiresAt: Date.now() - 1000 },
+        { scopeKey: 'active', count: 3, expiresAt: Date.now() + 60000 },
+      ])
+      .run();
+  };
   beforeEach(() => {
     directory = mkdtempSync(path.join(tmpdir(), 'rodzina-backup-'));
     database = connect(path.join(directory, 'source.db'));
@@ -80,6 +89,7 @@ describe('SQLite backup', () => {
 
   it('cleans sessions after the backup while keeping them in the snapshot', () => {
     seedSessions(Date.now() - 1000);
+    seedRateLimits();
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     runBackup(backupConfig());
     expect(
@@ -92,14 +102,24 @@ describe('SQLite backup', () => {
     const file = readdirSync(backupConfig().RODZINA_BACKUP_DIR).find((name) => name.endsWith('.db'))!;
     const copy = connect(path.join(backupConfig().RODZINA_BACKUP_DIR, file));
     expect(copy.db.select().from(schema.sessions).all()).toHaveLength(3);
+    expect(copy.db.select().from(schema.authRateLimits).all()).toHaveLength(2);
+    expect(
+      database.db
+        .select()
+        .from(schema.authRateLimits)
+        .all()
+        .map((row) => row.scopeKey),
+    ).toEqual(['active']);
     expect(log.mock.calls.map(([value]) => JSON.parse(value).event)).toEqual([
       'backup_finished',
       'expired_sessions_deleted',
+      'expired_auth_rate_limits_deleted',
     ]);
   });
 
   it('logs a cleanup failure without failing or removing the completed backup', () => {
     seedSessions(Date.now() - 1000);
+    seedRateLimits();
     database.sqlite.exec(
       "CREATE TRIGGER reject_session_cleanup BEFORE DELETE ON sessions BEGIN SELECT RAISE(ABORT, 'test failure'); END",
     );
@@ -108,15 +128,46 @@ describe('SQLite backup', () => {
     expect(() => runBackup(backupConfig())).not.toThrow();
     expect(JSON.parse(error.mock.calls[0]![0]).event).toBe('session_cleanup_failed');
     expect(database.db.select().from(schema.sessions).all()).toHaveLength(3);
+    expect(
+      database.db
+        .select()
+        .from(schema.authRateLimits)
+        .all()
+        .map((row) => row.scopeKey),
+    ).toEqual(['active']);
     const file = readdirSync(backupConfig().RODZINA_BACKUP_DIR).find((name) => name.endsWith('.db'))!;
     snapshot(path.join(backupConfig().RODZINA_BACKUP_DIR, file));
   });
 
   it('does not clean sessions when the backup fails', () => {
     seedSessions(Date.now() - 1000);
+    seedRateLimits();
     writeFileSync(backupConfig().RODZINA_BACKUP_DIR, 'blocked');
     expect(() => runBackup(backupConfig())).toThrow();
     expect(database.db.select().from(schema.sessions).all()).toHaveLength(3);
+    expect(database.db.select().from(schema.authRateLimits).all()).toHaveLength(2);
+  });
+
+  it('logs a rate limit cleanup failure without failing the backup or session cleanup', () => {
+    seedSessions(Date.now() - 1000);
+    seedRateLimits();
+    database.sqlite.exec(
+      "CREATE TRIGGER reject_limit_cleanup BEFORE DELETE ON auth_rate_limits BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+    );
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => runBackup(backupConfig())).not.toThrow();
+    expect(JSON.parse(error.mock.calls[0]![0]).event).toBe('auth_rate_limit_cleanup_failed');
+    expect(database.db.select().from(schema.authRateLimits).all()).toHaveLength(2);
+    expect(
+      database.db
+        .select()
+        .from(schema.sessions)
+        .all()
+        .map((row) => row.id),
+    ).toEqual(['active']);
+    const file = readdirSync(backupConfig().RODZINA_BACKUP_DIR).find((name) => name.endsWith('.db'))!;
+    snapshot(path.join(backupConfig().RODZINA_BACKUP_DIR, file));
   });
 
   it('creates a standalone consistent snapshot from an open WAL database using the Warsaw date', () => {

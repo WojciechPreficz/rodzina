@@ -42,6 +42,16 @@ export const sessions = sqliteTable(
   (table) => [index('sessions_user_idx').on(table.userId)],
 );
 
+export const authRateLimits = sqliteTable(
+  'auth_rate_limits',
+  {
+    scopeKey: text('scope_key').primaryKey(),
+    count: integer('count').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (table) => [index('auth_rate_limits_expiry_idx').on(table.expiresAt)],
+);
+
 export const invitations = sqliteTable('invitations', {
   id: text('id').primaryKey(),
   familyId: text('family_id')

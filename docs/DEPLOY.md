@@ -27,6 +27,30 @@ SQL lub `drizzle-kit migrate` nie rejestruje tej funkcji. Nie ma nowych
 zmiennych środowiskowych, zależności runtime ani zadań crona.
 Lokalne `npm run db:migrate` korzysta z tego samego joba przez `tsx`.
 
+Migracja `0024_auth_rate_limits.sql` dodaje wspólne dla procesów liczniki
+logowania i indeks wygaśnięcia. Wykonaj ją tą samą procedurą: backup,
+jawny job migracji z nowej paczki i dopiero restart API. Limit pozostaje
+10 prób w 15 minut dla pary IP–konto, osobno dla hasła i PIN-u dziecka.
+Poprawne logowanie usuwa własny licznik; restart procesu go nie zeruje.
+Klucze są skrótami SHA-256 zakresu, IP i identyfikatora konta
+(znormalizowanego e-maila albo identyfikatorów rodziny i dziecka),
+bez zapisu surowych identyfikatorów w tej tabeli. Nie dodano zmiennych
+środowiskowych, zależności runtime, crona ani zmian kontraktu API/APK.
+
+### Adres klienta i granica zaufania proxy
+
+Logowanie pobiera IP z `request.ip`. Obecne `trustProxy: true` ufa całemu
+łańcuchowi `X-Forwarded-For`; klient mogący narzucić jego początek może
+zmieniać klucz limitu. Konfiguracja wymaga, aby API było dostępne wyłącznie
+przez zaufane proxy hostingu, które nadpisuje nagłówki `X-Forwarded-*`
+pochodzące od klienta. Przed odbiorem na hostingu sprawdź z operatorem
+łańcuch proxy oraz brak bezpośredniego dostępu do portu API. W kontrolowanej
+próbie porównaj ustalone IP przy zwykłym żądaniu i przy żądaniu z własnym
+`X-Forwarded-For`; nagłówek klienta nie może wybrać innego klucza limitu.
+Repozytorium potwierdza sposób odczytu IP, ale nie potwierdza konfiguracji
+vh.pl. Zmianę polityki `trustProxy` dobieramy do rzeczywistego łańcucha
+hostingu; nie zakładamy liczby pośredników ani ich adresów.
+
 Przed instalacją zatrzymaj lokalną aplikację (`npm run dev`, `npm run dev:api`, `npm start`) i testy w trybie watch. W każdym terminalu, w którym działają, użyj `Ctrl+C` i poczekaj na zakończenie procesu.
 
 Lokalnie, w katalogu repozytorium, uruchom kolejno:
@@ -157,6 +181,12 @@ bez nowego wpisu crona. Kopia zawiera stan sprzed sprzątania. Zdarzenie
 `expired_sessions_deleted` podaje liczbę usuniętych sesji; błąd
 `session_cleanup_failed` trafia do stderr, ale nie zmienia sukcesu backupu
 ani kodu zakończenia joba. Przy błędzie backupu sprzątanie nie jest wykonywane.
+Po backupie job niezależnie usuwa też wygasłe liczniki `auth_rate_limits`
+(`expires_at <= now` w ms UTC). Zdarzenie `expired_auth_rate_limits_deleted`
+podaje liczbę usuniętych wpisów; `auth_rate_limit_cleanup_failed` trafia
+do stderr bez zmiany sukcesu kopii ani wyniku sprzątania sesji.
+Kopia zachowuje liczniki sprzed sprzątania. Odczyt limitu sam rozpoznaje
+wygaśnięcie, więc opóźniony cron nie przedłuża blokady logowania.
 Migracja zadania #34 dodaje tylko indeks `sessions_user_idx`; uruchamia się
 jawnym jobem migracji według istniejącej procedury aktualizacji.
 
@@ -167,8 +197,9 @@ plików WAL ani SHM. Przy odtwarzaniu zatrzymaj API i joby, zachowaj dotychczaso
 usuń jej stare pliki `-wal` i `-shm`, a wybraną kopię umieść pod `RODZINA_DATABASE_PATH`.
 Po restarcie sprawdź `/api/health` i dane rodziny.
 
-Krok nie dodaje migracji ani zależności runtime. Istniejące migracje, w tym historyczna
-tabela `job_runs`, pozostają bez zmian. `release:smoke` uruchamia backup z paczki bez VAPID
+Pierwotny krok backupu nie dodawał migracji ani zależności runtime; sprzątanie
+limitów korzysta z migracji 0024 opisanej wyżej. Historyczna tabela `job_runs`
+pozostaje bez zmian. `release:smoke` uruchamia backup z paczki bez VAPID
 i sprawdza integralność kopii, obecność przypomnień i brak tabeli subskrypcji.
 
 ## 6. Aktualizacja

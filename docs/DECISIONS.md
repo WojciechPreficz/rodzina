@@ -22,6 +22,55 @@
   z automatycznym ponowieniem tej samej operacji po błędzie sieci.
 - Ta zmiana aktualizuje wyłącznie zakres i zadania; nie implementuje funkcji.
 
+## 26.10.2026 — trwałe limity logowania (punkt 3 przeglądu architektury)
+
+- Na polecenie właściciela wdrażamy punkty 3 i 6 przeglądu. Limity logowania
+  przenosimy z pamięci procesu do `auth_rate_limits` (migracja 0024), aby
+  restart i wiele procesów Passengera nie rozdzielały historii prób.
+- Zachowujemy 10 prób w stałym oknie 15 minut i usuwanie licznika po
+  poprawnym logowaniu. Rozdzielamy zakresy hasła i PIN-u oraz pary IP–konto;
+  dla hasła normalizujemy e-mail, dla dziecka używamy rodziny i użytkownika.
+  Klucz to SHA-256 tablicy tych wartości z zakresem, bez surowego e-maila
+  w tabeli. Skrót nie jest szyfrowaniem ani obietnicą anonimowości danych.
+- Sprawdzenie okna i zwiększenie licznika wykonujemy w krótkiej transakcji
+  `immediate`, przed `await` Argon2. Wygasły wpis rozpoczyna nowe okno przy
+  odczycie, bez zależności od crona. Istniejący backup sprząta wygasłe wpisy
+  po udanej kopii, niezależnie od sprzątania sesji; błąd sprzątania logujemy
+  bez unieważniania kopii. Bez nowej usługi, konfiguracji i zależności runtime.
+- Przegląd potwierdził `request.ip` i `trustProxy: true`. Zachowujemy politykę,
+  ponieważ nie znamy rzeczywistego łańcucha proxy vh.pl. Jej skuteczność
+  wymaga nadpisywania nagłówków klienta przez zaufane proxy i braku wejścia
+  bezpośrednio do API. Procedurę sprawdzenia opisuje `DEPLOY.md`; nie zaliczamy
+  jej jako wykonanej na hostingu. Dodatkowy limit łączny IP lub konta
+  pozostaje poza zakresem. Kontrakty API i APK pozostają zgodne.
+- Weryfikacja lokalna: 39 testów w sześciu plikach (limity hasła i PIN-u,
+  restart bazy, dwa połączenia API, czterech równoległych workerów,
+  wygaśnięcie, czyszczenie po sukcesie, klucze, migracja i backup), ESLint
+  zmienionego kodu, Prettier, `npm run typecheck`, `npm run build`
+  i `npm run release:smoke` zakończyły się sukcesem. Smoke sprawdza również
+  obecność `auth_rate_limits` w kopii bazy z paczki. Testy i smoke wykonano
+  poza sandboxem po błędach plików tymczasowych Vitest i `EPERM` backupu.
+  Raport: `.android-tools/architecture-3-tests.json`; logi buildu i smoke:
+  `.android-tools/architecture-3-build.log` i `architecture-3-smoke.log`.
+  Bez zmian UI ani APK; próby ekranów i telefonu nie są wymagane tym zakresem.
+  Stan przed commitem/pushem: zweryfikowane lokalnie, oczekuje na CI.
+
+## 26.10.2026 — rzeczywista zależność od sterownika SQLite (punkt 6)
+
+- Korygujemy wcześniejszą deklarację wymiany `better-sqlite3` na
+  `@libsql/client` w jednym pliku. `client.ts` centralizuje otwieranie
+  połączenia, ale typy połączenia, synchroniczne repozytoria i serwisy,
+  migracje sterownika, transakcje, idempotencja, limity logowania,
+  bezpośrednie SQL, backup `VACUUM INTO` i binaria release zależą od obecnego
+  sterownika. Powód: dokumentacja powinna opisywać rzeczywiste granice kodu.
+- Zachowujemy sterownik. Abstrakcję i ewentualną migrację planujemy osobno
+  dopiero przy konkretnej potrzebie, po sprawdzeniu modelu transakcyjnego
+  nowego klienta. Sam interfejs nie uzgadnia zapisów synchronicznych
+  i asynchronicznych. Wymagany będzie dowód atomowości mutacji i odpowiedzi
+  idempotentnej, poprawnych migracji schematu oraz spójnego backupu.
+- Ten punkt zmienia wyłącznie dokumentację, bez nowego adaptera ani zmiany
+  runtime lub danych.
+
 ## 26.10.2026 — przeterminowane zmiany zadań (punkt 2 przeglądu architektury)
 
 - Zachowujemy 30-dniowy limit automatycznego ponawiania. Trwały stan

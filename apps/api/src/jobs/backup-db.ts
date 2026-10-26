@@ -6,6 +6,7 @@ import { lte } from 'drizzle-orm';
 import { loadConfig } from '../config.js';
 import { createDatabase, type DatabaseConnection } from '../db/client.js';
 import { sessions } from '../db/schema.js';
+import { createAuthRateLimitRepository } from '../modules/auth/rate-limit-repository.js';
 
 export function deleteExpiredSessions(database: DatabaseConnection, nowMs: number): number {
   return database.db.delete(sessions).where(lte(sessions.expiresAt, nowMs)).run().changes;
@@ -49,6 +50,17 @@ export function runBackup(config = loadConfig()): void {
     } catch {
       console.error(
         JSON.stringify({ event: 'session_cleanup_failed', reason: 'Nie udało się usunąć wygasłych sesji.' }),
+      );
+    }
+    try {
+      const removed = createAuthRateLimitRepository(database).deleteExpired(Date.now());
+      console.log(JSON.stringify({ event: 'expired_auth_rate_limits_deleted', removed }));
+    } catch {
+      console.error(
+        JSON.stringify({
+          event: 'auth_rate_limit_cleanup_failed',
+          reason: 'Nie udało się usunąć wygasłych limitów logowania.',
+        }),
       );
     }
   } finally {

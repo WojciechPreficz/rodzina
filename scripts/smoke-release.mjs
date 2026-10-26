@@ -215,6 +215,7 @@ try {
     try {
       if (sqlite.pragma('integrity_check', { simple: true }) !== 'ok') throw new Error('Corrupt backup.');
       sqlite.prepare('SELECT id FROM reminders LIMIT 1').all();
+      sqlite.prepare('SELECT scope_key, count, expires_at FROM auth_rate_limits LIMIT 1').all();
       if (sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'push_subscriptions'").get())
         throw new Error('Backup still contains Web Push subscriptions.');
     } finally { sqlite.close(); }

@@ -2,9 +2,10 @@
 
 Data: 26.10.2026. Stan kodu podczas przeglądu: `0a9b7d9`.
 
-**Status: propozycje do zaplanowania; niezaimplementowane.** Dokument opisuje trzy pozostałe problemy
-z przeglądu oraz dodatkową rozbieżność w dokumentacji sterownika SQLite. Nie zmienia
-zakresów i statusów faz w [planie](plan.md), nie zatwierdza decyzji architektonicznych
+**Status: propozycje do zaplanowania; niezaimplementowane.** Dokument opisuje dwa
+pozostałe problemy z przeglądu. Opis zachowuje kontekst kodu `0a9b7d9`;
+aktualne decyzje i wyniki wykonanych zmian są w [DECISIONS.md](DECISIONS.md).
+Dokument nie zmienia zakresów i statusów faz w [planie](plan.md), nie zatwierdza decyzji architektonicznych
 ani wdrożenia. Każdą przyszłą zmianę należy realizować jako osobny, wskazany krok.
 Decyzje wykraczające poza obecne ustalenia należy wtedy zapisać w [DECISIONS.md](DECISIONS.md).
 
@@ -15,59 +16,13 @@ ograniczenia cPanel i Passengera: bez stałego procesu w tle, Redisa, WebSocket�
 ## Kolejność i zakres
 
 Kolejność poniżej odpowiada przeglądowi i proponowanej kolejności prac.
-Punkt 3 dotyczy ochrony logowania. Numeracja pozostałych punktów jest zachowana. Punkt 4 opisuje ryzyko wydajności
-wymagające pomiarów, punkt 5 koszt utrzymania, a punkt 6 zgodność dokumentacji z kodem.
+Numeracja pozostałych punktów jest zachowana. Punkt 4 opisuje ryzyko wydajności
+wymagające pomiarów, a punkt 5 koszt utrzymania.
 
-| Punkt | Problem                                                   | Oczekiwany rezultat                                    |
-| ----- | --------------------------------------------------------- | ------------------------------------------------------ |
-| 3     | Limity logowania tylko w pamięci                          | Wspólne liczniki przetrwają restart procesu            |
-| 4     | Synchronizacja pobiera całe zbiory wieloma żądaniami      | Mniej żądań HTTP i zapytań SQL, potwierdzone pomiarami |
-| 5     | Sesja jest związana z modułami funkcjonalnymi             | Osobne zarządzanie sesją i koordynowanie modułów       |
-| 6     | Dokumentacja obiecuje prostszą wymianę sterownika niż kod | Jawnie opisane zależności od synchronicznego SQLite    |
-
-## 3. Limity logowania są przechowywane tylko w pamięci procesu
-
-### Stan i skutki
-
-[auth/service.ts](../apps/api/src/modules/auth/service.ts) utrzymuje liczniki w globalnym
-`Map`, według pary IP–konto. Obecny limit wynosi 10 prób w 15 minut i dotyczy logowania
-hasłem oraz PIN-em. Restart procesu zeruje historię, a oddzielne procesy Passengera
-nie współdzielą liczników. Wygasłe klucze są odnawiane dopiero przy kolejnym użyciu;
-nieużywane wpisy nie są usuwane z mapy.
-
-Jest to potwierdzona właściwość implementacji. Przegląd nie potwierdza obejścia ochrony
-na serwerze produkcyjnym ani sposobu nadpisywania nagłówków proxy przez hosting.
-
-### Proponowana implementacja
-
-1. Dodać tabelę SQLite, np. `auth_rate_limits`, z kluczem zakresu limitu, licznikiem
-   i końcem okna w ms UTC oraz indeksem czasu wygaśnięcia. Wygenerować i commitować migrację.
-2. Wydzielić repozytorium i serwis limitowania. W krótkiej transakcji `immediate`
-   atomowo sprawdzać okno i zwiększać licznik przed kosztowną weryfikacją Argon2.
-   Transakcja nie może obejmować `await` weryfikacji hasła lub PIN-u.
-3. W pierwszym kroku zachować obecny próg, okno i rozróżnienie kont hasłowych oraz dzieci.
-   Klucz może zawierać skrót znormalizowanego identyfikatora i IP, zamiast surowego adresu
-   e-mail. Odpowiedź nadal ma status 429 i obecny polski kontrakt błędu.
-4. Przejrzeć ustalanie `request.ip` oraz granicę zaufania `trustProxy` w warunkach hostingu.
-   Skuteczność klucza IP wymaga wiarygodnego adresu klienta. Ewentualny dodatkowy limit
-   łączny IP lub konta zaplanować osobno, z uwzględnieniem wspólnego IP domowników
-   i możliwości zablokowania konta przez cudze próby.
-5. Usuwać wygasłe rekordy istniejącym jobem utrzymaniowym przy backupie. Odczyt limitu
-   musi sam rozpoznawać wygaśnięcie, więc opóźnienie crona nie przedłuża blokady.
-   Uzupełnić opis utrzymania w `docs/DEPLOY.md`, bez dodawania procesu w tle.
-
-**Pliki:** moduł auth i nowe pliki serwisu/repozytorium limitów, `apps/api/src/db/schema.ts`,
-migracja w `apps/api/drizzle/`, `apps/api/src/jobs/backup-db.ts`, testy auth, migracji
-i sprzątania oraz `docs/DEPLOY.md`.
-
-### Weryfikacja i kryteria odbioru
-
-- Jedenasta nieudana próba jest blokowana także po ponownym otwarciu tej samej bazy.
-  Dwa połączenia z plikiem SQLite widzą wspólny limit; równoczesne próby nie gubią zliczeń.
-- Testy obejmują granicę wygaśnięcia, logowanie hasłem i PIN-em, poprawne logowanie,
-  rozdzielenie kluczy oraz sprzątanie starych wpisów.
-- Lokalny `release:smoke` potwierdza migrację i działanie paczki. Nowy stan nie wymaga
-  zmiany APK ani nowych usług na hostingu.
+| Punkt | Problem                                              | Oczekiwany rezultat                                    |
+| ----- | ---------------------------------------------------- | ------------------------------------------------------ |
+| 4     | Synchronizacja pobiera całe zbiory wieloma żądaniami | Mniej żądań HTTP i zapytań SQL, potwierdzone pomiarami |
+| 5     | Sesja jest związana z modułami funkcjonalnymi        | Osobne zarządzanie sesją i koordynowanie modułów       |
 
 ## 4. Synchronizacja pobiera całe zbiory wieloma żądaniami
 
@@ -173,41 +128,6 @@ sesji w modułach oraz testy przejść konta i synchronizacji.
 - Refaktoryzacja zachowuje formaty cache i kontrakty API. Próby WWW oraz fizycznego APK
   potwierdzają odtworzenie danych i czyszczenie alarmów przy wylogowaniu.
 
-## 6. Dokumentacja zawyża wymienność sterownika SQLite
-
-### Stan i skutki
-
-[ARCHITECTURE.md](ARCHITECTURE.md) deklaruje możliwość zamiany `better-sqlite3`
-na `@libsql/client` przez zmianę jednego pliku. Tymczasem `DatabaseConnection` udostępnia
-konkretny typ `BetterSQLite3Database` oraz natywne połączenie `Database.Database`.
-Idempotencja używa bezpośrednio `database.sqlite.prepare()` i transakcji `immediate`,
-migracje korzystają z migratora właściwego dla sterownika, a repozytoria i serwisy zakładają
-synchroniczne operacje. Backup używa `VACUUM INTO`. Zmiana sterownika wymagałaby zatem
-analizy i zmian w wielu miejscach, w tym ponownego potwierdzenia atomowości.
-
-### Proponowana implementacja
-
-1. W osobnym kroku dokumentacyjnym poprawić opis: `client.ts` centralizuje otwieranie
-   połączenia, ale aplikacja świadomie zależy od synchronicznego SQLite przez Drizzle
-   i `better-sqlite3`. Utrwalić korektę wcześniejszego założenia w `DECISIONS.md`.
-2. Wymienić granice tej zależności: typy połączenia, migracje, transakcje, idempotencja,
-   bezpośrednie SQL, backup oraz pakowanie binariów natywnych.
-3. Pozostawić obecny sterownik. Abstrakcję wprowadzać dopiero przy konkretnej potrzebie
-   migracji i po sprawdzeniu modelu transakcyjnego drugiego klienta. Samo ukrycie typów
-   za interfejsem nie zapewnia zgodności synchronicznych i asynchronicznych zapisów.
-4. Ewentualną przyszłą migrację zaplanować oddzielnie, wraz z dowodem atomowego zapisu
-   mutacji i jej odpowiedzi idempotentnej, migracji schematu oraz spójnego backupu.
-
-**Pliki w rekomendowanym kroku:** wyłącznie `docs/ARCHITECTURE.md` i `docs/DECISIONS.md`.
-Ten dokument jedynie proponuje tę korektę i nie wprowadza jej w obowiązujących zasadach.
-
-### Weryfikacja i kryteria odbioru
-
-- Dokumentacja nie obiecuje wymiany sterownika w jednym pliku i wymienia rzeczywiste
-  zależności. Lokalnie wystarczają przegląd treści, diffu i formatowania.
-- Nie powstaje nowy adapter bazy, migracja danych ani zmiana runtime tylko w celu
-  dopasowania kodu do nieaktualnej deklaracji.
-
 ## Zasady odbioru przyszłych zmian i stan weryfikacji przeglądu
 
 Każdy punkt wymaga osobnego zakresu wykonawczego i odbioru zgodnie z sekcją 1.2
@@ -223,5 +143,5 @@ sandboxem zakończyło się sukcesem. Wynik dotyczy istniejącego kodu i nie pot
 działania proponowanych rozwiązań. Nie wykonano pełnego CI, pomiarów obciążenia ani prób
 fizycznego APK w ramach tego przeglądu.
 
-Utworzenie tego dokumentu obejmuje wyłącznie dokumentację. Wszystkie propozycje pozostają
-niezaimplementowane; nie zmienia to statusów istniejących faz ani ich odbiorów.
+Dokument zawiera wyłącznie pozostałe propozycje. Nie zmienia statusów istniejących
+faz ani ich odbiorów.
