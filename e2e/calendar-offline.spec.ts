@@ -148,7 +148,7 @@ for (const native of [false, true]) {
         .toBeUndefined();
       await expect
         .poll(() =>
-          page.evaluate(() => JSON.parse(localStorage.getItem('rodzina:shopping:v1')!).clientState.mutations.length),
+          readOfflineSnapshot<{ operations: unknown[] }>(page, 'shopping').then((saved) => saved?.operations.length),
         )
         .toBe(0);
       await page.screenshot({ path: info.outputPath('calendar-reconnected.png'), fullPage: true });
