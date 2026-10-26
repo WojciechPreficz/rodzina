@@ -1,0 +1,204 @@
+{
+  "fixtureVersion": 1,
+  "base": "legacy-valid.json",
+  "cases": [
+    {
+      "id": "broken-family",
+      "changes": [
+        {
+          "key": "rodzina:offline-data:v1",
+          "raw": "{broken"
+        }
+      ],
+      "expectedMigration": "discard-cache-with-notice",
+      "readerCheck": "family-invalid"
+    },
+    {
+      "id": "future-contacts",
+      "changes": [
+        {
+          "key": "rodzina:contacts:v1",
+          "path": ["version"],
+          "value": 2
+        }
+      ],
+      "expectedMigration": "block-unsupported-version",
+      "readerCheck": "contacts-invalid"
+    },
+    {
+      "id": "foreign-contacts",
+      "changes": [
+        {
+          "key": "rodzina:contacts:v1",
+          "path": ["data", "contacts", 0, "familyId"],
+          "value": "10000000-0000-4000-8000-000000000099"
+        }
+      ],
+      "expectedMigration": "reject-foreign-cache",
+      "readerCheck": "contacts-invalid"
+    },
+    {
+      "id": "foreign-session",
+      "changes": [
+        {
+          "key": "rodzina:offline-data:v1",
+          "path": ["account"],
+          "value": "10000000-0000-4000-8000-000000000099:10000000-0000-4000-8000-000000000098"
+        }
+      ],
+      "expectedMigration": "block-account-conflict",
+      "readerCheck": "family-invalid"
+    },
+    {
+      "id": "missing-task-list",
+      "changes": [
+        {
+          "key": "rodzina:tasks:v1",
+          "path": ["items"],
+          "value": {}
+        }
+      ],
+      "expectedMigration": "preserve-intent-needs-review-missing-base",
+      "readerCheck": "task-missing"
+    },
+    {
+      "id": "broken-shopping-journal",
+      "changes": [
+        {
+          "key": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000010",
+          "raw": "{broken"
+        }
+      ],
+      "expectedMigration": "block-preserve-raw-source",
+      "readerCheck": "invalid-json"
+    },
+    {
+      "id": "conflicting-shopping-copy",
+      "changes": [
+        {
+          "key": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000010",
+          "path": ["state", "variables", "change", "data", "name"],
+          "value": "Inny produkt"
+        }
+      ],
+      "expectedMigration": "block-conflicting-intent",
+      "readerCheck": "shopping-conflict"
+    },
+    {
+      "id": "shopping-snapshot-only",
+      "changes": [
+        {
+          "key": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000010",
+          "remove": true
+        }
+      ],
+      "expectedMigration": "recover-needs-review-snapshot-only",
+      "readerCheck": "shopping-snapshot-only"
+    },
+    {
+      "id": "shopping-journal-only",
+      "changes": [
+        {
+          "key": "rodzina:shopping:v1",
+          "remove": true
+        }
+      ],
+      "expectedMigration": "preserve-intent-needs-review-missing-base",
+      "readerCheck": "shopping-journal-only"
+    },
+    {
+      "id": "shopping-in-flight",
+      "changes": [
+        {
+          "key": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000010",
+          "path": ["state", "isPaused"],
+          "value": false
+        },
+        {
+          "key": "rodzina:shopping:v1",
+          "path": ["clientState", "mutations", 0, "state", "isPaused"],
+          "value": false
+        }
+      ],
+      "expectedMigration": "replay-with-same-id-after-lease",
+      "readerCheck": "shopping-in-flight"
+    },
+    {
+      "id": "shopping-ambiguous-order",
+      "changes": [
+        {
+          "key": "rodzina:shopping:v1",
+          "path": ["clientState", "mutations"],
+          "value": []
+        },
+        {
+          "key": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000011",
+          "path": ["state", "variables", "submittedAt"],
+          "value": 1793008797000
+        }
+      ],
+      "expectedMigration": "preserve-chain-needs-review-ambiguous-order",
+      "readerCheck": "shopping-tie"
+    },
+    {
+      "id": "task-tie",
+      "changes": [
+        {
+          "key": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000016",
+          "value": {
+            "id": "10000000-0000-4000-8000-000000000016",
+            "submittedAt": 1793008799000,
+            "listId": "10000000-0000-4000-8000-000000000005",
+            "taskId": "10000000-0000-4000-8000-000000000006",
+            "change": {
+              "type": "remove"
+            }
+          }
+        }
+      ],
+      "expectedMigration": "preserve-time-then-id-order",
+      "readerCheck": "task-tie"
+    },
+    {
+      "id": "task-without-status",
+      "changes": [
+        {
+          "key": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000012",
+          "path": ["status"],
+          "remove": true
+        }
+      ],
+      "expectedMigration": "import-as-pending",
+      "readerCheck": "task-pending"
+    },
+    {
+      "id": "task-expired",
+      "changes": [
+        {
+          "key": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000012",
+          "path": ["submittedAt"],
+          "value": 1790416799999
+        }
+      ],
+      "expectedMigration": "preserve-time-needs-review-expired",
+      "readerCheck": "task-expired"
+    },
+    {
+      "id": "task-persisted-review",
+      "changes": [
+        {
+          "key": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000012",
+          "path": ["status"],
+          "value": "needs-review"
+        },
+        {
+          "key": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000012",
+          "path": ["reason"],
+          "value": "expired"
+        }
+      ],
+      "expectedMigration": "preserve-review-despite-younger-time",
+      "readerCheck": "task-expired"
+    }
+  ]
+}

@@ -1,5 +1,54 @@
 # Decyzje
 
+## 26.10.2026 — kontrakt O.1 wspólnej obsługi offline (#49)
+
+- Specyfikacja [OFFLINE_CONTRACT.md](OFFLINE_CONTRACT.md) inwentaryzuje pięć
+  obecnych magazynów, dzienniki, znaczniki odrzuceń i powiązanie z alarmami.
+  Dodajemy wyłącznie dokumentację, syntetyczne próbki, ich test zgodności
+  z obecnymi czytnikami oraz objęcie dokumentów/JSON formatowaniem.
+- Przyjmujemy wersjonowaną bazę `rodzina-offline` z magazynami cache,
+  outbox, metadata i migration, adaptery modułów, sekwencję konta i jawne
+  zależności. Nadawca ma dzierżawę 15 s odnawianą co 5 s; odpowiedzi wymagają
+  zgodnej epoki i sesji. Szczegóły błędów, retry i czyszczenia są w kontrakcie.
+- Początkowy budżet logiczny to 40 MiB (24 MiB cache, 12 MiB kolejek
+  i chronionej bazy, 4 MiB metadanych), plus przejściowe 48 MiB migracji.
+  Liczenie z marginesem i pomiary są jawne; limity nie gwarantują przydziału
+  fizycznej pamięci. Odbiór na rzeczywistych danych należy do O.7.
+- Brak dowodu wyłączności nie pozwala automatycznie migrować starych kart.
+  Wersje sprzed protokołu wymagają konserwacyjnego zamknięcia przeglądarki
+  i uruchomienia nowej strony bez przywracania kart albo wcześniejszego
+  wdrożenia zgodnego protokołu. Sam timeout lub hash nie wystarczają.
+- Znaczniki odrzuceń zadań są nadrzędne nad resztkami operacji. Brakujące
+  dzienniki zakupów odzyskane ze snapshotu wymagają sprawdzenia, a remisy
+  na tym samym zasobie bez dowodu kolejności nie są rozstrzygane losowo.
+  Powód: zachowanie niewysłanych intencji bez odtwarzania odrzuconych zmian
+  i bez zgadywania kolejności. Nie dodajemy jeszcze produkcyjnego migratora.
+- Weryfikacja lokalna: 75 testów w sześciu zestawach (w tym 18 testów próbek),
+  lint nowego testu, formatowanie zmienionych plików i `npm run typecheck`
+  przeszły. Zestaw testów ponowiono poza sandboxem po błędzie ENOENT jego
+  plików tymczasowych. Ten krok nie wymaga prób UI/APK, bo nie zmienia
+  zachowania aplikacji. Status: **zweryfikowane lokalnie, oczekuje na CI**.
+  Na polecenie właściciela pracę kończymy po commicie i pushu; CI sprawdzi
+  właściciel. Nie oznaczamy zadania jako odebranego przed jego wynikiem.
+
+## 26.10.2026 — osobny plan wspólnej obsługi offline
+
+- Na polecenie właściciela tworzymy [OFFLINE_PLAN.md](OFFLINE_PLAN.md)
+  i zadania GitHub dla wspólnej pamięci trwałej oraz jednego silnika kolejki
+  z adapterami modułów. To plan prac, bez implementacji i bez zaliczenia CI.
+- Plan rozwija propozycję etapu B z 25.10.2026 i zastępuje jej robocze kroki
+  B.1–B.7 krokami O.1–O.7, uwzględniając kontakty i przyszłe obiady.
+  Dawne budżety są punktem wyjścia; konkretne limity i protokół migracji
+  określimy w O.1 na podstawie aktualnych danych i ryzyka aktualizacji.
+- O.1–O.7 poprzedzają krok 6.5. Kroki obiadów online 6.1–6.4 mogą być
+  realizowane wcześniej. W 6.5 dodamy adapter do gotowego rdzenia, bez
+  przebudowy innych magazynów; eksport do zakupów ma jednego nadawcę.
+- Zachowujemy zakres funkcji offline poszczególnych modułów, prywatność,
+  ID i wiek niewysłanych operacji oraz istniejącą politykę czyszczenia konta.
+  Przenosimy najpierw magazyny, potem silniki, po jednym module.
+  Powód: uproszczenie kolejnych integracji bez jednoczesnej wymiany
+  wszystkich ścieżek zapisu i synchronizacji.
+
 ## 26.10.2026 — rozszerzenie planu obiadów (faza 6, #6)
 
 - Na polecenie właściciela eksport scala składniki również z pozycjami już
@@ -355,6 +404,11 @@ transport` w [CI dla 5d78689](https://github.com/WojciechPreficz/rodzina/actions
   **zweryfikowane lokalnie, oczekuje na CI** oraz odbiór na urządzeniu.
 
 ## 25.10.2026 — PROPOZYCJA DO AKCEPTACJI: wspólny outbox i IndexedDB (etap B)
+
+**Aktualizacja 26.10.2026:** bieżący zakres, kolejność i kryteria określa
+[OFFLINE_PLAN.md](OFFLINE_PLAN.md), kroki O.1–O.7. Poniższa propozycja
+zachowuje uzasadnienie pierwotnego projektu; nie jest drugim planem realizacji
+ani potwierdzeniem przyjęcia dawnych budżetów.
 
 **Status: projekt do decyzji właściciela, bez implementacji.** Proponujemy
 najpierw przenieść istniejące formaty do IndexedDB, a dopiero potem zastępować

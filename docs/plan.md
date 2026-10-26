@@ -86,6 +86,17 @@ Pierwotne metadane statusów zachowano w archiwum.
 Bieżące dodatkowe plany: [redesign R.1–R.8](REDESIGN_PLAN.md)
 i [reset hasła przez e-mail](RESET_HASLA_PLAN.md). Ich statusów nie zmieniono.
 
+**Wspólna obsługa offline — plan O.1–O.7 z 26.10.2026:**
+[osobny plan](OFFLINE_PLAN.md) obejmuje wspólną pamięć IndexedDB i kolejkę
+operacji z adapterami istniejących modułów. Kroki wykonujemy kolejno przed
+6.5; funkcje obiadów online z 6.1–6.4 mogą powstać wcześniej. Nowy plan
+zastępuje roboczy podział etapu B z `DECISIONS.md`, bez implementacji
+obiadów i bez zmiany statusu dotychczasowych faz.
+
+O.1 (#49): kontrakty i próbki przygotowane lokalnie w
+[OFFLINE_CONTRACT.md](OFFLINE_CONTRACT.md), oczekują na CI końcowego commita.
+Produkcja nadal używa dotychczasowych magazynów i synchronizatorów.
+
 **Faza 8 — dokumenty: zaimplementowana — potwierdzenie właściciela 25.10.2026.**
 Pełny zakres pozostaje w [archiwum fazy 8](archive/plan-przyszle-fazy.md).
 Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani
@@ -230,7 +241,9 @@ Implementacja lokalna; końcowe CI i odbiór fizycznego APK pozostają do potwie
   identyfikatorów i atomowej idempotencji oraz eksportu kopii składników;
   zachowujemy działanie klientów online z wcześniejszych kroków. Korzystamy
   z istniejących mechanizmów magazynów i synchronizacji, bez implementowania
-  osobnego przyszłego planu ich przebudowy.
+  ich przebudowy w ramach fazy 6. Przed 6.5 kończymy kroki O.1–O.7
+  [wspólnej obsługi offline](OFFLINE_PLAN.md); 6.5 dodaje adapter obiadów
+  i eksport przez jedną wspólną kolejkę, bez drugiego silnika synchronizacji.
 - **Gotowe, gdy:** testy obejmują odczyt, dodanie, edycję, usunięcie, kopiowanie
   i eksport offline, niepobrany tydzień, podpowiedzi i dzisiejszą kartę, utratę
   odpowiedzi, retry bez ponownego zwiększenia ilości, wiele kart, zależności

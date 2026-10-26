@@ -1,0 +1,515 @@
+{
+  "fixtureVersion": 1,
+  "referenceTime": 1793008800000,
+  "accountId": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002",
+  "ids": {
+    "family": "10000000-0000-4000-8000-000000000001",
+    "user": "10000000-0000-4000-8000-000000000002",
+    "shoppingList": "10000000-0000-4000-8000-000000000003",
+    "milk": "10000000-0000-4000-8000-000000000004",
+    "taskList": "10000000-0000-4000-8000-000000000005",
+    "task": "10000000-0000-4000-8000-000000000006",
+    "group": "10000000-0000-4000-8000-000000000007",
+    "contact": "10000000-0000-4000-8000-000000000008",
+    "event": "10000000-0000-4000-8000-000000000009",
+    "bread": "10000000-0000-4000-8000-000000000010",
+    "shoppingEdit": "10000000-0000-4000-8000-000000000011",
+    "taskEdit": "10000000-0000-4000-8000-000000000012",
+    "taskDiscarded": "10000000-0000-4000-8000-000000000013",
+    "discard": "10000000-0000-4000-8000-000000000014",
+    "personalReminder": "10000000-0000-4000-8000-000000000015",
+    "taskRemove": "10000000-0000-4000-8000-000000000016"
+  },
+  "keys": {
+    "family": "rodzina:offline-data:v1",
+    "calendar": "rodzina:calendar:v1",
+    "contacts": "rodzina:contacts:v1",
+    "shopping": "rodzina:shopping:v1",
+    "tasks": "rodzina:tasks:v1",
+    "shoppingAdd": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000010",
+    "shoppingEdit": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000011",
+    "taskEdit": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000012",
+    "taskDiscarded": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000013",
+    "discard": "rodzina:tasks:v1:discard:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000014"
+  },
+  "entries": [
+    {
+      "key": "rodzina:offline-data:v1",
+      "value": {
+        "version": 1,
+        "account": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002",
+        "session": {
+          "user": {
+            "id": "10000000-0000-4000-8000-000000000002",
+            "familyId": "10000000-0000-4000-8000-000000000001",
+            "displayName": "Osoba testowa",
+            "color": "#426655",
+            "role": "admin"
+          },
+          "family": {
+            "id": "10000000-0000-4000-8000-000000000001",
+            "name": "Rodzina testowa",
+            "timezone": "Europe/Warsaw",
+            "joinCode": "TEST-CODE"
+          }
+        },
+        "members": [
+          {
+            "id": "10000000-0000-4000-8000-000000000002",
+            "familyId": "10000000-0000-4000-8000-000000000001",
+            "displayName": "Osoba testowa",
+            "color": "#426655",
+            "role": "admin"
+          }
+        ],
+        "syncedAt": 1793008796000
+      }
+    },
+    {
+      "key": "rodzina:calendar:v1",
+      "value": {
+        "version": 1,
+        "account": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002",
+        "ranges": [
+          {
+            "month": "2026-10",
+            "from": "2026-09-24",
+            "to": "2026-11-08",
+            "occurrences": [
+              {
+                "eventId": "10000000-0000-4000-8000-000000000009",
+                "occurrenceDate": "2026-10-26",
+                "startUtc": 1793008800000,
+                "endUtc": 1793012400000,
+                "allDay": false,
+                "isException": false,
+                "title": "Wydarzenie testowe",
+                "location": null,
+                "kind": "recurring",
+                "createdBy": "10000000-0000-4000-8000-000000000002",
+                "participants": [
+                  {
+                    "id": "10000000-0000-4000-8000-000000000002",
+                    "displayName": "Osoba testowa",
+                    "color": "#426655"
+                  }
+                ]
+              }
+            ],
+            "detailIds": ["10000000-0000-4000-8000-000000000009"],
+            "complete": true,
+            "stale": false,
+            "syncedAt": 1793008796000,
+            "usedAt": 1793008799000
+          }
+        ],
+        "details": {
+          "10000000-0000-4000-8000-000000000009": {
+            "event": {
+              "createdBy": "10000000-0000-4000-8000-000000000002",
+              "createdAt": 1793008790000,
+              "updatedAt": 1793008790000,
+              "id": "10000000-0000-4000-8000-000000000009",
+              "familyId": "10000000-0000-4000-8000-000000000001",
+              "title": "Wydarzenie testowe",
+              "description": "Syntetyczny opis",
+              "location": null,
+              "startDate": "2026-10-26",
+              "startTime": "11:00",
+              "durationMinutes": 60,
+              "kind": "recurring",
+              "rrule": "FREQ=DAILY;COUNT=3",
+              "datePrecision": "day",
+              "participants": [
+                {
+                  "id": "10000000-0000-4000-8000-000000000002",
+                  "displayName": "Osoba testowa",
+                  "color": "#426655"
+                }
+              ],
+              "reminders": [],
+              "exceptions": []
+            },
+            "syncedAt": 1793008796000
+          }
+        },
+        "personal": {
+          "10000000-0000-4000-8000-000000000009": [
+            {
+              "id": "10000000-0000-4000-8000-000000000015",
+              "familyId": "10000000-0000-4000-8000-000000000001",
+              "eventId": "10000000-0000-4000-8000-000000000009",
+              "taskId": null,
+              "documentId": null,
+              "type": "offset",
+              "offsetValue": 15,
+              "offsetUnit": "minute",
+              "remindAt": null,
+              "audience": "user",
+              "userId": "10000000-0000-4000-8000-000000000002",
+              "createdBy": "10000000-0000-4000-8000-000000000002",
+              "nextFireAt": 1793007900000,
+              "lastSentAt": null
+            }
+          ]
+        },
+        "distant": {
+          "ids": [],
+          "syncedAt": 1793008796000
+        }
+      }
+    },
+    {
+      "key": "rodzina:contacts:v1",
+      "value": {
+        "version": 1,
+        "account": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002",
+        "syncedAt": 1793008796000,
+        "data": {
+          "ok": true,
+          "groups": [
+            {
+              "createdBy": "10000000-0000-4000-8000-000000000002",
+              "createdAt": 1793008790000,
+              "updatedAt": 1793008790000,
+              "id": "10000000-0000-4000-8000-000000000007",
+              "familyId": "10000000-0000-4000-8000-000000000001",
+              "name": "Inne",
+              "isDefault": true
+            }
+          ],
+          "contacts": [
+            {
+              "createdBy": "10000000-0000-4000-8000-000000000002",
+              "createdAt": 1793008790000,
+              "updatedAt": 1793008790000,
+              "id": "10000000-0000-4000-8000-000000000008",
+              "familyId": "10000000-0000-4000-8000-000000000001",
+              "groupId": "10000000-0000-4000-8000-000000000007",
+              "name": "Kontakt testowy",
+              "address": null,
+              "phone": null,
+              "relationship": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "rodzina:shopping:v1",
+      "value": {
+        "timestamp": 1793008800000,
+        "buster": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002",
+        "session": {
+          "user": {
+            "id": "10000000-0000-4000-8000-000000000002",
+            "familyId": "10000000-0000-4000-8000-000000000001",
+            "displayName": "Osoba testowa",
+            "color": "#426655",
+            "role": "admin",
+            "email": null,
+            "createdAt": 1793008790000,
+            "updatedAt": 1793008790000
+          },
+          "family": {
+            "id": "10000000-0000-4000-8000-000000000001",
+            "name": "Rodzina testowa",
+            "timezone": "Europe/Warsaw",
+            "joinCode": ""
+          }
+        },
+        "clientState": {
+          "mutations": [
+            {
+              "mutationKey": [
+                "shopping",
+                "10000000-0000-4000-8000-000000000001",
+                "10000000-0000-4000-8000-000000000002"
+              ],
+              "state": {
+                "error": null,
+                "failureCount": 0,
+                "failureReason": null,
+                "isPaused": true,
+                "status": "pending",
+                "variables": {
+                  "change": {
+                    "type": "add",
+                    "id": "10000000-0000-4000-8000-000000000010",
+                    "listId": "10000000-0000-4000-8000-000000000003",
+                    "data": {
+                      "name": "Chleb",
+                      "quantity": "1 szt.",
+                      "category": "bakery"
+                    }
+                  },
+                  "operationId": "10000000-0000-4000-8000-000000000010",
+                  "submittedAt": 1793008797000
+                },
+                "submittedAt": 1793008797000
+              },
+              "scope": {
+                "id": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002"
+              }
+            },
+            {
+              "mutationKey": [
+                "shopping",
+                "10000000-0000-4000-8000-000000000001",
+                "10000000-0000-4000-8000-000000000002"
+              ],
+              "state": {
+                "error": null,
+                "failureCount": 0,
+                "failureReason": null,
+                "isPaused": true,
+                "status": "pending",
+                "variables": {
+                  "change": {
+                    "type": "edit",
+                    "id": "10000000-0000-4000-8000-000000000010",
+                    "listId": "10000000-0000-4000-8000-000000000003",
+                    "data": {
+                      "isChecked": true
+                    }
+                  },
+                  "operationId": "10000000-0000-4000-8000-000000000011",
+                  "submittedAt": 1793008798000
+                },
+                "submittedAt": 1793008798000
+              },
+              "scope": {
+                "id": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002"
+              }
+            }
+          ],
+          "queries": [
+            {
+              "dehydratedAt": 1793015670198,
+              "state": {
+                "data": [
+                  {
+                    "createdBy": "10000000-0000-4000-8000-000000000002",
+                    "createdAt": 1793008790000,
+                    "updatedAt": 1793008790000,
+                    "id": "10000000-0000-4000-8000-000000000003",
+                    "familyId": "10000000-0000-4000-8000-000000000001",
+                    "name": "Lista testowa",
+                    "position": 0
+                  }
+                ],
+                "dataUpdateCount": 1,
+                "dataUpdatedAt": 1793008796000,
+                "error": null,
+                "errorUpdateCount": 0,
+                "errorUpdatedAt": 0,
+                "fetchFailureCount": 0,
+                "fetchFailureReason": null,
+                "fetchMeta": null,
+                "isInvalidated": false,
+                "status": "success",
+                "fetchStatus": "idle"
+              },
+              "queryKey": [
+                "shopping",
+                "10000000-0000-4000-8000-000000000001",
+                "10000000-0000-4000-8000-000000000002",
+                "lists"
+              ],
+              "queryHash": "[\"shopping\",\"10000000-0000-4000-8000-000000000001\",\"10000000-0000-4000-8000-000000000002\",\"lists\"]"
+            },
+            {
+              "dehydratedAt": 1793015670198,
+              "state": {
+                "data": [
+                  {
+                    "createdBy": "10000000-0000-4000-8000-000000000002",
+                    "createdAt": 1793008790000,
+                    "updatedAt": 1793008790000,
+                    "id": "10000000-0000-4000-8000-000000000004",
+                    "listId": "10000000-0000-4000-8000-000000000003",
+                    "name": "Mleko",
+                    "quantity": "1 l",
+                    "category": "dairy",
+                    "isChecked": false,
+                    "checkedBy": null,
+                    "checkedAt": null,
+                    "position": 0
+                  }
+                ],
+                "dataUpdateCount": 1,
+                "dataUpdatedAt": 1793008796000,
+                "error": null,
+                "errorUpdateCount": 0,
+                "errorUpdatedAt": 0,
+                "fetchFailureCount": 0,
+                "fetchFailureReason": null,
+                "fetchMeta": null,
+                "isInvalidated": false,
+                "status": "success",
+                "fetchStatus": "idle"
+              },
+              "queryKey": [
+                "shopping",
+                "10000000-0000-4000-8000-000000000001",
+                "10000000-0000-4000-8000-000000000002",
+                "items",
+                "10000000-0000-4000-8000-000000000003"
+              ],
+              "queryHash": "[\"shopping\",\"10000000-0000-4000-8000-000000000001\",\"10000000-0000-4000-8000-000000000002\",\"items\",\"10000000-0000-4000-8000-000000000003\"]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000010",
+      "value": {
+        "mutationKey": ["shopping", "10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"],
+        "state": {
+          "error": null,
+          "failureCount": 0,
+          "failureReason": null,
+          "isPaused": true,
+          "status": "pending",
+          "variables": {
+            "change": {
+              "type": "add",
+              "id": "10000000-0000-4000-8000-000000000010",
+              "listId": "10000000-0000-4000-8000-000000000003",
+              "data": {
+                "name": "Chleb",
+                "quantity": "1 szt.",
+                "category": "bakery"
+              }
+            },
+            "operationId": "10000000-0000-4000-8000-000000000010",
+            "submittedAt": 1793008797000
+          },
+          "submittedAt": 1793008797000
+        },
+        "scope": {
+          "id": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002"
+        }
+      }
+    },
+    {
+      "key": "rodzina:shopping:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000011",
+      "value": {
+        "mutationKey": ["shopping", "10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"],
+        "state": {
+          "error": null,
+          "failureCount": 0,
+          "failureReason": null,
+          "isPaused": true,
+          "status": "pending",
+          "variables": {
+            "change": {
+              "type": "edit",
+              "id": "10000000-0000-4000-8000-000000000010",
+              "listId": "10000000-0000-4000-8000-000000000003",
+              "data": {
+                "isChecked": true
+              }
+            },
+            "operationId": "10000000-0000-4000-8000-000000000011",
+            "submittedAt": 1793008798000
+          },
+          "submittedAt": 1793008798000
+        },
+        "scope": {
+          "id": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002"
+        }
+      }
+    },
+    {
+      "key": "rodzina:tasks:v1",
+      "value": {
+        "account": "10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002",
+        "lists": [
+          {
+            "id": "10000000-0000-4000-8000-000000000005",
+            "familyId": "10000000-0000-4000-8000-000000000001",
+            "ownerId": "10000000-0000-4000-8000-000000000002",
+            "memberIds": [],
+            "name": "Zadania testowe",
+            "isDefault": true,
+            "position": 0,
+            "openTaskCount": 1,
+            "createdAt": 1793008790000,
+            "updatedAt": 1793008790000
+          }
+        ],
+        "items": {
+          "10000000-0000-4000-8000-000000000005": [
+            {
+              "createdBy": "10000000-0000-4000-8000-000000000002",
+              "createdAt": 1793008790000,
+              "updatedAt": 1793008790000,
+              "id": "10000000-0000-4000-8000-000000000006",
+              "listId": "10000000-0000-4000-8000-000000000005",
+              "title": "Zadanie testowe",
+              "notes": null,
+              "dueDate": "2026-10-27",
+              "dueTime": "12:00",
+              "assigneeId": null,
+              "reminders": [],
+              "isDone": false,
+              "doneBy": null,
+              "doneAt": null,
+              "position": 0
+            }
+          ]
+        },
+        "syncedAt": 1793008796000
+      }
+    },
+    {
+      "key": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000012",
+      "value": {
+        "id": "10000000-0000-4000-8000-000000000012",
+        "submittedAt": 1793008799000,
+        "listId": "10000000-0000-4000-8000-000000000005",
+        "taskId": "10000000-0000-4000-8000-000000000006",
+        "status": "pending",
+        "change": {
+          "type": "update",
+          "data": {
+            "isDone": true
+          }
+        }
+      }
+    },
+    {
+      "key": "rodzina:tasks:v1:operation:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000013",
+      "value": {
+        "id": "10000000-0000-4000-8000-000000000013",
+        "submittedAt": 1789552800000,
+        "listId": "10000000-0000-4000-8000-000000000005",
+        "taskId": "10000000-0000-4000-8000-000000000006",
+        "status": "needs-review",
+        "reason": "expired",
+        "change": {
+          "type": "update",
+          "data": {
+            "title": "Odrzucona intencja"
+          }
+        }
+      }
+    },
+    {
+      "key": "rodzina:tasks:v1:discard:10000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000002:10000000-0000-4000-8000-000000000014",
+      "value": {
+        "operationIds": ["10000000-0000-4000-8000-000000000013"],
+        "listId": "10000000-0000-4000-8000-000000000005",
+        "requiresRefresh": true
+      }
+    }
+  ],
+  "expected": {
+    "pendingShoppingIds": ["10000000-0000-4000-8000-000000000010", "10000000-0000-4000-8000-000000000011"],
+    "pendingTaskIds": ["10000000-0000-4000-8000-000000000012"],
+    "discardedIds": ["10000000-0000-4000-8000-000000000013"],
+    "blockedTaskIds": ["10000000-0000-4000-8000-000000000006"]
+  }
+}
