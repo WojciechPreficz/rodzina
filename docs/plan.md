@@ -140,7 +140,7 @@ Implementacja lokalna; końcowe CI i odbiór fizycznego APK pozostają do potwie
 - `GET /api/meals?weekStart=YYYY-MM-DD` (poniedziałek) zwraca 7 dni z posiłkami i składnikami.
 - `PUT /api/meals/:date/:slot` z `{ title, notes?, ingredients: [{ name, quantity? }] }` (upsert), `DELETE /api/meals/:date/:slot`.
 - `POST /api/meals/copy-week` z `{ fromWeekStart, toWeekStart, overwrite: boolean }`.
-- `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Dodaje składniki, scalając duplikaty po znormalizowanej nazwie (ilości są łączone tekstowo, np. "500 g + 1 kg"), i zwraca liczbę dodanych pozycji.
+- `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Scala składniki po znormalizowanej nazwie zarówno między wybranymi daniami, jak i z pozycjami już obecnymi na docelowej liście zakupów. Ilości łączymy tekstowo, np. "500 g + 1 kg". Podsumowanie rozróżnia pozycje dodane i uzupełnione.
 - `GET /api/meals/suggestions?q=` zwraca wcześniejsze tytuły obiadów razem z ostatnio użytymi składnikami (do szybkiego powtórzenia dania).
 
 **UI:**
@@ -151,6 +151,54 @@ Implementacja lokalna; końcowe CI i odbiór fizycznego APK pozostają do potwie
 - Akcje tygodnia: "Skopiuj poprzedni tydzień", "Dodaj składniki do listy zakupów" (wybór listy i dań, potem podsumowanie).
 - Karta "Dziś na obiad" na górze kalendarza (lekki dashboard).
 
+**Przenoszenie składników — ustalenia właściciela 26.10.2026:**
+
+- Eksport jest jednorazowym dodaniem składników, bez stałego powiązania obiadu
+  z zakupami. Późniejsza edycja lub usunięcie obiadu nie zmienia listy zakupów;
+  zmiany zakupów nie zmieniają planu obiadów.
+- Ponowienie wysyłki tej samej operacji, np. po utracie odpowiedzi lub restarcie
+  APK, nie może ponownie zwiększyć ilości. To zabezpieczenie techniczne jest
+  niezależne od decyzji o ponownym ręcznym eksporcie tych samych dań.
+- **Do ustalenia z właścicielem przed implementacją eksportu:** czy ponowny
+  ręczny eksport tego samego dania na tę samą listę ma ponownie dodać ilości,
+  ostrzegać czy pomijać wcześniejszy eksport. Nie zakładamy jeszcze żadnej
+  z tych reguł. Doprecyzowania wymaga też scalanie z pozycjami już kupionymi,
+  aby nowa potrzeba zakupowa nie pozostała ukryta jako odhaczona.
+
+**Offline — rozszerzenie zakresu 26.10.2026:**
+
+- Podobnie jak w zakupach i zadaniach, zapisane tygodnie, składniki i lokalne
+  podpowiedzi są dostępne bez internetu. Dorośli mogą dodawać, edytować i usuwać
+  obiady oraz kopiować zapisany tydzień do tygodnia o znanej zawartości. Dziecko
+  ma tylko odczyt. Niepobrany tydzień nie jest traktowany jak pusty; UI wyjaśnia
+  brak danych i blokuje operacje wymagające nieznanej zawartości.
+- Trwały cache i dziennik zmian są przypisane do rodziny i użytkownika,
+  odtwarzane po restarcie APK. Zmiana jest potwierdzana w UI dopiero po trwałym
+  zapisie; błąd pamięci nie może oznaczać pozornego sukcesu. Karta „Dziś na obiad”
+  uwzględnia zapisane dane i oczekujące zmiany, z datą w strefie rodziny.
+- Offline można zlecić eksport zapisanych składników do zapisanej listy zakupów,
+  także dla lokalnie dodanych lub zmienionych obiadów. Operacja zachowuje kopię
+  wybranych składników z chwili zlecenia, listę docelową i identyfikator operacji.
+  Późniejsza edycja obiadu nie zmienia oczekującego eksportu. Lokalna lista
+  zakupów pokazuje oczekującą zmianę; po synchronizacji uzgadniamy ją z wynikiem
+  serwera bez podwójnego dodania. Eksport nie może trafić jednocześnie do dwóch
+  niezależnie wysyłających kolejek. API sprawdza uprawnienia i scala z aktualnymi
+  zakupami atomowo; nie nadpisuje całej listy nieaktualnym snapshotem.
+- Powrót sieci i wznowienie aktywnej aplikacji uruchamiają synchronizację.
+  Kolejność zachowuje zależności operacji; retry używa tego samego identyfikatora.
+  Stosujemy istniejące zasady idempotencji zakupów i zadań, limit automatycznego
+  ponawiania 30 dni i retencję odpowiedzi 90 dni. Starsze zmiany wymagają
+  sprawdzenia, bez automatycznego nadawania im nowej daty lub identyfikatora.
+- Wylogowanie, zmiana konta i utrata sesji stosują istniejące zasady czyszczenia
+  magazynów konta. Spóźnione odpowiedzi nie przywracają danych poprzedniej osoby.
+  Przed wysłaniem API ponownie sprawdza rolę i dostęp do rodziny oraz listy.
+  Utrata dostępu i konflikty mają widoczny stan wymagający reakcji; nie wolno
+  po cichu odtwarzać usuniętych danych ani gubić oczekujących zmian.
+- Baner wyjaśnia tryb offline, wiek danych i stan kolejki. WWW obsługuje utratę
+  sieci w otwartym interfejsie, APK także ponowny start bez internetu po
+  wcześniejszym pobraniu danych. Bez PWA i bez gwarancji synchronizacji przy
+  zamkniętym APK. Nie dokładamy w tej fazie przebudowy magazynów innych modułów.
+
 **Kroki realizacji:**
 
 #### Krok 6.1 - API planu obiadów
@@ -160,23 +208,44 @@ Implementacja lokalna; końcowe CI i odbiór fizycznego APK pozostają do potwie
 
 #### Krok 6.2 - API: składniki do listy zakupów
 
-- **Zakres:** `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Funkcja `mergeQuantities` w `shared` (normalizacja nazwy, łączenie ilości tekstowo, np. "500 g + 1 kg"). Wykorzystuje serwis zakupów z fazy 5 (także historię). Zwraca liczbę dodanych pozycji. Decyzję, czy scalać także z pozycjami już obecnymi na liście, agent zapisuje w `DECISIONS.md`.
-- **Gotowe, gdy:** testy jednostkowe `mergeQuantities` i testy API (scalanie duplikatów, filtr `mealIds`, lista innej rodziny daje 404, izolacja rodzin).
+- **Zakres:** `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Funkcja `mergeQuantities` w `shared` (normalizacja nazwy, łączenie ilości tekstowo, np. "500 g + 1 kg"). Wykorzystuje serwis zakupów z fazy 5 (także historię). Scala także z istniejącymi pozycjami docelowej listy i zwraca liczby pozycji dodanych oraz uzupełnionych. Bez stałego powiązania zakupów z obiadami. Przed implementacją rozstrzygnąć wskazane powyżej pytania o ponowny ręczny eksport i pozycje kupione.
+- **Gotowe, gdy:** testy jednostkowe `mergeQuantities` i testy API (scalanie między daniami i z istniejącą listą, uzgodniona obsługa pozycji kupionych i ponownego eksportu, filtr `mealIds`, lista innej rodziny daje 404, zapis dziecka daje 403, izolacja rodzin). Zmiana lub usunięcie obiadu po eksporcie nie zmienia zakupów.
 
 #### Krok 6.3 - UI: tydzień obiadów
 
 - **Zakres:** zakładka Obiady z widokiem tygodnia (pon-nd), strzałkami i przyciskiem "dziś". Karta dnia albo "+ Dodaj obiad". Formularz (nazwa z podpowiedziami, które po wyborze uzupełniają składniki, notatka, lista składników), usuwanie, "Skopiuj poprzedni tydzień" z pytaniem o nadpisanie. Dziecko widzi tylko odczyt.
 - **Gotowe, gdy:** testy komponentów formularza i podpowiedzi. Ręcznie: zaplanowanie 5 obiadów i skopiowanie tygodnia.
 
-#### Krok 6.4 - UI: dodawanie do listy zakupów, karta "Dziś na obiad" i domknięcie fazy
+#### Krok 6.4 - UI: dodawanie do listy zakupów i karta "Dziś na obiad"
 
 - **Zakres:** akcja "Dodaj składniki do listy zakupów" (wybór listy i dań, potem podsumowanie), karta "Dziś na obiad" na górze kalendarza.
-- **Gotowe, gdy:** wszystkie kryteria akceptacji fazy 6, w tym ręcznie: 5 zaplanowanych obiadów i przeniesienie składników daje poprawnie pogrupowaną listę zakupów. Punkty z sekcji 1.1 i `release:smoke`.
+- **Gotowe, gdy:** ręcznie: 5 zaplanowanych obiadów i eksport do niepustej listy daje poprawnie pogrupowane zakupy ze scalonymi ilościami i podsumowaniem pozycji dodanych oraz uzupełnionych. Karta pokazuje dzisiejszy obiad. Zmiana planu po eksporcie nie zmienia zakupów. UI przy 390 i 1280 px, wspólny frontend APK i kontrole według sekcji 1.2. Domknięcie fazy przeniesione do kroku 6.5.
+
+#### Krok 6.5 - Obiady offline z trwałą kolejką zmian i domknięcie fazy
+
+- **Zakres:** pełny opis offline powyżej: trwały podgląd i edycja planu,
+  kopiowanie zapisanych tygodni, eksport kopii składników do zapisanej listy,
+  lokalna projekcja zakupów i karty „Dziś na obiad”, synchronizacja i ochrona
+  danych konta. W tym kroku rozszerzamy kontrakty mutacji o obsługę trwałych
+  identyfikatorów i atomowej idempotencji oraz eksportu kopii składników;
+  zachowujemy działanie klientów online z wcześniejszych kroków. Korzystamy
+  z istniejących mechanizmów magazynów i synchronizacji, bez implementowania
+  osobnego przyszłego planu ich przebudowy.
+- **Gotowe, gdy:** testy obejmują odczyt, dodanie, edycję, usunięcie, kopiowanie
+  i eksport offline, niepobrany tydzień, podpowiedzi i dzisiejszą kartę, utratę
+  odpowiedzi, retry bez ponownego zwiększenia ilości, wiele kart, zależności
+  z kolejką zakupów, konflikty, błąd zapisu, starsze zmiany, utratę dostępu,
+  wylogowanie i zmianę konta. Playwright wyłącznie headless przy 390 i 1280 px.
+  Ręcznie oraz w fizycznym APK: online → offline → zmiana obiadów i eksport →
+  zamknięcie → otwarcie offline → online; zmiany przetrwały restart, zgadzają
+  się z drugim urządzeniem i nie podwajają ilości. Spełnione wszystkie kryteria
+  fazy, sekcje 1.1–1.2 i końcowe CI; brakujących prób nie oznaczamy jako zaliczonych.
 
 **Kryteria akceptacji:**
 
-- Testy API: upsert, copy-week z i bez overwrite, to-shopping-list ze scalaniem duplikatów oraz izolacja rodzin.
-- Manualnie: zaplanowanie 5 obiadów i przeniesienie składników daje poprawnie pogrupowaną listę zakupów.
+- Testy API: upsert, copy-week z i bez overwrite, eksport ze scalaniem między daniami i z istniejącą listą, role oraz izolacja rodzin. Retry tej samej operacji nie zwiększa ponownie ilości.
+- Manualnie: zaplanowanie 5 obiadów i przeniesienie składników daje poprawnie pogrupowaną listę zakupów, także gdy lista zawiera już te produkty. Późniejsze zmiany planu i zakupów nie synchronizują się ze sobą.
+- Podgląd, edycja, kopiowanie i eksport offline działają w opisanym zakresie, także po restarcie APK. Synchronizacja zachowuje zmiany bez duplikatów; sprawdzone są błędy zapisu, prywatność kont i wymagane próby fizycznego telefonu.
 - Spełnione punkty z sekcji 1.1.
 
 **Poza zakresem:** książka przepisów, wartości odżywcze, inne posiłki niż obiad. Kolumna `slot` jest już na to przygotowana.

@@ -1,5 +1,27 @@
 # Decyzje
 
+## 26.10.2026 — rozszerzenie planu obiadów (faza 6, #6)
+
+- Na polecenie właściciela eksport scala składniki również z pozycjami już
+  obecnymi na wybranej liście zakupów, po znormalizowanej nazwie. Ilości nadal
+  łączymy tekstowo. Podsumowanie rozróżnia pozycje dodane i uzupełnione.
+- Eksport jest jednorazową operacją, bez stałego powiązania: późniejsza zmiana
+  lub usunięcie obiadu nie zmienia zakupów i odwrotnie. Powód: właściciel nie
+  chce automatycznej synchronizacji planu z listą po dodaniu składników.
+- Rozszerzamy zakres o odczyt, dodawanie, edycję, usuwanie, kopiowanie zapisanych
+  tygodni oraz eksport zapisanych składników offline, na wzór zakupów i zadań.
+  Szczegóły cache, kolejki, restartu APK, prywatności, idempotencji i prób
+  odbiorczych są w fazie 6 w `plan.md`. Eksport zachowuje kopię składników
+  z chwili zlecenia, a retry tej samej operacji nie dubluje ilości.
+- Dodajemy krok 6.5 — offline i domknięcie fazy. Kroki 6.1–6.4 pozostają
+  działającymi etapami online; 6.5 rozszerza kontrakty i integruje trwały zapis
+  oraz synchronizację. Nie wdrażamy przy okazji przyszłej przebudowy magazynów.
+- Do wyjaśnienia z właścicielem przed implementacją eksportu: zachowanie przy
+  ponownym ręcznym eksporcie tych samych dań na tę samą listę oraz scalaniu
+  z pozycjami już kupionymi. Nie utożsamiamy nowego ręcznego eksportu
+  z automatycznym ponowieniem tej samej operacji po błędzie sieci.
+- Ta zmiana aktualizuje wyłącznie zakres i zadania; nie implementuje funkcji.
+
 ## 26.10.2026 — przeterminowane zmiany zadań (punkt 2 przeglądu architektury)
 
 - Zachowujemy 30-dniowy limit automatycznego ponawiania. Trwały stan
