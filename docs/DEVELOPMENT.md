@@ -452,6 +452,52 @@ Lint i formatowanie zmienionych plików, typecheck, build WWW, debug APK
 i `release:smoke` przeszły. Fizycznego telefonu nie sprawdzono;
 wynik końcowego CI pozostaje do potwierdzenia po publikacji commita.
 
+### Odbiór wspólnego outbox zadań — O.6 (#54)
+
+Zadania i zakupy korzystają z jednego nadawcy konta oraz bazy urządzenia v3.
+Snapshot zadań zachowuje bazę i odrzucenia, a operacje znajdują się tylko
+w `outbox`. Aktualizacja O.4 zachowuje ID, czasy, statusy i zależności;
+pominięcie wydań pośrednich korzysta z dotychczasowego importera localStorage.
+Starsze karty muszą być zamknięte; rollback wymaga klienta v3 z oboma adapterami.
+
+1. WWW **390 i 1280 px** oraz testowy transport Androida: zmień zadania
+   i zakupy offline, przeładuj frontend, przywróć sieć. Konflikt zadania
+   pozostawia jego łańcuch do sprawdzenia, a niezależne zadania i zakupy
+   dochodzą do API bez duplikatów. Przejrzyj wygląd listy, formularza oraz
+   panelu zmian z właściwą przyczyną: wiek, zależność, konflikt lub odrzucenie.
+2. Przerwij przejęcie O.4 i ponów start. Nie powstaje drugi dziennik.
+   Utrata odpowiedzi i restart zachowują ID, czas, licznik i termin retry.
+   Zmiana zegara nie wznawia raz utrwalonego przeglądu. Dwie karty korzystają
+   z dzierżawy konta; stara odpowiedź nie może zapisać danych po przejęciu.
+3. Cofnij udostępnienie podczas edycji i wysyłki: prywatna treść oraz wszystkie
+   zależne intencje znikają z widoku i bazy. Pozostaje ogólny komunikat.
+   Usuniętego zadania nie odtwarzamy; trwałe odrzucenie zachowujemy do reakcji.
+   Odrzucenie całego łańcucha wymaga potwierdzenia, a nowy zapis odświeżenia listy.
+4. Odmowa IDB/pełna pamięć nie daje sukcesu akcji. Wylogowanie i zmiana konta
+   odcinają nadawcę oraz spóźnione odpowiedzi, czyszcząc cache, outbox i migracje.
+5. **Fizyczny APK — do wykonania:** pobierz zadania z alarmami, zmień termin,
+   ukończenie i usunięcie offline. Sprawdź trwałe wstrzymanie alarmów po
+   zakończeniu procesu, ponownym otwarciu APK i restarcie telefonu. Przywróć
+   sieć i sprawdź przywrócenie alarmów dopiero po właściwym uzgodnieniu.
+   Powtórz dla konfliktu, odrzucenia i cofniętego udostępnienia oraz wspólnych
+   zmian zakupów. Zapisz model, Android, wersję APK i wyniki. Transport testowy,
+   testy harmonogramu i build debug nie zastępują prób sprzętowych.
+
+Testy automatyczne: rdzeń offline, `taskStorage`, `taskOffline`, `TasksPage`,
+zakupy, sesja i harmonogram alarmów oraz Playwright `shared-outbox`,
+`tasks-offline`, `task-review`, `tasks-sharing` i zakupów. Końcowe CI oraz
+fizyczny APK pozostają do potwierdzenia. Bez deployu i publikacji APK.
+
+Weryfikacja lokalna O.6 (26.10.2026): testy rdzenia, zadań, zakupów,
+sesji/czyszczenia konta i harmonogramu alarmów; Playwright headless przy
+390/1280 px, w tym wspólny outbox, offline/restart frontendu, review,
+udostępnianie i transport Androida. Przejrzano zrzuty list, formularzy
+i panelu konfliktu w obu szerokościach. Lint, formatowanie, typecheck,
+build WWW, debug APK i `release:smoke` przeszły. Brak podłączonego telefonu:
+odbiór fizyczny alarmów oraz restartu urządzenia pozostaje niewykonany.
+Na polecenie właściciela kończymy na commicie i pushu; właściciel sprawdzi CI.
+Status: **zweryfikowane lokalnie, oczekuje na CI i próby fizycznego APK**.
+
 ### Narzędzia Androida
 
 APK zawiera lokalny frontend. Potrzebne są Node.js 22 lub 24, JDK 21, SDK 36

@@ -5,7 +5,8 @@ O.2 zaimplementowany lokalnie, oczekuje na końcowe CI i odbiór fizycznego APK;
 O.3 zaimplementowany lokalnie, oczekuje na odbiór fizycznego APK i końcowe CI;
 O.4 zaimplementowany lokalnie, oczekuje na odbiór fizycznego APK i końcowe CI;
 O.5 zaimplementowany lokalnie, oczekuje na odbiór fizycznego APK i końcowe CI;
-O.6–O.7 do realizacji. Zakupy używają wspólnego outbox, zadania swojego synchronizatora.
+O.6 zaimplementowany lokalnie, oczekuje na odbiór fizycznego APK i końcowe CI;
+O.7 do realizacji. Zakupy i zadania używają wspólnego outbox i jednego nadawcy.
 
 ## 1. Cel i kolejność prac
 

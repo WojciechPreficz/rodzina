@@ -84,9 +84,14 @@ export async function appendOperation(tx: IDBTransaction, accountId: string, mod
   metadata.put({ accountId, key: 'outbox-sequence', value: sequence });
   return operation;
 }
-export function nextOperation(operations: Operation[], now: number) {
+export function nextOperation(
+  operations: Operation[],
+  now: number,
+  available: (op: Operation) => boolean = () => true,
+) {
   return operations.find(
     (op, index) =>
+      available(op) &&
       op.status !== 'needs-review' &&
       op.nextAttemptAt <= now &&
       !op.dependsOn.length &&

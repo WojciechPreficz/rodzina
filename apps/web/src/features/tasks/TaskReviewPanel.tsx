@@ -125,7 +125,13 @@ export function TaskReviewPanel({
               </Title>
               <Text size="sm">{new Date(op.submittedAt).toLocaleString('pl-PL')}</Text>
               <Text size="sm" c="orange.9">
-                {op.reason === 'dependency' ? taskOfflineText.dependent : taskOfflineText.expired}
+                {op.reason === 'dependency'
+                  ? taskOfflineText.dependent
+                  : op.reason === 'conflict'
+                    ? taskOfflineText.conflict
+                    : op.reason === 'rejected'
+                      ? taskOfflineText.rejected
+                      : taskOfflineText.expired}
               </Text>
               {op.change.type !== 'remove' &&
                 Object.entries(op.change.data).map(([key, value]) => (

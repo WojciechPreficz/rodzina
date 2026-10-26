@@ -16,7 +16,7 @@ import {
 } from './shoppingStorage.js';
 import { appendOperation, readOperations } from '../../offline/outbox.js';
 import { assertContext, transact } from '../../offline/database.js';
-import { startSync } from '../../offline/sync.js';
+import { joinSync as startSync } from '../../offline/sync.js';
 import { shoppingAdapter, shoppingIntent, takeOverShopping } from './shoppingAdapter.js';
 import { readShoppingTransaction, putShoppingTransaction } from './shoppingStorage.js';
 export { SHOPPING_STORAGE_KEY } from './shoppingStorage.js';
@@ -170,7 +170,7 @@ export async function restoreShopping(client: QueryClient, session: ShoppingSess
     window.addEventListener(SHOPPING_SIGNAL, onSignal);
     window.addEventListener('storage', onStorage);
     load(saved);
-    runtime.sync = startSync(accountId, [shoppingAdapter(account)], async () => {
+    runtime.sync = startSync(accountId, shoppingAdapter(account), async () => {
       if (current(client, runtime)) await schedule(reload);
     });
   } catch (error) {

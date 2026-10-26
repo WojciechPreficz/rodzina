@@ -3,12 +3,14 @@ import { operationSchema, snapshotSchema, discardSchema, classify, TASK_STORAGE_
 import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/registry.js';
 import { registerRecordMigration } from '../../offline/recordMigration.js';
 import { accountToken, assertContext, transact, requestValue, CLEAR_PENDING_KEY } from '../../offline/database.js';
+import { appendOperation, readOperations, type Operation } from '../../offline/outbox.js';
 const dataSchema = z.object({
   version: z.literal(1),
   account: z.string().min(1),
   snapshot: snapshotSchema,
   operations: z.array(operationSchema),
   discards: z.record(discardSchema),
+  rejection: z.string().optional(),
 });
 export type TaskData = z.infer<typeof dataSchema>;
 export const TASK_SIGNAL = 'offline-tasks-changed:1';
@@ -57,10 +59,14 @@ function entry(input: unknown): CacheEntry {
     throw new Error('Nie można zapisać zadań: przekroczono budżet pamięci. Zsynchronizuj zmiany lub zwolnij miejsce.');
   return result;
 }
-function put(tx: IDBTransaction, value: unknown) {
+function put(tx: IDBTransaction, value: unknown, outbox = false) {
   const record = entry(value);
   tx.objectStore('cache').put(record);
-  tx.objectStore('metadata').put({ accountId: record.accountId, key: 'engine:tasks', value: 'legacy-idb' });
+  tx.objectStore('metadata').put({
+    accountId: record.accountId,
+    key: 'engine:tasks',
+    value: outbox ? 'outbox' : 'legacy-idb',
+  });
   tx.objectStore('metadata').put({ accountId: record.accountId, key: 'budget:tasks', value: record.chargedBytes });
 }
 registerAdapter({
@@ -106,18 +112,87 @@ export function importTasks(source: Record<string, string>, active?: string): Ta
   entry(validated);
   return validated;
 }
-registerRecordMigration('tasks', TASK_STORAGE_KEY, importTasks, put);
-export async function readTaskData(account: string) {
-  return transact('readonly', async (tx) => {
-    const active = await assertContext(tx);
-    if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
-    const record = await requestValue<CacheEntry | undefined>(
-      tx.objectStore('cache').get([account, 'tasks', 'snapshot']),
-    );
-    if (!record) return;
-    if (record.schemaVersion !== 1) throw new Error('Nieobsługiwana wersja pamięci zadań.');
-    return parse(record.payload);
+registerRecordMigration('tasks', TASK_STORAGE_KEY, importTasks, (tx, value) => put(tx, value));
+export function taskOperation(operation: Operation) {
+  return operationSchema.parse({
+    ...(operation.payload as object),
+    id: operation.operationId,
+    submittedAt: operation.submittedAt,
+    status: operation.status === 'needs-review' ? 'needs-review' : 'pending',
+    reason: operation.status === 'needs-review' ? operation.reviewReason : undefined,
   });
+}
+export async function readTaskTransaction(tx: IDBTransaction, account: string) {
+  const active = await assertContext(tx);
+  if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
+  const record = await requestValue<CacheEntry | undefined>(
+    tx.objectStore('cache').get([account, 'tasks', 'snapshot']),
+  );
+  if (record && record.schemaVersion !== 1) throw new Error('Nieobsługiwana wersja pamięci zadań.');
+  const data: TaskData = record
+    ? parse(record.payload)
+    : {
+        version: 1,
+        account,
+        snapshot: { account, items: {} },
+        operations: [],
+        discards: {},
+      };
+  const engine = await requestValue<{ value: string } | undefined>(
+    tx.objectStore('metadata').get([account, 'engine:tasks']),
+  );
+  if (engine?.value === 'outbox')
+    data.operations = (await readOperations(tx, account)).filter((op) => op.module === 'tasks').map(taskOperation);
+  return data;
+}
+export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
+  const data = parse(input);
+  entry(data);
+  const existing = (await readOperations(tx, data.account)).filter((op) => op.module === 'tasks');
+  const classified = classify(data.operations);
+  const store = tx.objectStore('outbox');
+  for (const old of existing)
+    if (!classified.some((op) => op.id === old.operationId)) store.delete([data.account, old.operationId]);
+  const previous = new Map<string, string>();
+  for (const op of classified) {
+    const key = `tasks:list:${op.listId}:task:${op.taskId}`;
+    const old = existing.find((entry) => entry.operationId === op.id);
+    if (old) {
+      store.put({
+        ...old,
+        submittedAt: op.submittedAt,
+        payload: { listId: op.listId, taskId: op.taskId, change: op.change },
+        ...(op.status === 'needs-review' ? { status: 'needs-review', reviewReason: op.reason } : {}),
+      });
+    } else {
+      await appendOperation(tx, data.account, 'tasks', {
+        operationId: op.id,
+        submittedAt: op.submittedAt,
+        entityId: op.taskId,
+        orderingKeys: [key],
+        payload: { listId: op.listId, taskId: op.taskId, change: op.change },
+        dependsOn: previous.has(key) ? [previous.get(key)!] : [],
+        ...(op.status === 'needs-review' ? { reviewReason: op.reason ?? 'expired' } : {}),
+      });
+    }
+    previous.set(key, op.id);
+  }
+  // The outbox is the only durable journal after takeover. Cache holds only the base.
+  await putTaskBaseTransaction(tx, data);
+  data.operations = classified;
+  return data;
+}
+export async function putTaskBaseTransaction(tx: IDBTransaction, data: TaskData) {
+  const baseBytes = entry({ ...data, operations: [] }).chargedBytes;
+  const queueBytes = (await readOperations(tx, data.account))
+    .filter((op) => op.module === 'tasks')
+    .reduce((sum, op) => sum + chargedBytes([data.account, op.operationId], op), 0);
+  if (baseBytes + queueBytes > 6 * 1048576)
+    throw new Error('Przekroczono budżet pamięci zadań. Zsynchronizuj zmiany lub zwolnij miejsce.');
+  put(tx, { ...data, operations: [] }, true);
+}
+export async function readTaskData(account: string) {
+  return transact('readonly', (tx) => readTaskTransaction(tx, account));
 }
 export async function updateTaskData(account: string, update: (data: TaskData) => void, token = accountToken()) {
   if (localStorage.getItem(CLEAR_PENDING_KEY)) throw new Error('Usuwanie danych konta nie zostało zakończone.');
@@ -125,21 +200,11 @@ export async function updateTaskData(account: string, update: (data: TaskData) =
   const result = await transact(
     'readwrite',
     async (tx) => {
-      const active = await assertContext(tx);
-      if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
-      const record = await requestValue<CacheEntry | undefined>(
-        tx.objectStore('cache').get([account, 'tasks', 'snapshot']),
-      );
-      if (record && record.schemaVersion !== 1) throw new Error('Nieobsługiwana wersja pamięci zadań.');
-      const data = record
-        ? parse(record.payload)
-        : { version: 1 as const, account, snapshot: { account, items: {} }, operations: [], discards: {} };
-      if (data.account !== account) throw new DOMException('Session changed', 'AbortError');
-      const before = record ? JSON.stringify(record.payload) : undefined;
+      const data = await readTaskTransaction(tx, account);
+      const before = JSON.stringify(data);
       update(data);
       changed = before !== JSON.stringify(data);
-      if (changed) put(tx, data);
-      return data;
+      return putTaskTransaction(tx, data);
     },
     token,
   );
@@ -156,5 +221,8 @@ export async function clearTaskData(account: string) {
     if (active.accountId !== account) return;
     tx.objectStore('cache').delete([account, 'tasks', 'snapshot']);
     tx.objectStore('metadata').delete([account, 'budget:tasks']);
+    tx.objectStore('metadata').delete([account, 'engine:tasks']);
+    for (const op of await readOperations(tx, account))
+      if (op.module === 'tasks') tx.objectStore('outbox').delete([account, op.operationId]);
   });
 }

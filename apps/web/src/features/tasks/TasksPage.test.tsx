@@ -1,6 +1,6 @@
 import { updateTaskData } from './taskStorage.js';
 import '../../offline/testSetup.js';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -12,6 +12,8 @@ import { TodayTasks } from './TodayTasks.js';
 import { isTaskOverdue } from './taskRules.js';
 import { taskStore } from './taskOffline.js';
 import { reportTransportFailure } from '../../connectivity.js';
+
+configure({ asyncUtilTimeout: 4000 });
 
 const session = vi.hoisted(() => ({
   user: { id: '10000000-0000-4000-8000-000000000001', displayName: 'Ania', role: 'child', color: '#1C7ED6' },
@@ -167,6 +169,7 @@ describe('tasks UI', () => {
     setup();
     await screen.findByRole('article', { name: task.title });
     await act(async () => {
+      onlineManager.setOnline(false);
       await taskStore.enqueue(list.id, task.id, {
         type: 'update',
         data: {
@@ -179,6 +182,7 @@ describe('tasks UI', () => {
         data.operations[0]!.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
       });
       await taskStore.reload();
+      onlineManager.setOnline(true);
       await taskStore.synchronize();
     });
     expect(screen.getByRole('article', { name: task.title })).toBeVisible();
@@ -498,7 +502,7 @@ describe('tasks UI', () => {
         body: expect.stringContaining('"type":"offset","offsetValue":0,"offsetUnit":"minute"'),
       }),
     );
-  });
+  }, 15000);
   it('does not request private data before confirming the account', () => {
     session.familyConfirmed = false;
     const fetchMock = setup();

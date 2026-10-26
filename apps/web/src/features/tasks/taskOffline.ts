@@ -1,7 +1,16 @@
 import { type PatchTask, type Task, type TaskList } from '@rodzina/shared';
 import { readTaskData, updateTaskData, clearTaskData } from './taskStorage.js';
-import { ensureMigrated, activateOfflineAccount, accountToken, isAccountCurrent } from '../../offline/database.js';
+import {
+  ensureMigrated,
+  activateOfflineAccount,
+  accountToken,
+  isAccountCurrent,
+  transact,
+} from '../../offline/database.js';
+import { readOperations } from '../../offline/outbox.js';
 import { apiFetch, ApiRequestError } from '../../api.js';
+import { joinSync } from '../../offline/sync.js';
+import { taskAdapter, revokedTaskText } from './taskAdapter.js';
 import { classify, operationSchema, type TaskOperation, type Snapshot } from './taskSchemas.js';
 export { TASK_STORAGE_KEY, type TaskOperation } from './taskSchemas.js';
 
@@ -15,6 +24,8 @@ export const taskOfflineText = {
   review: 'Zmiany wymagające sprawdzenia',
   expired: 'Zmiana ma ponad 30 dni i nie zostanie wysłana automatycznie.',
   dependent: 'Zmiana czeka na rozstrzygnięcie wcześniejszej zmiany tego zadania.',
+  conflict: 'Zmiana jest sprzeczna ze stanem serwera i wymaga sprawdzenia.',
+  rejected: 'Serwer odrzucił zmianę. Sprawdź aktualne dane przed ponowną edycją.',
   blocked: 'Najpierw sprawdź i odrzuć wstrzymane zmiany tego zadania. Następnie odśwież dane przed nowym zapisem.',
 };
 export function taskOperationBlocksAlarm(op: TaskOperation) {
@@ -41,25 +52,25 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
   let revision = 0;
   let sessionToken = accountToken();
   let running: Promise<void> | undefined;
+  let sender: ReturnType<typeof joinSync> | undefined;
+  const hiddenLists = new Set<string>();
   const listeners = new Set<() => void>();
   const emit = (next: TaskOfflineState) => {
-    state = next;
+    state = {
+      ...next,
+      lists: next.lists?.filter((list) => !hiddenLists.has(list.id)),
+      items: Object.fromEntries(Object.entries(next.items).filter(([id]) => !hiddenLists.has(id))),
+      pending: next.pending.filter((op) => !hiddenLists.has(op.listId)),
+    };
     listeners.forEach((listener) => listener());
   };
   let ready: Promise<void> = Promise.resolve();
   const discards = async () =>
     Object.entries((await readTaskData(state.account))?.discards ?? {}).map(([key, value]) => ({ key, ...value }));
-  const journal = () => refreshPending();
   const persist = async (next: Snapshot) => {
     await updateTaskData(next.account, (data) => {
       data.snapshot = next;
     });
-  };
-  const refreshPending = async () => {
-    const data = await updateTaskData(state.account, (value) => {
-      value.operations = classify(value.operations);
-    });
-    return data.operations;
   };
   const current = (captured: number) => {
     if (captured !== revision || !isAccountCurrent(sessionToken))
@@ -68,8 +79,11 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
   function activate(account: string) {
     if (state.account === account && isAccountCurrent(sessionToken)) return ready;
     const captured = ++revision;
+    hiddenLists.clear();
     sessionToken = accountToken();
     const token = accountToken();
+    sender?.stop();
+    sender = undefined;
     running = undefined;
     emit({ account, items: {}, pending: [], syncing: false });
     ready = (async () => {
@@ -83,7 +97,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
         });
         current(captured);
         if (!isAccountCurrent(token)) return;
-        emit({ ...data.snapshot, pending: data.operations, syncing: false });
+        emit({ ...data.snapshot, pending: data.operations, error: data.rejection, syncing: false });
       } catch (error) {
         if (captured === revision && isAccountCurrent(token))
           emit({ ...state, error: `Nie można odczytać zapisanych zadań. ${errorText(error)}` });
@@ -93,6 +107,8 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
   }
   function clear(removeStored = true) {
     revision++;
+    sender?.stop();
+    sender = undefined;
     running = undefined;
     ready = Promise.resolve();
     const account = state.account;
@@ -228,13 +244,18 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
         const { lists } = await transport<{ lists: TaskList[] }>('/api/tasks/lists');
         current(captured);
         const allowed = new Set(lists.map((list) => list.id));
-        alarmsChanged = (await journal()).length > 0;
-        const revoked = (await journal()).filter((op) => !allowed.has(op.listId));
+        for (const list of lists) hiddenLists.delete(list.id);
+        for (const id of Object.keys(state.items)) if (!allowed.has(id)) hiddenLists.add(id);
+        alarmsChanged = state.pending.length > 0;
         const items = Object.fromEntries(Object.entries(state.items).filter(([id]) => allowed.has(id)));
         // Revoked content must leave the UI even if local storage has failed.
         emit({ ...state, lists, items, pending: state.pending.filter((op) => allowed.has(op.listId)) });
-        await updateTaskData(account, (data) => {
-          data.snapshot = { account, lists, items };
+        const saved = await updateTaskData(account, (data) => {
+          if (data.operations.some((op) => !allowed.has(op.listId))) data.rejection = revokedTaskText;
+          data.snapshot.lists = lists;
+          data.snapshot.items = Object.fromEntries(
+            Object.entries(data.snapshot.items).filter(([id]) => allowed.has(id)),
+          );
           data.operations = data.operations.filter((op) => allowed.has(op.listId));
           data.discards = Object.fromEntries(
             Object.entries(data.discards).filter(([, entry]) => allowed.has(entry.listId)),
@@ -242,77 +263,47 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
         });
         emit({
           ...state,
-          lists,
-          items,
-          pending: await journal(),
-          error: revoked.length ? 'Utracono dostęp do listy. Jej oczekujące zmiany nie zostały wysłane.' : undefined,
+          ...saved.snapshot,
+          pending: saved.operations,
+          error: saved.rejection,
         });
-        try {
-          for (const queued of await journal()) {
-            const op = (await journal()).find((entry) => entry.id === queued.id);
-            if (!op) continue;
-            if (op.status === 'needs-review') {
-              emit({ ...state, pending: await journal() });
-              await refreshPending();
-              continue;
-            }
-            try {
-              const path =
-                op.change.type === 'create'
-                  ? `/api/tasks/lists/${encodeURIComponent(op.listId)}/tasks`
-                  : `/api/tasks/${encodeURIComponent(op.taskId)}`;
-              const response = await transport<{ task?: Task }>(
-                `${path}?operationId=${op.id}&actorId=${session.user.id}${op.change.type === 'create' ? `&taskId=${op.taskId}` : ''}`,
-                {
-                  method: op.change.type === 'create' ? 'POST' : op.change.type === 'update' ? 'PATCH' : 'DELETE',
-                  ...(op.change.type === 'remove' ? {} : { body: JSON.stringify(op.change.data) }),
-                },
-              );
-              current(captured);
-              const tasks = state.items[op.listId] ?? [];
-              const updated = response.task
-                ? [...tasks.filter((task) => task.id !== op.taskId), response.task]
-                : tasks.filter((task) => task.id !== op.taskId);
-              const next = { account, lists: state.lists, items: { ...state.items, [op.listId]: updated } };
-              await updateTaskData(account, (data) => {
-                const tasks = data.snapshot.items[op.listId] ?? [];
-                data.snapshot.items[op.listId] = response.task
-                  ? [...tasks.filter((task) => task.id !== op.taskId), response.task]
-                  : tasks.filter((task) => task.id !== op.taskId);
-                data.operations = data.operations.filter((entry) => entry.id !== op.id);
-              });
-              emit({ ...state, ...next, pending: await journal() });
-            } catch (error) {
-              current(captured);
-              if (
-                !(error instanceof ApiRequestError) ||
-                error.status === 429 ||
-                error.status >= 500 ||
-                error.status === 401
-              )
-                throw error;
-              // A rejected change cannot roll back subsequent offline changes.
-              await updateTaskData(account, (data) => {
-                data.operations = data.operations.filter((entry) => entry.id !== op.id);
-              });
-              emit({
-                ...state,
-                pending: await journal(),
-                error: `${errorText(error)} Oczekująca zmiana nie została zapisana na serwerze.`,
-              });
-            }
-          }
-        } catch (error) {
-          current(captured);
-          if (error instanceof ApiRequestError && [401, 403].includes(error.status)) throw error;
-          // Queue failures do not prevent refreshing the confirmed server state.
-          emit({ ...state, error: errorText(error) });
-        }
+        sender ??= joinSync(
+          account,
+          taskAdapter(account, transport, (listId) => {
+            if (captured !== revision || !isAccountCurrent(sessionToken)) return;
+            hiddenLists.add(listId);
+            const items = { ...state.items };
+            delete items[listId];
+            emit({
+              ...state,
+              items,
+              lists: state.lists?.filter((list) => list.id !== listId),
+              pending: state.pending.filter((op) => op.listId !== listId),
+              error: revokedTaskText,
+            });
+          }),
+          async () => {
+            if (captured !== revision || !isAccountCurrent(sessionToken)) return;
+            const data = await readTaskData(account);
+            const operations = await transact('readonly', (tx) => readOperations(tx, account));
+            current(captured);
+            emit({
+              ...state,
+              ...data!.snapshot,
+              pending: data!.operations,
+              error: data!.rejection ?? operations.find((op) => op.module === 'tasks' && op.lastError)?.lastError,
+            });
+            window.dispatchEvent(new Event('rodzina:tasks-changed'));
+          },
+        );
+        await sender.synchronize();
+        current(captured);
         for (const list of lists) {
           try {
             const awaitingRefresh = (await discards()).filter(
               (entry) => entry.listId === list.id && entry.requiresRefresh,
             );
+            const before = JSON.stringify((await readTaskData(account))!.snapshot.items[list.id]);
             const result = await transport<{ tasks: Task[] }>(
               `/api/tasks/lists/${encodeURIComponent(list.id)}/tasks?status=all`,
             );
@@ -323,15 +314,23 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
               items: { ...state.items, [list.id]: result.tasks },
               syncedAt: Date.now(),
             };
-            await updateTaskData(account, (data) => {
-              data.snapshot = next;
+            const saved = await updateTaskData(account, (data) => {
+              // An overlapping response must not replace a newer reconciliation or revocation.
+              if (
+                !data.snapshot.lists?.some((entry) => entry.id === list.id) ||
+                JSON.stringify(data.snapshot.items[list.id]) !== before
+              )
+                return;
+              data.snapshot.items[list.id] = result.tasks;
+              data.snapshot.syncedAt = next.syncedAt;
               for (const { key } of awaitingRefresh)
                 if (data.discards[key]) data.discards[key]!.requiresRefresh = false;
             });
-            emit({ ...state, ...next });
+            emit({ ...state, ...saved.snapshot, pending: saved.operations });
           } catch (error) {
             current(captured);
             if (error instanceof ApiRequestError && [403, 404].includes(error.status)) {
+              hiddenLists.add(list.id);
               const nextItems = { ...state.items };
               delete nextItems[list.id];
               const next = { account, lists: state.lists?.filter((entry) => entry.id !== list.id), items: nextItems };
@@ -348,6 +347,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
                 data.discards = Object.fromEntries(
                   Object.entries(data.discards).filter(([, entry]) => entry.listId !== list.id),
                 );
+                data.rejection = revokedTaskText;
               });
             } else throw error;
           }

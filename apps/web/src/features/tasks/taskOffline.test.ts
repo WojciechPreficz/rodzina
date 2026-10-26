@@ -1,9 +1,10 @@
 import '../../offline/testSetup.js';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { readTaskData, updateTaskData } from './taskStorage.js';
-import { clearDatabase, closeDatabase } from '../../offline/database.js';
+import { transact, clearDatabase, closeDatabase } from '../../offline/database.js';
 import { expect, it, vi } from 'vitest';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type Task, type TaskList } from '@rodzina/shared';
+import { readOperations } from '../../offline/outbox.js';
 import { ApiRequestError } from '../../api.js';
 import { createTaskOfflineStore, offlineTaskPatch, TASK_STORAGE_KEY } from './taskOffline.js';
 
@@ -88,6 +89,7 @@ async function expireFirst() {
     data.operations[0]!.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1000;
   });
 }
+
 it('restores downloaded data and pending create/edit projection after an offline restart', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -108,6 +110,7 @@ it('restores downloaded data and pending create/edit projection after an offline
   expect(f.tasks().filter((task) => task.id === id)).toHaveLength(1);
   expect(localStorage.getItem(TASK_STORAGE_KEY)).toBeNull();
 });
+
 it('persists review and dependent status, keeps alarm suppression after restart and clock correction', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -130,6 +133,7 @@ it('persists review and dependent status, keeps alarm suppression after restart 
     clock.mockRestore();
   }
 });
+
 it('does not replay old operations but continues independent work and refreshes confirmed data', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -143,6 +147,7 @@ it('does not replay old operations but continues independent work and refreshes 
   expect(f.store.getSnapshot().pending[0]?.reason).toBe('expired');
   expect(f.tasks().some((task) => task.title === 'Nowe')).toBe(true);
 });
+
 it('discards only the inspected review chain atomically and requires a fresh server read', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -165,6 +170,7 @@ it('discards only the inspected review chain atomically and requires a fresh ser
   await restored.enqueue(listId, taskId, { type: 'update', data: { title: 'Nowa decyzja' } });
   expect(restored.getSnapshot().pending[0]?.id).not.toBe(ids[0]);
 });
+
 it('retains unseen changes from another tab when rejecting a stale discard decision', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -178,6 +184,7 @@ it('retains unseen changes from another tab when rejecting a stale discard decis
   await expect(f.store.discardReview(ids)).rejects.toThrow('Lista zmian');
   expect((await readTaskData(account))?.operations).toHaveLength(2);
 });
+
 it('reuses the same operation ID after a lost response without duplicating a created task', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -185,12 +192,18 @@ it('reuses the same operation ID after a lost response without duplicating a cre
   f.lose();
   await f.store.synchronize();
   expect(f.store.getSnapshot().pending).toHaveLength(1);
+  const waiting = await transact('readonly', (tx) => readOperations(tx, account));
+  expect(waiting[0]?.status).toBe('retry-wait');
+  await transact('readwrite', async (tx) => {
+    tx.objectStore('outbox').put({ ...waiting[0], nextAttemptAt: 0 });
+  });
   await f.store.synchronize();
   expect(f.store.getSnapshot().pending).toEqual([]);
   expect(f.tasks()).toHaveLength(2);
   const posts = f.request.mock.calls.filter(([, init]) => init?.method === 'POST');
   expect(posts[0]?.[0]).toBe(posts[1]?.[0]);
 });
+
 it.each([429, 500])('retains ordered work on HTTP %s', async (status) => {
   const f = await fixture();
   await f.store.synchronize();
@@ -201,6 +214,7 @@ it.each([429, 500])('retains ordered work on HTTP %s', async (status) => {
   expect(f.store.getSnapshot().pending).toHaveLength(2);
   expect(f.store.project().items[listId]?.[0]).toMatchObject({ title: 'Nowy', notes: 'Notatka' });
 });
+
 it('purges revoked private content and work before sending mutations, including after restart', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -215,6 +229,7 @@ it('purges revoked private content and work before sending mutations, including 
   expect(restored.getSnapshot().pending).toEqual([]);
   expect(restored.project().items).toEqual({});
 });
+
 it('purges review work when access is revoked during list refresh', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -231,6 +246,7 @@ it('purges review work when access is revoked during list refresh', async () => 
   expect(restored.getSnapshot().pending).toEqual([]);
   expect(restored.project().items).toEqual({});
 });
+
 it('keeps revoked content out of memory when the purge cannot be persisted', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -247,22 +263,26 @@ it('keeps revoked content out of memory when the purge cannot be persisted', asy
     failure.mockRestore();
   }
 });
-it('rejects a removed object without recreating it or dropping a later independent edit', async () => {
+
+it('retains a rejected object chain for review without recreating it and sends independent work', async () => {
   const f = await fixture();
   await f.store.synchronize();
   await f.store.enqueue(listId, taskId, { type: 'update', data: { assigneeId: crypto.randomUUID() } });
   await f.store.enqueue(listId, taskId, { type: 'update', data: { notes: 'Zachowaj' } });
+  const independent = crypto.randomUUID();
+  await f.store.enqueue(listId, independent, { type: 'create', data: { title: 'Niezależne' } });
   f.setReject(new ApiRequestError('Nie istnieje', 404));
   const original = f.request.getMockImplementation()!;
   f.request.mockImplementation(async (path, init) => {
-    if (String(init?.body).includes('Zachowaj')) f.setReject();
+    if (String(init?.body).includes('Niezależne')) f.setReject();
     return original(path, init);
   });
   await f.store.synchronize();
-  expect(f.store.getSnapshot().pending).toEqual([]);
-  expect(f.store.project().items[listId]?.[0]?.notes).toBe('Zachowaj');
-  expect(f.request.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  expect(f.store.getSnapshot().pending.map((op) => op.reason)).toEqual(['rejected', 'dependency']);
+  expect(f.store.project().items[listId]?.some((task) => task.id === independent)).toBe(true);
+  expect(f.request.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
 });
+
 it('never acknowledges a failed durable edit and leaves its confirmed base intact', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -278,6 +298,7 @@ it('never acknowledges a failed durable edit and leaves its confirmed base intac
   expect(await readTaskData(account)).toEqual(before);
   expect(f.store.project().items[listId]?.[0]?.isDone).toBe(false);
 });
+
 it('merges concurrent tab writes in transactions without losing either operation', async () => {
   const f = await fixture();
   await f.store.synchronize();
@@ -291,6 +312,7 @@ it('merges concurrent tab writes in transactions without losing either operation
   expect(f.store.getSnapshot().pending).toHaveLength(2);
   expect(f.store.project().items[listId]?.[0]).toMatchObject({ title: 'Tytuł', notes: 'Notatka' });
 });
+
 it.each(['auth', 'refresh', 'mutation'] as const)(
   'ignores a late %s response after logout and account change',
   async (phase) => {
@@ -323,8 +345,55 @@ it.each(['auth', 'refresh', 'mutation'] as const)(
     expect(await readTaskData('another:account')).not.toHaveProperty('snapshot.lists');
   },
 );
+
 it('blocks assignment and reminder changes offline', () => {
   expect(offlineTaskPatch({ title: 'Nowy', assigneeId: null }, task)).toEqual({ title: 'Nowy' });
   expect(() => offlineTaskPatch({ assigneeId: user }, task)).toThrow('przypisanej osoby');
   expect(() => offlineTaskPatch({ reminders: [] }, task)).toThrow('przypomnień');
+});
+
+it('retains conflict dependencies and alarm blocks after restart while independent tasks synchronize', async () => {
+  const f = await fixture();
+  await f.store.synchronize();
+  await f.store.enqueue(listId, taskId, { type: 'update', data: { dueDate: '2027-02-01' } });
+  await f.store.enqueue(listId, taskId, { type: 'remove' });
+  const id = crypto.randomUUID();
+  await f.store.enqueue(listId, id, { type: 'create', data: { title: 'Niezależne' } });
+  const original = f.request.getMockImplementation()!;
+  f.request.mockImplementation(async (path, init) => {
+    if (init?.method === 'PATCH') throw new ApiRequestError('Konflikt', 409, 'OPERATION_CONFLICT');
+    return original(path, init);
+  });
+  await f.store.synchronize();
+  expect(f.store.getSnapshot().pending.map((op) => op.reason)).toEqual(['conflict', 'dependency']);
+  expect(f.store.blockedTasks(account)).toEqual([taskId, taskId]);
+  expect(f.tasks().some((entry) => entry.id === id)).toBe(true);
+  await closeDatabase();
+  const restored = createTaskOfflineStore();
+  await restored.activate(account);
+  expect(restored.getSnapshot().pending.map((op) => op.reason)).toEqual(['conflict', 'dependency']);
+  expect(restored.blockedTasks(account)).toEqual([taskId, taskId]);
+  expect(restored.project().items[listId]?.find((entry) => entry.id === taskId)?.dueDate).toBe(task.dueDate);
+});
+
+it('removes private payloads and dependent work when access changes during a mutation', async () => {
+  const f = await fixture();
+  await f.store.synchronize();
+  await f.store.enqueue(listId, taskId, { type: 'update', data: { notes: 'Prywatna treść' } });
+  await f.store.enqueue(listId, taskId, { type: 'remove' });
+  const original = f.request.getMockImplementation()!;
+  f.request.mockImplementation(async (path, init) => {
+    if (init?.method) {
+      f.revoke();
+      throw new ApiRequestError('Nie istnieje', 404);
+    }
+    return original(path, init);
+  });
+  await f.store.synchronize();
+  expect(f.store.project().items).toEqual({});
+  expect(f.store.getSnapshot().pending).toEqual([]);
+  expect(JSON.stringify(await readTaskData(account))).not.toContain('Prywatna treść');
+  expect(await transact('readonly', (tx) => readOperations(tx, account))).toEqual([]);
+  expect((await readTaskData(account))?.rejection).toContain('Utracono dostęp');
+  expect(f.request.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1);
 });

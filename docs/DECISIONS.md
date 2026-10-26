@@ -1,5 +1,36 @@
 # Decyzje
 
+## 26.10.2026 — zadania przez wspólny outbox, O.6 (#54)
+
+- Baza urządzenia ma wersję 3. Zmiana zamyka połączenia klientów O.4/O.5,
+  którzy nie mogą ponownie otworzyć wersji 1/2. Dzięki temu stary synchronizator
+  zadań nie działa obok nowego. Import localStorage nadal wymaga potwierdzonej
+  wyłączności. Rollback wymaga klienta czytającego wersję 3 i oba adaptery outbox.
+- Przejęcie O.4 jest jedną transakcją: `id` staje się `operationId`, pozostają
+  oryginalne czasy, kolejność, statusy i odrzucenia. Snapshot zawiera wyłącznie
+  potwierdzoną bazę i znaczniki odświeżenia, a operacje znajdują się tylko
+  w `outbox`. Znacznik `engine:tasks=outbox` zapobiega ponownemu importowi.
+  Lokalna projekcja jest wyliczana, bez drugiego zastosowania zmian.
+- Rejestr nadawcy łączy adaptery zakupów i zadań na konto. Jeden nadawca ma
+  jedną dzierżawę, timer i obsługę sieci/sesji. Odpinanie widoku nie zatrzymuje
+  pozostałego modułu. Nieobecny adapter nie blokuje niezależnych operacji
+  obecnego modułu; jawne zależności pozostają obowiązujące.
+- Zadania zachowują transport i ograniczenia edycji. Łańcuch zadania używa
+  `tasks:list:<listId>:task:<taskId>` oraz jawnego `dependsOn`. Konflikty i trwałe
+  odrzucenia pozostają do sprawdzenia, blokują zależności i zachowują blokady
+  alarmów. Inne zadania i zakupy mogą synchronizować się dalej. Odrzucenie
+  obejmuje cały sprawdzony łańcuch i nadal wymaga świeżego odczytu listy.
+- Adapter sprawdza sesję i listy przed wysłaniem, również przy retry. Po
+  mutacyjnym 403/404 ponownie sprawdza widoczność listy. Cofnięte udostępnienie
+  usuwa prywatną bazę, payloady i odrzucenia tej listy; pozostaje ogólny
+  komunikat bez treści zadania. Sama utrata obiektu nie jest powodem do
+  automatycznego odtwarzania zadania ani kasowania zależnych zmian.
+- Koperty zadań, chroniona baza i odrzucenia dzielą dotychczasową rezerwę
+  6 MiB. Nieudany zapis nie potwierdza akcji w UI. Alarmy pozostają w obecnym
+  mechanizmie Androida; powiadomienie po uzgodnieniu odświeża ich harmonogram.
+  Brak zmian serwera, migracji SQLite, konfiguracji, crona i zależności runtime.
+  Fizyczny Android i CI końcowego commita wymagają odrębnego potwierdzenia.
+
 ## 26.10.2026 — wspólny outbox zakupów, O.5 (#53)
 
 - Wersja 2 bazy `rodzina-offline` zachowuje magazyny wersji 1, ale wymusza

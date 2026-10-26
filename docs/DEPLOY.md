@@ -19,14 +19,17 @@ aktualizacji API. Szczegóły zgodności i migracji zachowuje
 
 ## 2. Zbudowanie i wgranie paczki
 
-O.5 (#53) aktualizuje bazę urządzenia `rodzina-offline` do wersji 2
-i przejmuje zakupy do `outbox-v1`. Nie zmienia bazy serwera, konfiguracji,
+O.6 (#54) aktualizuje bazę urządzenia `rodzina-offline` do wersji 3
+i przejmuje zadania do wspólnego outbox używanego przez zakupy od O.5 (#53).
+Nie zmienia bazy serwera, konfiguracji,
 crona ani zależności runtime. WWW i APK aktualizujemy osobno; zamknij starsze
 karty/proces APK przed przejściem, a przy źródłach localStorage potwierdź
 procedurę importu opisaną w [DEVELOPMENT.md](DEVELOPMENT.md).
-Po przejęciu nie wracaj do klienta wersji 1 i nie usuwaj pamięci urządzenia
-z niewysłanymi operacjami. Rollback wymaga klienta rozumiejącego wersję 2
-i wspólny outbox; backup serwera nie zawiera lokalnej kolejki urządzenia.
+Po przejęciu nie wracaj do klienta wersji 1/2 i nie usuwaj pamięci urządzenia
+z niewysłanymi operacjami. Rollback wymaga klienta rozumiejącego wersję 3
+i wspólny outbox zakupów oraz zadań; backup serwera nie zawiera lokalnej
+kolejki urządzenia. `versionchange` odcina starsze klienty IDB. Fizyczny odbiór
+alarmów i restartu urządzenia pozostaje obowiązkowy przed zaliczeniem O.6.
 
 Migracja 0023 dodaje Kontakty i cztery początkowe grupy dla każdej istniejącej
 rodziny. Wykonuj ją jobem `dist/jobs/migrate-db.js` z nowej paczki, po backupie,

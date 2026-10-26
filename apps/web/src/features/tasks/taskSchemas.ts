@@ -14,7 +14,7 @@ export const operationSchema = z.object({
   listId: z.string(),
   taskId: z.string(),
   status: z.enum(['pending', 'needs-review']).default('pending'),
-  reason: z.enum(['expired', 'dependency']).optional(),
+  reason: z.enum(['expired', 'dependency', 'conflict', 'rejected']).optional(),
   change: z.discriminatedUnion('type', [
     z.object({ type: z.literal('create'), data: createTaskSchema }),
     z.object({ type: z.literal('update'), data: patchTaskSchema }),

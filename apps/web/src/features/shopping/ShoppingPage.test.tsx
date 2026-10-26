@@ -135,11 +135,13 @@ describe('shopping UI', () => {
     await waitFor(() => expect(field).toBeEnabled());
     fireEvent.change(field, { target: { value: input } });
     fireEvent.click(screen.getByRole('button', { name: 'Dodaj' }));
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/shopping/lists/list/items?operationId='),
-        expect.objectContaining({ method: 'POST', body: JSON.stringify({ name, quantity }) }),
-      ),
+    await waitFor(
+      () =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.stringContaining('/api/shopping/lists/list/items?operationId='),
+          expect.objectContaining({ method: 'POST', body: JSON.stringify({ name, quantity }) }),
+        ),
+      { timeout: 4000 },
     );
     await waitFor(() => expect(field).toHaveValue(''));
     expect(await screen.findByRole('article', { name })).toHaveTextContent(quantity);

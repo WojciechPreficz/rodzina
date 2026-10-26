@@ -4,7 +4,7 @@ import { onlineManager } from '@tanstack/react-query';
 import { ApiRequestError } from '../api.js';
 import { activateOfflineAccount, transact, clearDatabase, requestValue } from './database.js';
 import { appendOperation, readOperations, type Lease } from './outbox.js';
-import { retryAt, startSync, type SyncAdapter } from './sync.js';
+import { joinSync, retryAt, startSync, type SyncAdapter } from './sync.js';
 
 const account = 'family:user';
 const senders: ReturnType<typeof startSync>[] = [];
@@ -40,6 +40,100 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe('shared account sender', () => {
+  it('shares one sender across modules, retains cross-module dependencies and continues independent work', async () => {
+    onlineManager.setOnline(false);
+    await seed();
+    await transact('readwrite', async (tx) => {
+      await appendOperation(tx, account, 'tasks', {
+        operationId: 'dependent-task',
+        submittedAt: Date.now(),
+        entityId: 'dependent',
+        payload: {},
+        orderingKeys: ['task:a'],
+        dependsOn: ['stable-id'],
+      });
+      await appendOperation(tx, account, 'tasks', {
+        operationId: 'independent-task',
+        submittedAt: Date.now(),
+        entityId: 'independent',
+        payload: {},
+        orderingKeys: ['task:b'],
+      });
+    });
+    let concurrent = 0;
+    let maximum = 0;
+    const sent: string[] = [];
+    const owners: string[] = [];
+    const adapter = (module: string): SyncAdapter => ({
+      module,
+      prepare: async () => {},
+      reconcile: async () => {},
+      invalidateAccess: async () => {},
+      send: async (op) => {
+        maximum = Math.max(maximum, ++concurrent);
+        sent.push(op.operationId);
+        owners.push(
+          await transact(
+            'readonly',
+            async (tx) =>
+              (await requestValue<{ value: Lease }>(tx.objectStore('metadata').get([account, 'sender-lease']))).value
+                .owner,
+          ),
+        );
+        concurrent--;
+        if (op.operationId === 'stable-id') throw new ApiRequestError('Konflikt', 409);
+        return {};
+      },
+    });
+    const shopping = joinSync(account, adapter('shopping'), () => {});
+    const tasks = joinSync(account, adapter('tasks'), () => {});
+    senders.push(shopping, tasks);
+    onlineManager.setOnline(true);
+    await tasks.synchronize();
+    expect(sent).toEqual(['stable-id', 'independent-task']);
+    expect(maximum).toBe(1);
+    expect(new Set(owners).size).toBe(1);
+    expect((await read()).map((op) => [op.operationId, op.reviewReason, op.dependsOn])).toEqual([
+      ['stable-id', 'conflict', []],
+      ['dependent-task', 'dependency', ['stable-id']],
+    ]);
+    shopping.stop();
+    await transact('readwrite', (tx) =>
+      appendOperation(tx, account, 'tasks', {
+        operationId: 'after-shopping-unmount',
+        submittedAt: Date.now(),
+        entityId: 'other',
+        payload: {},
+        orderingKeys: ['task:c'],
+      }),
+    );
+    await tasks.synchronize();
+    expect(sent.at(-1)).toBe('after-shopping-unmount');
+  });
+  it('does not let an unmounted module block independent registered work', async () => {
+    onlineManager.setOnline(false);
+    await seed();
+    await transact('readwrite', (tx) =>
+      appendOperation(tx, account, 'tasks', {
+        operationId: 'available-task',
+        submittedAt: Date.now(),
+        entityId: 'other',
+        payload: {},
+        orderingKeys: ['task:b'],
+      }),
+    );
+    const send = vi.fn(async () => ({}));
+    const sender = joinSync(
+      account,
+      { module: 'tasks', prepare: async () => {}, send, reconcile: async () => {}, invalidateAccess: async () => {} },
+      () => {},
+    );
+    senders.push(sender);
+    onlineManager.setOnline(true);
+    await sender.synchronize();
+    expect(send).toHaveBeenCalledOnce();
+    expect((await read()).map((op) => op.operationId)).toEqual(['stable-id']);
+  });
   it.each([429, 503])('persists %s retry across sender restart without changing identity', async (status) => {
     await seed();
     const before = (await read())[0]!;

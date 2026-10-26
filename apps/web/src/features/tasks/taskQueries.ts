@@ -7,6 +7,7 @@ import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import { TASK_SIGNAL } from './taskStorage.js';
+import { useOfflineSyncStatus } from '../../offline/status.js';
 import { offlineTaskPatch, taskOfflineText, taskOperationBlocksAlarm, taskStore } from './taskOffline.js';
 
 export function useTaskData() {
@@ -57,6 +58,7 @@ export function TaskPrefetch() {
 export function useTasks(listId?: string) {
   const { user, family, familyConfirmed } = useMe();
   const data = useTaskData();
+  const status = useOfflineSyncStatus(user && family ? `${family.id}:${user.id}` : '', 'tasks');
   const client = useQueryClient();
   const key = ['tasks', family?.id, user?.id];
   const active = data.lists?.find((list) => list.id === listId);
@@ -110,6 +112,12 @@ export function useTasks(listId?: string) {
       if (!taskStore.getSnapshot().error && pending()) await taskStore.synchronize();
       window.dispatchEvent(new Event('rodzina:tasks-changed'));
       if (taskStore.getSnapshot().error && !pending()) throw new Error(taskStore.getSnapshot().error);
+      if (
+        taskStore
+          .getSnapshot()
+          .pending.some((op) => op.status === 'needs-review' && changes.some(({ id }) => op.taskId === id))
+      )
+        throw new Error(taskStore.getSnapshot().error ?? taskOfflineText.blocked);
     }
   };
   const submit = async (id: string, change: Parameters<typeof taskStore.enqueue>[2]) => {
@@ -164,8 +172,8 @@ export function useTasks(listId?: string) {
       if (!isOffline()) await sync();
     },
     pendingAlarms: data.pending.some(taskOperationBlocksAlarm),
-    syncError: data.error,
-    syncing: data.syncing,
+    syncError: data.error ?? status.lastError ?? status.storageIssue,
+    syncing: data.syncing || status.syncing,
     createList,
     updateList,
     removeList,

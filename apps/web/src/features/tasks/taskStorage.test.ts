@@ -13,6 +13,7 @@ import {
 } from '../../offline/database.js';
 import { importTasks, readTaskData, updateTaskData } from './taskStorage.js';
 import { TASK_STORAGE_KEY } from './taskOffline.js';
+import { readOperations } from '../../offline/outbox.js';
 import { CONTACTS_STORAGE_KEY } from '../contacts/contactsOffline.js';
 import '../contacts/contactsOffline.js';
 const fixture = JSON.parse(readFileSync('docs/offline/fixtures/legacy-valid.json', 'utf8')) as {
@@ -34,6 +35,43 @@ function seed() {
 }
 afterEach(() => vi.restoreAllMocks());
 describe('O.4 legacy import', () => {
+  it('atomically takes over O.4, preserves review, times and discards, and keeps only the confirmed base in cache', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
+    seed();
+    await ensureMigrated(true);
+    await activateOfflineAccount(fixture.accountId);
+    const original = (await readTaskData(fixture.accountId))!;
+    const put = IDBObjectStore.prototype.put;
+    const failure = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+      this: IDBObjectStore,
+      value,
+      ...args
+    ) {
+      if (this.name === 'metadata' && value.key === 'engine:tasks') throw new Error('Takeover interrupted');
+      return put.call(this, value, ...args);
+    });
+    await expect(updateTaskData(fixture.accountId, () => {})).rejects.toThrow('Takeover interrupted');
+    failure.mockRestore();
+    expect(await readTaskData(fixture.accountId)).toEqual(original);
+    expect(await transact('readonly', (tx) => readOperations(tx, fixture.accountId))).toEqual([]);
+    await updateTaskData(fixture.accountId, () => {});
+    expect(await readTaskData(fixture.accountId)).toEqual(original);
+    const operations = await transact('readonly', (tx) => readOperations(tx, fixture.accountId));
+    expect(operations.map((op) => [op.operationId, op.submittedAt, op.status])).toEqual(
+      original.operations.map((op) => [op.id, op.submittedAt, op.status]),
+    );
+    const record = await transact('readonly', (tx) =>
+      requestValue<{ payload: { operations: unknown[] } }>(
+        tx.objectStore('cache').get([fixture.accountId, 'tasks', 'snapshot']),
+      ),
+    );
+    expect(record.payload.operations).toEqual([]);
+    await closeDatabase();
+    await activateOfflineAccount(fixture.accountId);
+    await updateTaskData(fixture.accountId, () => {});
+    expect(await transact('readonly', (tx) => readOperations(tx, fixture.accountId))).toEqual(operations);
+    expect(await readTaskData(fixture.accountId)).toEqual(original);
+  });
   it('requires explicit exclusivity, preserves raw sources until import can run, and keeps IDs, timestamps, discards and contacts time', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
     seed();

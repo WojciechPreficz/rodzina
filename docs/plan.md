@@ -117,6 +117,12 @@ cache widoku. Baza urządzenia ma wersję 2, odcinającą starszy silnik zakupó
 Odbiór fizycznego APK oraz końcowe CI pozostają do potwierdzenia;
 [checklista](DEVELOPMENT.md#odbiór-wspólnego-outbox-zakupów--o5-53).
 
+O.6 (#54): zadania korzystają lokalnie ze wspólnego outbox i nadawcy zakupów,
+z zachowaniem prywatności list, zależności oraz blokad alarmów. Baza urządzenia
+ma wersję 3, odcinającą starszy synchronizator zadań. Fizyczny odbiór APK,
+restartu urządzenia i alarmów oraz CI końcowego commita pozostają do
+potwierdzenia; [checklista](DEVELOPMENT.md#odbiór-wspólnego-outbox-zadań--o6-54).
+
 **Faza 8 — dokumenty: zaimplementowana — potwierdzenie właściciela 25.10.2026.**
 Pełny zakres pozostaje w [archiwum fazy 8](archive/plan-przyszle-fazy.md).
 Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani

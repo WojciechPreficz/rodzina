@@ -35,7 +35,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
   const token = accountToken();
   const owner = crypto.randomUUID();
   let active = true;
-  let running = false;
+  let running: Promise<void> | undefined;
   let controller: AbortController | undefined;
   let lease: Lease | undefined;
   let revision = '';
@@ -59,8 +59,11 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
       operations,
       synced.filter((entry) => entry.key.startsWith('last-sync:')),
       sessionConfirmed,
+      adapters.map((adapter) => adapter.module),
     ]);
     if (nextRevision === revision) return;
+    await changed();
+    if (!current()) return;
     revision = nextRevision;
     for (const adapter of adapters) {
       const own = operations.filter((op) => op.module === adapter.module);
@@ -73,11 +76,9 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         sessionConfirmed,
       });
     }
-    await changed();
   };
-  const synchronize = async () => {
-    if (!current() || running) return;
-    running = true;
+  const run = async () => {
+    if (!current()) return;
     try {
       await status();
       while (current() && onlineManager.isOnline()) {
@@ -114,7 +115,9 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
               op.orderingKeys.forEach((key) => blockedKeys.add(key));
             }
           }
-          const op = nextOperation(operations, Date.now());
+          const op = nextOperation(operations, Date.now(), (op) =>
+            adapters.some((adapter) => adapter.module === op.module),
+          );
           if (!op || !adapters.some((adapter) => adapter.module === op.module)) {
             tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...lease, expiresAt: 0 } });
             return;
@@ -125,7 +128,8 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         });
         await status();
         if (!operation || !current()) break;
-        const adapter = adapters.find((adapter) => adapter.module === operation.module)!;
+        const adapter = adapters.find((adapter) => adapter.module === operation.module);
+        if (!adapter) continue;
         const captured = lease!;
         const request = new AbortController();
         controller = request;
@@ -165,12 +169,15 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
           }
           await transaction(async (tx) => {
             await assertLease(tx, accountId, captured, Date.now());
-            const old = (await readOperations(tx, accountId)).find((op) => op.operationId === operation.operationId);
+            let old = (await readOperations(tx, accountId)).find((op) => op.operationId === operation.operationId);
             if (!old) return;
             const expired = error instanceof OfflineOperationExpiredError;
             const review = expired || (error instanceof ApiRequestError && error.status < 500 && error.status !== 429);
-            if (error instanceof ApiRequestError && [403, 404].includes(error.status))
+            if (error instanceof ApiRequestError && [403, 404].includes(error.status)) {
               await adapter.invalidateAccess(tx, old, error);
+              old = (await readOperations(tx, accountId)).find((op) => op.operationId === operation.operationId);
+              if (!old) return;
+            }
             tx.objectStore('outbox').put({
               ...old,
               status: review ? 'needs-review' : 'retry-wait',
@@ -201,11 +208,20 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
       if (current() && !(error instanceof DOMException && error.name === 'AbortError'))
         reportStorageIssue(`Nie można zsynchronizować zmian. ${storageError(error)}`);
     } finally {
-      running = false;
       if (current()) await status().catch(() => {});
     }
   };
+  const synchronize = () => {
+    running ??= run().finally(() => {
+      running = undefined;
+    });
+    return running;
+  };
   const wake = () => {
+    if (!current()) {
+      stop();
+      return;
+    }
     void synchronize();
   };
   const stopOnline = onlineManager.subscribe(wake);
@@ -237,5 +253,55 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
     }).catch(() => {});
   }
   wake();
-  return { wake, stop, refreshStatus: status };
+  return { wake, stop, refreshStatus: status, synchronize, isActive: current };
+}
+
+// All mounted modules share one account sender and one set of lifecycle listeners.
+const accountSenders = new Map<
+  string,
+  {
+    adapters: SyncAdapter[];
+    listeners: Map<() => Promise<void> | void, SyncAdapter>;
+    sender: ReturnType<typeof startSync>;
+  }
+>();
+export function joinSync(accountId: string, adapter: SyncAdapter, changed: () => Promise<void> | void) {
+  let entry = accountSenders.get(accountId);
+  if (entry && !entry.sender.isActive()) {
+    entry.sender.stop();
+    accountSenders.delete(accountId);
+    entry = undefined;
+  }
+  if (!entry) {
+    const adapters: SyncAdapter[] = [];
+    const listeners = new Map<() => Promise<void> | void, SyncAdapter>();
+    entry = {
+      adapters,
+      listeners,
+      sender: startSync(accountId, adapters, async () => {
+        for (const listener of listeners.keys()) await listener();
+      }),
+    };
+    accountSenders.set(accountId, entry);
+  }
+  const joined = entry;
+  // Multiple views may observe a module, but there is only one transport for it.
+  if (!joined.adapters.some((value) => value.module === adapter.module)) joined.adapters.push(adapter);
+  joined.listeners.set(changed, adapter);
+  joined.sender.wake();
+  return {
+    ...joined.sender,
+    stop: () => {
+      joined.listeners.delete(changed);
+      joined.adapters.splice(0, joined.adapters.length);
+      for (const value of joined.listeners.values())
+        if (!joined.adapters.some((adapter) => adapter.module === value.module)) joined.adapters.push(value);
+      if (!joined.adapters.some((value) => value.module === adapter.module))
+        publishSyncStatus(accountId, adapter.module);
+      if (!joined.listeners.size) {
+        joined.sender.stop();
+        if (accountSenders.get(accountId) === joined) accountSenders.delete(accountId);
+      }
+    },
+  };
 }
