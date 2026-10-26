@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Alert, Box, Button, Group, Loader, Stack, Text } from '@mantine/core';
+import { Alert, Box, Button, Group, Loader, Stack, Switch, Text } from '@mantine/core';
 import { ScheduleXCalendar, useCalendarApp } from '@schedule-x/react';
 import {
   createViewDay,
@@ -31,6 +31,9 @@ import { TodayTasks } from '../tasks/TodayTasks.js';
 import { createCalendarSwipePlugin } from './calendarSwipe.js';
 import { CalendarHeader } from './CalendarHeader.js';
 import { CalendarAgendaEvent } from './CalendarAgendaEvent.js';
+import { isHolidayRangeSupported, polishHolidaysInRange, type PolishHoliday } from './polishHolidays.js';
+import { holidayCalendars, holidaysToScheduleX, readHolidayLayers, saveHolidayLayers } from './holidayLayers.js';
+import { HolidayDetails } from './HolidayDetails.js';
 
 const text = labels.calendarUi;
 // The adapter destroys the calendar when this object changes identity.
@@ -70,6 +73,8 @@ function CalendarView({
   const [swipe] = useState(() => createCalendarSwipePlugin());
   const occurrences = useOccurrences(range);
   const readOnly = useCalendarReadOnly();
+  const [layers, setLayers] = useState(readHolidayLayers);
+  const [holidayDetails, setHolidayDetails] = useState<PolishHoliday | null>(null);
   const calendar = useCalendarApp({
     views: [createViewMonthAgenda(), createViewMonthGrid(), createMobileWeekView(), createViewWeek(), createViewDay()],
     defaultView: 'month-grid',
@@ -77,21 +82,27 @@ function CalendarView({
     timezone,
     firstDayOfWeek: 1,
     selectedDate: Temporal.PlainDate.from(date),
-    calendars: memberCalendars(members),
+    calendars: { ...memberCalendars(members), ...holidayCalendars() },
     events: [],
     callbacks: {
       onRender: () => setReady(true),
       onRangeUpdate: ({ start, end }) =>
         setRange({ from: start.toPlainDate().toString(), to: end.toPlainDate().toString() }),
       onSelectedDateUpdate: (selectedDate) => setDate(selectedDate.toString()),
-      onEventClick: (event) => navigate(eventUrl(String(event.eventId), String(event.occurrenceDate))),
+      onEventClick: (event) => {
+        if (event.holiday) setHolidayDetails(event.holiday as PolishHoliday);
+        else navigate(eventUrl(String(event.eventId), String(event.occurrenceDate)));
+      },
     },
     plugins: [eventsService, swipe],
   });
   useEffect(() => {
     if (!ready) return;
-    eventsService.set(toScheduleX(occurrences.data ?? [], timezone, selected));
-  }, [eventsService, occurrences.data, timezone, selected, ready]);
+    eventsService.set([
+      ...toScheduleX(occurrences.data ?? [], timezone, selected),
+      ...holidaysToScheduleX(polishHolidaysInRange(range), layers),
+    ]);
+  }, [eventsService, occurrences.data, timezone, selected, ready, range, layers]);
 
   return (
     <Stack className="calendar-page" gap="lg">
@@ -148,6 +159,21 @@ function CalendarView({
           {selected.length === 0 ? text.allMembers : text.selectedMembers}
         </Text>
       </div>
+      <Group className="calendar-holiday-layers" gap="lg" role="group" aria-label={text.holidayLayers}>
+        {(['publicHoliday', 'observance'] as const).map((category) => (
+          <Switch
+            key={category}
+            label={category === 'publicHoliday' ? text.publicHolidays : text.observances}
+            checked={layers[category]}
+            onChange={(event) => {
+              const next = { ...layers, [category]: event.currentTarget.checked };
+              setLayers(next);
+              saveHolidayLayers(next);
+            }}
+          />
+        ))}
+      </Group>
+      {!isHolidayRangeSupported(range) && <Alert color="yellow">{text.holidayRangeUnsupported}</Alert>}
       {occurrences.isFetching && occurrences.coverage === 'missing' && <Loader aria-label={text.loading} />}
       {occurrences.coverage && occurrences.coverage !== 'complete' && (
         <Alert color="yellow">
@@ -172,13 +198,14 @@ function CalendarView({
       </div>
       {occurrences.coverage === 'complete' &&
         !occurrences.error &&
-        toScheduleX(occurrences.data, timezone, selected).length === 0 && <Text c="dimmed">{text.noEvents}</Text>}
+        toScheduleX(occurrences.data, timezone, selected).length === 0 && <Text c="dimmed">{text.noFamilyEvents}</Text>}
       {readOnly && (
         <Text size="sm" c="dimmed">
           {calendarOnlineHint}
         </Text>
       )}
       <DistantEvents timezone={timezone} selected={selected} />
+      <HolidayDetails holiday={holidayDetails} onClose={() => setHolidayDetails(null)} />
     </Stack>
   );
 }

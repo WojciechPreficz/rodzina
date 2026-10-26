@@ -103,7 +103,7 @@ for (const native of [false, true]) {
         .getByRole('group', { name: 'Pokaż tylko', exact: true })
         .getByRole('button', { name: 'Ania' });
       await member.click();
-      await expect(page.getByText('Brak wydarzeń w wybranym zakresie.')).toBeVisible();
+      await expect(page.getByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).toBeVisible();
       await member.click();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: info.outputPath('calendar-offline.png'), fullPage: true });

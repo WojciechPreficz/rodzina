@@ -35,7 +35,7 @@ export function CalendarAgendaEvent({
         {calendarEvent.kind === 'recurring' && <small>{labels.calendarUi.modeNames.recurring}</small>}
       </div>
       <span aria-hidden="true" className="calendar-agenda-arrow">
-        ↗
+        {calendarEvent.holiday ? 'ⓘ' : '↗'}
       </span>
     </div>
   );

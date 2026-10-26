@@ -40,6 +40,7 @@ vi.mock('./calendarQueries.js', () => ({
 }));
 
 beforeEach(() => {
+  localStorage.clear();
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
@@ -83,6 +84,27 @@ describe('calendar creation modes', () => {
 });
 
 describe('calendar member filters', () => {
+  it('toggles holiday layers independently and restores them after remounting', () => {
+    const show = () =>
+      render(
+        <MantineProvider env="test">
+          <MemoryRouter>
+            <CalendarPage />
+          </MemoryRouter>
+        </MantineProvider>,
+      );
+    const first = show();
+    expect(screen.getByRole('switch', { name: 'Święta ustawowe' })).toBeChecked();
+    fireEvent.click(screen.getByRole('switch', { name: 'Dni okolicznościowe' }));
+    expect(screen.getByRole('switch', { name: 'Święta ustawowe' })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Piotr' }));
+    expect(screen.getByRole('switch', { name: 'Dni okolicznościowe' })).not.toBeChecked();
+    first.unmount();
+    show();
+    expect(screen.getByRole('switch', { name: 'Święta ustawowe' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Dni okolicznościowe' })).not.toBeChecked();
+  });
+
   it('toggles multiple members and restores all events when the last filter is removed', () => {
     render(
       <MantineProvider env="test">
@@ -94,7 +116,7 @@ describe('calendar member filters', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     const anna = screen.getByRole('button', { name: 'Anna' });
     const piotr = screen.getByRole('button', { name: 'Piotr' });
-    const emptyMessage = 'Brak wydarzeń w wybranym zakresie.';
+    const emptyMessage = 'Brak wydarzeń rodzinnych w wybranym zakresie.';
     expect(anna).toHaveAttribute('aria-pressed', 'false');
     expect(piotr).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText('Wszyscy domownicy')).toBeInTheDocument();

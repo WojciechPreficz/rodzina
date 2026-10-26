@@ -72,6 +72,20 @@
   border: 0;
   background: var(--app-surface);
 }
+.family-calendar
+  :is(.sx__month-grid-day, .sx__month-agenda-day, .sx__week-grid__date, .sx__time-grid-day):is(
+    .sx__saturday,
+    .sx__sunday
+  ):not(.sx__month-agenda-day--active) {
+  background-color: color-mix(in srgb, #a63838 5%, var(--app-surface));
+}
+.calendar-holiday-layers .mantine-Switch-body {
+  min-height: 44px;
+  align-items: center;
+}
+.family-calendar :is(.sx__saturday, .sx__sunday) :is(.sx__month-grid-day__header-date, .sx__week-grid__day-name) {
+  color: #a63838;
+}
 .family-calendar button:focus-visible,
 .family-calendar input:focus-visible,
 .family-calendar [tabindex]:focus-visible {

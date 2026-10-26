@@ -99,6 +99,38 @@ Nie zmienia to statusu fazy 6.
 
 ## 6. Fazy
 
+### Rozszerzenie kalendarza K.1 — polskie święta i dni okolicznościowe
+
+**Zakres zatwierdzony 26.10.2026:** jeden samodzielny krok, niezależny od fazy 6.
+Implementacja lokalna; końcowe CI i odbiór fizycznego APK pozostają do potwierdzenia.
+
+- Dwie domyślnie widoczne warstwy wpisów całodniowych: 14 nazwanych świąt
+  ustawowo wolnych od pracy (w tym Wigilia) oraz 12 dni okolicznościowych:
+  Dzień Babci (21.01), Dzień Dziadka (22.01), Walentynki (14.02), Dzień Kobiet
+  (08.03), Dzień Mężczyzn (10.03), Dzień Matki (26.05), Dzień Dziecka (01.06),
+  Dzień Ojca (23.06), Dzień Chłopaka (30.09), Dzień Edukacji Narodowej
+  (14.10), Mikołajki (06.12) i Sylwester (31.12).
+- Lokalny generator dla lat 2025–2099, według obecnych przepisów; święta ruchome
+  wyznaczane od Wielkanocy. Daty `YYYY-MM-DD`, bez konwersji przez UTC.
+  Poza zakresem komunikat, bez blokowania wydarzeń rodzinnych.
+- Wszystkie widoki Schedule-X, osobne kolory i tekstowe kategorie, dwa niezależne
+  przełączniki zapisane na urządzeniu. Filtry domowników nie ukrywają świąt.
+  Zbieżne okazje pozostają osobnymi wpisami. Weekendy wyróżnione wizualnie.
+- Podgląd nazwy, daty i kategorii, bez edycji i przypomnień. Okazje mają opis
+  „Nie jest ustawowym dniem wolnym od pracy”; Dzień Nauczyciela dodatkowe
+  objaśnienie o zajęciach lekcyjnych i opiece.
+- Warstwy działają offline i przy błędzie API wydarzeń, bez zapisu do snapshotów
+  wydarzeń i harmonogramu alarmów. Brak zmian API, bazy, migracji, konfiguracji,
+  crona i zależności. Aktualizacja reguł wymaga wydania WWW oraz osobnego APK.
+- **Poza zakresem:** ferie, przerwy szkolne, imieniny, indywidualne dni wolne
+  oraz wyznaczanie dnia wolnego za święto w sobotę.
+- **Gotowe, gdy:** testy dat, zbieżności, zakresów, przełączników i podglądu;
+  Playwright headless przy 390 i 1280 px (wszystkie widoki, offline, błąd API,
+  inna strefa urządzenia); przegląd wyglądu w obu szerokościach; fizyczne APK
+  online i w trybie samolotowym, ponowne otwarcie z zapisanym wyborem warstw;
+  kontrole lokalne i końcowe CI zgodnie z sekcją 1.2. Nie oznaczamy brakujących
+  prób telefonu ani CI jako zaliczonych.
+
 ### Faza 6 - plan obiadów
 
 **Cel:** rodzina planuje obiady na tydzień i jednym kliknięciem przenosi składniki do listy zakupów.

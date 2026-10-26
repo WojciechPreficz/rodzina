@@ -1,5 +1,50 @@
 # Decyzje
 
+## 26.10.2026 — święta i dni okolicznościowe w kalendarzu (K.1)
+
+- Właściciel zatwierdził lokalne warstwy świąt ustawowych i 12 dni
+  okolicznościowych opisanych w `plan.md`. Reguły obejmują lata 2025–2099,
+  według obecnego stanu prawnego, bez obietnicy automatycznego śledzenia zmian.
+  Źródłem świąt jest [ustawa o dniach wolnych od pracy](https://eli.gov.pl/eli/DU/2025/296/ogl),
+  w tym Wigilia od 2025 r.; daty ruchome obliczamy gregoriańskim algorytmem
+  Meeusa/Jonesa/Butchera i przesunięciami od Wielkanocy.
+- Dni okolicznościowe stosują daty polskie. Źródła obejmują publikacje GUS:
+  [Babcia i Dziadek](https://gdansk.stat.gov.pl/infografiki/21-stycznia-dzien-babci-22-stycznia-dzien-dziadka%2C1%2C11.html),
+  [Walentynki](https://publikacje.new.stat.gov.pl/portal-publikacje/14-lutego-walentynki-0),
+  [Matka, Dziecko i Ojciec](https://lodz.stat.gov.pl/infografiki/infografika-2026-26-maja-dzien-matki-1-czerwca-dzien-dziecka-23-czerwca-dzien-ojca%2C15%2C18.html?pdf=1).
+  Objaśnienie Dnia Nauczyciela wynika z
+  [informacji MEN](https://www.gov.pl/web/edukacja/list-ministra-dariusza-piontkowskiego-z-okazji-dnia-edukacji-narodowej).
+- Katalog nie jest zbiorem wydarzeń rodziny: brak uczestników, mutacji,
+  przypomnień i zapisu do snapshotu wydarzeń. Klucze wpisów adaptera są
+  deterministyczne i nie są identyfikatorami encji bazy. Daty pozostają
+  `Temporal.PlainDate`, niezależne od strefy urządzenia i rodziny.
+- Dwie preferencje widoczności zapisujemy w `rodzina:calendar:holiday-layers:v1`.
+  Są wspólne dla urządzenia i nie zawierają danych konta. Domyślnie obie
+  włączone; błędny lub niedostępny magazyn nie blokuje kalendarza.
+  Filtry domowników dotyczą tylko wydarzeń rodzinnych. Pusty wynik filtra
+  opisujemy jako brak wydarzeń rodzinnych, nawet gdy widoczne są święta.
+- Rozróżnienie kategorii jest tekstowe i kolorystyczne. Opis okazji nie
+  sugeruje, że dana data musi być robocza; zbieżne święta nie zastępują się.
+  Brak nowych zależności, API, migracji, zmiennych środowiskowych i crona.
+  Zmiany katalogu wymagają aktualizacji WWW i osobnego wydania APK.
+- Końcowe CI i próby fizycznego APK pozostają do potwierdzenia. Implementacja
+  tego rozszerzenia nie zmienia statusu innych faz i nie obejmuje deployu.
+- Weryfikacja lokalna: 83 testy Vitest kalendarza (w tym dodatkowy test
+  przełączników), ESLint zmienionego zakresu, Prettier, `npm run typecheck`,
+  build WWW/API i debug APK. Playwright headless: 16 scenariuszy kalendarza,
+  w tym 4 nowych scenariuszy świąt przy 390 i 1280 px. Po poprawce kontrastu
+  zaznaczonego weekendu ponowiono 4 scenariusze świąt i przegląd zrzutów obu
+  szerokości. Wszystkie wymienione kontrole zakończyły się sukcesem.
+  Raporty lokalne: `.android-tools/holiday-unit.json`,
+  `.android-tools/holiday-page-unit.json` oraz `playwright-report/`;
+  zrzuty w `test-results/`. Vitest i Playwright uruchomiono poza sandboxem,
+  który blokował pliki tymczasowe Vitest i start serwera testowego.
+  ADB nie wykazał podłączonego urządzenia: nie zaliczamy próby fizycznego APK.
+  Stan: zweryfikowane lokalnie, oczekuje na CI. Deploy nie jest częścią kroku.
+- Na polecenie właściciela etykiety 1 maja i 11 listopada to odpowiednio
+  „Święto Pracy” i „Dzień Niepodległości”. Po zmianie przeszło 8 testów katalogu,
+  ESLint, Prettier oraz `npm run typecheck`.
+
 ## 26.10.2026 — trwały podgląd Kontaktów offline (krok 9.3, #46)
 
 - Przechowujemy kompletną odpowiedź `/api/contacts` wraz z czasem pobrania

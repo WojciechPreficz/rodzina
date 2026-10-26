@@ -136,27 +136,27 @@ it('shows the offline notice and missing coverage without an infinite loader or 
   show();
   expect(screen.getByRole('status')).toHaveTextContent('kalendarz jest dostępny tylko do odczytu');
   expect(screen.getByText(/Ten zakres nie został zapisany offline/)).toBeVisible();
-  expect(screen.queryByText('Brak wydarzeń w wybranym zakresie.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Ładowanie…')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Dodaj wydarzenie' })).toBeDisabled();
 });
 it('distinguishes a downloaded empty month from a partially saved range', () => {
   calendarStore.saveRange(date.slice(0, 7), [], calendarStore.token());
   show();
-  expect(screen.getByText('Brak wydarzeń w wybranym zakresie.')).toBeVisible();
+  expect(screen.getByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).toBeVisible();
   cleanup();
   calendarStore.saveEvent(event, calendarStore.token());
   calendarStore.forgetEvent(event.id, calendarStore.token());
   show();
   expect(screen.getByText(/Zapisane dane są częściowe/)).toBeVisible();
-  expect(screen.queryByText('Brak wydarzeń w wybranym zakresie.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).not.toBeInTheDocument();
 });
 it('filters saved occurrences locally by member while offline', () => {
   save();
   show();
-  expect(screen.queryByText('Brak wydarzeń w wybranym zakresie.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Ania' }));
-  expect(screen.getByText('Brak wydarzeń w wybranym zakresie.')).toBeVisible();
+  expect(screen.getByText('Brak wydarzeń rodzinnych w wybranym zakresie.')).toBeVisible();
 });
 it('restores complete details and personal reminders before fetching and disables every write', () => {
   save();
