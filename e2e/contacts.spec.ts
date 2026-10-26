@@ -80,6 +80,7 @@ for (const native of [false, true]) {
   }, info) => {
     const mobile = info.project.name === 'phone';
     const pickGroup = async (name: string) => {
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       if (mobile) {
         const clear = page.getByRole('button', { name: 'Wyczyść filtry' });
         if (await clear.isVisible()) await clear.click();
@@ -97,7 +98,7 @@ for (const native of [false, true]) {
           data: {
             familyName: 'Kontakty',
             displayName: 'Anna',
-            email: `contacts-${native}-${info.project.name}@example.com`,
+            email: `contacts-${native}-${info.project.name}-${info.repeatEachIndex}@example.com`,
             password: 'password123',
           },
         })

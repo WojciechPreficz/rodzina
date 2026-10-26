@@ -1,5 +1,21 @@
 # Decyzje
 
+## 26.10.2026 — synchronizacja wyboru grupy w testach Kontaktów
+
+- Zgłoszone timeouty mobilnego scenariusza CRUD występują przy wyborze grupy
+  po zapisie formularza. Lokalnie oba warianty przeszły pierwszą próbę oraz
+  po pięć powtórzeń ze śladem Playwright; błędu z CI nie odtworzono.
+- Helper wyboru grupy czeka teraz na usunięcie dialogu z DOM przed interakcją
+  z filtrem. Zapobiega to rozpoczęciu wpisywania podczas zamykania okna
+  i przywracania fokusu przez Mantine, które stanowi możliwą przyczynę błędu.
+  Nie zmieniamy timeoutów ani kodu aplikacji.
+- Adres konta scenariusza CRUD uwzględnia indeks powtórzenia Playwright,
+  aby wielokrotne próby nie kolidowały podczas rejestracji.
+- Po poprawce przeszło 12 prób CRUD: po trzy dla WWW i transportu Androida
+  przy 390 i 1280 px. Lint, formatowanie i typecheck przeszły. Status:
+  **zweryfikowane lokalnie, oczekuje na CI**. Próby transportu Androida
+  w przeglądarce nie zastępują odbioru fizycznego APK.
+
 ## 26.10.2026 — CI wyłącznie na Node 24
 
 - Na polecenie właściciela usuwamy macierz Node 22 i 24 z joba `checks`
