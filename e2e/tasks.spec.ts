@@ -241,6 +241,9 @@ for (const native of [false, true]) {
     await page.getByRole('button', { name: 'Dodaj', exact: true }).click();
     const task = page.getByRole('article', { name: 'Odebrać paczkę', exact: true });
     await expect(task).toBeVisible();
+    // The durable local projection appears before submission finishes. Wait for
+    // the form to release its unsaved-changes guard before navigating to edit.
+    await expect(page.getByRole('textbox', { name: 'Dodaj zadanie', exact: true })).toHaveValue('');
     await task.getByRole('link').click();
     const dialog = page.getByRole('dialog', { name: 'Edytuj zadanie' });
     await dialog.getByRole('textbox', { name: 'Tytuł', exact: true }).fill('Odebrać dużą paczkę');
