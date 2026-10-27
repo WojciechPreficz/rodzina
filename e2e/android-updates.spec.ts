@@ -37,6 +37,7 @@ test('login and More show release availability without broken downloads at both 
 
 test('browser displays a published same-domain HTTPS release and instructions', async ({ page }, testInfo) => {
   let authenticated = false;
+  const unexpectedApiRequests: string[] = [];
   const user = {
     id: 'user',
     familyId: 'family',
@@ -50,7 +51,12 @@ test('browser displays a published same-domain HTTPS release and instructions', 
   // A local HTTPS document is served by Playwright routing; no external server is contacted.
   await page.route('https://rodzina.preficze.pl/**', async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/api/auth/me' && authenticated)
+    if (url.pathname === '/api/auth/me') {
+      if (!authenticated)
+        return route.fulfill({
+          status: 401,
+          json: { error: { code: 'UNAUTHORIZED', message: 'Zaloguj się.' } },
+        });
       return route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -59,6 +65,7 @@ test('browser displays a published same-domain HTTPS release and instructions', 
           family: { id: 'family', name: 'Rodzina', timezone: 'Europe/Warsaw', joinCode: 'ABC123' },
         }),
       });
+    }
     // Session confirmation and background prefetches must share the mocked authenticated state.
     // Forwarding them to the real API would return 401 and sign the browser out.
     const authenticatedResponses: Record<string, unknown> = {
@@ -66,9 +73,17 @@ test('browser displays a published same-domain HTTPS release and instructions', 
       '/api/occurrences': { occurrences: [] },
       '/api/events/upcoming-distant': { events: [] },
       '/api/tasks/lists': { lists: [] },
+      '/api/documents': { documents: [] },
     };
     if (authenticated && Object.hasOwn(authenticatedResponses, url.pathname))
       return route.fulfill({ json: authenticatedResponses[url.pathname] });
+    if (url.pathname.startsWith('/api/')) {
+      unexpectedApiRequests.push(`${route.request().method()} ${url.pathname}${url.search}`);
+      return route.fulfill({
+        status: 501,
+        json: { error: { code: 'UNMOCKED_API', message: 'Brak odpowiedzi testowej.' } },
+      });
+    }
     if (url.pathname === '/downloads/android/latest.json')
       return route.fulfill({
         contentType: 'application/json',
@@ -102,4 +117,5 @@ test('browser displays a published same-domain HTTPS release and instructions', 
   await expect(page.getByRole('link', { name: 'Pobierz aplikację na Androida' })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('android-reminders-published.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(unexpectedApiRequests).toEqual([]);
 });
