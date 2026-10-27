@@ -65,6 +65,14 @@ trwały termin ponowienia, granicę 30 dni i zależności. API zachowuje odpowie
 403/404/409; odrzucenie i konflikt wymagają reakcji. Prywatna treść znika
 z pamięci oraz widoku również wtedy, gdy trwały zapis jej usunięcia zawiedzie.
 
+Nadawca nie odpytuje pustej kolejki okresowo. `appendOperation`, zakończenie
+operacji i aktualizacja jej stanu zgłaszają zmianę po zatwierdzeniu transakcji.
+Jeśli adapter bezpośrednio usuwa lub modyfikuje wpisy outbox poza tymi metodami,
+wywołuje `notifyOutboxChanged(tx, accountId)` z `offline/signals.ts`.
+Sygnały lokalne i między kartami budzą tego samego nadawcę; IDB pozostaje źródłem
+prawdy. Jeden timer obsługuje termin retry, przejęcie wygasającej dzierżawy
+i granicę wieku operacji. Pusta kolejka nie wymaga timera ani dzierżawy.
+
 ## Status, sesja i migracja
 
 - Kolejki korzystają z `useOfflineSyncStatus(accountId, module)`:

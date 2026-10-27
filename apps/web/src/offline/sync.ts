@@ -1,5 +1,5 @@
 import { focusManager, onlineManager } from '@tanstack/react-query';
-import { assertOfflineReplayAge, OfflineOperationExpiredError } from '@rodzina/shared';
+import { assertOfflineReplayAge, OfflineOperationExpiredError, OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../api.js';
 import { accountToken, isAccountCurrent, transact, requestValue } from './database.js';
 import {
@@ -13,6 +13,7 @@ import {
   type Lease,
 } from './outbox.js';
 import { publishSyncStatus, reportStorageIssue, storageError } from './status.js';
+import { notifyOutboxChanged, watchOutbox } from './signals.js';
 
 export type SyncAdapter = {
   module: string;
@@ -41,8 +42,45 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
   let lease: Lease | undefined;
   let revision = '';
   let sessionConfirmed = false;
+  let timer: number | undefined;
+  let requested = false;
   const current = () => active && isAccountCurrent(token);
   const transaction = <T>(action: (tx: IDBTransaction) => Promise<T>) => transact('readwrite', action, token);
+  const available = (op: Operation) => adapters.some((adapter) => adapter.module === op.module);
+  const expired = (op: Operation) =>
+    op.status !== 'needs-review' && Date.now() - op.submittedAt > OFFLINE_REPLAY_MAX_AGE_MS;
+  const inspect = () =>
+    transact(
+      'readonly',
+      async (tx) => ({
+        operations: await readOperations(tx, accountId),
+        held: (
+          await requestValue<{ value: Lease } | undefined>(tx.objectStore('metadata').get([accountId, 'sender-lease']))
+        )?.value,
+      }),
+      token,
+    );
+  const schedule = async () => {
+    window.clearTimeout(timer);
+    timer = undefined;
+    if (!current() || !onlineManager.isOnline()) return;
+    const { operations, held } = await inspect();
+    if (!current()) return;
+    const now = Date.now();
+    const blockedUntil = held && held.owner !== owner ? held.expiresAt : 0;
+    const due = operations.flatMap((op, index) => {
+      if (op.status === 'needs-review') return [];
+      const times = [op.submittedAt + OFFLINE_REPLAY_MAX_AGE_MS + 1];
+      if (
+        available(op) &&
+        !op.dependsOn.length &&
+        !operations.slice(0, index).some((parent) => parent.orderingKeys.some((key) => op.orderingKeys.includes(key)))
+      )
+        times.push(Math.max(op.nextAttemptAt, blockedUntil));
+      return times;
+    });
+    if (due.length) timer = window.setTimeout(wake, Math.min(2147483647, Math.max(1, Math.min(...due) - now)));
+  };
   const status = async () => {
     if (!current()) return;
     const { operations, synced } = await transact(
@@ -83,10 +121,25 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
     try {
       await status();
       while (current() && onlineManager.isOnline()) {
+        const preview = await inspect();
+        if (!current() || !onlineManager.isOnline()) break;
+        const ready = nextOperation(preview.operations, Date.now(), available);
+        const heldByOther = preview.held && preview.held.owner !== owner && preview.held.expiresAt > Date.now();
+        const reviewParents = preview.operations.filter((op) => op.status === 'needs-review');
+        const needsClassification = preview.operations.some(
+          (op) =>
+            expired(op) ||
+            (op.status !== 'needs-review' &&
+              reviewParents.some(
+                (parent) =>
+                  op.dependsOn.includes(parent.operationId) ||
+                  (parent.sequence < op.sequence && parent.orderingKeys.some((key) => op.orderingKeys.includes(key))),
+              )),
+        );
+        if (!needsClassification && (!ready || heldByOther)) break;
         const operation = await transaction(async (tx) => {
-          lease = await acquireLease(tx, accountId, owner, Date.now());
-          if (!lease) return;
           const operations = await readOperations(tx, accountId);
+          let classified = false;
           // Expiration is durable, even if the clock subsequently moves backwards.
           for (const op of operations) {
             if (op.status === 'needs-review') continue;
@@ -97,6 +150,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
               op.reviewReason = 'expired';
               op.lastError = 'Zmiana ma ponad 30 dni i wymaga sprawdzenia.';
               tx.objectStore('outbox').put(op);
+              classified = true;
             }
           }
           const blockedIds = new Set<string>();
@@ -110,20 +164,18 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
               op.reviewReason = 'dependency';
               op.lastError = 'Zmiana zależy od wcześniejszej zmiany wymagającej sprawdzenia.';
               tx.objectStore('outbox').put(op);
+              classified = true;
             }
             if (op.status === 'needs-review') {
               blockedIds.add(op.operationId);
               op.orderingKeys.forEach((key) => blockedKeys.add(key));
             }
           }
-          const op = nextOperation(operations, Date.now(), (op) =>
-            adapters.some((adapter) => adapter.module === op.module),
-          );
-          if (!op || !adapters.some((adapter) => adapter.module === op.module)) {
-            tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...lease, expiresAt: 0 } });
-            await recountOutboxBudgets(tx, accountId);
-            return;
-          }
+          if (classified) await recountOutboxBudgets(tx, accountId);
+          const op = nextOperation(operations, Date.now(), available);
+          if (!op) return;
+          lease = await acquireLease(tx, accountId, owner, Date.now());
+          if (!lease) return;
           op.status = 'sending';
           tx.objectStore('outbox').put(op);
           await recountOutboxBudgets(tx, accountId);
@@ -213,11 +265,30 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
       if (current() && !(error instanceof DOMException && error.name === 'AbortError'))
         reportStorageIssue(`Nie można zsynchronizować zmian. ${storageError(error)}`);
     } finally {
-      if (current()) await status().catch(() => {});
+      if (current()) {
+        if (lease) {
+          const captured = lease;
+          lease = undefined;
+          await transaction(async (tx) => {
+            const old = await assertLease(tx, accountId, captured, Date.now());
+            tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...old, expiresAt: 0 } });
+            notifyOutboxChanged(tx, accountId);
+          }).catch(() => {});
+        }
+        await status().catch(() => {});
+        await schedule().catch(() => {});
+      }
     }
   };
   const synchronize = () => {
-    running ??= run().finally(() => {
+    requested = true;
+    window.clearTimeout(timer);
+    running ??= (async () => {
+      do {
+        requested = false;
+        await run();
+      } while (requested && current());
+    })().finally(() => {
       running = undefined;
     });
     return running;
@@ -230,32 +301,36 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
     void synchronize();
   };
   const stopOnline = onlineManager.subscribe(wake);
-  const stopFocus = focusManager.subscribe(wake);
-  const onStorage = () => wake();
-  window.addEventListener('storage', onStorage);
+  const stopFocus = focusManager.subscribe((focused) => {
+    if (focused) wake();
+  });
+  const stopSignals = watchOutbox(accountId, wake);
   window.addEventListener('offline-account-changed', stop);
   window.addEventListener('offline-context-invalidated', stop);
   window.addEventListener('rodzina:session-lost', stop);
   window.addEventListener('pagehide', stop);
-  const timer = window.setInterval(wake, 500);
   function stop() {
     if (!active) return;
     active = false;
     controller?.abort();
-    window.clearInterval(timer);
+    window.clearTimeout(timer);
     stopOnline();
     stopFocus();
-    window.removeEventListener('storage', onStorage);
+    stopSignals();
     window.removeEventListener('offline-account-changed', stop);
     window.removeEventListener('offline-context-invalidated', stop);
     window.removeEventListener('rodzina:session-lost', stop);
     window.removeEventListener('pagehide', stop);
     for (const adapter of adapters) publishSyncStatus(accountId, adapter.module);
-    void transaction(async (tx) => {
-      if (!lease) return;
-      const old = await assertLease(tx, accountId, lease, Date.now());
-      tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...old, expiresAt: 0 } });
-    }).catch(() => {});
+    if (lease) {
+      const captured = lease;
+      lease = undefined;
+      void transaction(async (tx) => {
+        const old = await assertLease(tx, accountId, captured, Date.now());
+        tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...old, expiresAt: 0 } });
+        notifyOutboxChanged(tx, accountId);
+      }).catch(() => {});
+    }
   }
   wake();
   return { wake, stop, refreshStatus: status, synchronize, isActive: current };

@@ -323,7 +323,7 @@ it.each(['auth', 'refresh', 'mutation'] as const)(
     const original = f.request.getMockImplementation()!;
     f.request.mockImplementation(async (path, init) => {
       if (
-        (phase === 'auth' && path === '/api/auth/me') ||
+        (phase === 'auth' && path === '/api/auth/me' && !init?.signal) ||
         (phase === 'refresh' && path.endsWith('?status=all')) ||
         (phase === 'mutation' && !!init?.method)
       )

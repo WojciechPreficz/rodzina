@@ -17,6 +17,7 @@ import {
 import { appendOperation, readOperations } from '../../offline/outbox.js';
 import { assertContext, transact } from '../../offline/database.js';
 import { joinSync } from '../../offline/sync.js';
+import { notifyOutboxChanged } from '../../offline/signals.js';
 import { shoppingAdapter, shoppingIntent, takeOverShopping } from './shoppingAdapter.js';
 import { readShoppingTransaction, putShoppingTransaction } from './shoppingStorage.js';
 export { SHOPPING_STORAGE_KEY } from './shoppingStorage.js';
@@ -238,6 +239,7 @@ export async function discardShoppingReview(client: QueryClient, account: Shoppi
           }
         }
         const data = (await readShoppingTransaction(tx, accountId))!;
+        if (removed.size) notifyOutboxChanged(tx, accountId);
         await putShoppingTransaction(tx, data, true);
       },
       runtime.token,

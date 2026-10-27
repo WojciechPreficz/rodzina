@@ -1,6 +1,7 @@
 import { assertContext, requestValue } from './database.js';
 import { adapters, chargedBytes, type CacheEntry } from './registry.js';
 import { z } from 'zod';
+import { notifyOutboxChanged } from './signals.js';
 
 export type Operation = {
   schemaVersion: 1;
@@ -81,6 +82,7 @@ export async function appendOperation(tx: IDBTransaction, accountId: string, mod
     .reduce((sum, op) => sum + chargedBytes([accountId, op.operationId], op), 0);
   if (size > 6 * 1048576) throw new Error('Brak miejsca w kolejce offline. Zsynchronizuj zapisane zmiany.');
   tx.objectStore('outbox').add(operation);
+  notifyOutboxChanged(tx, accountId);
   metadata.put({ accountId, key: 'outbox-sequence', value: sequence });
   return operation;
 }
@@ -99,6 +101,7 @@ export function nextOperation(
   );
 }
 export function completeOperation(tx: IDBTransaction, operations: Operation[], operation: Operation) {
+  notifyOutboxChanged(tx, operation.accountId);
   const store = tx.objectStore('outbox');
   store.delete([operation.accountId, operation.operationId]);
   for (const child of operations)
@@ -109,6 +112,7 @@ export function completeOperation(tx: IDBTransaction, operations: Operation[], o
 // Retry/review and dependency updates change envelope sizes without a base write.
 // Recount after those transitions as well as after removing a completed operation.
 export async function recountOutboxBudgets(tx: IDBTransaction, accountId: string) {
+  notifyOutboxChanged(tx, accountId);
   const operations = await readOperations(tx, accountId);
   const cache = tx.objectStore('cache');
   const records = await requestValue<CacheEntry[]>(cache.index('accountId').getAll(accountId));

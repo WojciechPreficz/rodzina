@@ -4,6 +4,7 @@ import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/re
 import { registerRecordMigration } from '../../offline/recordMigration.js';
 import { accountToken, assertContext, transact, requestValue, CLEAR_PENDING_KEY } from '../../offline/database.js';
 import { appendOperation, readOperations, type Operation } from '../../offline/outbox.js';
+import { notifyOutboxChanged } from '../../offline/signals.js';
 const dataSchema = z.object({
   version: z.literal(1),
   account: z.string().min(1),
@@ -150,6 +151,7 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
   entry(data);
   const existing = (await readOperations(tx, data.account)).filter((op) => op.module === 'tasks');
   const classified = classify(data.operations);
+  let queueChanged = existing.length !== classified.length;
   const store = tx.objectStore('outbox');
   for (const old of existing)
     if (!classified.some((op) => op.id === old.operationId)) store.delete([data.account, old.operationId]);
@@ -158,13 +160,16 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
     const key = `tasks:list:${op.listId}:task:${op.taskId}`;
     const old = existing.find((entry) => entry.operationId === op.id);
     if (old) {
-      store.put({
+      const updated = {
         ...old,
         submittedAt: op.submittedAt,
         payload: { listId: op.listId, taskId: op.taskId, change: op.change },
         ...(op.status === 'needs-review' ? { status: 'needs-review', reviewReason: op.reason } : {}),
-      });
+      };
+      queueChanged ||= JSON.stringify(old) !== JSON.stringify(updated);
+      store.put(updated);
     } else {
+      queueChanged = true;
       await appendOperation(tx, data.account, 'tasks', {
         operationId: op.id,
         submittedAt: op.submittedAt,
@@ -180,6 +185,7 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
   // The outbox is the only durable journal after takeover. Cache holds only the base.
   await putTaskBaseTransaction(tx, data);
   data.operations = classified;
+  if (queueChanged) notifyOutboxChanged(tx, data.account);
   return data;
 }
 export async function putTaskBaseTransaction(tx: IDBTransaction, data: TaskData) {

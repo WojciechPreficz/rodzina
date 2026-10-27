@@ -1,10 +1,13 @@
 import './testSetup.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onlineManager } from '@tanstack/react-query';
+import { IDBDatabase } from 'fake-indexeddb';
+import { OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../api.js';
 import { activateOfflineAccount, transact, clearDatabase, requestValue } from './database.js';
 import { appendOperation, readOperations, type Lease } from './outbox.js';
 import { joinSync, retryAt, startSync, type SyncAdapter } from './sync.js';
+import { OUTBOX_SIGNAL } from './signals.js';
 
 const account = 'family:user';
 const senders: ReturnType<typeof startSync>[] = [];
@@ -36,10 +39,164 @@ function start(overrides: Partial<SyncAdapter> = {}) {
 }
 afterEach(() => {
   senders.splice(0).forEach((sender) => sender.stop());
+  vi.useRealTimers();
   onlineManager.setOnline(true);
   vi.restoreAllMocks();
 });
 describe('shared account sender', () => {
+  it('does not read or write IDB while an empty sender is idle, including unrelated storage events', async () => {
+    await activateOfflineAccount(account);
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const sender = start();
+    await sender.synchronize();
+    const transactions = vi.spyOn(IDBDatabase.prototype, 'transaction').mockClear();
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated', newValue: 'value' }));
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: OUTBOX_SIGNAL,
+        newValue: JSON.stringify({ accountId: 'another:account' }),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(transactions).not.toHaveBeenCalled();
+    transactions.mockRestore();
+    expect(
+      await transact('readonly', (tx) => requestValue(tx.objectStore('metadata').get([account, 'sender-lease']))),
+    ).toBeUndefined();
+  });
+  it('wakes an idle sender after a committed append without a manual wake', async () => {
+    await activateOfflineAccount(account);
+    const send = vi.fn(async () => ({}));
+    const sender = start({ send });
+    await sender.synchronize();
+    await seed();
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    await sender.synchronize();
+    expect(await read()).toEqual([]);
+  });
+  it('does not announce an aborted append', async () => {
+    await activateOfflineAccount(account);
+    const signal = vi.fn();
+    window.addEventListener(OUTBOX_SIGNAL, signal);
+    try {
+      await expect(
+        transact('readwrite', async (tx) => {
+          await appendOperation(tx, account, 'shopping', {
+            operationId: 'aborted',
+            submittedAt: Date.now(),
+            entityId: 'item',
+            payload: {},
+            orderingKeys: ['list:a'],
+          });
+          throw new Error('Abort append');
+        }),
+      ).rejects.toThrow('Abort append');
+      expect(signal).not.toHaveBeenCalled();
+      expect(await read()).toEqual([]);
+    } finally {
+      window.removeEventListener(OUTBOX_SIGNAL, signal);
+    }
+  });
+  it('sleeps until persisted retry is due and resumes it automatically after restart', async () => {
+    await seed();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const first = start({
+      send: async () => {
+        throw new ApiRequestError('Retry', 429, undefined, 60000);
+      },
+    });
+    await first.synchronize();
+    first.stop();
+    const send = vi.fn(async () => ({}));
+    const second = start({ send });
+    await second.synchronize();
+    const transactions = vi.spyOn(IDBDatabase.prototype, 'transaction').mockClear();
+    await vi.advanceTimersByTimeAsync(59000);
+    expect(transactions).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    await second.synchronize();
+    expect(send).toHaveBeenCalledOnce();
+    expect(await read()).toEqual([]);
+  });
+  it('waits for another sender lease to expire without polling or taking it early', async () => {
+    await seed();
+    const { acquireLease } = await import('./outbox.js');
+    await transact('readwrite', (tx) => acquireLease(tx, account, 'other-tab', Date.now()));
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const send = vi.fn(async () => ({}));
+    const sender = start({ send });
+    await sender.synchronize();
+    const transactions = vi.spyOn(IDBDatabase.prototype, 'transaction').mockClear();
+    await vi.advanceTimersByTimeAsync(14000);
+    expect(transactions).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    await sender.synchronize();
+    expect(send).toHaveBeenCalledOnce();
+  });
+  it('handles account storage notifications and releases timers when stopped', async () => {
+    onlineManager.setOnline(false);
+    await seed();
+    const send = vi.fn(async () => ({}));
+    const sender = start({ send });
+    await sender.synchronize();
+    onlineManager.setOnline(true);
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: OUTBOX_SIGNAL,
+        newValue: JSON.stringify({ accountId: account }),
+      }),
+    );
+    await sender.synchronize();
+    expect(send).toHaveBeenCalledOnce();
+    sender.stop();
+    await sender.synchronize();
+    const transactions = vi.spyOn(IDBDatabase.prototype, 'transaction').mockClear();
+    window.dispatchEvent(new CustomEvent(OUTBOX_SIGNAL, { detail: account }));
+    expect(transactions).not.toHaveBeenCalled();
+  });
+  it('rechecks a renewed foreign lease at its saved deadline before taking over', async () => {
+    await seed();
+    const { acquireLease } = await import('./outbox.js');
+    await transact('readwrite', (tx) => acquireLease(tx, account, 'other-tab', Date.now()));
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const send = vi.fn(async () => ({}));
+    const sender = start({ send });
+    await sender.synchronize();
+    await vi.advanceTimersByTimeAsync(10000);
+    await transact('readwrite', (tx) => acquireLease(tx, account, 'other-tab', Date.now()));
+    await vi.advanceTimersByTimeAsync(5000);
+    await sender.synchronize();
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10000);
+    await sender.synchronize();
+    expect(send).toHaveBeenCalledOnce();
+  });
+  it('expires a waiting retry at the age deadline without sending or reviving it after clock correction', async () => {
+    await seed();
+    const now = Date.now();
+    await transact('readwrite', async (tx) => {
+      const op = (await readOperations(tx, account))[0]!;
+      tx.objectStore('outbox').put({
+        ...op,
+        submittedAt: now - OFFLINE_REPLAY_MAX_AGE_MS + 1000,
+        status: 'retry-wait',
+        nextAttemptAt: now + 60000,
+      });
+    });
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const send = vi.fn(async () => ({}));
+    const sender = start({ send });
+    await sender.synchronize();
+    await vi.advanceTimersByTimeAsync(1001);
+    await sender.synchronize();
+    expect(send).not.toHaveBeenCalled();
+    expect((await read())[0]).toMatchObject({ status: 'needs-review', reviewReason: 'expired' });
+    vi.setSystemTime(now - 60000);
+    await sender.synchronize();
+    expect((await read())[0]?.status).toBe('needs-review');
+  });
   it('shares one sender across modules, retains cross-module dependencies and continues independent work', async () => {
     onlineManager.setOnline(false);
     await seed();

@@ -1,5 +1,20 @@
 # Decyzje
 
+## 27.10.2026 — nadawca offline bez pollingu
+
+- Zastępujemy odpytywanie co 500 ms sygnałami po zatwierdzeniu zmian outbox,
+  odzyskaniu połączenia i focusie. Między kartami używamy `BroadcastChannel`,
+  z filtrowanym sygnałem `storage` jako wariantem zastępczym. Sygnał zawiera
+  wyłącznie identyfikator konta; dzierżawa w IDB nadal zapewnia wyłączność.
+- Jeden timer wskazuje najbliższe retry, wygaśnięcie dzierżawy innego nadawcy
+  lub granicę wieku operacji. Odnowienie dzierżawy pozostaje aktywne tylko
+  podczas wysyłania. Pusta kolejka nie uruchamia odczytów okresowych ani zapisów
+  dzierżawy. Przed przejęciem dzierżawy sprawdzamy gotowość operacji odczytem,
+  a następnie ponownie w transakcji zapisu, aby zachować ochronę przed wyścigami.
+- Zmiana dotyczy nadawcy O.7. Nie przebudowuje modelu operacji zadań ani
+  cyklu życia modułów. Nie zmienia schematu IDB, API, konfiguracji ani alarmów.
+  Odbiór fizycznego APK i pomiar baterii pozostają do wykonania.
+
 ## 27.10.2026 — odbiór wspólnej obsługi offline, O.7 (#55)
 
 - Zakupy dołączają do rejestru pięciu adapterów także na potrzeby ogólnego
