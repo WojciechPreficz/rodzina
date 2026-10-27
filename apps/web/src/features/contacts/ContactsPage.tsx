@@ -26,6 +26,7 @@ import { ContactForm } from './ContactForm.js';
 import { contactInitials, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import './contacts.css';
 import { CONTACTS_SIGNAL, contactsStore } from './contactsOffline.js';
+import { OfflineNotice } from '../../offline/OfflineNotice.js';
 
 type Editor = { kind: 'contact'; contact?: Contact } | { kind: 'group'; group?: ContactGroup };
 type Removal = { kind: 'contact'; item: Contact } | { kind: 'group'; item: ContactGroup };
@@ -133,18 +134,14 @@ export function ContactsPage() {
           )
         }
       />
-      {offline && (
-        <Alert color="yellow">
-          Brak połączenia z internetem. Dodawanie, edycja i usuwanie są niedostępne.
-          {saved &&
-            ` Kontakty mogą być nieaktualne. Ostatnie pobranie: ${new Date(saved.syncedAt).toLocaleString('pl-PL')}.`}
-        </Alert>
-      )}
-      {state.account === account && state.issue && (
-        <Alert color="red" role="alert">
-          {state.issue}
-        </Alert>
-      )}
+      <OfflineNotice
+        offline={offline}
+        syncedAt={saved?.syncedAt}
+        issue={state.account === account ? state.issue : undefined}
+        role="alert"
+      >
+        Brak połączenia z internetem. Dodawanie, edycja i usuwanie są niedostępne. Kontakty mogą być nieaktualne.
+      </OfflineNotice>
       {query.isPending && !saved && !offline && (
         <Group role="status">
           <Loader size="sm" />

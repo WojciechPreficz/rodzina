@@ -23,6 +23,7 @@ import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import { QuickAdd } from './QuickAdd.js';
 import { useShopping } from './shoppingQueries.js';
+import { OfflineNotice } from '../../offline/OfflineNotice.js';
 import type { ShoppingChange } from './shoppingApi.js';
 import './shopping.css';
 
@@ -54,7 +55,7 @@ export function ShoppingPage() {
     if (location.state?.shoppingCatalog) void navigate(-1);
     else setParams({}, { replace: true });
   };
-  const { lists, items, queueChange, active, online, pendingCount, syncError, reviewCount, discardReview } =
+  const { lists, items, queueChange, active, online, syncedAt, pendingCount, syncError, reviewCount, discardReview } =
     useShopping(selected);
   const members = useMembersQuery();
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -188,11 +189,9 @@ export function ShoppingPage() {
           )
         }
       />
-      {!online && (
-        <Alert color="yellow" role="status">
-          {t.offline}
-        </Alert>
-      )}
+      <OfflineNotice offline={!online} syncedAt={syncedAt}>
+        {t.offline}
+      </OfflineNotice>
       {online && pendingCount > 0 && <Text role="status">{t.syncing(pendingCount)}</Text>}
       {syncError && syncError !== error && (
         <Alert color="red" role="alert">

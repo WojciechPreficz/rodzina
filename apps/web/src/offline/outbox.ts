@@ -1,5 +1,5 @@
 import { assertContext, requestValue } from './database.js';
-import { chargedBytes } from './registry.js';
+import { adapters, chargedBytes, type CacheEntry } from './registry.js';
 import { z } from 'zod';
 
 export type Operation = {
@@ -104,6 +104,29 @@ export function completeOperation(tx: IDBTransaction, operations: Operation[], o
   for (const child of operations)
     if (child.dependsOn.includes(operation.operationId))
       store.put({ ...child, dependsOn: child.dependsOn.filter((id) => id !== operation.operationId) });
+}
+
+// Retry/review and dependency updates change envelope sizes without a base write.
+// Recount after those transitions as well as after removing a completed operation.
+export async function recountOutboxBudgets(tx: IDBTransaction, accountId: string) {
+  const operations = await readOperations(tx, accountId);
+  const cache = tx.objectStore('cache');
+  const records = await requestValue<CacheEntry[]>(cache.index('accountId').getAll(accountId));
+  for (const record of records) {
+    if (adapters.get(record.module)?.capabilities !== 'read-write') continue;
+    const key = [accountId, record.module, record.key];
+    const previous = record.chargedBytes;
+    while (record.chargedBytes !== chargedBytes(key, record)) record.chargedBytes = chargedBytes(key, record);
+    if (previous !== record.chargedBytes) cache.put(record);
+    const queueBytes = operations
+      .filter((op) => op.module === record.module)
+      .reduce((sum, op) => sum + chargedBytes([accountId, op.operationId], op), 0);
+    tx.objectStore('metadata').put({
+      accountId,
+      key: `budget:${record.module}`,
+      value: record.chargedBytes + queueBytes,
+    });
+  }
 }
 
 export type Lease = { owner: string; epoch: number; expiresAt: number; generation: string };

@@ -45,7 +45,14 @@ export function useTaskData() {
   return {
     ...(state.account === account
       ? taskStore.project()
-      : { items: {} as Record<string, Task[]>, lists: undefined, pending: [], error: undefined, syncing: false }),
+      : {
+          items: {} as Record<string, Task[]>,
+          lists: undefined,
+          pending: [],
+          error: undefined,
+          syncing: false,
+          syncedAt: undefined,
+        }),
     offline,
   };
 }
@@ -164,6 +171,7 @@ export function useTasks(listId?: string) {
     active,
     enabled: !!user && !!family,
     offline: data.offline,
+    syncedAt: data.syncedAt,
     pendingCount: data.pending.filter((op) => op.status === 'pending').length,
     reviewOperations: data.pending.filter((op) => op.status === 'needs-review'),
     reviewItems: data.items,

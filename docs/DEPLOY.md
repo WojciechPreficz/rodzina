@@ -31,6 +31,34 @@ i wspólny outbox zakupów oraz zadań; backup serwera nie zawiera lokalnej
 kolejki urządzenia. `versionchange` odcina starsze klienty IDB. Fizyczny odbiór
 alarmów i restartu urządzenia pozostaje obowiązkowy przed zaliczeniem O.6.
 
+O.7 (#55) zachowuje IDB v3 i format operacji v1. Dodaje wspólny komunikat
+podglądów oraz rejestrację zakupów do ogólnego czyszczenia. Nie wymaga migracji
+SQLite, nowej konfiguracji, crona ani zależności runtime. Instrukcja rozwoju:
+[OFFLINE_ADAPTER.md](OFFLINE_ADAPTER.md); [odbiór](DEVELOPMENT.md#odbiór-całej-migracji-offline--o7-55).
+
+Przy aktualizacji WWW zamknij starsze karty, odśwież stronę i potwierdź import,
+jeśli aplikacja wykryje localStorage. Przy APK zachowaj dane aplikacji i ten
+sam klucz podpisu; zamknij stary proces, zainstaluj aktualizację i uruchom ją
+ponownie. Wspierane źródła: legacy localStorage opisane w kontrakcie, IDB v1
+(O.2–O.4), v2 (O.5) i v3 (O.6). Można pominąć wydania pośrednie.
+Import bez internetu pozostaje możliwy po wcześniejszym pobraniu danych;
+wysyłka rusza po odzyskaniu sieci w otwartym interfejsie.
+
+Jeśli migracja jest zablokowana, zamknij inne instancje i ponów ją.
+Przy uszkodzonym źródle lub braku miejsca zachowaj dane urządzenia;
+nie czyść pamięci, nie odinstalowuj APK i nie usuwaj dziennika, aby wymusić
+start. Niedokończony import wznawia się ze znacznika. Wylogowanie zgodnie
+z dotychczasową polityką usuwa również niewysłane operacje.
+
+Rollback po przejęciu outbox wymaga klienta v3 z oboma adapterami i tymi
+samymi wersjami payloadów; O.6 jest zgodnym formatowo punktem odniesienia.
+Liczniki budżetów są przeliczane przy kolejnych zapisach. Cofnięcie paczki
+serwera nie cofa IDB ani APK i nie odzyskuje lokalnych zmian. API musi nadal
+obsługiwać poprzedni wspierany APK oraz zapamiętane ID operacji przez 90 dni.
+Przed rollbackiem danych serwera zatrzymaj synchronizację urządzeń i zastosuj
+procedurę backupu poniżej. Nie wracaj do dawnych nadawców TanStack/O.4 ani
+localStorage po nowych zapisach.
+
 Migracja 0023 dodaje Kontakty i cztery początkowe grupy dla każdej istniejącej
 rodziny. Wykonuj ją jobem `dist/jobs/migrate-db.js` z nowej paczki, po backupie,
 według procedury aktualizacji poniżej. Job rejestruje funkcję SQLite

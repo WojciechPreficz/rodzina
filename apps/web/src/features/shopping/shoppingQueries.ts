@@ -69,6 +69,7 @@ export function useShopping(selected: string | null) {
     },
     active,
     online,
+    syncedAt: items.dataUpdatedAt || lists.dataUpdatedAt || undefined,
     pendingCount: status.pendingCount,
     syncError: status.reviewCount
       ? (status.lastError ?? 'Zapisane zmiany zakupów wymagają sprawdzenia. Zachowano je na urządzeniu.')

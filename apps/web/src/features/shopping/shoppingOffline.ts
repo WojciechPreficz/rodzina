@@ -16,7 +16,7 @@ import {
 } from './shoppingStorage.js';
 import { appendOperation, readOperations } from '../../offline/outbox.js';
 import { assertContext, transact } from '../../offline/database.js';
-import { joinSync as startSync } from '../../offline/sync.js';
+import { joinSync } from '../../offline/sync.js';
 import { shoppingAdapter, shoppingIntent, takeOverShopping } from './shoppingAdapter.js';
 import { readShoppingTransaction, putShoppingTransaction } from './shoppingStorage.js';
 export { SHOPPING_STORAGE_KEY } from './shoppingStorage.js';
@@ -27,7 +27,7 @@ type Runtime = {
   account: string;
   token: number;
   active: boolean;
-  sync: ReturnType<typeof startSync>;
+  sync: ReturnType<typeof joinSync>;
   stop: () => void;
   reload: () => Promise<void>;
   load: (data: ShoppingData) => void;
@@ -113,7 +113,7 @@ export async function restoreShopping(client: QueryClient, session: ShoppingSess
       account: accountId,
       token,
       active: true,
-      sync: undefined as unknown as ReturnType<typeof startSync>,
+      sync: undefined as unknown as ReturnType<typeof joinSync>,
       schedule,
       reload,
       load,
@@ -170,7 +170,7 @@ export async function restoreShopping(client: QueryClient, session: ShoppingSess
     window.addEventListener(SHOPPING_SIGNAL, onSignal);
     window.addEventListener('storage', onStorage);
     load(saved);
-    runtime.sync = startSync(accountId, shoppingAdapter(account), async () => {
+    runtime.sync = joinSync(accountId, shoppingAdapter(account), async () => {
       if (current(client, runtime)) await schedule(reload);
     });
   } catch (error) {

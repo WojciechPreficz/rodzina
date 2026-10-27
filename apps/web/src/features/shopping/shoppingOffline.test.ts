@@ -44,7 +44,6 @@ async function start(seed = false) {
   clients.push(client);
   client.mount();
   await restoreShopping(client, session);
-  client.setMutationDefaults(key, { ...client.getMutationDefaults(key), retryDelay: 10 });
   if (seed) {
     client.setQueryData([...key, 'lists'], [list]);
     client.setQueryData([...key, 'items', 'list'], [item]);

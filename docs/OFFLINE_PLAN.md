@@ -299,6 +299,11 @@ adapterem bez drugiej kolejki i drugich listenerów sesji/sieci.
 Checklistę przyszłego adaptera obiadów powiązano z 6.5, bez implementacji
 tej fazy. Brakujące próby i oczekujące CI nie są oznaczone jako zaliczone.
 
+Implementacja O.7: [instrukcja adaptera](OFFLINE_ADAPTER.md),
+[odbiór i ograniczenia](DEVELOPMENT.md#odbiór-całej-migracji-offline--o7-55)
+i [aktualizacja/rollback](DEPLOY.md). Lokalne kontrole nie zaliczają
+nieprzeprowadzonych prób fizycznego APK ani CI końcowego commita.
+
 ## 6. Integracja przyszłych obiadów
 
 Implementacja pozostaje w fazie 6. W O.1 projektujemy i w O.5–O.6 sprawdzamy
@@ -358,8 +363,10 @@ runtime/config/crona, jeśli okażą się konieczne, podlegają sekcji 1.1 planu
 ## 8. Zadania GitHub
 
 Zadania wykonujemy kolejno O.1 → O.2 → O.3 → O.4 → O.5 → O.6 → O.7.
-Każde ma własny zakres i kryteria z sekcji 5. O.1 jest opracowany lokalnie
-i oczekuje na CI końcowego commita; pozostałe kroki nie są wykonane.
+Każde ma własny zakres i kryteria z sekcji 5. O.1–O.7 mają implementację
+lokalną; nie oznacza to zaliczenia końcowego CI ani brakujących prób
+fizycznego APK. Bieżące statusy i granice odbioru są w
+[plan.md](plan.md#bieżący-zakres-i-statusy) i [DEVELOPMENT.md](DEVELOPMENT.md).
 
 | Krok | Zadanie                                                     | Zakres                                                 |
 | ---- | ----------------------------------------------------------- | ------------------------------------------------------ |

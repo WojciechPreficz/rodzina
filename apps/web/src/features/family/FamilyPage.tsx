@@ -11,6 +11,7 @@ import { useCreateInvitation, useMembersQuery, useRotateJoinCode } from './famil
 import { canEditProfile, errorMessage, isFamilyAdmin } from './familyRules.js';
 import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';
 import { useOffline } from '../../connectivity.js';
+import { OfflineNotice } from '../../offline/OfflineNotice.js';
 
 function InviteCard() {
   const [role, setRole] = useState<'admin' | 'member'>('member');
@@ -130,14 +131,9 @@ export function FamilyPage() {
     <Stack className="settings-page family-page" gap="lg">
       <PageHeader title={labels.family} description={family.name} />
 
-      {offline && (
-        <Alert color="yellow" role="status">
-          Jesteś offline — pokazujemy ostatnio zapisane dane. Zmiany wymagają połączenia z internetem.
-          {familySyncedAt && (
-            <Text size="sm">Ostatnie udane pobranie: {new Date(familySyncedAt).toLocaleString('pl-PL')}</Text>
-          )}
-        </Alert>
-      )}
+      <OfflineNotice offline={offline} syncedAt={familySyncedAt}>
+        Jesteś offline — pokazujemy ostatnio zapisane dane. Zmiany wymagają połączenia z internetem.
+      </OfflineNotice>
       {!offline && (familySyncError || membersQuery.error) ? (
         <Alert color="red">{familySyncError || errorMessage(membersQuery.error, labels.membersLoadError)}</Alert>
       ) : null}

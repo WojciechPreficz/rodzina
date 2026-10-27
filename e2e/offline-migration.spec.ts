@@ -8,7 +8,7 @@ const fixture = JSON.parse(readFileSync('docs/offline/fixtures/legacy-valid.json
   entries: { key: string; value: unknown }[];
 };
 
-test('migrates legacy previews only after confirmation and restores both after an offline restart', async ({
+test('migrates all legacy modules only after confirmation and restores them after an offline restart', async ({
   page,
 }, info) => {
   await installNativeTransport(page);
@@ -49,6 +49,36 @@ test('migrates legacy previews only after confirmation and restores both after a
   await expect(page.getByRole('heading', { name: event.title, exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edytuj', exact: true })).toBeDisabled();
   await page.screenshot({ path: info.outputPath('migrated-calendar-offline.png'), fullPage: true });
+  await page.goto('/kontakty');
+  await expect(page.getByText(/Ostatnie udane pobranie:/)).toBeVisible();
+  const contacts = await readOfflineSnapshot<{ data: { contacts: unknown[] } }>(page, 'contacts');
+  expect(contacts?.data.contacts).toHaveLength(1);
+  await page.screenshot({ path: info.outputPath('migrated-contacts-offline.png'), fullPage: true });
+  await page.goto('/zadania');
+  const tasks = await readOfflineSnapshot<{ snapshot: { lists: { id: string }[] }; operations: unknown[] }>(
+    page,
+    'tasks',
+  );
+  await expect
+    .poll(async () => (await readOfflineSnapshot<{ operations: unknown[] }>(page, 'tasks'))?.operations.length)
+    .toBe(1);
+  await page.goto(`/zadania/${tasks!.snapshot.lists[0]!.id}`);
+  await expect(page.getByRole('alert').filter({ hasText: 'Jesteś offline' })).toContainText('Ostatnie udane pobranie:');
+  await page.screenshot({ path: info.outputPath('migrated-tasks-offline.png'), fullPage: true });
+  await page.goto('/zakupy');
+  await expect(page.getByRole('status').filter({ hasText: 'Jesteś offline' })).toContainText(
+    'Ostatnie udane pobranie:',
+  );
+  expect((await readOfflineSnapshot<{ operations: unknown[] }>(page, 'shopping'))?.operations).toHaveLength(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('migrated-shopping-offline.png'), fullPage: true });
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) =>
+        /^rodzina:(offline-data|calendar|contacts|shopping|tasks):v1/.test(key),
+      ),
+    ),
+  ).toEqual([]);
 });
 
 test('shows a storage denial while keeping the online family view usable', async ({ page, baseURL }, info) => {

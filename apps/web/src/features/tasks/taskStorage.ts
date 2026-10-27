@@ -190,6 +190,7 @@ export async function putTaskBaseTransaction(tx: IDBTransaction, data: TaskData)
   if (baseBytes + queueBytes > 6 * 1048576)
     throw new Error('Przekroczono budżet pamięci zadań. Zsynchronizuj zmiany lub zwolnij miejsce.');
   put(tx, { ...data, operations: [] }, true);
+  tx.objectStore('metadata').put({ accountId: data.account, key: 'budget:tasks', value: baseBytes + queueBytes });
 }
 export async function readTaskData(account: string) {
   return transact('readonly', (tx) => readTaskTransaction(tx, account));

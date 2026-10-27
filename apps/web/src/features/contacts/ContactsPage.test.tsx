@@ -150,7 +150,7 @@ describe('contacts online', () => {
     session.familyConfirmed = false;
     const fetch = setup();
     await loaded();
-    expect(screen.getByText(/Ostatnie pobranie:/)).toBeInTheDocument();
+    expect(screen.getByText(/Ostatnie udane pobranie:/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '＋ Dodaj kontakt' })).toBeDisabled();
     fireEvent.change(screen.getByRole('textbox', { name: 'Szukaj kontaktu' }), { target: { value: 'lodz' } });
     fireEvent.click(await loaded());

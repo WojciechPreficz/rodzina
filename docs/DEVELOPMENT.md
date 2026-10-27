@@ -498,6 +498,70 @@ odbiór fizyczny alarmów oraz restartu urządzenia pozostaje niewykonany.
 Na polecenie właściciela kończymy na commicie i pushu; właściciel sprawdzi CI.
 Status: **zweryfikowane lokalnie, oczekuje na CI i próby fizycznego APK**.
 
+### Odbiór całej migracji offline — O.7 (#55)
+
+Instrukcja adapterów i checklista przyszłych obiadów 6.5:
+[OFFLINE_ADAPTER.md](OFFLINE_ADAPTER.md). Aktualizacja i zgodny rollback:
+[DEPLOY.md](DEPLOY.md). Nie implementujemy obiadów ani drugiej kolejki.
+
+Rejestr obejmuje wszystkie pięć magazynów. Bieżące operacje zakupów i zadań
+wysyła wyłącznie wspólny nadawca. Zachowano importery localStorage oraz
+przejęcie dzienników IDB O.3/O.4; nie są to dodatkowe silniki wysyłania.
+Usunięto pozostałą konfigurację retry mutacji TanStack z testów i alias
+ukrywający dołączenie zakupów do wspólnego nadawcy. Wspólny `OfflineNotice`
+pokazuje czas pobrania lub jego brak na pięciu ekranach. Liczniki budżetu
+obejmują bazę i outbox i są przeliczane również po zmianie stanu retry
+oraz zatwierdzeniu odpowiedzi. Pomiar próbki: [kontrakt, sekcja 7](OFFLINE_CONTRACT.md#7-budżety-i-pomiar).
+
+Macierz odbioru odpowiada sekcji 7 planu offline. Wskazanie testu opisuje
+pokrycie automatyczne; nie potwierdza wykonania odpowiedniej próby sprzętowej.
+
+| Scenariusz                                                       | Dowód automatyczny / próba odbiorcza                                                                                                          |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pięć źródeł localStorage, pominięcie wersji, restart offline     | `offline/acceptance.test.ts`, Playwright `offline-migration`                                                                                  |
+| Niewysłane, stare i odrzucone operacje; blokady alarmów          | `taskStorage`, `taskOffline`, `shoppingStorage`, `shoppingOffline`, `localSchedule`                                                           |
+| Przerwanie importu i przejęcia, źródła i obszar migracji         | `database`, `shoppingStorage`, `taskStorage`, nowy test przekrojowy wznowienia przejęcia zadań                                                |
+| Utrata odpowiedzi po sukcesie API, brak lokalnego commit         | `sync`, `shoppingOffline`, `taskOffline`; stałe ID, brak duplikatu                                                                            |
+| Dwie karty, stara karta, wersja bazy, dzierżawa, późna odpowiedź | `database`, `sync`, Playwright `shopping-storage`                                                                                             |
+| Odmowa IDB, quota, uszkodzony cache/dziennik                     | `database`, `shoppingStorage`, `taskStorage`, `contactsOffline`, Playwright `offline-migration` i `shopping-storage`                          |
+| Logout, utrata sesji, obce konto, czyszczenie                    | `accountStorage`, `auth`, `database`, przekrojowe testy czyszczenia i odzyskania `clear-pending` bez runtime zakupów                          |
+| Cofnięte udostępnienie, konflikt, niezależne zmiany              | `taskOffline`, `sync`, Playwright `shared-outbox`; prywatna treść znika                                                                       |
+| 429/5xx, Retry-After, 30 dni, korekta zegara                     | `sync`, `outbox`, `shoppingOffline`, `taskOffline`                                                                                            |
+| UI offline, pending, review i błąd pamięci                       | Headless 390/1280 px: `offline-migration`, `shared-outbox`, `contacts-offline`, `family-offline`, `shopping-storage`; zrzuty w `test-results` |
+| Zamknięcie procesu APK, restart telefonu i alarmy                | **Do wykonania na fizycznym telefonie** według O.6 i punktów poniżej                                                                          |
+| Fizyczny budżet pamięci i aktualizacja APK z pominięciem wydań   | **Do wykonania na fizycznym telefonie**; próbka syntetyczna nie zastępuje pomiaru urządzenia                                                  |
+
+Pozostałe próby fizyczne:
+
+1. Zapisz model telefonu, Android, źródłową i docelową wersję APK. Zaktualizuj
+   wspieraną wersję bez kasowania danych, także pomijając wydania pośrednie.
+   Potwierdź import dopiero po zamknięciu starych instancji.
+2. W trybie samolotowym sprawdź wszystkie pięć ekranów, wyszukiwanie kontaktów,
+   termin zadania i zakupy. Dodaj zmiany, zakończ proces APK, uruchom ponownie;
+   zmiany i ich wiek mają pozostać. Przywróć sieć i sprawdź brak duplikatów.
+3. Zmień termin/ukończenie/usunięcie zadania z alarmem. Sprawdź wstrzymanie
+   po zamknięciu APK i restarcie telefonu, a przywrócenie dopiero po sync.
+   Powtórz dla odrzucenia, konfliktu i cofniętego udostępnienia.
+4. Zanotuj `navigator.storage.estimate()` przed i po pobraniu rzeczywistych
+   danych oraz logiczne rozmiary cache, outbox, metadanych i migracji.
+   Sprawdź granice z kontraktu, odmowę nowej zmiany i zachowanie kolejki.
+5. Wyloguj konto z oczekującymi zmianami i sprawdź wyczyszczenie danych,
+   dzienników, stagingu i dawnych kluczy, bez odtworzenia przez późną odpowiedź.
+   Powtórz zmianę konta w drugiej karcie. Zapisz wyniki i ograniczenia rollbacku.
+
+Lokalnie 27.10.2026: testy rdzenia i zależnych modułów, lint zmienionych
+plików, formatowanie oraz typecheck przeszły. Wykonano 20 scenariuszy
+Playwright headless i po końcowej zmianie rdzenia 12 scenariuszy regresji
+(w tym cztery zgłoszone awarie tworzenia/edycji zadań) przy 390/1280 px.
+Przejrzano zrzuty trybu offline i panelu konfliktu w obu szerokościach.
+Transport testowy Androida, build WWW i debug APK przeszły.
+Raporty Vitest są w ignorowanym `coverage/offline-o7-*.json`, a zrzuty
+w `test-results/`. `adb devices` nie wykazał podłączonego
+telefonu; fizyczny odbiór alarmów, restartu i budżetów pozostaje niewykonany.
+Wyniki dotyczą wersji wysyłanej w commicie O.7. Status: **zweryfikowane lokalnie, oczekuje na CI
+i próby fizycznego APK**. Właściciel sprawdza CI; nie zamykamy #55 jako
+odebranego kroku i nie wykonujemy deployu ani publikacji APK.
+
 ### Narzędzia Androida
 
 APK zawiera lokalny frontend. Potrzebne są Node.js 22 lub 24, JDK 21, SDK 36

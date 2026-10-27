@@ -33,6 +33,7 @@ import { useTasks } from './taskQueries.js';
 import { isTaskOverdue } from './taskRules.js';
 import { taskOfflineText } from './taskOffline.js';
 import { isAndroid } from '../../platform.js';
+import { OfflineNotice } from '../../offline/OfflineNotice.js';
 import './tasks.css';
 
 const t = labels.tasksUi;
@@ -228,12 +229,10 @@ function TaskListPage() {
           </Button>
         }
       />
-      {data.offline && (
-        <Alert title="Tryb offline">
-          <Text>{taskOfflineText.banner}</Text>
-          <Text mt="xs">{taskOfflineText.limits}</Text>
-        </Alert>
-      )}
+      <OfflineNotice offline={data.offline} syncedAt={data.syncedAt} role="alert">
+        <Text>{taskOfflineText.banner}</Text>
+        <Text mt="xs">{taskOfflineText.limits}</Text>
+      </OfflineNotice>
       {data.pendingCount > 0 && (
         <Alert>
           <Text>Zmiany oczekujące na wysłanie: {data.pendingCount}</Text>

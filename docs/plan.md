@@ -123,6 +123,13 @@ ma wersję 3, odcinającą starszy synchronizator zadań. Fizyczny odbiór APK,
 restartu urządzenia i alarmów oraz CI końcowego commita pozostają do
 potwierdzenia; [checklista](DEVELOPMENT.md#odbiór-wspólnego-outbox-zadań--o6-54).
 
+O.7 (#55): przekrojowe testy migracji pięciu modułów i czyszczenia konta,
+wspólne komunikaty wieku danych oraz rejestracja zakupów przygotowane lokalnie.
+Instrukcja [adaptera](OFFLINE_ADAPTER.md) obejmuje też checklistę przyszłych
+obiadów 6.5, bez ich implementacji. Odbiór fizycznego APK, alarmów i budżetów
+urządzenia oraz końcowe CI pozostają do potwierdzenia;
+[checklista](DEVELOPMENT.md#odbiór-całej-migracji-offline--o7-55).
+
 **Faza 8 — dokumenty: zaimplementowana — potwierdzenie właściciela 25.10.2026.**
 Pełny zakres pozostaje w [archiwum fazy 8](archive/plan-przyszle-fazy.md).
 Potwierdzenie implementacji nie oznacza zaliczenia końcowego CI ani

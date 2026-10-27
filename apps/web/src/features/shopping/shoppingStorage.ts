@@ -17,7 +17,7 @@ import {
   PROTOCOL_KEY,
   CLEAR_PENDING_KEY,
 } from '../../offline/database.js';
-import { chargedBytes, type CacheEntry } from '../../offline/registry.js';
+import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/registry.js';
 import { requireMigration } from '../../offline/status.js';
 import { freezeParticipants, resumeParticipants } from '../../offline/coordinator.js';
 import type { QueuedShoppingChange, ShoppingSession } from './shoppingOffline.js';
@@ -98,6 +98,32 @@ function parseQueries(input: unknown[], account: string): DehydratedState['queri
     return query;
   });
 }
+registerAdapter({
+  module: 'shopping',
+  schemaVersion: 1,
+  capabilities: 'read-write',
+  separateMigration: true,
+  legacyKey: SHOPPING_STORAGE_KEY,
+  budget: 4 * 1048576,
+  parseCache: (value) => {
+    const data = value as ShoppingData;
+    if (data?.version !== 1 || typeof data.account !== 'string') error('Nieobsługiwany format pamięci zakupów.');
+    const session = snapshotSchema.shape.session.parse(data.session);
+    if (`${session.family.id}:${session.user.id}` !== data.account || session.user.familyId !== session.family.id)
+      error('Zapisane zakupy należą do innego konta.');
+    parseQueries(data.queries, data.account);
+    z.array(operationSchema).parse(data.operations);
+    return data;
+  },
+  trim: (value) => value,
+  describe: (value) => {
+    const data = value as ShoppingData;
+    return {
+      syncedAt: Math.max(0, ...data.queries.map((q) => q.state.dataUpdatedAt)) || null,
+      coverage: data.queries.length ? 'partial' : 'missing',
+    };
+  },
+});
 function entry(data: ShoppingData, outboxBytes = 0, outbox = false): CacheEntry {
   const record = {
     accountId: data.account,
@@ -110,14 +136,13 @@ function entry(data: ShoppingData, outboxBytes = 0, outbox = false): CacheEntry 
     usedAt: Date.now(),
     chargedBytes: 0,
   };
-  const bytes = chargedBytes([data.account, 'shopping', 'snapshot'], record) + outboxBytes;
+  while (record.chargedBytes !== chargedBytes([data.account, 'shopping', 'snapshot'], record))
+    record.chargedBytes = chargedBytes([data.account, 'shopping', 'snapshot'], record);
+  const bytes = record.chargedBytes + outboxBytes;
   // Pending work and its base are pinned together. Never trim an operation or manufacture an empty list.
-  const pendingBytes = data.operations.length ? bytes : 0;
+  const pendingBytes = data.operations.length || outboxBytes ? bytes : 0;
   if (pendingBytes > 6 * 1048576 || (!pendingBytes && bytes > 4 * 1048576))
     error('Nie można zapisać zakupów: przekroczono budżet pamięci. Zsynchronizuj zmiany lub zwolnij miejsce.');
-  record.chargedBytes = bytes;
-  while (record.chargedBytes !== chargedBytes([data.account, 'shopping', 'snapshot'], record) + outboxBytes)
-    record.chargedBytes = chargedBytes([data.account, 'shopping', 'snapshot'], record) + outboxBytes;
   return record;
 }
 export async function putShoppingTransaction(tx: IDBTransaction, data: ShoppingData, outbox = false) {
@@ -132,7 +157,7 @@ export async function putShoppingTransaction(tx: IDBTransaction, data: ShoppingD
       record = entry(data, outboxBytes, outbox);
       break;
     } catch (cause) {
-      if (data.operations.length) throw cause;
+      if (data.operations.length || outboxBytes) throw cause;
       const evict = data.queries
         .filter((q) => q.queryKey[3] === 'items')
         .sort((a, b) => a.state.dataUpdatedAt - b.state.dataUpdatedAt)[0];
@@ -141,7 +166,11 @@ export async function putShoppingTransaction(tx: IDBTransaction, data: ShoppingD
     }
   }
   tx.objectStore('cache').put(record);
-  tx.objectStore('metadata').put({ accountId: data.account, key: 'budget:shopping', value: record.chargedBytes });
+  tx.objectStore('metadata').put({
+    accountId: data.account,
+    key: 'budget:shopping',
+    value: record.chargedBytes + outboxBytes,
+  });
   tx.objectStore('metadata').put({
     accountId: data.account,
     key: 'engine:shopping',

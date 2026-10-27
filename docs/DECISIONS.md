@@ -1,5 +1,21 @@
 # Decyzje
 
+## 27.10.2026 — odbiór wspólnej obsługi offline, O.7 (#55)
+
+- Zakupy dołączają do rejestru pięciu adapterów także na potrzeby ogólnego
+  czyszczenia i odzyskiwania `clear-pending`. Zachowujemy ich specjalny importer
+  legacy. Bez rejestracji samo czyszczenie IDB pomijało dawne klucze zakupów,
+  jeśli nie uruchomiono osobnej ścieżki runtime zakupów.
+- `chargedBytes` rekordu cache liczy wyłącznie ten rekord. Licznik budżetu
+  zakupów/zadań sumuje bazę i outbox, również po retry i zakończeniu operacji.
+  Dotychczas zakupy doliczały outbox do rozmiaru cache, a zadania zapisywały
+  w metadanych samą bazę. Przekrojowy pomiar i testy licznika utrwalają jedną
+  interpretację. Limity nie zmieniają się; migracja schematu nie jest potrzebna.
+- Pięć ekranów używa wspólnego komunikatu offline i wieku danych, zachowując
+  ograniczenia właściwe modułom. Instrukcja adaptera opisuje działające zakupy
+  i zadania oraz checklistę 6.5 bez implementacji obiadów. CI i fizyczny APK
+  pozostają oddzielnymi warunkami odbioru, zgodnie z poleceniem właściciela.
+
 ## 26.10.2026 — zadania przez wspólny outbox, O.6 (#54)
 
 - Baza urządzenia ma wersję 3. Zmiana zamyka połączenia klientów O.4/O.5,

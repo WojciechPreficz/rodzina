@@ -6,6 +6,7 @@ import {
   acquireLease,
   assertLease,
   completeOperation,
+  recountOutboxBudgets,
   nextOperation,
   readOperations,
   type Operation,
@@ -120,10 +121,12 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
           );
           if (!op || !adapters.some((adapter) => adapter.module === op.module)) {
             tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...lease, expiresAt: 0 } });
+            await recountOutboxBudgets(tx, accountId);
             return;
           }
           op.status = 'sending';
           tx.objectStore('outbox').put(op);
+          await recountOutboxBudgets(tx, accountId);
           return op;
         });
         await status();
@@ -158,6 +161,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             if (!operations.some((op) => op.operationId === operation.operationId)) return;
             await adapter.reconcile(tx, operation, response);
             completeOperation(tx, operations, operation);
+            await recountOutboxBudgets(tx, accountId);
             tx.objectStore('metadata').put({ accountId, key: `last-sync:${operation.module}`, value: Date.now() });
           });
         } catch (error) {
@@ -196,6 +200,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
                   }
                 : {}),
             });
+            await recountOutboxBudgets(tx, accountId);
           });
         } finally {
           window.clearInterval(renewal);

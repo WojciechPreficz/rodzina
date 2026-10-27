@@ -289,6 +289,17 @@ zadania 4848 B; razem **22 478 B**. Dzienniki i znaczniki są tu zsumowane
 z modułem, a nie rozdzielone między przyszłe magazyny. Mała próbka sprawdza
 format i pomiar; nie potwierdza jeszcze wystarczalności limitów na telefonie.
 
+Pomiar O.7 po rzeczywistym imporcie tej samej próbki do IDB v3 (27.10.2026),
+utrwalony snapshotem `offline/acceptance.test.ts`: rodzina **2148 B**,
+kalendarz **4662 B**, kontakty **2386 B**, baza zakupów **5302 B**,
+outbox zakupów **3338 B**, baza zadań **3200 B**, outbox zadań **1732 B**.
+Razem **22 768 B**, bez metadanych i przejściowego obszaru migracji.
+Test sprawdza zgodność liczników z rekordami oraz limity modułów,
+restart i powtórny import bez duplikatów. `chargedBytes` cache nie zawiera
+drugi raz outbox. Dla zakupów i zadań metadana budżetu sumuje bazę i kolejkę.
+To miara logiczna próbki; fizyczny `storage.estimate()` i skrajne dane
+na rzeczywistym telefonie pozostają próbą odbiorczą, nie zaliczonym pomiarem.
+
 ## 8. Próbki i macierz weryfikacji
 
 [legacy-valid.json](offline/fixtures/legacy-valid.json) zawiera wyłącznie

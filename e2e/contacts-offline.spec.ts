@@ -54,7 +54,7 @@ for (const native of [false, true]) {
       await page.reload();
       if (info.project.name === 'desktop') await page.getByRole('button', { name: /Inne/ }).click();
     } else await page.context().setOffline(true);
-    await expect(page.getByText(/Ostatnie pobranie:/)).toBeVisible();
+    await expect(page.getByText(/Ostatnie udane pobranie:/)).toBeVisible();
     await expect(page.getByRole('button', { name: '＋ Dodaj kontakt' })).toBeDisabled();
     const search = page.getByRole('textbox', { name: 'Szukaj kontaktu' });
     for (const term of ['lucja zak', 'lodz', '600111222']) {
@@ -81,7 +81,7 @@ for (const native of [false, true]) {
     await search.fill('');
     await expect(page.getByRole('button', { name: 'Szczegóły kontaktu: Łucja Nowak' })).toBeVisible();
     await expect(page.getByRole('button', { name: '＋ Dodaj kontakt' })).toBeEnabled();
-    await expect(page.getByText(/Ostatnie pobranie:/)).toHaveCount(0);
+    await expect(page.getByText(/Ostatnie udane pobranie:/)).toHaveCount(0);
     await expect
       .poll(() =>
         readOfflineSnapshot<{ data: { contacts: { name: string }[] } }>(page, 'contacts').then(
