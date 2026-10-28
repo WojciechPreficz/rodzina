@@ -72,7 +72,7 @@ test('browser displays a published same-domain HTTPS release and instructions', 
       '/api/members': { members: [user] },
       '/api/occurrences': { occurrences: [] },
       '/api/events/upcoming-distant': { events: [] },
-      '/api/tasks/lists': { lists: [] },
+      '/api/tasks/snapshot': { ok: true, lists: [], items: {} },
       '/api/documents': { documents: [] },
     };
     if (authenticated && Object.hasOwn(authenticatedResponses, url.pathname))
