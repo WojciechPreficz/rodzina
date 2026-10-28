@@ -3,7 +3,7 @@
 ## Produkt i platformy
 
 Rodzina organizuje kalendarz, zakupy, zadania, dokumenty i kontakty.
-Obiady pozostają planem w [plan.md](plan.md). Rodzina ma wspólne konto
+Obiady mają API online; interfejs i obsługa offline pozostają w [plan.md](plan.md). Rodzina ma wspólne konto
 z wieloma domownikami; listy zadań są prywatne lub udostępniane.
 WWW i APK korzystają ze wspólnego React. APK zawiera lokalny frontend
 i pobiera zdalne API. Alarmy dostarcza wyłącznie Android; zamknięta aplikacja
@@ -54,6 +54,18 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.
   Dorośli edytują, cała rodzina odczytuje; brak integracji z książką telefonu.
+- Obiady: jeden `dinner` na datę i rodzinę, składniki zachowują kolejność.
+  `GET /api/meals?weekStart=YYYY-MM-DD` wymaga poniedziałku i zwraca siedem
+  `days` z datą i tablicą `meals`, również dla pustych dni. Dorośli wykonują
+  `PUT` (upsert) i `DELETE /api/meals/:date/dinner`; dziecko tylko odczytuje.
+  PUT zastępuje składniki i notatkę, zachowując ID i autora istniejącego obiadu.
+  `POST /api/meals/copy-week` kopiuje dni źródła atomowo: `overwrite=false`
+  pomija zajęte dni, `true` zastępuje ich zawartość. Pozostałe dni docelowe
+  pozostają bez zmian; kopiowanie na ten sam tydzień jest odrzucane.
+  `GET /api/meals/suggestions?q=` zwraca do 20 różnych tytułów z aktualnie
+  zapisanych obiadów rodziny wraz ze składnikami ostatnio zapisanego wariantu.
+  Wyszukiwanie i grupowanie ignorują wielkość liter i różnice białych znaków.
+  Brak eksportu zakupów i kolejki offline w tym kroku.
 
 ## API i bezpieczeństwo
 

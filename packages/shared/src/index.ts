@@ -1,4 +1,5 @@
 export const packageName = 'rodzina';
+export * from './schemas/meals.js';
 export * from './schemas/contacts.js';
 export * from './offline.js';
 

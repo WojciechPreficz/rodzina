@@ -176,6 +176,13 @@
       "when": 1793012991720,
       "tag": "0024_auth_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793183352960,
+      "tag": "0025_woozy_karen_page",
+      "breakpoints": true
     }
   ]
 }

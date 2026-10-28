@@ -3,6 +3,42 @@ import { sql } from 'drizzle-orm';
 import { check } from 'drizzle-orm/sqlite-core';
 import type { DocumentType, ShoppingCategory } from '@rodzina/shared';
 
+export const meals = sqliteTable(
+  'meals',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(),
+    slot: text('slot').$type<'dinner'>().notNull().default('dinner'),
+    title: text('title').notNull(),
+    notes: text('notes'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('meals_family_date_slot_idx').on(table.familyId, table.date, table.slot),
+    index('meals_family_updated_idx').on(table.familyId, table.updatedAt),
+    check('meals_dinner_slot', sql`${table.slot} = 'dinner'`),
+  ],
+);
+
+export const mealIngredients = sqliteTable(
+  'meal_ingredients',
+  {
+    id: text('id').primaryKey(),
+    mealId: text('meal_id')
+      .notNull()
+      .references(() => meals.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    quantity: text('quantity'),
+    position: integer('position').notNull(),
+  },
+  (table) => [index('meal_ingredients_meal_position_idx').on(table.mealId, table.position)],
+);
+
 export const families = sqliteTable('families', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),

@@ -13,7 +13,7 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | ------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
 | Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                        | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
 | Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026             | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
-| Faza 6: obiady                                                | Do implementacji                                        | Kroki 6.1–6.5 poniżej                                             |
+| Faza 6: obiady, krok 6.1                                      | API zaimplementowane lokalnie                           | Końcowe CI; kroki 6.2–6.5 do implementacji                        |
 | Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026 | Odbiór telefonu i końcowe CI do potwierdzenia                     |
 | Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                               | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
 | K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                               | Końcowe CI i fizyczne APK do potwierdzenia                        |
@@ -98,6 +98,7 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 
 #### Krok 6.1 - API planu obiadów
 
+- **Status:** zweryfikowane lokalnie, oczekuje na CI. API online, bez UI i kolejki offline.
 - **Zakres:** migracje `meals` i `meal_ingredients`. `GET /api/meals?weekStart=` (poniedziałek, 7 dni z posiłkami i składnikami), `PUT` i `DELETE /api/meals/:date/:slot`, `POST /api/meals/copy-week`, `GET /api/meals/suggestions`. Uprawnienia: dziecko ma tylko odczyt.
 - **Gotowe, gdy:** testy API: upsert, copy-week z `overwrite` i bez, podpowiedzi z ostatnio użytymi składnikami, walidacja `weekStart` (tylko poniedziałek), 403 dla dziecka na zapisie, izolacja rodzin.
 
