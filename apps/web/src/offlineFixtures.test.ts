@@ -41,7 +41,7 @@ const fixture = z
       blockedTaskIds: z.array(z.string().uuid()),
     }),
   })
-  .parse(JSON.parse(readFileSync(resolve('docs/offline/fixtures/legacy-valid.json'), 'utf8')));
+  .parse(JSON.parse(readFileSync(resolve('test-fixtures/offline/legacy-valid.json'), 'utf8')));
 const scenarios = z
   .object({
     fixtureVersion: z.literal(1),
@@ -66,7 +66,7 @@ const scenarios = z
       }),
     ),
   })
-  .parse(JSON.parse(readFileSync(resolve('docs/offline/fixtures/legacy-cases.json'), 'utf8')));
+  .parse(JSON.parse(readFileSync(resolve('test-fixtures/offline/legacy-cases.json'), 'utf8')));
 const variants = z
   .object({
     fixtureVersion: z.literal(1),
@@ -105,7 +105,7 @@ const variants = z
     ),
     tasks: z.array(z.object({ key: z.string(), value: z.unknown() })),
   })
-  .parse(JSON.parse(readFileSync(resolve('docs/offline/fixtures/operation-variants.json'), 'utf8')));
+  .parse(JSON.parse(readFileSync(resolve('test-fixtures/offline/operation-variants.json'), 'utf8')));
 
 const required = (record: Record<string, string>, name: string) => {
   const value = record[name];

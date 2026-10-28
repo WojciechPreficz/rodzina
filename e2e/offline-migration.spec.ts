@@ -4,7 +4,7 @@ import { installNativeTransport } from './nativeTransport.js';
 import { readOfflineSnapshot } from './offlineDatabase.js';
 import type { Snapshot } from '../apps/web/src/features/calendar/calendarOffline.js';
 
-const fixture = JSON.parse(readFileSync('docs/offline/fixtures/legacy-valid.json', 'utf8')) as {
+const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   entries: { key: string; value: unknown }[];
 };
 

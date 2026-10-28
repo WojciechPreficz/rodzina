@@ -1,74 +1,30 @@
 # Rodzina
 
-Rodzinna aplikacja Android i strona WWW do wspólnego organizowania codziennych spraw.
-
-Przypomnienia offline są funkcją APK. Strona pozwala zarządzać danymi i pobrać
-aplikację Android. Nowe wizyty nie instalują PWA ani nie rejestrują Web Push.
-Przejściowy `/sw.js` wycofuje wcześniejsze instalacje przy powrocie online,
-zachowując sesję i dane użytkownika. Starą ikonę PWA można usunąć ręcznie.
+Rodzinna aplikacja Android i strona WWW: kalendarz, zakupy, zadania,
+dokumenty i kontakty. Działa pod [rodzina.preficze.pl](https://rodzina.preficze.pl).
+Przypomnienia dostarcza APK. WWW pozwala zarządzać danymi i pobrać aplikację.
 
 ## Lokalny start
 
-Wymagane: Node.js 22 lub 24 oraz npm.
+Node.js 22 lub 24 oraz npm (CI i hosting: 24).
 
-1. Zainstaluj zależności: `npm ci`.
-2. Skopiuj `apps/api/.env.example` do `apps/api/.env`.
-3. Uruchom `npm run dev` i otwórz `http://localhost:5173`.
+1. npm ci
+2. Skopiuj apps/api/.env.example do apps/api/.env.
+3. npm run dev i http://localhost:5173.
 
-`npm run build` i `npm start` uruchamiają lokalny wariant produkcyjny na porcie 3000.
-Ustaw wtedy `RODZINA_PUBLIC_URL=http://localhost:3000` w lokalnym `.env`.
-Serwer i backup nie wymagają VAPID; jedynym zadaniem crona jest backup SQLite.
+Wariant produkcyjny: npm run build, npm run db:migrate i npm start
+na porcie 3000; ustaw RODZINA_PUBLIC_URL=http://localhost:3000.
 
-## Android i przypomnienia
+## Dokumentacja
 
-Na stronie logowania i w „Więcej” wybierz „Pobierz aplikację na Androida”.
-Otwórz APK, zezwól na instalację z tego źródła i zatwierdź ją w Androidzie.
-W APK nowsze wydanie można sprawdzić przez „Więcej > Wersja aplikacji”.
-Aktualizacja wymaga tego samego klucza podpisującego i zachowuje dane aplikacji.
+- [Plan i statusy](docs/plan.md)
+- [Architektura i reguły aplikacji](docs/ARCHITECTURE.md)
+- [Praca lokalna, testy i odbiór telefonu](docs/DEVELOPMENT.md)
+- [Konfiguracja, aktualizacje i odzyskiwanie](docs/DEPLOY.md)
+- [Istotne decyzje](docs/DECISIONS.md)
+- [Zasady dla agentów](AGENTS.md)
 
-APK zawiera lokalny frontend. Po synchronizacji może wyświetlać zapisane alarmy
-bez internetu, do terminu zabezpieczenia widocznego w „Powiadomieniach”.
-Zmiany z innych urządzeń docierają po kolejnej synchronizacji; zamknięte APK
-nie pobiera ich w tle. Nie ma pełnej edycji kalendarza offline.
-Po wcześniejszym pobraniu APK pokazuje też domowników, kod rodziny i kalendarz
-tylko do odczytu, z pełnymi szczegółami zapisanych wydarzeń. Kalendarz zachowuje
-bieżący miesiąc i sąsiednie oraz otwarte online zakresy (maksymalnie 12 miesięcy).
-Baner pokazuje czas pobrania, a niezapisany zakres ma osobny komunikat.
-Kontakty zachowują ostatnią kompletnie pobraną listę kontaktów i grup dla
-rodziny i użytkownika. Bez internetu działają wybór grup, wyszukiwanie,
-szczegóły i odnośniki numerów telefonu; dodawanie, edycja i usuwanie wymagają
-połączenia, bez kolejki zmian. Baner pokazuje czas pobrania i ostrzega
-o nieaktualności. Błędy pamięci urządzenia są widoczne; wylogowanie, utrata
-sesji i zmiana konta czyszczą zapisane kontakty. Po powrocie sieci dane
-odświeżają się w otwartym widoku.
-Zakupy zachowują swoją kolejkę zmian offline. Zwykła strona obsługuje utratę sieci
-w otwartym interfejsie; ponowny start bez internetu dotyczy lokalnego frontendu APK.
-Próby alarmów i instalatora na fizycznym telefonie wymagają osobnego potwierdzenia.
-
-Build testowy: `npm run android:debug` (JDK 21 i Android SDK 36).
-Podpisywanie, instalacja i testy są opisane w [DEVELOPMENT](docs/DEVELOPMENT.md)
-i [DEPLOY](docs/DEPLOY.md); klucz podpisujący przechowujemy poza repo.
-
-## Weryfikacja i aktualizacja serwera
-
-```sh
-npm run lint
-npm run format:check
-npm run typecheck
-npm test
-npm run build
-npm run test:e2e
-npm run release:smoke
-npm run android:debug
-```
-
-Playwright działa wyłącznie headless przy 390 i 1280 px. Testy JVM i Android Lint
-uruchamiaj po buildzie: `./gradlew testDebugUnitTest lintDebug` w `android/`
-(Windows: `./gradlew.bat testDebugUnitTest lintDebug`).
-
-Istniejąca aplikacja działa pod [rodzina.preficze.pl](https://rodzina.preficze.pl).
-Aktualizację uruchamia właściciel przez ręczny workflow Deploy z `main` według
-[DEPLOY](docs/DEPLOY.md). ZIP serwera i podpisane APK są osobnymi artefaktami;
-Deploy publikuje oba, a instalację aktualizacji na telefonie zatwierdza użytkownik.
-Przejście ze starego wydania wymaga zatrzymania crona Web Push przed podmianą
-paczki oraz zachowania przejściowego `/sw.js` i odpowiedzi 410 manifestu.
+Build testowy APK: npm run android:debug (JDK 21, SDK 36).
+Aktualizacja release wymaga istniejącego klucza i zachowuje dane.
+Push na main uruchamia CI; ręczny workflow Deploy publikuje API/WWW i nowe APK,
+a instalację na telefonie zatwierdza użytkownik.

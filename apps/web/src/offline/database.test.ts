@@ -19,7 +19,7 @@ import {
 } from './database.js';
 import { adapters, chargedBytes } from './registry.js';
 
-const fixture = JSON.parse(readFileSync('docs/offline/fixtures/legacy-valid.json', 'utf8')) as {
+const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
   entries: { key: string; value: unknown }[];
 };

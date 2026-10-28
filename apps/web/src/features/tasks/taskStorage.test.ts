@@ -16,7 +16,7 @@ import { TASK_STORAGE_KEY } from './taskOffline.js';
 import { readOperations } from '../../offline/outbox.js';
 import { CONTACTS_STORAGE_KEY } from '../contacts/contactsOffline.js';
 import '../contacts/contactsOffline.js';
-const fixture = JSON.parse(readFileSync('docs/offline/fixtures/legacy-valid.json', 'utf8')) as {
+const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
   referenceTime: number;
   entries: { key: string; value: unknown }[];

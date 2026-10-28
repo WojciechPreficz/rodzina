@@ -13,7 +13,7 @@ import {
 } from './shoppingStorage.js';
 import type { ShoppingSession } from './shoppingOffline.js';
 import '../../offlineData.js';
-const fixture = JSON.parse(readFileSync('docs/offline/fixtures/legacy-valid.json', 'utf8')) as {
+const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
   referenceTime: number;
   entries: { key: string; value: unknown }[];

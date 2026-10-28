@@ -24,7 +24,7 @@ import { readOperations } from './outbox.js';
 import { startSync, type SyncAdapter } from './sync.js';
 import { adapters, chargedBytes, type CacheEntry } from './registry.js';
 
-const fixture = JSON.parse(readFileSync('docs/offline/fixtures/legacy-valid.json', 'utf8')) as {
+const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
   entries: { key: string; value: unknown }[];
 };

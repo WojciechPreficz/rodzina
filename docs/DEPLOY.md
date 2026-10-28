@@ -1,495 +1,92 @@
-# Aktualizacja i konfiguracja na cPanel vh.pl
+# Aktualizacja i konfiguracja
 
-Aktualizujemy istniejącą instalację na https://rodzina.preficze.pl.
-Nie powtarzamy pierwszego wdrożenia ani zakładania rodziny.
-Historia migracji, pierwsze uruchomienie, dawny projekt publikacji APK
-i procedura przejścia ze starego Web Push są w
-[archiwum wdrożeń](archive/deploy-historia.md).
-Przed aktualizacją instalacji sprzed 4.9 wykonaj opisaną tam procedurę
-wycofania Web Push, w tym zatrzymanie starego crona i kopię sprzed migracji 0013.
-Zachowuj przejściowy `/sw.js` i odpowiedź 410 manifestu w kolejnych wydaniach.
-Zakres kontroli lokalnych i CI określa [plan, sekcja 1.2](plan.md);
-rozbieżne listy kontroli pozostawiono do decyzji właściciela w [raporcie](DOKUMENTACJA_RAPORT.md).
+Istniejąca instalacja: https://rodzina.preficze.pl, cPanel vh.pl, Passenger,
+Node 24. Nie powtarzamy pierwszego wdrożenia ani rejestracji rodziny.
+Push uruchamia CI; wdrożenie jest ręczne: Actions → Deploy → Run workflow → main.
+Deploy weryfikuje dokładny commit, buduje i publikuje API/WWW oraz podpisane APK.
+Instalację aktualizacji na telefonie zatwierdza użytkownik.
 
-Backup obejmuje również `shopping_operations` i `task_operations`. Nie usuwaj
-ich wpisów przy zwykłym porządkowaniu: urządzenie może ponowić operację
-po długiej przerwie. Nowy klient z parametrami operacji wymaga wcześniejszej
-aktualizacji API. Szczegóły zgodności i migracji zachowuje
-[historia wdrożeń](archive/deploy-historia.md).
+## Konfiguracja API
 
-## 2. Zbudowanie i wgranie paczki
-
-O.6 (#54) aktualizuje bazę urządzenia `rodzina-offline` do wersji 3
-i przejmuje zadania do wspólnego outbox używanego przez zakupy od O.5 (#53).
-Nie zmienia bazy serwera, konfiguracji,
-crona ani zależności runtime. WWW i APK aktualizujemy osobno; zamknij starsze
-karty/proces APK przed przejściem, a przy źródłach localStorage potwierdź
-procedurę importu opisaną w [DEVELOPMENT.md](DEVELOPMENT.md).
-Po przejęciu nie wracaj do klienta wersji 1/2 i nie usuwaj pamięci urządzenia
-z niewysłanymi operacjami. Rollback wymaga klienta rozumiejącego wersję 3
-i wspólny outbox zakupów oraz zadań; backup serwera nie zawiera lokalnej
-kolejki urządzenia. `versionchange` odcina starsze klienty IDB. Fizyczny odbiór
-alarmów i restartu urządzenia pozostaje obowiązkowy przed zaliczeniem O.6.
-
-O.7 (#55) zachowuje IDB v3 i format operacji v1. Dodaje wspólny komunikat
-podglądów oraz rejestrację zakupów do ogólnego czyszczenia. Nie wymaga migracji
-SQLite, nowej konfiguracji, crona ani zależności runtime. Instrukcja rozwoju:
-[OFFLINE_ADAPTER.md](OFFLINE_ADAPTER.md); [odbiór](DEVELOPMENT.md#odbiór-całej-migracji-offline--o7-55).
-
-Przy aktualizacji WWW zamknij starsze karty, odśwież stronę i potwierdź import,
-jeśli aplikacja wykryje localStorage. Przy APK zachowaj dane aplikacji i ten
-sam klucz podpisu; zamknij stary proces, zainstaluj aktualizację i uruchom ją
-ponownie. Wspierane źródła: legacy localStorage opisane w kontrakcie, IDB v1
-(O.2–O.4), v2 (O.5) i v3 (O.6). Można pominąć wydania pośrednie.
-Import bez internetu pozostaje możliwy po wcześniejszym pobraniu danych;
-wysyłka rusza po odzyskaniu sieci w otwartym interfejsie.
-
-Jeśli migracja jest zablokowana, zamknij inne instancje i ponów ją.
-Przy uszkodzonym źródle lub braku miejsca zachowaj dane urządzenia;
-nie czyść pamięci, nie odinstalowuj APK i nie usuwaj dziennika, aby wymusić
-start. Niedokończony import wznawia się ze znacznika. Wylogowanie zgodnie
-z dotychczasową polityką usuwa również niewysłane operacje.
-
-Rollback po przejęciu outbox wymaga klienta v3 z oboma adapterami i tymi
-samymi wersjami payloadów; O.6 jest zgodnym formatowo punktem odniesienia.
-Liczniki budżetów są przeliczane przy kolejnych zapisach. Cofnięcie paczki
-serwera nie cofa IDB ani APK i nie odzyskuje lokalnych zmian. API musi nadal
-obsługiwać poprzedni wspierany APK oraz zapamiętane ID operacji przez 90 dni.
-Przed rollbackiem danych serwera zatrzymaj synchronizację urządzeń i zastosuj
-procedurę backupu poniżej. Nie wracaj do dawnych nadawców TanStack/O.4 ani
-localStorage po nowych zapisach.
-
-Migracja 0023 dodaje Kontakty i cztery początkowe grupy dla każdej istniejącej
-rodziny. Wykonuj ją jobem `dist/jobs/migrate-db.js` z nowej paczki, po backupie,
-według procedury aktualizacji poniżej. Job rejestruje funkcję SQLite
-`random_uuid()` opartą o `crypto.randomUUID()`; bezpośrednie wykonanie pliku
-SQL lub `drizzle-kit migrate` nie rejestruje tej funkcji. Nie ma nowych
-zmiennych środowiskowych, zależności runtime ani zadań crona.
-Lokalne `npm run db:migrate` korzysta z tego samego joba przez `tsx`.
-
-Migracja `0024_auth_rate_limits.sql` dodaje wspólne dla procesów liczniki
-logowania i indeks wygaśnięcia. Wykonaj ją tą samą procedurą: backup,
-jawny job migracji z nowej paczki i dopiero restart API. Limit pozostaje
-10 prób w 15 minut dla pary IP–konto, osobno dla hasła i PIN-u dziecka.
-Poprawne logowanie usuwa własny licznik; restart procesu go nie zeruje.
-Klucze są skrótami SHA-256 zakresu, IP i identyfikatora konta
-(znormalizowanego e-maila albo identyfikatorów rodziny i dziecka),
-bez zapisu surowych identyfikatorów w tej tabeli. Nie dodano zmiennych
-środowiskowych, zależności runtime, crona ani zmian kontraktu API/APK.
-
-### Adres klienta i granica zaufania proxy
-
-Logowanie pobiera IP z `request.ip`. Obecne `trustProxy: true` ufa całemu
-łańcuchowi `X-Forwarded-For`; klient mogący narzucić jego początek może
-zmieniać klucz limitu. Konfiguracja wymaga, aby API było dostępne wyłącznie
-przez zaufane proxy hostingu, które nadpisuje nagłówki `X-Forwarded-*`
-pochodzące od klienta. Przed odbiorem na hostingu sprawdź z operatorem
-łańcuch proxy oraz brak bezpośredniego dostępu do portu API. W kontrolowanej
-próbie porównaj ustalone IP przy zwykłym żądaniu i przy żądaniu z własnym
-`X-Forwarded-For`; nagłówek klienta nie może wybrać innego klucza limitu.
-Repozytorium potwierdza sposób odczytu IP, ale nie potwierdza konfiguracji
-vh.pl. Zmianę polityki `trustProxy` dobieramy do rzeczywistego łańcucha
-hostingu; nie zakładamy liczby pośredników ani ich adresów.
-
-Przed instalacją zatrzymaj lokalną aplikację (`npm run dev`, `npm run dev:api`, `npm start`) i testy w trybie watch. W każdym terminalu, w którym działają, użyj `Ctrl+C` i poczekaj na zakończenie procesu.
-
-Lokalnie, w katalogu repozytorium, uruchom kolejno:
-
-```powershell
-npm ci
-npm run lint
-npm run format:check
-npm run typecheck
-npm test
-npm run release
-npm run test:e2e
-npm run release:smoke
-npm run android:debug
-```
-
-Po buildzie Androida uruchom w `android/` także `./gradlew testDebugUnitTest lintDebug`
-(Windows: `./gradlew.bat testDebugUnitTest lintDebug`). Playwright działa wyłącznie headless.
-Jeżeli aktualizujesz instalację sprzed 4.9, przed rozpakowaniem ZIP wykonaj procedurę
-wycofania Web Push w [archiwum wdrożeń](archive/deploy-historia.md), łącznie z zatrzymaniem starego crona.
-
-`npm run release` wykonuje również build. `release:smoke` sprawdza paczkę, odmowę startu produkcji bez migracji, dwukrotne uruchomienie joba migracji, start serwera i backup na tymczasowej bazie bez VAPID. Wgraj `release.zip` do prywatnego stagingu i postępuj według sekcji aktualizacji poniżej. Paczka zawiera `server.cjs`, `dist/`, `public/`, `drizzle/` oraz produkcyjne `package.json` i `package-lock.json`. Nie kopiuj lokalnego `node_modules` na hosting — binaria dla Windows nie działają na Linuksie.
-
-### Utrzymanie zależności paczki release
-
-Źródłowa para produkcyjnego manifestu i lockfile jest w `scripts/release/`.
-Po zmianie zależności API najpierw zaktualizuj główny lockfile przez npm,
-następnie uruchom `npm run release:lock` i commituj oba pliki produkcyjne razem
-z manifestem API i głównym lockfile. Polecenie wydziela drzewo runtime z już
-zablokowanych wersji monorepo: zachowuje zależności zagnieżdżone, integralność
-archiwów i opcjonalne warianty platformowe; pomija bundlowany `@rodzina/shared`.
-Nie odpytuje rejestru ani nie rozwiązuje zakresów wersji ponownie. Niezgodność
-manifestów lub drzewa zależności zatrzymuje pakowanie; build sam nie poprawia lockfile.
-
-Smoke i deploy używają tej samej procedury: `npm ci --omit=dev --ignore-scripts
---no-audit --no-fund`, jawne pobranie gotowego binarium `better-sqlite3` przez
-`prebuild-install` i sprawdzenie SQLite oraz Argon2. Brak binarium kończy procedurę
-bez próby kompilacji. Smoke wykonuje dwie instalacje w pustych katalogach,
-porównuje rzeczywiste wersje z lockfile i między instalacjami oraz sprawdza,
-że instalacja nie zmieniła lockfile. CI wykonuje tę próbę na Linuksie i Node 24,
-zgodnie z hostingiem. Lokalne smoke na Windows sprawdza wariant Windows;
-pakiety opcjonalne Argon2 zależą od OS, CPU i libc, a binarium SQLite także od ABI Node.
-Powtarzalność wersji dotyczy tej samej platformy i wersji Node.
-
-### Windows: `npm ci` kończy się `EPERM ... unlink ... argon2.win32-x64-msvc.node`
-
-`npm ci` usuwa dotychczasowe zależności przed instalacją. Windows nie pozwala usunąć natywnego modułu Argon2, gdy jest załadowany przez działające API lub testy. `Ctrl+C` w terminalu, w którym instalacja już się zakończyła błędem, nie zatrzymuje API z innego terminala.
-
-1. Zatrzymaj aplikację i testy w ich terminalach, jak opisano wyżej, po czym ponów `npm ci`.
-2. Jeśli terminal został zamknięty, sprawdź procesy w PowerShell:
-
-   ```powershell
-   Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
-     Select-Object ProcessId, ParentProcessId, CommandLine | Format-List
-   ```
-
-   Zidentyfikuj proces API lub watchera tej aplikacji po ścieżce repozytorium i poleceniu. Zatrzymaj tylko ustalony proces przez `Stop-Process -Id <PID>`, a następnie ponów instalację. Nie zatrzymuj wszystkich procesów Node: mogą należeć do innych aplikacji, w tym Codex.
-
-3. Jeżeli blokada pozostaje, uruchom ponownie Windows i wykonaj `npm ci` przed ponownym startem aplikacji. Jeśli błąd występuje także wtedy, sprawdź uprawnienia pliku i historię ochrony antywirusa.
-
-Nie usuwaj `package-lock.json` ani lokalnej bazy w celu naprawy tego błędu.
-
-## 3. Konfiguracja aplikacji Node
-
-W cPanel **Setup Node.js App** wybierz Node.js 24 albo 22, ustaw app root `rodzina`, startup file `server.cjs` i URL subdomeny. Utwórz katalogi `~/rodzina-data/`, `~/rodzina-data/logs/` oraz `~/rodzina-data/backups/`.
-
-Utwórz `~/rodzina-data/.env` na podstawie `apps/api/.env.example` (plik dostarczony właścicielowi przed wdrożeniem) i ustaw co najmniej:
+Konfiguracja jest poza aplikacją, domyślnie ~/rodzina-data/.env,
+lub pod RODZINA_ENV_FILE. Wzór: apps/api/.env.example.
+Katalog bazy, backupów i APK musi być trwały, prywatny i poza zarządzanymi
+plikami aplikacji. W cPanel: app root rodzina, startup server.cjs.
 
 ```dotenv
 NODE_ENV=production
 RODZINA_DATABASE_PATH=/home/<user>/rodzina-data/rodzina.db
 RODZINA_BACKUP_DIR=/home/<user>/rodzina-data/backups
 RODZINA_WEB_DIR=./public
-RODZINA_PUBLIC_URL=https://rodzina.<domena>
-RODZINA_ALLOW_REGISTRATION=true
+RODZINA_PUBLIC_URL=https://rodzina.preficze.pl
+RODZINA_ALLOW_REGISTRATION=false
+RODZINA_ANDROID_DOWNLOAD_DIR=/home/<user>/rodzina-android
+RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS=
 ```
 
-Konfigurację odczytuje `server.cjs` przez `RODZINA_ENV_FILE` albo domyślnie `/home/<user>/rodzina-data/.env`. Nie umieszczaj `.env` w paczce ani repozytorium. Sesje są losowymi tokenami przechowywanymi w bazie jako hash; nie potrzeba sekretu podpisującego cookie.
+RODZINA_ALLOW_REGISTRATION włączamy tylko na czas zakładania rodziny.
+PUBLIC_URL określa linki zaproszeń/resetu. DOWNLOAD_DIR puste oznacza brak
+wydania (404 JSON). SHA256_CERT_FINGERPRINTS to publiczne odciski certyfikatów,
+32 pary hex z dwukropkami, wiele wartości oddzielonych przecinkiem.
+Puste odciski wyłączają weryfikację App Links.
 
-W aplikacji Node wykonaj **Run NPM Install**. Zależności runtime w paczce są gotowymi pakietami; nie uruchamiaj kompilacji aplikacji na serwerze.
+trustProxy=true wymaga dostępu do API wyłącznie przez zaufane proxy,
+które nadpisuje nagłówki X-Forwarded-* klienta. Z operatorem potwierdź łańcuch
+proxy i brak bezpośredniego dostępu do portu API. Kontrolowana próba z własnym
+X-Forwarded-For nie może zmienić IP używanego przez limit logowania.
+Nie zakładamy niepotwierdzonej konfiguracji vh.pl.
 
-### Konfiguracja kont i sesji (faza 1)
+## Paczka i migracje
 
-- `RODZINA_PUBLIC_URL` jest adresem linków zaproszeń i resetu hasła. Na serwerze ustaw dokładny adres HTTPS subdomeny. Lokalnie: `http://localhost:5173` dla `npm run dev`, `http://localhost:3000` dla `npm start`.
-- `RODZINA_ALLOW_REGISTRATION=true` pozwala założyć rodzinę. Po utworzeniu pierwszego administratora ustaw `false` i zrestartuj aplikację. Dołączanie przez zaproszenie nadal działa.
-- Cookie `sid` jest HttpOnly, SameSite=Lax i Secure w produkcji. Sesja i cookie są ważne 60 dni i odnawiane przy aktywności. Token sesji jest przechowywany w bazie jako SHA-256; hasła i PIN-y jako Argon2id.
-- Zaproszenie jest jednorazowe i ważne 7 dni. Link resetu hasła tworzy administrator, jest jednorazowy i ważny 24 godziny. Aplikacja nie wysyła e-maili: link należy skopiować lub udostępnić z ekranu Rodzina.
-- Role dorosłych można zmieniać między administratorem i dorosłym. Kont dzieci nie zamieniamy w dorosłych ani odwrotnie. Ostatni administrator nie może zostać usunięty ani zdegradowany.
-- Faza 1 nie dodaje nowych zmiennych, zadań crona ani zależności runtime. Paczka zawiera istniejące migracje auth oraz natywne pakiety `better-sqlite3` i `@node-rs/argon2`; instalacja musi użyć gotowych binariów. Pierwszy deploy obejmował stan po fazie 3.
+Lokalnie dobieramy kontrole do zmiany według [AGENTS.md](../AGENTS.md).
+npm run release buduje release.zip: server.cjs, dist, public, drizzle oraz
+produkcyjny manifest i lockfile. Nie kopiujemy lokalnego node_modules.
+Po zmianie zależności API aktualizujemy lockfile monorepo i uruchamiamy
+npm run release:lock; oba pliki scripts/release commitujemy razem ze zmianą.
+Pakowanie wymaga zgodności manifestu i lockfile i nie rozwiązuje wersji ponownie.
 
-## 5. Cron cPanel
+Deploy i release:smoke instalują przez npm ci --omit=dev --ignore-scripts
+--no-audit --no-fund, jawnie pobierają gotowe binarium better-sqlite3 przez
+prebuild-install i sprawdzają SQLite oraz Argon2. Brak binarium przerywa
+procedurę bez kompilacji na hostingu. Smoke sprawdza również migracje,
+start serwera, frontend i backup na tymczasowej bazie.
 
-Passenger może usypiać proces; nie uruchamiaj schedulera w pamięci. Cała konfiguracja crona jest niezależna od zmiennych środowiskowych aplikacji, dlatego każde polecenie joba jawnie wczytuje `~/rodzina-data/.env`.
+Produkcja nie migruje przy starcie: po backupie job nowej paczki wykonuje
+migracje, a API jedynie sprawdza ich zastosowanie. Polecenie w katalogu paczki:
 
-Od kroku 4.9 pozostaje tylko backup raz dziennie. Przypomnienia realizuje harmonogram APK.
-Techniczny job heartbeat został usunięty; nie dodawaj jego wpisu do crona.
+```sh
+/home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env dist/jobs/migrate-db.js
+```
 
-### Wycofana wysyłka Web Push — krok 4.9
+Używaj joba aplikacji: rejestruje również random_uuid() wymagane przez migracje.
+Nie wykonuj bezpośrednio SQL ani drizzle-kit migrate. Błąd migracji daje kod 1
+i zatrzymuje deploy przed podmianą. Development migruje automatycznie;
+lokalny npm start wymaga wcześniejszego npm run db:migrate po buildzie.
 
-Job `send-reminders.js`, endpointy `/api/push/*` i VAPID zostały usunięte.
-Przed aktualizacją starej instalacji usuń jej cron przypomnień i poczekaj na
-zakończenie aktywnego przebiegu według procedury w [archiwum wdrożeń](archive/deploy-historia.md). Nie dodawaj
-nowego crona przypomnień. Istniejące zmienne `RODZINA_VAPID_*` są ignorowane.
+## Backup i cron
 
-### Backup SQLite — krok 3.5
-
-`RODZINA_BACKUP_DIR` wskazuje katalog kopii. Domyślnie jest to `./apps/api/data/backups`
-względem katalogu roboczego; na hostingu ustaw bezwzględne
-`/home/<user>/rodzina-data/backups`. Job tworzy katalog, jeśli go brakuje.
-Katalog powinien być dostępny wyłącznie dla konta aplikacji i leżeć poza katalogiem publicznym.
-
-Wpis dzienny o 03:15 czasu serwera (konfiguracja pierwszego wdrożenia; przy aktualizacji sprawdź istniejący wpis, nie dodawaj duplikatu):
+Jedyny cron: backup dziennie o 03:15 czasu serwera. Sprawdź istniejący wpis,
+ścieżkę Node i strefę crona; nie dodawaj duplikatu. Utwórz prywatne katalogi
+~/rodzina-data/logs i backups. Cron jawnie wczytuje .env:
 
 ```cron
 15 3 * * * cd /home/<user>/rodzina && /home/<user>/nodevenv/rodzina/24/bin/node --env-file=/home/<user>/rodzina-data/.env /home/<user>/rodzina/dist/jobs/backup-db.js >> /home/<user>/rodzina-data/logs/backup.log 2>&1
 ```
 
-Zastąp `<user>` loginem hostingu i sprawdź ścieżkę Node oraz strefę czasową crona.
-Backup wykonuje `VACUUM INTO` na działającej bazie SQLite (również w trybie WAL).
-Nazwa `rodzina-YYYY-MM-DD.db` używa daty w `Europe/Warsaw`. Ponowne uruchomienie
-tego samego dnia zastępuje kopię dopiero po zakończeniu nowego snapshotu.
-Po sukcesie pozostaje 14 ostatnich kopii według dat w nazwach; inne pliki i katalogi
-nie podlegają rotacji. Błąd tworzenia kopii nie uruchamia rotacji. Job loguje wynik
-do stdout, a błąd do stderr i kończy się kodem 1. Monitoruj `backup.log` i wolne miejsce.
+VACUUM INTO tworzy samodzielną bazę bez WAL/SHM. Pozostaje 14 kopii dziennych
+rodzina-YYYY-MM-DD.db, według Europe/Warsaw. Nowa kopia zastępuje dzisiejszą
+dopiero po sukcesie; błąd nie uruchamia rotacji i kończy job kodem 1.
+Po udanym backupie job sprząta wygasłe sesje i limity logowania; błąd sprzątania
+jest logowany oddzielnie i nie unieważnia kopii. Monitoruj log oraz wolne miejsce.
+Przed aktualizacją wykonaj polecenie crona bez harmonogramu i przekierowania.
+Backup zachowuje także odpowiedzi idempotentne operacji; nie usuwaj ich ręcznie.
 
-Po udanym backupie ten sam job usuwa wygasłe sesje (`expires_at <= now`),
-bez nowego wpisu crona. Kopia zawiera stan sprzed sprzątania. Zdarzenie
-`expired_sessions_deleted` podaje liczbę usuniętych sesji; błąd
-`session_cleanup_failed` trafia do stderr, ale nie zmienia sukcesu backupu
-ani kodu zakończenia joba. Przy błędzie backupu sprzątanie nie jest wykonywane.
-Po backupie job niezależnie usuwa też wygasłe liczniki `auth_rate_limits`
-(`expires_at <= now` w ms UTC). Zdarzenie `expired_auth_rate_limits_deleted`
-podaje liczbę usuniętych wpisów; `auth_rate_limit_cleanup_failed` trafia
-do stderr bez zmiany sukcesu kopii ani wyniku sprzątania sesji.
-Kopia zachowuje liczniki sprzed sprzątania. Odczyt limitu sam rozpoznaje
-wygaśnięcie, więc opóźniony cron nie przedłuża blokady logowania.
-Migracja zadania #34 dodaje tylko indeks `sessions_user_idx`; uruchamia się
-jawnym jobem migracji według istniejącej procedury aktualizacji.
+Odtworzenie bazy wymaga zatrzymania API, zapisów i jobów, zachowania obecnej bazy,
+usunięcia jej starych WAL/SHM i umieszczenia kopii pod DATABASE_PATH.
+Po restarcie sprawdź health i dane rodziny. Utrata zapisów po backupie wymaga
+osobnej decyzji właściciela; workflow nie cofa bazy automatycznie.
 
-Lokalnie po buildzie uruchom `npm run job:backup` z katalogu repozytorium.
-Na serwerze przed aktualizacją uruchom ręcznie polecenie z wpisu crona (bez harmonogramu
-i przekierowania logów). Kopię można otworzyć jako samodzielną bazę SQLite; nie wymaga
-plików WAL ani SHM. Przy odtwarzaniu zatrzymaj API i joby, zachowaj dotychczasową bazę,
-usuń jej stare pliki `-wal` i `-shm`, a wybraną kopię umieść pod `RODZINA_DATABASE_PATH`.
-Po restarcie sprawdź `/api/health` i dane rodziny.
-
-Pierwotny krok backupu nie dodawał migracji ani zależności runtime; sprzątanie
-limitów korzysta z migracji 0024 opisanej wyżej. Historyczna tabela `job_runs`
-pozostaje bez zmian. `release:smoke` uruchamia backup z paczki bez VAPID
-i sprawdza integralność kopii, obecność przypomnień i brak tabeli subskrypcji.
-
-## 6. Aktualizacja
-
-Procedurę aktualizacji opisuje krok D.4 historycznego etapu pierwszego wdrożenia w [archiwum planu](archive/plan-fazy-0-4.md); jej przećwiczenie wymaga osobnego potwierdzenia. Przed aktualizacją bazy wykonaj kopię jobem `backup-db.js` opisanym powyżej.
-
-### Aktualizacja istniejącego serwera od fazy 4
-
-API/WWW i Android mają osobne artefakty. Ręczny Deploy publikuje oba; przy ręcznej aktualizacji ZIP publikację APK wykonaj osobno:
-
-| Artefakt              | Zawartość i sposób aktualizacji                                                                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `release.zip`         | API, migracje i stronę WWW; wgrywany do istniejącej aplikacji Node w `~/rodzina/`.                                                                        |
-| Podpisane release APK | Lokalny frontend i kod Androida; budowane na komputerze, publikowane osobno i instalowane na telefonie. Dystrybucja i aktualizator działają od kroku 4.6. |
-| `latest.json`         | Informacja o najnowszym APK; publikowana po wgraniu i sprawdzeniu tego APK, od kroku 4.6.                                                                 |
-
-1. Lokalnie wykonaj weryfikację i zbuduj ZIP według sekcji 2. Dla zmian wspólnego frontendu sprawdź także build Androida i właściwe scenariusze na telefonie. Sam `release:smoke` nie testuje APK.
-2. Zachowaj poprzedni ZIP i wykonaj backup produkcyjnej bazy jobem z sekcji 5. Zachowaj istniejącą konfigurację `.env`, bazę i cron backupu. Przy przejściu na 4.9 najpierw wykonaj procedurę wycofania Web Push w [archiwum wdrożeń](archive/deploy-historia.md).
-3. Wgraj i rozpakuj sprawdzony ZIP do prywatnego stagingu i przygotuj tam zależności produkcyjne według procedury automatycznej poniżej. Po backupie, przed podmianą plików, uruchom ze stagingu `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/migrate-db.js` (podstaw rzeczywiste ścieżki Node i konfiguracji). Dopiero po sukcesie migracji podmień `server.cjs`, `dist/`, `public/`, `drizzle/`, produkcyjne `package.json` i `package-lock.json` oraz zależności w istniejącym `~/rodzina/` i wykonaj restart przez `tmp/restart.txt`. Nie zastępuj produkcyjnej bazy lokalną. Preferowana procedura automatyczna poniżej wykonuje te kroki w tej kolejności.
-4. Sprawdź `/api/health`, logowanie, odczyt i zapis kalendarza w przeglądarce oraz w poprzedniej wspieranej wersji APK. Nowy backend musi nadal obsługiwać telefony, które nie zainstalowały aktualizacji.
-5. Jeżeli wydanie wymaga nowego APK, opublikuj je dopiero po zgodnym API według sekcji 7. Nie uruchamiaj ponownie konfiguracji pierwszego wdrożenia ani rejestracji rodziny.
-
-Powrót do poprzedniego ZIP wymaga zgodności ze schematem bazy po migracjach. Nie cofaj bazy automatycznie: odtworzenie backupu może usunąć dane zapisane od chwili jego wykonania. Wycofanie publikacji APK opisuje [archiwalna sekcja 7.5](archive/deploy-historia.md).
-
-Krok 2.3 dodaje migrację `0011_chubby_gateway.sql` z tabelą przypomnień. Nie dodaje konfiguracji, zależności runtime ani cronów. Terminy są zapisywane i przeliczane przy zapisie wydarzeń; przypomnienia dostarcza APK po synchronizacji harmonogramu.
-
-## 7. Android — konfiguracja, publikacja APK i aktualizacje
-
-Bieżące budowanie: Node 22/24, JDK 21, SDK 36, `npm run android:debug`.
-Release: istniejący klucz poza repo, `android/version.properties`,
-`npm run android:release:interactive` albo `npm run android:release`.
-Dokładne polecenia, konfiguracja klucza i backup są w części „Krok 4.6” poniżej;
-automatyczne podpisywanie i publikowanie przy każdym ręcznym Deploy opisuje 4.7.
-Nie generuj ponownie istniejącego klucza dla aktualizacji.
-
-API używa dotychczasowej sesji: cookie HttpOnly/SameSite=Lax i kontrola Origin
-w przeglądarce, natywny transport RodzinaApi w APK. Nie dodawaj wyjątków CORS/CSRF.
-`RODZINA_ANDROID_API_ORIGIN` wybiera API podczas budowania APK; release wymaga
-`https://rodzina.preficze.pl`, a HTTP localhost jest dostępne tylko w debug.
-Zmiana wymaga ponownej kompilacji. Backend zachowuje zgodność ze starszym wspieranym APK.
-
-`RODZINA_ANDROID_DOWNLOAD_DIR` w `.env` API wskazuje trwały katalog poza
-aplikacją i danymi rodziny. Puste oznacza brak wydania (404 JSON, czytelna informacja w UI).
-`RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS` zawiera publiczne odciski App Links.
-APK jest dostępne przez HTTPS tej samej domeny bez sesji, jako
-`application/vnd.android.package-archive`, pod niezmiennym adresem z wersją.
-Najpierw wgraj i sprawdź APK, potem atomowo opublikuj `latest.json` z `no-store`.
-ZIP nie zmienia plików zainstalowanego APK ani trwałego katalogu pobierania.
-Na serwer nie trafiają JDK/SDK, klucz, hasła ani lokalna baza; nie potrzeba nowego crona.
-
-### Synchronizacja harmonogramu — krok 4.4
-
-Zmiana wymaga nowego APK z pluginami Capacitor App 8.1.2 i Network 8.0.1
-(`npm run android:sync`, następnie build Androida). Zwykła aktualizacja paczki
-API/WWW nie aktualizuje lokalnych plików ani pluginów zainstalowanego APK.
-Brak nowych zmiennych środowiskowych, migracji i cronów; API harmonogramu
-pozostaje zgodne z krokiem 4.2. Zależności App/Network dotyczą Androida,
-nie wymagają kompilacji nowych zależności runtime na vh.pl.
-
-APK pobiera zmiany po wznowieniu, odzyskaniu sieci i co 20 s w aktywnym
-interfejsie. Zamknięte APK nie pobiera zmian z serwera. Ekran powiadomień
-pokazuje ostatnią udaną synchronizację oraz zakres zabezpieczenia offline;
-zmiany na innym urządzeniu mogą pozostawić stary alarm do kolejnej synchronizacji.
-Strona nie dostarcza powiadomień; definicje pozostają wspólne z APK. Procedura i niepotwierdzone testy telefonu
-są w [historii pracy lokalnej](archive/development-historia.md), w sekcji kroku 4.4.
-
-## Android App Links — krok 4.5
-
-Nowa opcjonalna zmienna serwera: `RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS`.
-Wpisz publiczny odcisk SHA-256 certyfikatu podpisującego zainstalowane APK,
-w formacie 32 par hex oddzielonych dwukropkami. Kilka odcisków rozdziel przecinkiem.
-Nie wpisuj hasła ani zawartości keystore. Wartość pusta zwraca `[]` i pozostawia
-otwieranie linków w przeglądarce jako ścieżkę awaryjną; nie oznacza weryfikacji APK.
-
-Odcisk ustalisz przez `keytool -list -v -keystore <ścieżka-do-keystore>`
-(hasło podaj interaktywnie). Dla testowego debug APK użyj lokalnego debug.keystore;
-nie traktuj jego certyfikatu jako certyfikatu późniejszego wydania release z kroku 4.6.
-Nie generujemy nowego klucza produkcyjnego w kroku 4.5.
-
-Po lokalnych testach aktualizuj sprawdzoną paczkę według istniejącej procedury,
-ustaw zmienną w `.env` serwera i zrestartuj aplikację. Endpoint
-`https://rodzina.preficze.pl/.well-known/assetlinks.json` musi zwracać HTTP 200,
-`Content-Type: application/json`, bez logowania i bez przekierowania. Odpowiedź
-wskazuje `pl.preficze.rodzina`, relację `delegate_permission/common.handle_all_urls`
-oraz skonfigurowane odciski. Cache ma 5 minut. Sprawdź, czy konfiguracja hostingu
-nie przechwytuje `/.well-known/` przed Passengerem. Test instalacji musi potwierdzić
-faktyczną weryfikację domeny przez Androida; samo HTTP 200 jej nie dowodzi.
-
-Powiązanie obejmuje `/zaproszenie/` i `/reset-hasla/`. Bez APK pozostają dotychczasowe
-trasy SPA w przeglądarce. Do obsługi nowych intentów, Wstecz, insets i adaptera
-linków wymagane jest nowe APK (`npm run android:debug` do testów); ZIP serwera
-nie aktualizuje APK. Nie dodano migracji, cronów ani zależności runtime serwera.
-`release:smoke` sprawdza również publiczną odpowiedź JSON assetlinks.
-
-Na 17.10.2026 w ramach kroku 4.5 nie aktualizowano produkcji ani odcisków certyfikatów
-na domenie. Testy App Links na telefonie pozostają do wykonania według DEVELOPMENT.md.
-
-# Krok 4.6 — osobne wydania API/WWW oraz Androida
-
-ZIP serwera aktualizuje API i stronę WWW. Nie zmienia lokalnych plików frontendu w już
-zainstalowanym APK. APK stanowi odrębny plik wydania. Poniżej opisano procedurę
-lokalną; workflow Deploy z kroku 4.7 buduje i publikuje APK automatycznie przy każdej
-aktualizacji serwera.
-Nie usuwaj produkcyjnej bazy ani sesji przy żadnym z tych wydań. Dotychczasowy
-kontrakt sesji i `/api/reminders/schedule` pozostaje zgodny ze starszym APK;
-przed kolejną zmianą API wykonaj regresję poprzedniej wspieranej wersji APK.
-
-## Klucz podpisujący — pierwsze przygotowanie
-
-Klucz potwierdza tożsamość wydawcy. Android instaluje aktualizację tej samej
-aplikacji wyłącznie przy zgodnym podpisie. Utrata klucza uniemożliwi aktualizowanie
-istniejącej instalacji. Nie używaj klucza debug do zwykłych wydań.
-
-Utwórz prywatny katalog poza repo, np. `C:\Users\<user>\rodzina-signing`. W terminalu
-z JDK 21 uruchom (zastąp ścieżkę własną):
-
-```powershell
-keytool -genkeypair -v -keystore C:\Users\<user>\rodzina-signing\rodzina-release.jks -storetype JKS -alias rodzina -keyalg RSA -keysize 3072 -validity 10000
-```
-
-Hasła podaj interaktywnie, bez wklejania ich do czatu, polecenia ani repo. Zachowaj
-keystore, alias i hasła w bezpiecznym miejscu oraz drugą zaszyfrowaną kopię na
-niezależnym nośniku. Sprawdź odtworzenie kopii przez `keytool -list -v -keystore
-<kopia.jks>`. Nie kopiuj klucza na hosting. Do GitHub Actions trafia wyłącznie jako sekret według kroku 4.7. Odcisk certyfikatu
-SHA-256 jest publiczny: wpisz go w `RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS`
-zgodnie z procedurą App Links z kroku 4.5.
-
-Podpisane APK można zbudować na dwa sposoby:
-
-Najprostsza metoda przy domyślnej ścieżce `~/rodzina-signing/rodzina-release.jks`
-i aliasie `rodzina`: uruchom `npm run android:release:interactive` bez przekierowania
-wyjścia, bezpośrednio w terminalu. JDK zapyta o hasło magazynu i klucza, tak jak
-`keytool`; Enter przy drugim pytaniu użyje pierwszego hasła. Hasła nie są zapisywane
-w historii ani pliku. Sprawdzamy otwarcie keystore i odzyskanie klucza przed buildem.
-To pozwala odróżnić błędne hasło magazynu, brak aliasu i błędne hasło klucza.
-Dla innej lokalizacji/aliasu ustaw `RODZINA_ANDROID_KEYSTORE` i
-`RODZINA_ANDROID_KEY_ALIAS`; pozostałe zmienne haseł nie są potrzebne w tej metodzie.
-
-Alternatywnie, dla środowiska bez interaktywnego terminala:
-
-```powershell
-$env:RODZINA_ANDROID_KEYSTORE = 'C:\Users\<user>\rodzina-signing\rodzina-release.jks'
-$env:RODZINA_ANDROID_KEY_ALIAS = 'rodzina'
-$env:RODZINA_ANDROID_STORE_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'Hasło keystore' -AsSecureString)).Password
-$env:RODZINA_ANDROID_KEY_PASSWORD = [System.Net.NetworkCredential]::new('', (Read-Host 'Hasło klucza' -AsSecureString)).Password
-npm run android:release
-Remove-Item Env:RODZINA_ANDROID_STORE_PASSWORD, Env:RODZINA_ANDROID_KEY_PASSWORD
-```
-
-Takie zmienne nie są szyfrowanym magazynem; ogranicz je do bieżącej sesji i usuń
-po budowie. Nie włączaj logowania środowiska ani diagnostyki Gradle `--debug`.
-Na Linux/macOS ustaw analogiczne zmienne środowiskowe bez zapisywania haseł
-w historii. `JAVA_HOME`: JDK 21, `ANDROID_HOME`: SDK 36. Skrypt lokalnie wykrywa
-także narzędzia w `.android-tools`, jeśli zmienne nie zostały ustawione.
-
-`npm run android:check-signing` sprawdza wyłącznie poświadczenia ze zmiennych,
-bez budowania frontendu i APK. Release zawsze wykonuje tę kontrolę, następnie
-uruchamia Gradle z `--no-daemon --no-configuration-cache`, aby nie współdzielić
-procesu podpisującego między próbami. Sukces `keytool -list` z hasłem wpisanym
-interaktywnie nie potwierdza jeszcze wartości przekazanej przez PowerShell
-w zmiennej środowiskowej ani hasła samego klucza. Nie zmieniaj formatu ani nie
-generuj ponownie klucza tylko na podstawie ogólnego błędu podpisywania Gradle.
-
-## Budowanie i publikacja
-
-1. Zwiększ `versionCode` w `android/version.properties` (maks. 2100000000), zmień
-   `versionName`, np. `1.0.1`. Zachowaj `pl.preficze.rodzina` i ten sam klucz.
-   Pierwsze wydanie ma kod 1; poprzednie debug APK wymaga osobnego usunięcia przed
-   instalacją release, jeśli podpisy są różne. Przetestuj to na koncie testowym.
-2. Przeprowadź lint, format:check, typecheck, testy, build, testy Playwright headless,
-   `release:smoke`, a następnie `npm run android:release`. Release odrzuca API HTTP
-   i klucz w repo. Skrypt sprawdza podpis przez apksigner i identyfikator/wersję
-   przez aapt; odrzuca debug APK. Wynik w `android-releases/<kod>-<wersja>/`:
-   `rodzina-<kod>-<wersja>.apk`, `latest.json`, publiczny odcisk certyfikatu.
-   Istniejący katalog wydania nie jest nadpisywany. `android:package` pozwala
-   przygotować metadane już zbudowanego APK bez ponownej kompilacji.
-3. Zainstaluj podpisane APK na fizycznym telefonie i wykonaj checklistę w
-   DEVELOPMENT.md, w tym aktualizację z wcześniejszego podpisanego wydania.
-4. Utwórz trwały katalog poza `~/rodzina`, `public/` i katalogiem danych rodziny,
-   np. `/home/<user>/rodzina-android`. Tylko APK i latest.json; żadnych keystore,
-   haseł, baz, `.env`, logów ani backupów. Ustaw w `.env` API:
-   `RODZINA_ANDROID_DOWNLOAD_DIR=/home/<user>/rodzina-android`. Puste oznacza brak
-   wydania. Katalog musi być czytelny dla aplikacji Node. Restartuj Passengera.
-5. Wgraj APK pod tymczasową nazwą, porównaj SHA-256 z `latest.json`, a po pełnym
-   transferze zmień nazwę na docelową. Nigdy nie zastępuj pliku już opublikowanej
-   wersji. Dopiero potem wgraj `latest.json.tmp` i atomowo zmień na `latest.json`.
-   Nie publikuj metadanych przed APK. Zachowaj wcześniejsze wersje na czas wsparcia;
-   cofnięcie metadanych nie proponuje downgrade'u w APK.
-6. Sprawdź HTTPS domeny: `/downloads/android/latest.json` publicznie zwraca JSON,
-   `Cache-Control: no-store`; APK ma MIME `application/vnd.android.package-archive`,
-   `Content-Disposition: attachment`, `nosniff` i cache immutable na rok. Ścieżka
-   APK zawiera wersję. Metadata dopuszcza tylko HTTPS tej samej domeny i katalogu
-   `/downloads/android/`; service worker nie przechowuje tych zasobów. Konfiguracja
-   hostingu/CDN nie może zastępować 404 APK plikiem SPA ani cache'ować latest.json.
-
-Aktualizując serwer dotychczasową paczką ZIP zachowaj katalog wydań. Nie dodano
-crona ani stałego procesu. Automatyzacja deployu GitHub Actions należy do kroku 4.7.
-CI w tym kroku sprawdza debug Androida, testy JVM i Android Lint, bez klucza release.
-
-## Instalacja i aktualizacja na telefonie
-
-Na stronie logowania lub w „Więcej” wybierz „Pobierz aplikację na Androida”, otwórz
-APK z pobranych plików, zezwól przeglądarce na instalowanie z tego źródła i zatwierdź
-instalację. Nowe wydanie strony nie oferuje instalowania PWA ani Web Push.
-Starą ikonę PWA można ręcznie usunąć po sprawdzeniu APK.
-
-APK sprawdza wersję przy uruchomieniu/wznowieniu/powrocie sieci, maks. raz na 15 min.
-Ręcznie: „Więcej > Wersja aplikacji > Sprawdź aktualizacje”. „Aktualizuj” pobiera
-plik i weryfikuje SHA-256, potem otwiera instalator Androida. Jeśli wymagana jest
-zgoda dla Rodziny, użyj „Zezwól na instalację”, wróć i wybierz „Ponów instalację”.
-Użytkownik zatwierdza instalację systemowo. Odmowa lub anulowanie nie kasuje sesji
-ani alarmów; można ponowić. Brak sieci, miejsca, uszkodzony plik i błąd serwera
-nie blokują normalnej pracy. Po przerwaniu procesu pobierz plik ponownie.
-
-Aktualizacja zachowuje dane pakietu. Receiver `MY_PACKAGE_REPLACED` odtwarza alarmy,
-a uruchomiona aplikacja uzgadnia harmonogram. Nie odinstalowuj APK przy zwykłej
-aktualizacji. Nie ma cichej instalacji ani automatycznej aktualizacji zamkniętego APK.
-SHA-256 chroni integralność pliku, zaufanie do metadanych zapewnia HTTPS; to nie
-zastępuje weryfikacji podpisu przez Androida. Źródła:
-[podpisywanie](https://developer.android.com/studio/publish/app-signing),
-[FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider).
-
-## Krok 4.7 — ręczna aktualizacja przez GitHub Actions
-
-### Błąd pobierania zależności Androida (HTTP 403)
-
-Jeżeli po udanej kontroli keystore krok „Build and verify signed Android release”
-kończy się `Could not GET ... repo.maven.apache.org ... 403 Forbidden`, błąd dotyczy
-dostępu do Maven Central. Nie wymaga zmiany klucza, aliasu ani haseł podpisywania.
-Deploy zatrzymuje się przed publikacją plików na serwerze.
-
-`android/maven-repositories.gradle` kieruje repozytoria Maven Central wszystkich
-modułów (także buildscript i pluginów Capacitor) do
-[publicznego mirrora Google](https://storage-download.googleapis.com/maven-central/index.html).
-CI i Deploy zapisują cache Gradle przez `gradle/actions/setup-gradle@v4`;
-cache konfiguracji z sekretami podpisywania pozostaje wyłączony.
-Po wysłaniu poprawki uruchom nowy Deploy dla aktualnego `main`.
-Ponowienie starego przebiegu korzysta ze starego commita bez poprawki.
-
-### Uruchomienie workflow
-
-Workflow **Deploy** aktualizuje istniejącą instalację API/WWW oraz przy każdym
-uruchomieniu buduje, podpisuje i publikuje nową wersję APK. Nie trzeba ręcznie
-wgrywać pierwszego ani następnych APK. Uruchamia się tylko
-przez **Actions → Deploy → Run workflow**, z wyborem `main`. Push i pull request
-uruchamiają CI, bez zmiany serwera. Inna gałąź kończy Deploy błędem przed checkoutem.
-Wdrażany jest dokładny `github.sha` wybranego uruchomienia; podsumowanie zawiera
-commit, SHA-256 ZIP-a, wynik i etap. Równoległe uruchomienia czekają w grupie
-`rodzina-production`; nie anulujemy trwającej podmiany. Dodatkowa blokada na serwerze
-chroni także przed równoczesnym uruchomieniem skryptu z komputera.
+## GitHub Actions
 
 ### Jednorazowa konfiguracja repozytorium
 
@@ -542,171 +139,81 @@ w `finally`. Nie są artefaktami Actions. Skrypt nie wypisuje środowiska, zawar
 W razie awarii log pokazuje bezpieczną nazwę etapu; szczegółową diagnostykę wykonuj
 w prywatnej sesji SSH, bez kopiowania sekretów do issue lub logów Actions.
 
-### Jednorazowe włączenie podpisywania Androida
+### Podpisywanie Androida w Actions
 
-W tym samym repozytorium dodaj trzy **Secrets**:
+Secrets: ANDROID_KEYSTORE_BASE64 (istniejący keystore w Base64),
+ANDROID_STORE_PASSWORD, ANDROID_KEY_PASSWORD. Variables: ANDROID_KEY_ALIAS
+(np. rodzina), ANDROID_CERTIFICATE_SHA256 (64 cyfry hex, z dwukropkami lub bez).
+Użyj klucza już zainstalowanego release; zmiana podpisu jest odrzucana.
+Nie kopiuj sekretów do czatu, repo, logów ani na hosting. Runner przechowuje
+klucz tymczasowo poza checkoutem i usuwa go także po błędzie.
 
-| Sekret                    | Wartość                                                          |
-| ------------------------- | ---------------------------------------------------------------- |
-| `ANDROID_KEYSTORE_BASE64` | Zawartość **istniejącego** pliku keystore zakodowana jako Base64 |
-| `ANDROID_STORE_PASSWORD`  | Hasło tego magazynu                                              |
-| `ANDROID_KEY_PASSWORD`    | Hasło klucza prywatnego (może być takie samo jak hasło magazynu) |
-
-Dodaj dwie **Variables**:
-
-| Zmienna                      | Wartość                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------- |
-| `ANDROID_KEY_ALIAS`          | Alias istniejącego klucza, np. `rodzina`                                              |
-| `ANDROID_CERTIFICATE_SHA256` | Publiczny odcisk SHA-256 certyfikatu tego klucza, 64 cyfry hex, z dwukropkami lub bez |
-
-Użyj tego samego klucza co do już zainstalowanego release APK. Nie generuj nowego
-klucza. Odcisk znajdziesz w `certificate-sha256.txt` przygotowanego lokalnie wydania
-lub w `keytool -list -v -keystore <plik> -alias <alias>`. Nie wklejaj haseł ani
-Base64 do czatu, commita lub logu. Dla domyślnej lokalizacji istniejącego klucza
-możesz ustawić sekret przez PowerShell i GitHub CLI bez wypisywania jego zawartości:
-
-```powershell
-$apkKeyPath = Join-Path $env:USERPROFILE 'rodzina-signing/rodzina-release.jks'
-[Convert]::ToBase64String([IO.File]::ReadAllBytes($apkKeyPath)) | gh secret set ANDROID_KEYSTORE_BASE64 --repo WojciechPreficz/rodzina
-gh secret set ANDROID_STORE_PASSWORD --repo WojciechPreficz/rodzina
-gh secret set ANDROID_KEY_PASSWORD --repo WojciechPreficz/rodzina
-```
-
-Dwa ostatnie polecenia pytają o wartość interaktywnie. Alias i publiczny odcisk
-ustaw w panelu GitHuba. Zachowaj niezależną kopię klucza i haseł według 4.6.
-Brak sekretów, niewłaściwe hasło lub niezgodny odcisk zatrzymuje workflow przed SSH
-i zmianami serwera. Klucz jest dekodowany poza checkoutem do prywatnego katalogu
-tymczasowego runnera i usuwany w `finally`, także po błędzie. Nie trafia na hosting
-ani do artefaktów. Hasła istnieją tylko w środowisku kroku budowania; Gradle działa
-bez współdzielonego daemona i configuration cache. Zwykłe CI nadal nie używa sekretów.
-
-Runner odczytuje dostępne wydanie i weryfikuje jego APK. Nowy `versionCode` wynosi
-`max(kod z repo + 1, opublikowany kod + 1)`, więc rośnie także przy kolejnym deployu
-tego samego commita. Nazwa ma postać `1.0.0-deploy.2`, zgodnie z bazową wersją
-z `android/version.properties`. Zmiana numeru dotyczy tylko budowania na runnerze;
-skrypt odtwarza plik repozytorium i nie tworzy commitów z numerami wersji.
-
-Po pierwszym deployu katalog APK jest tworzony automatycznie obok katalogu aplikacji,
-np. `/home/USER/rodzina-android` dla `DEPLOY_PATH=/home/USER/rodzina`. Po backupie
-i podmianie kodu skrypt atomowo dodaje do istniejącego `DEPLOY_ENV_FILE` wyłącznie
-`RODZINA_ANDROID_DOWNLOAD_DIR`, jeśli wpisu nie było lub był pusty. Pozostałe
-ustawienia pozostają zachowane. Jeśli katalog był już skonfigurowany, używamy go
-bez zmiany ścieżki. Musi leżeć poza aplikacją, bazą, backupami i zależnościami,
-bez dowiązań. Konto SSH musi móc zapisać katalog nadrzędny aplikacji i `.env`.
-Nie ustawiaj innej wartości tej zmiennej w panelu cPanel — konflikt jest błędem
-preflightu. Nowe crony, migracje i zależności runtime nie są potrzebne.
-
-Preflight nie zapisuje osobnego logu na serwerze. Błąd przed uruchomieniem backupu
-i restartem nie musi pojawić się w logach Passengera ani cronów. W Actions skrypt
-raportuje ostatnią rozpoczętą kontrolę: `node-startup` oznacza próbę uruchomienia
-Node przez powłokę SSH, `remote-entry` wejście do skryptu, a `preflight-*` konkretny
-warunek (np. `preflight-package`, `preflight-env-file`, `preflight-database-path`,
-`preflight-backup-path`, `preflight-npm`). `lock` i `staging` dotyczą przygotowania
-transakcji po udanej kontroli. Nazwa wskazuje kontrolę, która nie zakończyła się
-pomyślnie; nie ujawnia wartości konfiguracji. Dla rozpoznanych błędów SSH pojawia
-się też stały opis problemu z kluczem, weryfikacją hosta, DNS lub połączeniem.
-Surowe stdout/stderr błędów nie są kopiowane do logu. Nie włączaj `ssh -v` ani
-wypisywania `.env`; sprawdź wskazany warunek w prywatnej sesji administratora.
-
-Diagnostyka podmiany również trafia bezpośrednio do GitHub Actions, bez pliku logu
-na hostingu. `promotion-check-*` oznacza ponowne sprawdzenie drzew i ścieżki restartu,
-`promotion-copy-dependencies` kopiowanie `node_modules`, a `promotion-copy-server`,
-`promotion-copy-package`, `promotion-copy-dist`, `promotion-copy-public` i
-`promotion-copy-drizzle` wskazują kopiowany element aplikacji. Etapy
-`promotion-restart-directory` i `promotion-restart-marker` dotyczą przygotowania
-restartu; `restart` oznacza zapis znacznika. Błąd może zawierać bezpieczny kod z
-zamkniętej listy, np. `EACCES`/`EPERM` (uprawnienia), `ENOENT` (brak ścieżki),
-`ENOSPC`/`EDQUOT` (miejsce/limit) albo `ERR_FS_CP_DIR_TO_NON_DIR` (konflikt typów).
-`UNKNOWN` oznacza błąd bez rozpoznanego kodu. Pełne komunikaty, ścieżki plików
-i wartości konfiguracji pozostają ukryte. Działająca strona nie potwierdza pełnego
-wdrożenia ani braku częściowej podmiany; wymagane są wszystkie kontrole workflow.
-
-Konfiguracja serwera pozostaje dotychczasowa: `NODE_ENV=production`,
-`RODZINA_PUBLIC_URL=https://rodzina.preficze.pl`, `RODZINA_WEB_DIR=./public`
-(lub bezwzględne `DEPLOY_PATH/public`). Baza i katalog backupu muszą już istnieć,
-mieć bezwzględne ścieżki i leżeć poza zarządzanymi plikami aplikacji. Jeśli wcześniej
-włączono pobieranie Androida, jego katalog musi istnieć i być poza całym katalogiem
-aplikacji, zgodnie z 4.6. Pierwszy katalog tworzy workflow. Zarządzane drzewa `dist`, `public`, `drizzle` nie mogą zawierać
-prywatnych plików, APK ani dowiązań. Dowiązanie cPanel `node_modules` jest zachowane.
-Poza pierwszym ustawieniem istniejącej zmiennej `RODZINA_ANDROID_DOWNLOAD_DIR`
-nie zmieniamy `.env` API, migracji, cronów ani zależności runtime.
+Nowy versionCode to max(kod repo + 1, opublikowany kod + 1).
+Numer zmienia się tylko podczas builda; workflow nie commituje wersji.
+Katalog APK powstaje obok aplikacji, jeśli nie został skonfigurowany.
+Deploy atomowo uzupełnia pusty DOWNLOAD_DIR w istniejącym .env; inne ustawienia
+zachowuje. Nie ustawiaj konfliktującej wartości w panelu cPanel.
 
 ### Przebieg aktualizacji
 
-1. Na Linux/Node 24: `npm ci`, lint, format:check, typecheck, testy, build,
-   Playwright headless i `release:smoke`. Błąd kończy workflow przed SSH.
-   Smoke tworzy i testuje `release.zip`; deploy nie buduje go ponownie.
-   Następnie JDK 21/SDK 36 buduje podpisane APK z automatycznym numerem wersji.
-   Sprawdzamy tożsamość, podpis i odcisk, wykonujemy testy JVM i Android Lint.
-   Frontend Androida trafia do `dist-android`, więc sprawdzony ZIP strony WWW się nie zmienia.
-2. Skrypt sprawdza zawartość ZIP-a, commit checkoutu i SHA-256. Przed zmianami
-   pobiera aktualne metadane Androida oraz sprawdza SHA-256 opublikowanego APK,
-   jeśli istnieje. Nieprawidłowe lub niedostępne wydanie przerywa deploy.
-   Starsza wersja API bez obsługi pobierania Androida może zwracać HTTP 200 z HTML
-   zamiast 404. Wyłącznie przed aktualizacją dopuszczamy taką odpowiedź, jeśli jest
-   identyczna ze stroną główną i zawiera element aplikacji `root`. Preflight SSH
-   musi dodatkowo potwierdzić brak `RODZINA_ANDROID_DOWNLOAD_DIR` w konfiguracji.
-   Po aktualizacji wymagamy HTTP 404 przy braku wydania; HTML nadal jest błędem.
-   Nie trzeba zmieniać konfiguracji vh.pl ani ręcznie wgrywać endpointu.
-3. Preflight przez SSH sprawdza istniejącą instalację i konfigurację. Powstaje
-   prywatny staging obok aplikacji oraz `.rodzina-deploy-lock` (dla katalogu
-   aplikacji `rodzina`). ZIP trafia przez SCP do stagingu; serwer porównuje SHA-256
-   i rozpakowuje paczkę. Błąd transferu nie zmienia plików aplikacji.
-   Osobno przesyłamy APK do tego samego prywatnego stagingu; jego suma, rozmiar,
-   wersja i zgodność certyfikatu z poprzednią publikacją są sprawdzane przed backupem.
-4. Walidacja ZIP lokalnie i po rozpakowaniu na serwerze wymaga produkcyjnego
-   lockfile zgodnego z manifestem. Właściwy npm CLI używanej wersji Node instaluje
-   zależności produkcyjne przez `npm ci --omit=dev --ignore-scripts --no-audit --no-fund`
-   w katalogu tymczasowym z jawnym `--prefix`, z pominięciem wrappera cPanel.
-   Sprawdzamy, czy `node_modules` jest rzeczywistym katalogiem tej paczki, oraz czy
-   SQLite, Argon2 i prebuild-install są rozwiązywane z niego, bez użycia produkcyjnych
-   zależności. Etap `dependencies-check` powtarza kontrolę przed backupem i podmianą.
-   Dla `better-sqlite3` uruchamiamy wyłącznie pobranie gotowego modułu przez
-   `prebuild-install`, bez awaryjnego `node-gyp`. Sprawdzamy otwarcie bazy w pamięci
-   oraz dostępność Argon2. Brak gotowej binarki przerywa wdrożenie przed podmianą.
-   Hosting potrzebuje dostępu do npm i serwera gotowych binariów. Nie buduje API,
-   frontendu ani nowych bibliotek runtime ze źródeł.
-5. Z dotychczasowego katalogu aplikacji uruchamiany jest istniejący job:
-   `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/backup-db.js`. Używa produkcyjnej
-   konfiguracji i rotacji 14 kopii. Błąd backupu przerywa deploy przed podmianą.
-   Następnie etap `migration` uruchamia z rozpakowanej **nowej** paczki
-   `DEPLOY_NODE --env-file=DEPLOY_ENV_FILE dist/jobs/migrate-db.js`, z jej migracjami
-   i zależnościami produkcyjnymi. Nie wymaga `drizzle-kit`. Blokada deployu obejmuje
-   backup i migrację. Błąd migracji przerywa deploy przed promocją i restartem.
-   Nie nadpisujemy bazy paczką ani nie cofamy jej automatycznie.
-6. W prywatnym katalogu obok aplikacji, np. `rodzina-deploy-history`, zachowujemy
-   `<UUID>-previous.tar.gz` (poprzednie `server.cjs`, `package.json`, `package-lock.json`,
-   jeśli istniał, oraz `dist`, `public`, `drizzle`), `<UUID>-release.zip` oraz
-   `<UUID>.json` z commitem, sumą i polem `previousHasLockfile`. Pierwsza aktualizacja
-   starszej instalacji bez lockfile pozostaje obsługiwana. Historia
-   nie zawiera `.env`, bazy ani kluczy. Nie jest dostępna przez HTTP; administrator
-   okresowo usuwa starsze paczki po ocenie okresu potrzebnego do odzyskiwania.
-7. Kopiowane są przygotowane zależności do docelowego `node_modules`, następnie
-   wyłącznie sześć zarządzanych ścieżek, w tym parę manifest–lockfile. Nie usuwamy szeroko zawartości aplikacji;
-   stare assety pozostają dla wcześniej otwartych kart. Zachowane są `.env`, baza/WAL/SHM,
-   logi, backupy, `.htaccess`, konfiguracja cPanel, crony i trwałe pliki Androida.
-   Zapis `tmp/restart.txt` restartuje Passengera. Produkcyjne API tylko sprawdza,
-   czy wszystkie migracje z `drizzle/meta/_journal.json` mają zapis w bazie.
-   Przy brakach kończy proces z komunikatem wskazującym job migracji.
-   Przy pierwszej publikacji przed restartem tworzymy trwały katalog APK i atomowo
-   ustawiamy jego ścieżkę w `.env`, zachowując pozostałą konfigurację i uprawnienia pliku.
-8. Maksymalnie sześć prób (odstęp 5 s, limit żądania 20 s) sprawdza HTTPS:
-   health JSON z `ok=true`, `dbOk=true`, HTML strony, 401 `/api/auth/me` bez sesji
-   oraz niezmienione metadane i sumę APK. Błąd kończy workflow na czerwono.
-   Staging i blokada są sprzątane także po błędzie; historia i backup pozostają.
-9. Dopiero po udanych kontrolach serwera kopiujemy nowe APK pod tymczasową nazwą
-   w katalogu pobierania i ponownie sprawdzamy SHA-256. Plik z niezmiennym adresem
-   zawierającym wersję zostaje zatwierdzony przez rename. Odcisk certyfikatu jest
-   zachowany w katalogu do kontroli następnych wydań. Na końcu atomowo podmieniamy
-   `latest.json`, zachowując stare APK. Ponownie sprawdzamy przez HTTPS metadane
-   i sumę pobranego nowego APK. Podsumowanie zawiera także numer i SHA-256 APK.
-   Błąd po publikacji zgłasza nieudany deploy; nie cofa automatycznie API ani bazy.
+1. Workflow wykonuje pełne kontrole API/WWW, smoke, podpisane APK, testy JVM
+   i Android Lint. Weryfikuje commit, sumy paczek i zgodność poprzedniego APK.
+2. SSH sprawdza instalację i blokadę .rodzina-deploy-lock. Prywatny staging
+   obok aplikacji służy przygotowaniu paczki i zależności, nie jest drugim środowiskiem.
+3. Dotychczasowy job tworzy backup. Job nowej paczki wykonuje migracje.
+   Historia rodzina-deploy-history zachowuje previous.tar.gz, release.zip
+   i metadane transakcji; bez .env i bazy. Administrator rotuje historię ręcznie.
+4. Skrypt kopiuje przygotowane zależności i zarządzane pliki aplikacji,
+   zachowuje konfigurację, bazę, APK i dowiązanie node_modules cPanel.
+   Restart przez tmp/restart.txt. Podmiana jest sekwencyjna: wybierz mały ruch
+   i nie przerywaj kopiowania. Równoległe wdrożenia czekają na blokadę.
+5. HTTPS sprawdza health JSON (ok i dbOk), stronę HTML, 401 auth/me bez sesji
+   oraz stare metadane/sumę APK. Dopiero potem publikuje nowe APK pod niezmienną
+   nazwą z wersją, a na końcu atomowo latest.json. Ponownie sprawdza pobranie.
+6. Podsumowanie podaje commit, sumy i wynik. Zielone CI nie zastępuje udanego
+   Deploy; sam restart lub działająca strona nie potwierdza całej aktualizacji.
 
-Podmiana jest sekwencyjna, bez gwarancji zerowej przerwy. Wybieraj czas małego
-ruchu. Nie przerywaj joba w trakcie kopiowania. Zwykły cron nadal używa istniejącego
-`.env` i harmonogramu. Pierwsze ustawienie katalogu Androida opisano powyżej.
-Publikacja nowego APK jest częścią każdego Deploy; aktualizacja na telefonie
-nadal wymaga zgody instalatora Androida.
+## Lokalne podpisywanie i publikacja APK
+
+Zachowaj pl.preficze.rodzina, istniejący keystore i jego niezależną zaszyfrowaną
+kopię wraz z aliasem i hasłami. Utrata klucza uniemożliwia aktualizację.
+Odcisk sprawdzisz interaktywnie: keytool -list -v -keystore <plik>.
+JDK 21 i SDK 36; konfiguracja budowania w .env.android.example.
+
+Najprościej: npm run android:release:interactive w terminalu bez przekierowań.
+Domyślny klucz: ~/rodzina-signing/rodzina-release.jks, alias rodzina.
+Inną ścieżkę/alias wskaż przez RODZINA_ANDROID_KEYSTORE i
+RODZINA_ANDROID_KEY_ALIAS. Nie generuj nowego klucza dla istniejącej aplikacji.
+Automatyzacja używa także RODZINA_ANDROID_STORE_PASSWORD i
+RODZINA_ANDROID_KEY_PASSWORD tylko w środowisku procesu. android:check-signing
+sprawdza je przed budową; po użyciu usuń hasła z sesji. Nie loguj środowiska.
+
+1. Dla ręcznego wydania zwiększ versionCode (maks. 2100000000) i versionName
+   w android/version.properties. Zbuduj npm run android:release.
+2. Wynik w android-releases/<kod>-<wersja>: APK, latest.json i publiczny odcisk.
+   android:package pakuje już zbudowane APK. Podpis i tożsamość są sprawdzane.
+3. Wykonaj odbiór fizycznego telefonu z [DEVELOPMENT.md](DEVELOPMENT.md),
+   również aktualizację wcześniejszego release bez czyszczenia danych.
+4. Opublikuj najpierw zgodne API. Wgraj APK tymczasowo do DOWNLOAD_DIR,
+   sprawdź SHA-256 i zmień nazwę na docelową. Dopiero potem atomowo podmień
+   latest.json. Nigdy nie zastępuj opublikowanego pliku inną zawartością.
+5. Sprawdź /downloads/android/latest.json (JSON, no-store), APK (właściwy
+   MIME, attachment, nosniff, immutable) i SHA-256. Hosting nie może zwracać
+   HTML SPA zamiast brakującego APK. Cofnięcie metadanych nie instaluje downgrade'u.
+
+App Links: /.well-known/assetlinks.json musi zwracać 200 JSON bez logowania
+i przekierowań, z pl.preficze.rodzina i odciskiem podpisu zainstalowanego APK.
+Trasy: /zaproszenie/ i /reset-hasla/. HTTP 200 nie dowodzi weryfikacji Androida;
+sprawdź ją na telefonie. Brak APK pozostawia działające trasy WWW.
+
+## Zgodność urządzeń
+
+API zachowuje poprzednią wspieraną wersję APK. ZIP nie aktualizuje telefonu.
+Aktualizacja APK zachowuje dane i podpis. Obecna pamięć urządzenia używa IDB v3:
+nie cofaj klienta do starszego silnika, nie czyść niewysłanych zmian i nie
+odinstalowuj aplikacji w celu naprawy migracji. Import po zamknięciu starszych
+instancji; przerwany import wznawia się. Backup serwera nie zawiera kolejki
+telefonu. Rollback wymaga klienta zgodnego z jej formatem i obu modułów zapisu.
 
 ### Awaria i bezpieczne odzyskiwanie
 
@@ -760,19 +267,13 @@ nadal wymaga zgody instalatora Androida.
   `transaction.json`, sprawdź pełną ścieżkę stagingu i dopiero wtedy usuń wyłącznie
   wskazany staging i blokadę. Nie usuwaj historii ani bazy, aby odblokować deploy.
 
-## Procedury przejściowe i kontrole po aktualizacji
+## Starsze instalacje WWW
 
-[Wycofanie PWA i serwerowego Web Push, kontrola po 4.10 oraz powrót
-do paczki sprzed migracji 0013](archive/deploy-historia.md) pozostają dostępne
-dla aktualizacji starszych instalacji i odzyskiwania.
-Pełna lista zaległych prób telefonu jest w
-[DEVELOPMENT.md](DEVELOPMENT.md) i [historii testów](archive/development-historia.md).
-
-### Migracje lokalnie i przy starcie produkcyjnym
-
-Przy `NODE_ENV !== 'production'` (w tym `npm run dev`) API nadal automatycznie
-uruchamia migracje, aby zachować dotychczasową wygodę pracy lokalnej.
-Produkcja nie zmienia schematu przy starcie, także gdy Passenger uruchamia wiele
-procesów. Jawny job zamyka połączenie po sukcesie lub błędzie i zwraca kod 1
-przy niepowodzeniu. Lokalny `npm start` również wymaga wcześniejszego uruchomienia
-`node --env-file=apps/api/.env apps/api/dist/jobs/migrate-db.js` po buildzie.
+Przed aktualizacją instalacji z Web Push usuń dawny cron send-reminders
+i poczekaj na zakończenie joba; wykonaj i zachowaj kopię sprzed migracji 0013.
+Nie dodawaj crona przypomnień ani VAPID. W kolejnych wydaniach zachowujemy
+przejściowy /sw.js z no-store oraz manifest.webmanifest zwracający 410,
+również po deployu nakładkowym. Worker wyrejestrowuje dawną instalację
+i usuwa wyłącznie jej precache; nie czyści sesji i danych użytkownika.
+Powrót przed usunięcie tabel Web Push wymaga zgodnej paczki i osobno
+zatwierdzonego odtworzenia kopii przy zatrzymanych zapisach i jobach.
