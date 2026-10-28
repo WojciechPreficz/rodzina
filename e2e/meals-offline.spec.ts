@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
+import { readOfflineSnapshot } from './offlineDatabase.js';
 
 for (const native of [false, true]) {
   test(`meal edits, frozen exports and purchases survive offline restart via ${native ? 'Android transport' : 'WWW'}`, async ({
@@ -14,7 +15,7 @@ for (const native of [false, true]) {
       data: {
         familyName: 'Obiady offline',
         displayName: 'Ania',
-        email: `meals-offline-${native}-${info.project.name}@example.com`,
+        email: `meals-offline-${native}-${info.project.name}-${info.repeatEachIndex}@example.com`,
         password: 'password123',
       },
     });
@@ -75,6 +76,29 @@ for (const native of [false, true]) {
     if (native) await installNativeTransport(page);
     await page.goto(`/zakupy?lista=${listId}`);
     await expect(page.getByText('500 g', { exact: true })).toBeVisible();
+    // Rendering precedes asynchronous persistence. A full navigation can stop
+    // that write, leaving the export without its required offline shopping data.
+    await expect
+      .poll(
+        async () => {
+          const saved = await readOfflineSnapshot<{
+            queries: { queryKey: unknown[]; state: { data: { id?: string; quantity?: string }[] } }[];
+          }>(page, 'shopping');
+          return {
+            list: saved?.queries.some(
+              (query) => query.queryKey[3] === 'lists' && query.state.data.some((list) => list.id === listId),
+            ),
+            items: saved?.queries.some(
+              (query) =>
+                query.queryKey[3] === 'items' &&
+                query.queryKey[4] === listId &&
+                query.state.data.some((item) => item.quantity === '500 g'),
+            ),
+          };
+        },
+        { message: 'Shopping list and items must be persisted before leaving the page' },
+      )
+      .toEqual({ list: true, items: true });
     await page.goto('/obiady');
     await expect(page.getByRole('heading', { name: 'Zupa testowa', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Następny tydzień' }).click();
@@ -116,6 +140,9 @@ for (const native of [false, true]) {
     await page.getByRole('button', { name: 'Dodaj składniki do listy zakupów', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Lista zakupów' }).click();
     await page.getByRole('option', { name: listName, exact: true }).click();
+    await expect(dialog.getByRole('checkbox', { name: /Zupa testowa/ })).toBeChecked();
+    await expect(dialog.getByRole('checkbox', { name: /Makaron offline/ })).toBeChecked();
+    await expect(dialog.getByRole('button', { name: 'Dodaj składniki', exact: true })).toBeEnabled();
     await dialog.getByRole('button', { name: 'Dodaj składniki', exact: true }).click();
     await expect(dialog.getByText(/Eksport zapisany na urządzeniu/)).toBeVisible();
     await dialog.getByRole('button', { name: 'Gotowe' }).click();
