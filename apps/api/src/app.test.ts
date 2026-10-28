@@ -152,7 +152,7 @@ describe('auth API', () => {
         payload: { email: 'tester@example.com', password: 'wrong-password' },
       });
       if (i < 10) {
-        expect(response.statusCode).toBe(401);
+        expect(response.statusCode).toBe(403);
       } else {
         expect(response.statusCode).toBe(429);
         expect(response.json().error.code).toBe('RATE_LIMITED');

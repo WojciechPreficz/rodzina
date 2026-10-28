@@ -49,10 +49,36 @@ describe('authentication regressions', () => {
     database.sqlite.close();
   });
 
+  it('distinguishes invalid login credentials from missing sessions', async () => {
+    const child = await post('/api/members/child', { displayName: 'Child', pin: '1234' }, cookie);
+    const attempts = [
+      { url: '/api/auth/login', payload: { email: registerBody.email, password: 'incorrect123' } },
+      { url: '/api/auth/login', payload: { email: 'missing@example.com', password: 'incorrect123' } },
+      {
+        url: '/api/auth/login-child',
+        payload: { joinCode: admin.family.joinCode, userId: child.json().member.id, pin: '9999' },
+      },
+      {
+        url: '/api/auth/login-child',
+        payload: { joinCode: admin.family.joinCode, userId: admin.user.id, pin: '1234' },
+      },
+    ];
+    for (const { url, payload } of attempts) {
+      const response = await post(url, payload, cookie);
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.code).toBe('INVALID_CREDENTIALS');
+      expect(response.headers['set-cookie']).toBeUndefined();
+      expect((await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } })).statusCode).toBe(200);
+    }
+    const anonymous = await app.inject({ method: 'GET', url: '/api/auth/me' });
+    expect(anonymous.statusCode).toBe(401);
+    expect(anonymous.json().error.code).toBe('UNAUTHORIZED');
+  });
+
   it('blocks the eleventh incorrect PIN and invalidates the old family code', async () => {
     const child = await post('/api/members/child', { displayName: 'Child', pin: '1234' }, cookie);
     const credentials = { joinCode: admin.family.joinCode, userId: child.json().member.id, pin: '9999' };
-    for (let i = 0; i < 10; i++) expect((await post('/api/auth/login-child', credentials)).statusCode).toBe(401);
+    for (let i = 0; i < 10; i++) expect((await post('/api/auth/login-child', credentials)).statusCode).toBe(403);
     expect((await post('/api/auth/login-child', credentials)).statusCode).toBe(429);
     expect((await post('/api/auth/login-child', { ...credentials, pin: '1234' })).statusCode).toBe(429);
     const rotation = await post('/api/family/join-code/rotate', undefined, cookie);

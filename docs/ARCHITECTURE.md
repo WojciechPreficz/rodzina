@@ -69,6 +69,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   changeOrigin=false. Cookie sid: HttpOnly, SameSite=Lax, Secure w produkcji.
 - trustProxy=true wymaga zaufanego proxy nadpisującego X-Forwarded-*.
   Konfiguracja hostingu wymaga potwierdzenia; patrz DEPLOY.
+- Błędny e-mail, hasło lub PIN zwraca 403 `INVALID_CREDENTIALS`, bez sygnału
+  utraty sesji. Brak lub wygaśnięcie sesji zwraca 401 `UNAUTHORIZED`
+  i uruchamia czyszczenie danych konta.
 - Limity logowania: 10 prób/15 minut dla IP–konto, osobno hasło i PIN,
   trwałe w SQLite. Poprawne logowanie usuwa własny licznik.
 - Operacje zakupów i zadań zachowują identyfikatory przy ponowieniu.

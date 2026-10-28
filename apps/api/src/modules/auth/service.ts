@@ -67,12 +67,12 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
 
     const user = repository.findUserByEmail(normalizedEmail);
     if (!user || !user.passwordHash) {
-      throw new ApiError(401, 'UNAUTHORIZED', 'Nieprawidłowy e-mail lub hasło.');
+      throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy e-mail lub hasło.');
     }
 
     const isValid = await verifyPassword(user.passwordHash, password);
     if (!isValid) {
-      throw new ApiError(401, 'UNAUTHORIZED', 'Nieprawidłowy e-mail lub hasło.');
+      throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy e-mail lub hasło.');
     }
 
     rateLimits.clear(loginKey);
@@ -116,7 +116,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     const user = repository.findChild(family.id, userId);
 
     if (!user || !user.pinHash) {
-      throw new ApiError(401, 'UNAUTHORIZED', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
+      throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
     }
 
     const loginKey = createLoginRateLimitKey('child', ip, family.id, userId);
@@ -124,7 +124,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
 
     const isValid = await verifyPin(user.pinHash, pin);
     if (!isValid) {
-      throw new ApiError(401, 'UNAUTHORIZED', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
+      throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
     }
 
     rateLimits.clear(loginKey);

@@ -69,7 +69,9 @@ describe('joining and child authentication', () => {
       if (url.startsWith('/api/auth/family-members'))
         return response({ members: [{ id: 'c1', displayName: 'Zosia', color: '#7BC6B9' }] });
       if (url === '/api/auth/login-child')
-        return ++attempts === 1 ? response({ error: { message: 'Błędny PIN.' } }, 401) : response(session);
+        return ++attempts === 1
+          ? response({ error: { code: 'INVALID_CREDENTIALS', message: 'Błędny PIN.' } }, 403)
+          : response(session);
       return response({ error: { message: 'Brak sesji.' } }, 401);
     });
     vi.stubGlobal('fetch', fetchMock);

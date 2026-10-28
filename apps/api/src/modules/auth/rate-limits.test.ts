@@ -57,7 +57,7 @@ describe('persistent login limits', { timeout: 20000 }, () => {
   });
 
   it.each(['password', 'child'] as const)('keeps the %s limit after reopening the database', async (kind) => {
-    for (let i = 0; i < 10; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(401);
+    for (let i = 0; i < 10; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(403);
     await app.close();
     database.sqlite.close();
     database = createDatabase(config);
@@ -71,23 +71,23 @@ describe('persistent login limits', { timeout: 20000 }, () => {
   });
 
   it.each(['password', 'child'] as const)('clears the %s counter after a successful login', async (kind) => {
-    for (let i = 0; i < 9; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(401);
+    for (let i = 0; i < 9; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(403);
     const success = await post(url(kind), credentials(kind, true));
     expect(success.statusCode).toBe(200);
     expect(success.headers['set-cookie']).toBeDefined();
     expect(database.db.select().from(authRateLimits).all()).toEqual([]);
-    expect((await post(url(kind), credentials(kind))).statusCode).toBe(401);
+    expect((await post(url(kind), credentials(kind))).statusCode).toBe(403);
     expect(database.db.select().from(authRateLimits).get()?.count).toBe(1);
   });
 
   it.each(['password', 'child'] as const)('expires the %s limit at the exact boundary without cron', async (kind) => {
     const now = Date.now();
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
-    for (let i = 0; i < 10; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(401);
+    for (let i = 0; i < 10; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(403);
     clock.mockReturnValue(now + LOGIN_RATE_WINDOW_MS - 1);
     expect((await post(url(kind), credentials(kind))).statusCode).toBe(429);
     clock.mockReturnValue(now + LOGIN_RATE_WINDOW_MS);
-    expect((await post(url(kind), credentials(kind))).statusCode).toBe(401);
+    expect((await post(url(kind), credentials(kind))).statusCode).toBe(403);
     expect(database.db.select().from(authRateLimits).get()).toMatchObject({
       count: 1,
       expiresAt: now + 2 * LOGIN_RATE_WINDOW_MS,
@@ -98,15 +98,15 @@ describe('persistent login limits', { timeout: 20000 }, () => {
   it('normalizes emails and separates IPs, accounts and child scopes without storing raw identities', async () => {
     for (let i = 0; i < 10; i++) {
       expect((await post(url('password'), { email: ' ADMIN@EXAMPLE.COM ', password: 'incorrect123' })).statusCode).toBe(
-        401,
+        403,
       );
     }
     expect((await post(url('password'), credentials('password', true))).statusCode).toBe(429);
-    expect((await post(url('password'), credentials('password'), '192.0.2.2')).statusCode).toBe(401);
+    expect((await post(url('password'), credentials('password'), '192.0.2.2')).statusCode).toBe(403);
     expect((await post(url('password'), { email: 'other@example.com', password: 'incorrect123' })).statusCode).toBe(
-      401,
+      403,
     );
-    expect((await post(url('child'), credentials('child'))).statusCode).toBe(401);
+    expect((await post(url('child'), credentials('child'))).statusCode).toBe(403);
     const keys = database.db
       .select()
       .from(authRateLimits)
@@ -131,7 +131,7 @@ describe('persistent login limits', { timeout: 20000 }, () => {
           }),
         ),
       );
-      expect(responses.filter((response) => response.statusCode === 401)).toHaveLength(10);
+      expect(responses.filter((response) => response.statusCode === 403)).toHaveLength(10);
       expect(responses.filter((response) => response.statusCode === 429)).toHaveLength(10);
       expect(database.db.select().from(authRateLimits).get()?.count).toBe(10);
       expect(secondDatabase.db.select().from(authRateLimits).get()?.count).toBe(10);
@@ -150,9 +150,9 @@ describe('persistent login limits', { timeout: 20000 }, () => {
         remoteAddress: '127.0.0.1',
         headers: { ...headers, 'x-forwarded-for': forwarded },
       });
-    for (let i = 0; i < 10; i++) expect((await request('192.0.2.1, 192.0.2.100')).statusCode).toBe(401);
+    for (let i = 0; i < 10; i++) expect((await request('192.0.2.1, 192.0.2.100')).statusCode).toBe(403);
     expect((await request('192.0.2.1, 192.0.2.100')).statusCode).toBe(429);
-    expect((await request('192.0.2.2, 192.0.2.100')).statusCode).toBe(401);
+    expect((await request('192.0.2.2, 192.0.2.100')).statusCode).toBe(403);
   });
 
   it.each(['password', 'child'] as const)(
@@ -165,7 +165,7 @@ describe('persistent login limits', { timeout: 20000 }, () => {
           expect(database.db.select().from(authRateLimits).get()?.count).toBe(verify.mock.calls.length);
           return false;
         });
-      for (let i = 0; i < 10; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(401);
+      for (let i = 0; i < 10; i++) expect((await post(url(kind), credentials(kind))).statusCode).toBe(403);
       expect((await post(url(kind), credentials(kind))).statusCode).toBe(429);
       expect(verify).toHaveBeenCalledTimes(10);
     },

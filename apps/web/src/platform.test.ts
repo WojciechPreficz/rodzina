@@ -9,7 +9,8 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => ({ request, clearSession }),
 }));
 import { apiFetch, ApiRequestError } from './api.js';
-import { clearNativeSession, invalidateSessionRequests } from './platform.js';
+import { localScheduler } from './features/notifications/localSchedule.js';
+import { clearNativeSession, getSessionGeneration, invalidateSessionRequests } from './platform.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined) },
 }));
@@ -62,6 +63,34 @@ describe('Android API transport', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     await clearNativeSession();
     expect(clearSession).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['web', '/api/auth/login'],
+    ['web', '/api/auth/login-child'],
+    ['android', '/api/auth/login'],
+    ['android', '/api/auth/login-child'],
+  ])('preserves request generation on invalid credentials in %s at %s', async (platform, path) => {
+    getPlatform.mockReturnValue(platform);
+    const body = JSON.stringify({ error: { code: 'INVALID_CREDENTIALS', message: 'Nieprawidłowe dane logowania.' } });
+    if (platform === 'android') request.mockResolvedValueOnce({ status: 403, body });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(body, { status: 403 })));
+    const listener = vi.fn();
+    const generation = getSessionGeneration();
+    window.addEventListener('rodzina:session-lost', listener);
+    try {
+      await expect(apiFetch(path, { method: 'POST', body: '{}' })).rejects.toMatchObject({
+        status: 403,
+        code: 'INVALID_CREDENTIALS',
+      });
+      expect(getSessionGeneration()).toBe(generation);
+      expect(listener).not.toHaveBeenCalled();
+      expect(clearSession).not.toHaveBeenCalled();
+      // Android clears alarms before starting login; the failure must not clear them again.
+      expect(localScheduler.clear).toHaveBeenCalledTimes(platform === 'android' ? 1 : 0);
+    } finally {
+      window.removeEventListener('rodzina:session-lost', listener);
+    }
   });
 
   it('signals loss of session only for 401, preserving the session on network errors and forbidden edits', async () => {
