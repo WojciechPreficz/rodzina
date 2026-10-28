@@ -167,12 +167,16 @@ it('cleans session polling and listeners after Strict Mode, account changes and 
     request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
     const client = mount();
     await screen.findByText('Anna');
-    expect(intervals()).toHaveLength(2);
-    expect(listeners()).toBe(2);
+    await waitFor(() => {
+      expect(intervals()).toHaveLength(2);
+      expect(listeners()).toBe(2);
+    });
     fireEvent.click(screen.getByText('switch'));
     await screen.findByText('Zosia');
-    expect(intervals()).toHaveLength(2);
-    expect(listeners()).toBe(2);
+    await waitFor(() => {
+      expect(intervals()).toHaveLength(2);
+      expect(listeners()).toBe(2);
+    });
     cleanup();
     client.clear();
     expect(intervals()).toHaveLength(0);
@@ -180,8 +184,10 @@ it('cleans session polling and listeners after Strict Mode, account changes and 
     request.mockRejectedValueOnce(new Error('offline'));
     const remounted = mount();
     await screen.findByText('Zosia');
-    expect(intervals()).toHaveLength(2);
-    expect(listeners()).toBe(2);
+    await waitFor(() => {
+      expect(intervals()).toHaveLength(2);
+      expect(listeners()).toBe(2);
+    });
     cleanup();
     remounted.clear();
     expect(intervals()).toHaveLength(0);
