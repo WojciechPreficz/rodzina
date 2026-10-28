@@ -82,7 +82,11 @@ async function seedAccount(client: QueryClient) {
       ok: true,
       text: async () =>
         JSON.stringify(
-          path === '/api/auth/me' ? session : path === '/api/tasks/lists' ? { lists: [list] } : { tasks: [] },
+          path === '/api/auth/me'
+            ? session
+            : path === '/api/tasks/snapshot'
+              ? { ok: true, lists: [list], items: { [list.id]: [] } }
+              : { tasks: [] },
         ),
     })),
   );

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { and, asc, eq, ne } from 'drizzle-orm';
+import { and, asc, eq, ne, inArray } from 'drizzle-orm';
 import {
   computeNextFireAt,
   type Reminder,
@@ -16,6 +16,36 @@ import { reminders } from '../../db/schema.js';
 
 export function createReminderRepository(database: DatabaseConnection) {
   const db = database.db;
+  function listMany(
+    familyId: string,
+    source: 'eventId' | 'taskId' | 'documentId',
+    ids: string[],
+    userId?: string,
+  ): Map<string, Reminder[]> {
+    const result = new Map<string, Reminder[]>();
+    for (let offset = 0; offset < ids.length; offset += 400) {
+      const rows = db
+        .select()
+        .from(reminders)
+        .where(
+          and(
+            eq(reminders.familyId, familyId),
+            inArray(reminders[source], ids.slice(offset, offset + 400)),
+            userId === undefined
+              ? ne(reminders.audience, 'user')
+              : and(eq(reminders.audience, 'user'), eq(reminders.userId, userId)),
+          ),
+        )
+        .orderBy(asc(reminders.id))
+        .all();
+      for (const row of rows) {
+        const id = row[source]!;
+        if (!result.has(id)) result.set(id, []);
+        result.get(id)!.push(row);
+      }
+    }
+    return result;
+  }
   function list(familyId: string, eventId: string, userId?: string): Reminder[] {
     return db
       .select()
@@ -255,6 +285,7 @@ export function createReminderRepository(database: DatabaseConnection) {
     }
   }
   return {
+    listMany,
     list,
     insert,
     saveEvent,

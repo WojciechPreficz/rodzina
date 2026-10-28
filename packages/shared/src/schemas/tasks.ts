@@ -74,3 +74,22 @@ export type Task = z.infer<typeof taskSchema>;
 export type CreateTask = z.infer<typeof createTaskSchema>;
 export type PatchTask = z.infer<typeof patchTaskSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
+
+// A complete replacement; missing lists or task groups must never clear a cache.
+export const taskSnapshotResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    lists: z.array(taskListSchema),
+    items: z.record(z.array(taskSchema)),
+  })
+  .superRefine((snapshot, ctx) => {
+    const ids = new Set(snapshot.lists.map((list) => list.id));
+    if (
+      ids.size !== snapshot.lists.length ||
+      Object.keys(snapshot.items).length !== ids.size ||
+      snapshot.lists.some((list) => !snapshot.items[list.id]) ||
+      Object.entries(snapshot.items).some(([id, tasks]) => !ids.has(id) || tasks.some((task) => task.listId !== id))
+    )
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Niekompletna odpowiedź zadań.' });
+  });
+export type TaskSnapshotResponse = z.infer<typeof taskSnapshotResponseSchema>;

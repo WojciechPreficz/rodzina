@@ -100,34 +100,67 @@ export function createEventRepository(database: DatabaseConnection) {
           .all()
           .map(({ event }) => event)
       : db.select().from(events).where(eq(events.familyId, familyId)).all();
+    return hydrate(familyId, rows);
+  }
+  function hydrate(familyId: string, rows: (typeof events.$inferSelect)[]): CalendarEvent[] {
+    const shared = reminderRepository.listMany(
+      familyId,
+      'eventId',
+      rows.map((event) => event.id),
+    );
+    const people = new Map<string, CalendarEvent['participants']>();
+    const overrides = new Map<string, CalendarEvent['exceptions']>();
+    for (let offset = 0; offset < rows.length; offset += 400) {
+      const ids = rows.slice(offset, offset + 400).map((event) => event.id);
+      const participants = db
+        .select({ eventId: events.id, id: users.id, displayName: users.displayName, color: users.color })
+        .from(eventParticipants)
+        .innerJoin(events, eq(events.id, eventParticipants.eventId))
+        .innerJoin(users, eq(users.id, eventParticipants.userId))
+        .where(and(eq(events.familyId, familyId), eq(users.familyId, familyId), inArray(events.id, ids)))
+        .orderBy(asc(users.createdAt), asc(users.id))
+        .all();
+      for (const { eventId, ...person } of participants) {
+        if (!people.has(eventId)) people.set(eventId, []);
+        people.get(eventId)!.push(person);
+      }
+      const exceptions = db
+        .select({ exception: eventExceptions })
+        .from(eventExceptions)
+        .innerJoin(events, eq(events.id, eventExceptions.eventId))
+        .where(and(eq(events.familyId, familyId), inArray(events.id, ids)))
+        .orderBy(asc(eventExceptions.originalDate))
+        .all();
+      for (const { exception } of exceptions) {
+        if (!overrides.has(exception.eventId)) overrides.set(exception.eventId, []);
+        overrides.get(exception.eventId)!.push(exception);
+      }
+    }
     return rows.map((event) => ({
       ...event,
-      participants: participants(familyId, event.id),
-      reminders: reminderRepository.list(familyId, event.id),
-      exceptions: exceptions(familyId, event.id),
+      participants: people.get(event.id) ?? [],
+      reminders: shared.get(event.id) ?? [],
+      exceptions: overrides.get(event.id) ?? [],
     }));
   }
   function upcomingDistant(familyId: string, today: string): CalendarEvent[] {
     // A month-precision deadline remains upcoming throughout that month.
-    return db
-      .select()
-      .from(events)
-      .where(
-        and(
-          eq(events.familyId, familyId),
-          eq(events.kind, 'distant'),
-          gte(events.startDate, `${today.slice(0, 7)}-01`),
-        ),
-      )
-      .orderBy(asc(events.startDate), asc(events.id))
-      .all()
-      .filter((event) => event.datePrecision === 'month' || event.startDate >= today)
-      .map((event) => ({
-        ...event,
-        participants: participants(familyId, event.id),
-        reminders: reminderRepository.list(familyId, event.id),
-        exceptions: exceptions(familyId, event.id),
-      }));
+    return hydrate(
+      familyId,
+      db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.familyId, familyId),
+            eq(events.kind, 'distant'),
+            gte(events.startDate, `${today.slice(0, 7)}-01`),
+          ),
+        )
+        .orderBy(asc(events.startDate), asc(events.id))
+        .all()
+        .filter((event) => event.datePrecision === 'month' || event.startDate >= today),
+    );
   }
   function timezone(familyId: string): string {
     return db.select({ timezone: families.timezone }).from(families).where(eq(families.id, familyId)).get()!.timezone;

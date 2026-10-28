@@ -1,4 +1,4 @@
-import { type PatchTask, type Task, type TaskList } from '@rodzina/shared';
+import { taskSnapshotResponseSchema, type TaskSnapshotResponse, type Task, type PatchTask } from '@rodzina/shared';
 import { readTaskData, updateTaskData, clearTaskData } from './taskStorage.js';
 import {
   ensureMigrated,
@@ -230,6 +230,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
     const captured = revision;
     const account = state.account;
     let alarmsChanged = false;
+    let sessionConfirmed = false;
     const work = async () => {
       emit({ ...state, syncing: true });
       try {
@@ -240,8 +241,13 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
           window.dispatchEvent(new Event('rodzina:session-lost'));
           return;
         }
+        sessionConfirmed = true;
         // Access is refreshed before replay, including retries with saved responses.
-        const { lists } = await transport<{ lists: TaskList[] }>('/api/tasks/lists');
+        const initialDiscards = await discards();
+        const initialItems = (await readTaskData(account))!.snapshot.items;
+        current(captured);
+        let snapshot = taskSnapshotResponseSchema.parse(await transport<TaskSnapshotResponse>('/api/tasks/snapshot'));
+        const { lists } = snapshot;
         current(captured);
         const allowed = new Set(lists.map((list) => list.id));
         for (const list of lists) hiddenLists.delete(list.id);
@@ -251,6 +257,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
         // Revoked content must leave the UI even if local storage has failed.
         emit({ ...state, lists, items, pending: state.pending.filter((op) => allowed.has(op.listId)) });
         const saved = await updateTaskData(account, (data) => {
+          current(captured);
           if (data.operations.some((op) => !allowed.has(op.listId))) data.rejection = revokedTaskText;
           data.snapshot.lists = lists;
           data.snapshot.items = Object.fromEntries(
@@ -261,6 +268,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
             Object.entries(data.discards).filter(([, entry]) => allowed.has(entry.listId)),
           );
         });
+        current(captured);
         emit({
           ...state,
           ...saved.snapshot,
@@ -296,68 +304,55 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
             window.dispatchEvent(new Event('rodzina:tasks-changed'));
           },
         );
+        const replaying = state.pending.length > 0;
         await sender.synchronize();
         current(captured);
-        for (const list of lists) {
-          try {
-            const awaitingRefresh = (await discards()).filter(
-              (entry) => entry.listId === list.id && entry.requiresRefresh,
-            );
-            const before = JSON.stringify((await readTaskData(account))!.snapshot.items[list.id]);
-            const result = await transport<{ tasks: Task[] }>(
-              `/api/tasks/lists/${encodeURIComponent(list.id)}/tasks?status=all`,
-            );
-            current(captured);
-            const next = {
-              account,
-              lists: state.lists,
-              items: { ...state.items, [list.id]: result.tasks },
-              syncedAt: Date.now(),
-            };
-            const saved = await updateTaskData(account, (data) => {
-              // An overlapping response must not replace a newer reconciliation or revocation.
-              if (
-                !data.snapshot.lists?.some((entry) => entry.id === list.id) ||
-                JSON.stringify(data.snapshot.items[list.id]) !== before
-              )
-                return;
-              data.snapshot.items[list.id] = result.tasks;
-              data.snapshot.syncedAt = next.syncedAt;
-              for (const { key } of awaitingRefresh)
-                if (data.discards[key]) data.discards[key]!.requiresRefresh = false;
-            });
-            emit({ ...state, ...saved.snapshot, pending: saved.operations });
-          } catch (error) {
-            current(captured);
-            if (error instanceof ApiRequestError && [403, 404].includes(error.status)) {
-              hiddenLists.add(list.id);
-              const nextItems = { ...state.items };
-              delete nextItems[list.id];
-              const next = { account, lists: state.lists?.filter((entry) => entry.id !== list.id), items: nextItems };
-
-              emit({
-                ...state,
-                ...next,
-                pending: state.pending.filter((op) => op.listId !== list.id),
-                error: 'Utracono dostęp do listy zadań.',
-              });
-              await updateTaskData(account, (data) => {
-                data.snapshot = next;
-                data.operations = data.operations.filter((op) => op.listId !== list.id);
-                data.discards = Object.fromEntries(
-                  Object.entries(data.discards).filter(([, entry]) => entry.listId !== list.id),
-                );
-                data.rejection = revokedTaskText;
-              });
-            } else throw error;
-          }
+        const awaitingRefresh = replaying ? await discards() : initialDiscards;
+        const before = JSON.stringify(
+          replaying
+            ? (await readTaskData(account))!.snapshot.items
+            : Object.fromEntries(Object.entries(initialItems).filter(([id]) => allowed.has(id))),
+        );
+        current(captured);
+        if (replaying) {
+          snapshot = taskSnapshotResponseSchema.parse(await transport<TaskSnapshotResponse>('/api/tasks/snapshot'));
+          current(captured);
         }
+        const visible = new Set(snapshot.lists.map((list) => list.id));
+        for (const list of snapshot.lists) hiddenLists.delete(list.id);
+        for (const id of Object.keys(state.items)) if (!visible.has(id)) hiddenLists.add(id);
+        // Revocation takes effect even if the following durable write fails.
+        emit({
+          ...state,
+          lists: snapshot.lists,
+          items: Object.fromEntries(Object.entries(state.items).filter(([id]) => visible.has(id))),
+        });
+        // Replace the complete cache atomically, never a partial list response.
+        const savedSnapshot = await updateTaskData(account, (data) => {
+          current(captured);
+          if (JSON.stringify(data.snapshot.items) !== before) return;
+          data.snapshot = { account, lists: snapshot.lists, items: snapshot.items, syncedAt: Date.now() };
+          const allowed = new Set(snapshot.lists.map((list) => list.id));
+          if (data.operations.some((op) => !allowed.has(op.listId))) data.rejection = revokedTaskText;
+          data.operations = data.operations.filter((op) => allowed.has(op.listId));
+          data.discards = Object.fromEntries(
+            Object.entries(data.discards).filter(([, entry]) => allowed.has(entry.listId)),
+          );
+          for (const { key } of awaitingRefresh) if (data.discards[key]) data.discards[key]!.requiresRefresh = false;
+        });
+        current(captured);
+        emit({
+          ...state,
+          ...savedSnapshot.snapshot,
+          pending: savedSnapshot.operations,
+          error: savedSnapshot.rejection ?? state.error,
+        });
       } catch (error) {
         if (captured === revision && isAccountCurrent(sessionToken)) {
           if (error instanceof ApiRequestError && [401, 403].includes(error.status)) {
             await clear();
             window.dispatchEvent(new Event('rodzina:session-lost'));
-          } else if (error instanceof ApiRequestError && error.status === 404) {
+          } else if (!sessionConfirmed && error instanceof ApiRequestError && error.status === 404) {
             const next = { account, lists: [], items: {} };
             emit({ ...state, ...next, error: errorText(error) });
             try {

@@ -100,6 +100,25 @@ describe('task lists API', () => {
       .run();
     return id;
   }
+  it('returns only accessible complete lists in snapshots and removes revoked shares', async () => {
+    const shared = await create([member.id]);
+    const privateList = await create();
+    const foreign = await create([], outsider);
+    const sharedTask = task(shared.id);
+    task(privateList.id);
+    task(foreign.id, outsider.id);
+    const snapshot = (await request('GET', '/api/tasks/snapshot', undefined, member)).json();
+    expect(snapshot.lists.some((list: TaskList) => list.id === shared.id)).toBe(true);
+    expect(Object.values(snapshot.items).flat()).toEqual([expect.objectContaining({ id: sharedTask })]);
+    expect(snapshot.items[privateList.id]).toBeUndefined();
+    expect(snapshot.items[foreign.id]).toBeUndefined();
+    await request('PATCH', base + '/' + shared.id, { memberIds: [] });
+    const revoked = await request('GET', '/api/tasks/snapshot', undefined, member);
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.headers['cache-control']).toBe('no-store');
+    expect(revoked.json().items[shared.id]).toBeUndefined();
+    expect((await app.inject({ method: 'GET', url: '/api/tasks/snapshot' })).statusCode).toBe(401);
+  });
   beforeEach(async () => {
     database = createDatabase(loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' }));
     migrate(database.db, { migrationsFolder });

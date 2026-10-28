@@ -82,6 +82,57 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .all()
       .map(serialize);
   }
+  function snapshot(familyId: string, actorId: string) {
+    return db.transaction(() => {
+      const rows = db
+        .select()
+        .from(taskLists)
+        .where(accessFilter(familyId, actorId))
+        .orderBy(
+          sql`CASE WHEN ${taskLists.ownerId} = ${actorId} AND ${taskLists.isDefault} = 1 THEN 0 ELSE 1 END`,
+          asc(taskLists.position),
+          asc(taskLists.createdAt),
+          asc(taskLists.id),
+        )
+        .all();
+      const taskRows = db
+        .select({ task: tasks })
+        .from(tasks)
+        .innerJoin(taskLists, eq(tasks.listId, taskLists.id))
+        .where(accessFilter(familyId, actorId))
+        .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+        .all()
+        .map((row) => row.task);
+      const memberRows = db
+        .select({ listId: taskListMembers.listId, userId: users.id })
+        .from(taskListMembers)
+        .innerJoin(taskLists, eq(taskLists.id, taskListMembers.listId))
+        .innerJoin(users, eq(users.id, taskListMembers.userId))
+        .where(and(accessFilter(familyId, actorId), eq(users.familyId, familyId)))
+        .orderBy(asc(users.createdAt), asc(users.id))
+        .all();
+      const shared = reminderRepository.listMany(
+        familyId,
+        'taskId',
+        taskRows.map((task) => task.id),
+      );
+      const items: Record<string, ReturnType<typeof serializeTask>[]> = Object.fromEntries(
+        rows.map((list) => [list.id, []]),
+      );
+      const memberIds = new Map<string, string[]>();
+      for (const row of memberRows) {
+        if (!memberIds.has(row.listId)) memberIds.set(row.listId, []);
+        memberIds.get(row.listId)!.push(row.userId);
+      }
+      for (const task of taskRows) items[task.listId]!.push({ ...task, reminders: shared.get(task.id) ?? [] });
+      const lists = rows.map((list) => ({
+        ...list,
+        memberIds: memberIds.get(list.id) ?? [],
+        openTaskCount: items[list.id]!.filter((task) => !task.isDone).length,
+      }));
+      return { ok: true as const, lists, items };
+    });
+  }
   function areFamilyMembers(familyId: string, memberIds: string[]) {
     if (!memberIds.length) return true;
     return (
@@ -236,6 +287,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .map(({ task }) => serializeTask(task));
   }
   return {
+    snapshot,
     findAccessibleList,
     ensureDefault,
     listLists,

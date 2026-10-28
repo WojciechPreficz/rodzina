@@ -50,6 +50,8 @@ async function fixture() {
   const request = vi.fn(async (path: string, init?: RequestInit): Promise<unknown> => {
     if (path === '/api/auth/me') return { family: { id: family }, user: { id: user } };
     if (path === '/api/tasks/lists') return { lists };
+    if (path === '/api/tasks/snapshot')
+      return { ok: true, lists, items: Object.fromEntries(lists.map((list) => [list.id, tasks])) };
     if (!init?.method) return { tasks };
     if (reject) throw reject;
     if (responses.has(path)) return responses.get(path);
@@ -237,7 +239,7 @@ it('purges review work when access is revoked during list refresh', async () => 
   await expireFirst();
   const original = f.request.getMockImplementation()!;
   f.request.mockImplementation(async (path, init) => {
-    if (path.endsWith('?status=all')) throw new ApiRequestError('Brak dostępu', 403);
+    if (path === '/api/tasks/snapshot') return { ok: true, lists: [], items: {} };
     return original(path, init);
   });
   await f.store.synchronize();
@@ -324,7 +326,7 @@ it.each(['auth', 'refresh', 'mutation'] as const)(
     f.request.mockImplementation(async (path, init) => {
       if (
         (phase === 'auth' && path === '/api/auth/me' && !init?.signal) ||
-        (phase === 'refresh' && path.endsWith('?status=all')) ||
+        (phase === 'refresh' && path === '/api/tasks/snapshot') ||
         (phase === 'mutation' && !!init?.method)
       )
         return new Promise((resolve) => {
@@ -338,7 +340,11 @@ it.each(['auth', 'refresh', 'mutation'] as const)(
     await clearDatabase();
     await f.store.activate('another:account');
     finish(
-      phase === 'auth' ? { user: { id: user }, family: { id: family } } : phase === 'refresh' ? { tasks: [task] } : {},
+      phase === 'auth'
+        ? { user: { id: user }, family: { id: family } }
+        : phase === 'refresh'
+          ? { ok: true, lists: [list], items: { [listId]: [task] } }
+          : {},
     );
     await pending;
     expect(f.store.getSnapshot()).toMatchObject({ account: 'another:account', items: {}, pending: [] });
@@ -396,4 +402,37 @@ it('removes private payloads and dependent work when access changes during a mut
   expect(await transact('readonly', (tx) => readOperations(tx, account))).toEqual([]);
   expect((await readTaskData(account))?.rejection).toContain('Utracono dostęp');
   expect(f.request.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1);
+});
+
+it.each(['partial', 'failure'] as const)('preserves the complete cache on a %s snapshot', async (mode) => {
+  const f = await fixture();
+  await f.store.synchronize();
+  const before = (await readTaskData(account))!.snapshot;
+  const original = f.request.getMockImplementation()!;
+  f.request.mockImplementation(async (path, init) => {
+    if (path === '/api/tasks/snapshot') {
+      if (mode === 'failure') throw new ApiRequestError('Błąd API', 404);
+      return { ok: true, lists: [list], items: {} };
+    }
+    return original(path, init);
+  });
+  await f.store.synchronize();
+  expect((await readTaskData(account))!.snapshot).toEqual(before);
+  expect(f.store.project().items[listId]).toEqual([task]);
+  expect(f.store.getSnapshot().error).toBeTruthy();
+});
+it.each([1, 10, 30])('uses two shared in-flight reads for %i lists with a slow API', async (count) => {
+  const f = await fixture();
+  const lists = Array.from({ length: count }, (_, i) => ({ ...list, id: i ? crypto.randomUUID() : listId }));
+  const original = f.request.getMockImplementation()!;
+  f.request.mockImplementation(async (path, init) => {
+    if (path === '/api/tasks/snapshot') {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return { ok: true, lists, items: Object.fromEntries(lists.map((list) => [list.id, []])) };
+    }
+    return original(path, init);
+  });
+  await Promise.all([f.store.synchronize(), f.store.synchronize(), f.store.synchronize()]);
+  expect(f.request.mock.calls.map(([path]) => path)).toEqual(['/api/auth/me', '/api/tasks/snapshot']);
+  expect(f.store.project().lists).toHaveLength(count);
 });

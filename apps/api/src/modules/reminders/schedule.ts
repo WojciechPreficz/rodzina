@@ -33,8 +33,15 @@ export function readReminderSchedule(
     const tz = repository.timezone(familyId);
     const members = database.db.select().from(users).where(eq(users.familyId, familyId)).all();
     const reminders: ReminderSchedule['reminders'] = [];
-    for (const event of repository.list(familyId)) {
-      for (const reminder of [...event.reminders, ...reminderRepository.list(familyId, event.id, userId)]) {
+    const events = repository.list(familyId);
+    const personalEvents = reminderRepository.listMany(
+      familyId,
+      'eventId',
+      events.map((event) => event.id),
+      userId,
+    );
+    for (const event of events) {
+      for (const reminder of [...event.reminders, ...(personalEvents.get(event.id) ?? [])]) {
         if (!resolveRecipients(reminder, { event, members }).includes(userId)) continue;
         const data: TimeReminder =
           reminder.type === 'absolute'
@@ -64,13 +71,22 @@ export function readReminderSchedule(
       }
     }
     const taskRepository = createTaskListRepository(database);
-    for (const list of includeTasks ? taskRepository.listLists(familyId, userId) : []) {
-      for (const task of taskRepository.listTasks(list.id, 'open')) {
+    const taskSnapshot = includeTasks
+      ? taskRepository.snapshot(familyId, userId)
+      : { lists: [], items: {} as ReturnType<typeof taskRepository.snapshot>['items'] };
+    const personalTasks = reminderRepository.listMany(
+      familyId,
+      'taskId',
+      Object.values(taskSnapshot.items)
+        .flat()
+        .map((task) => task.id),
+      userId,
+    );
+    for (const list of taskSnapshot.lists) {
+      for (const task of taskSnapshot.items[list.id]!) {
+        if (task.isDone) continue;
         if (!task.dueDate) continue;
-        for (const reminder of [
-          ...reminderRepository.listTask(familyId, task.id),
-          ...reminderRepository.listTask(familyId, task.id, userId),
-        ]) {
+        for (const reminder of [...(task.reminders ?? []), ...(personalTasks.get(task.id) ?? [])]) {
           if (!resolveRecipients(reminder, { task, list, members }).includes(userId)) continue;
           const data: TimeReminder =
             reminder.type === 'absolute'
@@ -92,10 +108,22 @@ export function readReminderSchedule(
         }
       }
     }
-    for (const document of includeDocuments ? createDocumentRepository(database).list(familyId) : []) {
+    const documents = includeDocuments ? createDocumentRepository(database).list(familyId) : [];
+    const sharedDocuments = reminderRepository.listMany(
+      familyId,
+      'documentId',
+      documents.map((document) => document.id),
+    );
+    const personalDocuments = reminderRepository.listMany(
+      familyId,
+      'documentId',
+      documents.map((document) => document.id),
+      userId,
+    );
+    for (const document of documents) {
       for (const reminder of [
-        ...reminderRepository.listDocument(familyId, document.id),
-        ...reminderRepository.listDocument(familyId, document.id, userId),
+        ...(sharedDocuments.get(document.id) ?? []),
+        ...(personalDocuments.get(document.id) ?? []),
       ]) {
         if (!resolveRecipients(reminder, { document, members }).includes(userId)) continue;
         const data: TimeReminder =

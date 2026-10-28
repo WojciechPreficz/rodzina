@@ -86,6 +86,11 @@ function setup(
       return new Response(JSON.stringify({ error: { message: 'Nie udało się zapisać.' } }), { status: 400 });
     let body: object;
     if (url.startsWith('/api/reminders/mine')) body = { reminders: [] };
+    else if (url === '/api/tasks/snapshot')
+      body = {
+        lists,
+        items: Object.fromEntries(lists.map((list) => [list.id, items.filter((item) => item.listId === list.id)])),
+      };
     else if (url === '/api/tasks/lists' && method === 'GET') body = { lists };
     else if (url === '/api/tasks/lists' && method === 'POST') {
       const created = { ...list, id: '10000000-0000-4000-8000-000000000015', name: data.name, isDefault: false };
@@ -410,8 +415,11 @@ describe('tasks UI', () => {
   });
   it('offers leaving to a member without owner settings', async () => {
     const fetchMock = setup('/zadania/10000000-0000-4000-8000-000000000011', [task], false, (url, method) =>
-      url === '/api/tasks/lists' && method === 'GET'
-        ? { lists: [{ ...list, ownerId: '10000000-0000-4000-8000-000000000014', memberIds: [session.user.id] }] }
+      url === '/api/tasks/snapshot' && method === 'GET'
+        ? {
+            lists: [{ ...list, ownerId: '10000000-0000-4000-8000-000000000014', memberIds: [session.user.id] }],
+            items: { [list.id]: [task] },
+          }
         : undefined,
     );
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -430,7 +438,8 @@ describe('tasks UI', () => {
       '/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013',
       [task],
       false,
-      (url, method) => (revoked && url === '/api/tasks/lists' && method === 'GET' ? { lists: [] } : undefined),
+      (url, method) =>
+        revoked && url === '/api/tasks/snapshot' && method === 'GET' ? { lists: [], items: {} } : undefined,
     );
     await screen.findByLabelText('Notatka');
     revoked = true;
@@ -560,9 +569,7 @@ describe('today tasks card', () => {
   it('replaces removed tasks with the empty state on refresh', async () => {
     let removed = false;
     setup('/', [task], false, (url) =>
-      url.includes('/10000000-0000-4000-8000-000000000011/tasks?status=all')
-        ? { tasks: removed ? [] : [task] }
-        : undefined,
+      url === '/api/tasks/snapshot' ? { lists: [list], items: { [list.id]: removed ? [] : [task] } } : undefined,
     );
     await screen.findByText(task.title);
     removed = true;

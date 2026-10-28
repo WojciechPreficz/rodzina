@@ -8,6 +8,7 @@ import {
   createTaskListSchema,
   patchTaskListSchema,
   taskListsResponseSchema,
+  taskSnapshotResponseSchema,
   taskListResponseSchema,
   taskListDeletedResponseSchema,
   taskListLeftResponseSchema,
@@ -67,6 +68,11 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       primaryKeyConflictMessage: 'Identyfikator zadania jest już używany.',
       internalMessage: 'Nie udało się obsłużyć zadań.',
       logMessage: 'Task request failed',
+    });
+    routes.get('/api/tasks/snapshot', (request) => {
+      const user = requireUser(request);
+      repository.ensureDefault(user.familyId, user.id);
+      return taskSnapshotResponseSchema.parse(repository.snapshot(user.familyId, user.id));
     });
     routes.get('/api/tasks/lists/:id/tasks', (request) => {
       const { id } = parse(idSchema, request.params);
