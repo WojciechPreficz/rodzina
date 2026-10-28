@@ -13,7 +13,7 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | ------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
 | Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                        | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
 | Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026             | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
-| Faza 6: obiady, krok 6.1                                      | API zaimplementowane lokalnie                           | Końcowe CI; kroki 6.2–6.5 do implementacji                        |
+| Faza 6: obiady, kroki 6.1–6.2                                 | API zaimplementowane lokalnie                           | Końcowe CI; kroki 6.3–6.5 do implementacji                        |
 | Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026 | Odbiór telefonu i końcowe CI do potwierdzenia                     |
 | Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                               | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
 | K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                               | Końcowe CI i fizyczne APK do potwierdzenia                        |
@@ -54,11 +54,10 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 - Ponowienie wysyłki tej samej operacji, np. po utracie odpowiedzi lub restarcie
   APK, nie może ponownie zwiększyć ilości. To zabezpieczenie techniczne jest
   niezależne od decyzji o ponownym ręcznym eksporcie tych samych dań.
-- **Do ustalenia z właścicielem przed implementacją eksportu:** czy ponowny
-  ręczny eksport tego samego dania na tę samą listę ma ponownie dodać ilości,
-  ostrzegać czy pomijać wcześniejszy eksport. Nie zakładamy jeszcze żadnej
-  z tych reguł. Doprecyzowania wymaga też scalanie z pozycjami już kupionymi,
-  aby nowa potrzeba zakupowa nie pozostała ukryta jako odhaczona.
+- **Uzgodnione z właścicielem 28.10.2026:** ponowny ręczny eksport tego samego
+  dania na tę samą listę wymaga ostrzeżenia i potwierdzenia z informacją
+  o ponownym dodaniu ilości. Pozycje kupione pozostają bez zmian; nowa potrzeba
+  tworzy osobną niekupioną pozycję (lub uzupełnia istniejącą niekupioną).
 
 **Offline — rozszerzenie zakresu 26.10.2026:**
 
@@ -104,7 +103,8 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 
 #### Krok 6.2 - API: składniki do listy zakupów
 
-- **Zakres:** `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Funkcja `mergeQuantities` w `shared` (normalizacja nazwy, łączenie ilości tekstowo, np. "500 g + 1 kg"). Wykorzystuje serwis zakupów z fazy 5 (także historię). Scala także z istniejącymi pozycjami docelowej listy i zwraca liczby pozycji dodanych oraz uzupełnionych. Bez stałego powiązania zakupów z obiadami. Przed implementacją rozstrzygnąć wskazane powyżej pytania o ponowny ręczny eksport i pozycje kupione.
+- **Status:** zweryfikowane lokalnie, oczekuje na CI.
+- **Zakres:** `POST /api/meals/to-shopping-list?operationId=<UUID>` z `{ weekStart, listId, mealIds?, confirmRepeat? }`. Funkcje `normalizeShoppingName` i `mergeQuantities` w `shared` (normalizacja nazwy, łączenie ilości tekstowo, np. "500 g + 1 kg"). Wykorzystuje serwis zakupów z fazy 5 (także historię). Scala z niekupionymi pozycjami docelowej listy i zwraca liczby pozycji dodanych oraz uzupełnionych. Kupione pozostają bez zmian. Ponowny ręczny eksport wymaga potwierdzenia ponownego dodania ilości; techniczne ponowienie tego samego ID nie podwaja zakupów. Rejestr wcześniejszych eksportów nie synchronizuje późniejszych zmian. UI ostrzeżenia i potwierdzenia należy do 6.4.
 - **Gotowe, gdy:** testy jednostkowe `mergeQuantities` i testy API (scalanie między daniami i z istniejącą listą, uzgodniona obsługa pozycji kupionych i ponownego eksportu, filtr `mealIds`, lista innej rodziny daje 404, zapis dziecka daje 403, izolacja rodzin). Zmiana lub usunięcie obiadu po eksporcie nie zmienia zakupów.
 
 #### Krok 6.3 - UI: tydzień obiadów

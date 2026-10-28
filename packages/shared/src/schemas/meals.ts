@@ -52,6 +52,20 @@ export const mealSuggestionsResponseSchema = z.object({
   suggestions: z.array(mealSchema.pick({ title: true, ingredients: true })),
 });
 export const copyMealWeekResponseSchema = z.object({ ok: z.literal(true), copied: z.number().int().nonnegative() });
+export const mealsToShoppingListSchema = z
+  .object({
+    weekStart: mealWeekStartSchema,
+    listId: z.string().uuid(),
+    mealIds: z.array(z.string().uuid()).min(1).max(7).optional(),
+    confirmRepeat: z.boolean().default(false),
+  })
+  .strict();
+export const mealsToShoppingListResponseSchema = z.object({
+  ok: z.literal(true),
+  added: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+});
+export type MealsToShoppingList = z.infer<typeof mealsToShoppingListSchema>;
 export type PutMeal = z.infer<typeof putMealSchema>;
 export type Meal = z.infer<typeof mealSchema>;
 export type CopyMealWeek = z.infer<typeof copyMealWeekSchema>;

@@ -1,12 +1,9 @@
 import crypto from 'node:crypto';
 import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import type { CreateShoppingItem, CreateShoppingList, PatchShoppingItem, PatchShoppingList } from '@rodzina/shared';
+import { normalizeShoppingName } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { shoppingLists, shoppingItems, shoppingHistory } from '../../db/schema.js';
-
-function normalizeName(name: string) {
-  return name.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('pl-PL');
-}
 
 export function createShoppingRepository(database: DatabaseConnection) {
   const db = database.db;
@@ -95,7 +92,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
       () => {
         // Guard the parent inside the same transaction as the insert and history update.
         if (!findList(familyId, listId)) return undefined;
-        const nameNormalized = normalizeName(data.name);
+        const nameNormalized = normalizeShoppingName(data.name);
         const previous = db
           .select()
           .from(shoppingHistory)
@@ -180,7 +177,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
       .run().changes;
   }
   function suggestions(familyId: string, query: string) {
-    const prefix = normalizeName(query);
+    const prefix = normalizeShoppingName(query);
     return db
       .select({ name: shoppingHistory.displayName, category: shoppingHistory.category })
       .from(shoppingHistory)

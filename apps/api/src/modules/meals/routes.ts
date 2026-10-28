@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import {
   copyMealWeekSchema,
   copyMealWeekResponseSchema,
@@ -9,14 +10,39 @@ import {
   mealWeekQuerySchema,
   mealWeekResponseSchema,
   putMealSchema,
+  mealsToShoppingListSchema,
+  mealsToShoppingListResponseSchema,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { parse } from '../../http/validation.js';
 import { requireUser } from '../../http/session-auth.js';
 import { createMealService } from './service.js';
+import { registerIdempotentMutations } from '../../http/idempotency.js';
 
 export function registerMealRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createMealService(database);
+  app.register(async (routes) => {
+    registerIdempotentMutations(routes, database, {
+      table: 'shopping_operations',
+      querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid().optional() }).strict(),
+      validate: (request) => {
+        const user = requireUser(request);
+        service.requireExportAccess(user.familyId, user.role, parse(mealsToShoppingListSchema, request.body).listId);
+      },
+      recheckAccess: (request) => {
+        const user = requireUser(request);
+        service.requireExportAccess(user.familyId, user.role, parse(mealsToShoppingListSchema, request.body).listId);
+      },
+      fingerprintParts: (request) => [requireUser(request).familyId, request.method, request.url, request.body],
+    });
+    routes.post('/api/meals/to-shopping-list', (request) => {
+      const user = requireUser(request);
+      return mealsToShoppingListResponseSchema.parse({
+        ok: true,
+        ...service.toShoppingList(user.familyId, user.id, user.role, parse(mealsToShoppingListSchema, request.body)),
+      });
+    });
+  });
   app.get('/api/meals', (request) => {
     const user = requireUser(request);
     const { weekStart } = parse(mealWeekQuerySchema, request.query);

@@ -65,7 +65,29 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   `GET /api/meals/suggestions?q=` zwraca do 20 różnych tytułów z aktualnie
   zapisanych obiadów rodziny wraz ze składnikami ostatnio zapisanego wariantu.
   Wyszukiwanie i grupowanie ignorują wielkość liter i różnice białych znaków.
-  Brak eksportu zakupów i kolejki offline w tym kroku.
+  `POST /api/meals/to-shopping-list?operationId=<UUID>` przyjmuje `weekStart`,
+  `listId`, opcjonalne `mealIds` (1–7 ID z tego tygodnia) i `confirmRepeat`
+  (domyślnie false). Brak filtra wybiera cały tydzień; nieznane ID daje 404,
+  powtórzone ID nie zwielokrotnia składników. Eksport jest tylko dla dorosłych.
+  W jednej transakcji scala składniki po nazwie (NFKC, białe znaki, wielkość
+  liter) z niekupionymi pozycjami listy. Ilości łączy tekstowo przez `+`,
+  pomijając brakujące wartości, bez konwersji jednostek. Kupione pozycje
+  pozostają bez zmian; nowa potrzeba tworzy osobną niekupioną pozycję.
+  Nowe pozycje korzystają z historii kategorii zakupów i aktualizują historię.
+  Odpowiedź `{ ok: true, added, updated }` liczy pozycje dodane i uzupełnione.
+  Rejestr `meal_shopping_exports` wykrywa wcześniejszy eksport obiadu na daną
+  listę, także po edycji obiadu. Ponowienie ręczne wymaga `confirmRepeat=true`;
+  w przeciwnym razie 409 `MEAL_EXPORT_CONFIRMATION_REQUIRED` wyjaśnia ponowne
+  dodanie ilości. Odrzucana jest cała operacja, także przy mieszanym wyborze.
+  Rejestr nie synchronizuje zmian: edycja/usunięcie obiadu nie zmienia zakupów,
+  a zmiany zakupów nie wpływają na plan. Usunięcie obiadu lub listy usuwa wpis
+  rejestru; nowy obiad ma nową tożsamość.
+  Wymagany `operationId` korzysta z istniejącej tabeli `shopping_operations`:
+  ponowienie zachowuje odpowiedź bez zwiększenia ilości, także po zmianie planu;
+  zmiana danych pod tym samym ID daje 409. Po ostrzeżeniu można potwierdzić
+  pod tym samym ID, ponieważ odrzucona operacja nie zapisuje odpowiedzi.
+  Rola i dostęp do listy są sprawdzane również przed odtworzeniem odpowiedzi.
+  UI potwierdzenia należy do 6.4, integracja ze wspólną kolejką offline do 6.5.
 
 ## API i bezpieczeństwo
 

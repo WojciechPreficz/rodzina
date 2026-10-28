@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { parseShoppingInput } from './shopping.js';
+import { mergeQuantities, normalizeShoppingName, parseShoppingInput } from './shopping.js';
+
+describe('mergeQuantities', () => {
+  it.each([
+    [['500 g', '1 kg'], '500 g + 1 kg'],
+    [[' 500 g ', null, '', undefined, ' 1 kg '], '500 g + 1 kg'],
+    [[null, undefined, '  '], null],
+    [[], null],
+    [['2 szt', '2 szt'], '2 szt + 2 szt'],
+    [['do smaku', '1 łyżka'], 'do smaku + 1 łyżka'],
+  ] as const)('joins %j without converting units', (quantities, expected) => {
+    expect(mergeQuantities(...quantities)).toBe(expected);
+  });
+});
+
+describe('normalizeShoppingName', () => {
+  it('normalizes case, Unicode compatibility and whitespace, preserving Polish letters', () => {
+    expect(normalizeShoppingName('  MĄKA\u00a0  Pszenna  ')).toBe('mąka pszenna');
+    expect(normalizeShoppingName('ＭＬＥＫＯ')).toBe('mleko');
+    expect(normalizeShoppingName('Sól')).not.toBe(normalizeShoppingName('Sol'));
+  });
+});
 
 describe('parseShoppingInput', () => {
   it.each([

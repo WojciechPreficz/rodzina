@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mealResponseSchema, mealWeekResponseSchema } from '@rodzina/shared';
+import { mealResponseSchema, mealWeekResponseSchema, mealsToShoppingListResponseSchema } from '@rodzina/shared';
+import { createShoppingService } from '../shopping/service.js';
 import { buildApp } from '../../app.js';
 import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
@@ -69,6 +70,25 @@ describe('meals API', () => {
   function copy(overwrite = false, user = admin) {
     return request('POST', '/api/meals/copy-week', { fromWeekStart: start, toWeekStart: target, overwrite }, user);
   }
+  function shopping() {
+    return createShoppingService(database);
+  }
+  function list(user = admin) {
+    return shopping().listLists(
+      user === outsider
+        ? database.db.select().from(schema.users).where(eq(schema.users.id, user.id)).get()!.familyId
+        : familyId,
+      user.id,
+    )[0]!;
+  }
+  function exportMeals(listId: string, extra: Record<string, unknown> = {}, operationId = randomUUID(), user = admin) {
+    return request(
+      'POST',
+      `/api/meals/to-shopping-list?operationId=${operationId}`,
+      { weekStart: start, listId, ...extra },
+      user,
+    );
+  }
   beforeEach(async () => {
     const config = loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' });
     database = createDatabase(config);
@@ -83,6 +103,234 @@ describe('meals API', () => {
   afterEach(async () => {
     await app?.close();
     database?.sqlite.close();
+  });
+
+  it('groups normalized ingredients, merges current unpurchased items and preserves categories and history', async () => {
+    const destination = list();
+    const existing = shopping().createItem(familyId, destination.id, admin.id, {
+      name: 'MARCHEW',
+      quantity: '1 kg',
+      category: 'fruit_vegetables',
+    });
+    const historyItem = shopping().createItem(familyId, destination.id, admin.id, { name: 'Mleko', category: 'dairy' });
+    shopping().removeItem(familyId, historyItem.id, admin.id, 'admin');
+    await put(start, {
+      title: 'Zupa',
+      ingredients: [{ name: 'marchew', quantity: '500 g' }, { name: 'Woda' }, { name: ' Mleko ', quantity: '1 l' }],
+    });
+    await put('2026-10-20', {
+      title: 'Drugie',
+      ingredients: [
+        { name: 'ＭＡＲＣＨＥＷ', quantity: '2 szt' },
+        { name: ' woda ', quantity: '1 l' },
+      ],
+    });
+    const response = await exportMeals(destination.id, {}, randomUUID(), member);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(mealsToShoppingListResponseSchema.parse(response.json())).toEqual({ ok: true, added: 2, updated: 1 });
+    const items = shopping().listItems(familyId, destination.id);
+    expect(items).toHaveLength(3);
+    expect(items.find((item) => item.id === existing.id)).toMatchObject({
+      quantity: '1 kg + 500 g + 2 szt',
+      category: 'fruit_vegetables',
+      createdBy: admin.id,
+    });
+    expect(items.find((item) => item.name === 'Woda')).toMatchObject({ quantity: '1 l', createdBy: member.id });
+    expect(items.find((item) => item.name === 'Mleko')).toMatchObject({ quantity: '1 l', category: 'dairy' });
+    expect(
+      database.db
+        .select()
+        .from(schema.shoppingHistory)
+        .all()
+        .find((item) => item.nameNormalized === 'mleko')?.useCount,
+    ).toBe(2);
+  });
+
+  it('leaves checked purchases untouched and adds a separate unpurchased need', async () => {
+    const destination = list();
+    const item = shopping().createItem(familyId, destination.id, admin.id, { name: 'Marchew', quantity: '2 kg' });
+    const checked = shopping().updateItem(familyId, item.id, admin.id, 'admin', { isChecked: true });
+    await put();
+    expect((await exportMeals(destination.id)).json()).toEqual({ ok: true, added: 2, updated: 0 });
+    const items = shopping().listItems(familyId, destination.id);
+    expect(items.find((value) => value.id === checked.id)).toEqual(checked);
+    expect(items.find((value) => value.name === 'Marchew' && !value.isChecked)).toMatchObject({
+      quantity: '500 g',
+      checkedBy: null,
+      checkedAt: null,
+    });
+    expect((await exportMeals(destination.id, { confirmRepeat: true })).json()).toEqual({
+      ok: true,
+      added: 0,
+      updated: 2,
+    });
+    expect(
+      shopping()
+        .listItems(familyId, destination.id)
+        .find((value) => value.id === checked.id),
+    ).toEqual(checked);
+  });
+
+  it('requires explicit confirmation for repeated meals and atomically rejects a mixed selection', async () => {
+    const destination = list();
+    const first = await put();
+    const second = await put('2026-10-20');
+    expect((await exportMeals(destination.id, { mealIds: [first.id] })).json()).toEqual({
+      ok: true,
+      added: 2,
+      updated: 0,
+    });
+    const before = shopping().listItems(familyId, destination.id);
+    const operation = randomUUID();
+    const warning = await exportMeals(destination.id, {}, operation);
+    expect(warning.statusCode).toBe(409);
+    expect(warning.json()).toEqual({
+      error: {
+        code: 'MEAL_EXPORT_CONFIRMATION_REQUIRED',
+        message: expect.stringContaining('ponownie dodać ich ilości'),
+      },
+    });
+    expect(shopping().listItems(familyId, destination.id)).toEqual(before);
+    expect(database.db.select().from(schema.mealShoppingExports).all()).toHaveLength(1);
+    expect((await exportMeals(destination.id, { confirmRepeat: true }, operation)).json()).toEqual({
+      ok: true,
+      added: 0,
+      updated: 2,
+    });
+    expect(
+      shopping()
+        .listItems(familyId, destination.id)
+        .find((item) => item.name === 'Marchew')?.quantity,
+    ).toBe('500 g + 500 g + 500 g');
+    expect((await exportMeals(destination.id, { mealIds: [second.id] })).statusCode).toBe(409);
+    const another = shopping().createList(familyId, admin.id, 'admin', { name: 'Druga' });
+    expect((await exportMeals(another.id)).statusCode).toBe(200);
+  });
+
+  it('replays the same operation once, conflicts on changed payload and rechecks current access', async () => {
+    const destination = list();
+    await put();
+    const operation = randomUUID();
+    const results = await Promise.all([
+      exportMeals(destination.id, {}, operation),
+      exportMeals(destination.id, {}, operation),
+    ]);
+    expect(results.map((response) => response.statusCode)).toEqual([200, 200]);
+    expect(results[0]!.json()).toEqual(results[1]!.json());
+    const before = shopping().listItems(familyId, destination.id);
+    await app.close();
+    app = await buildApp(loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' }), database);
+    await put(start, { title: 'Zmiana', ingredients: [] });
+    expect((await exportMeals(destination.id, {}, operation)).json()).toEqual(results[0]!.json());
+    expect((await exportMeals(destination.id, { confirmRepeat: true }, operation)).statusCode).toBe(409);
+    expect(shopping().listItems(familyId, destination.id)).toEqual(before);
+    database.db.update(schema.users).set({ role: 'child' }).where(eq(schema.users.id, admin.id)).run();
+    expect((await exportMeals(destination.id, {}, operation)).statusCode).toBe(403);
+    database.db.update(schema.users).set({ role: 'admin' }).where(eq(schema.users.id, admin.id)).run();
+    shopping().removeList(familyId, destination.id, 'admin');
+    expect((await exportMeals(destination.id, {}, operation)).statusCode).toBe(404);
+  });
+
+  it('requires confirmation when different operations concurrently export the same meals', async () => {
+    const destination = list();
+    await put(start, {
+      title: 'Duży obiad',
+      ingredients: [
+        { name: 'Mąka', quantity: 'x'.repeat(200) },
+        { name: 'MĄKA', quantity: '500 g' },
+        { name: 'Sól', quantity: null },
+      ],
+    });
+    const results = await Promise.all([exportMeals(destination.id), exportMeals(destination.id)]);
+    expect(results.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+    const items = shopping().listItems(familyId, destination.id);
+    expect(items.find((item) => item.name === 'Mąka')?.quantity).toBe('x'.repeat(200) + ' + 500 g');
+    expect(items.find((item) => item.name === 'Sól')?.quantity).toBeNull();
+    const response = await request('GET', `/api/shopping/lists/${destination.id}/items`);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().items).toEqual(items);
+  });
+
+  it('validates export selection, authentication, role and family without partial writes', async () => {
+    const destination = list();
+    const foreignList = list(outsider);
+    const saved = await put();
+    const foreignMeal = await put(start, meal, outsider);
+    const otherWeek = await put(target);
+    for (const id of [foreignMeal.id, otherWeek.id, randomUUID()]) {
+      expect((await exportMeals(destination.id, { mealIds: [saved.id, id] })).statusCode).toBe(404);
+    }
+    expect((await exportMeals(foreignList.id)).statusCode).toBe(404);
+    expect((await exportMeals(destination.id, {}, randomUUID(), outsider)).statusCode).toBe(404);
+    expect((await exportMeals(destination.id, {}, randomUUID(), child)).statusCode).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/meals/to-shopping-list',
+          payload: {},
+          headers: { host: 'localhost:3000', origin: 'http://localhost:3000' },
+        })
+      ).statusCode,
+    ).toBe(401);
+    for (const extra of [
+      { weekStart: '2026-10-20' },
+      { listId: 'bad' },
+      { mealIds: [] },
+      { mealIds: ['bad'] },
+      { mealIds: Array(8).fill(saved.id) },
+      { confirmRepeat: 'true' },
+      { familyId },
+    ]) {
+      expect((await exportMeals(destination.id, extra)).statusCode).toBe(400);
+    }
+    for (const suffix of ['', '?operationId=bad', `?operationId=${randomUUID()}&actorId=${outsider.id}`]) {
+      expect(
+        (await request('POST', '/api/meals/to-shopping-list' + suffix, { weekStart: start, listId: destination.id }))
+          .statusCode,
+      ).toBe(suffix.includes('actorId') ? 401 : 400);
+    }
+    expect(shopping().listItems(familyId, destination.id)).toEqual([]);
+    expect((await exportMeals(destination.id, { mealIds: [saved.id, saved.id] })).json()).toEqual({
+      ok: true,
+      added: 2,
+      updated: 0,
+    });
+  });
+
+  it('keeps exported purchases independent of meal edits and deletion, including empty weeks', async () => {
+    const destination = list();
+    expect((await exportMeals(destination.id)).json()).toEqual({ ok: true, added: 0, updated: 0 });
+    const saved = await put();
+    await exportMeals(destination.id);
+    const items = shopping().listItems(familyId, destination.id);
+    shopping().updateItem(familyId, items[0]!.id, admin.id, 'admin', { name: 'Zakup zmieniony' });
+    expect((await week()).days[0]!.meals[0]).toEqual(saved);
+    const purchases = shopping().listItems(familyId, destination.id);
+    await put(start, { title: 'Nowy', ingredients: [] });
+    expect((await exportMeals(destination.id)).statusCode).toBe(409);
+    await request('DELETE', `/api/meals/${start}/dinner`);
+    expect(shopping().listItems(familyId, destination.id)).toEqual(purchases);
+    expect(database.db.select().from(schema.mealShoppingExports).all()).toEqual([]);
+  });
+
+  it('rolls back purchases, history, receipts and idempotency together on failure and permits retry', async () => {
+    const destination = list();
+    shopping().createItem(familyId, destination.id, admin.id, { name: 'Marchew', quantity: '1 kg' });
+    await put();
+    const before = shopping().listItems(familyId, destination.id);
+    const history = database.db.select().from(schema.shoppingHistory).all();
+    database.sqlite.exec(
+      "CREATE TRIGGER fail_export BEFORE INSERT ON meal_shopping_exports BEGIN SELECT RAISE(ABORT, 'test'); END;",
+    );
+    const operation = randomUUID();
+    expect((await exportMeals(destination.id, {}, operation)).statusCode).toBe(500);
+    expect(shopping().listItems(familyId, destination.id)).toEqual(before);
+    expect(database.db.select().from(schema.shoppingHistory).all()).toEqual(history);
+    expect(database.db.select().from(schema.mealShoppingExports).all()).toEqual([]);
+    expect(database.db.select().from(schema.shoppingOperations).all()).toEqual([]);
+    database.sqlite.exec('DROP TRIGGER fail_export');
+    expect((await exportMeals(destination.id, {}, operation)).json()).toEqual({ ok: true, added: 1, updated: 1 });
   });
 
   it('returns all seven days, upserts with stable identity and replaces ordered ingredients', async () => {

@@ -327,6 +327,21 @@ export const shoppingHistory = sqliteTable(
   (table) => [primaryKey({ columns: [table.familyId, table.nameNormalized] })],
 );
 
+// Receipts only detect repeated manual exports; they never synchronize source changes.
+export const mealShoppingExports = sqliteTable(
+  'meal_shopping_exports',
+  {
+    mealId: text('meal_id')
+      .notNull()
+      .references(() => meals.id, { onDelete: 'cascade' }),
+    listId: text('list_id')
+      .notNull()
+      .references(() => shoppingLists.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.mealId, table.listId] })],
+);
+
 export const shoppingOperations = sqliteTable(
   'shopping_operations',
   {
