@@ -9,19 +9,19 @@ aplikacji jest w [ARCHITECTURE.md](ARCHITECTURE.md).
 Stan dokumentacji na 28.10.2026. Brak potwierdzenia CI lub prób ręcznych
 nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 
-| Zakres                                                        | Stan                                                                   | Pozostałe warunki                                                 |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                                       | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
-| Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026                            | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
-| Faza 6: obiady, kroki 6.1–6.4                                 | API, UI tygodnia, eksport i dzisiejsza karta zaimplementowane lokalnie | Odbiór 6.3–6.4 i końcowe CI; krok 6.5 do implementacji            |
-| Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026                | Odbiór telefonu i końcowe CI do potwierdzenia                     |
-| Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                                              | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
-| K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                                              | Końcowe CI i fizyczne APK do potwierdzenia                        |
-| Redesign R.1–R.7                                              | Implementacja opisana w historii zmian                                 | R.8: odbiór całości i gotowość aktualizacji do potwierdzenia      |
-| Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                                              | Końcowe CI, alarmy, restart i pomiary urządzenia do potwierdzenia |
-| Oddzielenie sesji od modułów                                  | Implementacja opisana 28.10.2026                                       | Końcowe CI i fizyczne APK do potwierdzenia                        |
-| Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                               | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
-| Reset hasła przez e-mail                                      | Zaplanowany, niezaimplementowany                                       | Osobny krok poniżej                                               |
+| Zakres                                                        | Stan                                                                            | Pozostałe warunki                                                 |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                                                | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
+| Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026                                     | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
+| Faza 6: obiady, kroki 6.1–6.5                                 | API, UI tygodnia, eksport, dzisiejsza karta i offline zaimplementowane lokalnie | Odbiór ręczny, fizyczne APK i końcowe CI do potwierdzenia         |
+| Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026                         | Odbiór telefonu i końcowe CI do potwierdzenia                     |
+| Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                                                       | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
+| K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                                                       | Końcowe CI i fizyczne APK do potwierdzenia                        |
+| Redesign R.1–R.7                                              | Implementacja opisana w historii zmian                                          | R.8: odbiór całości i gotowość aktualizacji do potwierdzenia      |
+| Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                                                       | Końcowe CI, alarmy, restart i pomiary urządzenia do potwierdzenia |
+| Oddzielenie sesji od modułów                                  | Implementacja opisana 28.10.2026                                                | Końcowe CI i fizyczne APK do potwierdzenia                        |
+| Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
+| Reset hasła przez e-mail                                      | Zaplanowany, niezaimplementowany                                                | Osobny krok poniżej                                               |
 
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
@@ -121,6 +121,7 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 
 #### Krok 6.5 - Obiady offline z trwałą kolejką zmian i domknięcie fazy
 
+- **Status:** zaimplementowane lokalnie; odbiór ręczny, fizyczne APK i końcowe CI do potwierdzenia.
 - **Zakres:** pełny opis offline powyżej: trwały podgląd i edycja planu,
   kopiowanie zapisanych tygodni, eksport kopii składników do zapisanej listy,
   lokalna projekcja zakupów i karty „Dziś na obiad”, synchronizacja i ochrona

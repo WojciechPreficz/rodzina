@@ -6,6 +6,9 @@ import {
   shoppingListSchema,
   shoppingItemSchema,
   OFFLINE_REPLAY_MAX_AGE_MS,
+  mealOfflineChangeSchema,
+  normalizeShoppingName,
+  mergeQuantities,
 } from '@rodzina/shared';
 import {
   accountToken,
@@ -21,6 +24,7 @@ import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/re
 import { requireMigration } from '../../offline/status.js';
 import { freezeParticipants, resumeParticipants } from '../../offline/coordinator.js';
 import type { QueuedShoppingChange, ShoppingSession } from './shoppingOffline.js';
+import type { MealShoppingProjection } from './shoppingApi.js';
 import { readOperations, type Operation } from '../../offline/outbox.js';
 
 export const SHOPPING_STORAGE_KEY = 'rodzina:shopping:v1';
@@ -40,6 +44,12 @@ const changeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('remove'), id, listId: id }),
   z.object({ type: z.literal('clear'), listId: id }),
 ]);
+const mealProjectionSchema = z.object({
+  type: z.literal('mealExport'),
+  listId: id,
+  id,
+  ingredients: z.array(z.object({ name: z.string(), quantity: z.string().nullable(), id })),
+});
 const variablesSchema = z.object({
   change: changeSchema,
   operationId: id,
@@ -53,12 +63,26 @@ const snapshotSchema = z.object({
   clientState: z.object({ queries: z.array(z.unknown()), mutations: z.array(z.unknown()) }),
 });
 const operationSchema = variablesSchema.extend({
+  change: z.union([changeSchema, mealProjectionSchema]),
   sequence: z.number().int().positive(),
   review: z
-    .enum(['snapshot-only', 'missing-base', 'ambiguous-order', 'expired', 'conflict', 'rejected', 'dependency'])
+    .enum([
+      'snapshot-only',
+      'missing-base',
+      'ambiguous-order',
+      'expired',
+      'conflict',
+      'rejected',
+      'dependency',
+      'MEAL_EXPORT_CONFIRMATION_REQUIRED',
+    ])
     .optional(),
 });
-export type StoredShoppingOperation = QueuedShoppingChange & { sequence: number; review?: string };
+export type StoredShoppingOperation = Omit<QueuedShoppingChange, 'change'> & {
+  change: QueuedShoppingChange['change'] | MealShoppingProjection;
+  sequence: number;
+  review?: string;
+};
 export type ShoppingData = {
   version: 1;
   account: string;
@@ -184,6 +208,31 @@ export const shoppingOperation = (op: Operation): StoredShoppingOperation => ({
   sequence: op.sequence,
   ...(op.status === 'needs-review' ? { review: op.reviewReason ?? 'conflict' } : {}),
 });
+export function mealShoppingOperation(op: Operation): StoredShoppingOperation | undefined {
+  if (op.module !== 'meals') return;
+  const change = mealOfflineChangeSchema.parse(op.payload);
+  if (change.type !== 'export') return;
+  const grouped = new Map<string, { name: string; quantity: string | null; id: string }>();
+  for (const meal of change.data.snapshot ?? [])
+    for (const ingredient of meal.ingredients) {
+      const key = normalizeShoppingName(ingredient.name);
+      const previous = grouped.get(key);
+      const target = change.data.targets?.find((target) => normalizeShoppingName(target.name) === key);
+      if (!target) throw new Error('Brak identyfikatora składnika eksportu.');
+      grouped.set(key, {
+        name: previous?.name ?? ingredient.name,
+        id: target.id,
+        quantity: mergeQuantities(previous?.quantity, ingredient.quantity),
+      });
+    }
+  return {
+    operationId: op.operationId,
+    submittedAt: op.submittedAt,
+    sequence: op.sequence,
+    change: { type: 'mealExport', listId: change.data.listId, id: op.operationId, ingredients: [...grouped.values()] },
+    ...(op.status === 'needs-review' ? { review: op.reviewReason ?? 'conflict' } : {}),
+  };
+}
 export async function shoppingUsesOutbox(tx: IDBTransaction, account: string) {
   return (
     (await requestValue<{ value: string } | undefined>(tx.objectStore('metadata').get([account, 'engine:shopping'])))
@@ -199,9 +248,11 @@ export async function readShoppingTransaction(tx: IDBTransaction, account: strin
   if (record.schemaVersion !== 1 || data.version !== 1 || data.account !== account)
     error('Nieobsługiwana wersja pamięci zakupów.');
   if (!(await shoppingUsesOutbox(tx, account))) return data;
-  const operations = (await readOperations(tx, account))
-    .filter((op) => op.module === 'shopping')
-    .map(shoppingOperation);
+  const operations = (await readOperations(tx, account)).flatMap((op) => {
+    if (op.module === 'shopping') return [shoppingOperation(op)];
+    const projection = mealShoppingOperation(op);
+    return projection ? [projection] : [];
+  });
   return { ...data, operations, nextSequence: Math.max(data.nextSequence, ...operations.map((op) => op.sequence + 1)) };
 }
 export async function readShoppingData(account?: string) {

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, Paper, Stack, Text, Title } from '@mantine/core';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { copyMealWeekResponseSchema, type Meal, type PutMeal } from '@rodzina/shared';
-import { apiFetch } from '../../api.js';
+import { useMutation } from '@tanstack/react-query';
+import { type Meal, type PutMeal } from '@rodzina/shared';
 import { useMe } from '../../sessionContext.js';
-import { isOffline, useOffline } from '../../connectivity.js';
+import { useOffline } from '../../connectivity.js';
+import { OfflineNotice } from '../../offline/OfflineNotice.js';
+import { queueMeal, queueMealCopy, useMealState, confirmMealExport, discardMealOperation } from './mealOffline.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { todayInTimezone } from '../calendar/toScheduleX.js';
@@ -20,9 +21,9 @@ export function MealsPage() {
 }
 
 function MealWeek() {
-  const { user, family, familyConfirmed } = useMe();
+  const { user, family } = useMe();
   const offline = useOffline();
-  const client = useQueryClient();
+  const savedState = useMealState();
   const today = todayInTimezone(family?.timezone ?? 'Europe/Warsaw');
   const [week, setWeek] = useState(() => mealWeekStart(today));
   const [editor, setEditor] = useState<string | null>(null);
@@ -32,23 +33,15 @@ function MealWeek() {
   const [notice, setNotice] = useState('');
   const [exportMeals, setExportMeals] = useState<Meal[] | null>(null);
   const account = `${family?.id}:${user?.id}`;
-  const key = ['meals', family?.id, user?.id];
   const canEdit = !!user && user.role !== 'child';
-  const writable = canEdit && familyConfirmed && !offline;
   const query = useMealWeek(week);
+  const previousWeek = useMealWeek(shiftMealDate(week, -7), canEdit);
+  const writable = canEdit && query.ready && !!query.data;
   const mutation = useMutation({
     networkMode: 'always',
     retry: false,
-    mutationFn: async ({ path, method, data }: { path: string; method: string; data?: unknown }) => {
-      if (!writable || isOffline()) throw new Error('Połącz się z internetem, aby zapisać zmiany.');
-      return apiFetch(path, { method, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: key }),
-        client.invalidateQueries({ queryKey: ['meal-suggestions', account] }),
-      ]);
-    },
+    mutationFn: async (action: { date: string; data: PutMeal | null } | { overwrite: boolean }) =>
+      'date' in action ? queueMeal(action.date, action.data) : queueMealCopy(week, action.overwrite),
   });
   const close = () => {
     if (mutation.isPending || (editor && !allowNavigation())) return;
@@ -66,18 +59,12 @@ function MealWeek() {
   const runAction = async () => {
     try {
       if (removal) {
-        await mutation.mutateAsync({ path: `/api/meals/${removal}/dinner`, method: 'DELETE' });
+        await mutation.mutateAsync({ date: removal, data: null });
         setNotice('Obiad został usunięty.');
         setRemoval(null);
       } else {
-        const result = copyMealWeekResponseSchema.parse(
-          await mutation.mutateAsync({
-            path: '/api/meals/copy-week',
-            method: 'POST',
-            data: { fromWeekStart: shiftMealDate(week, -7), toWeekStart: week, overwrite },
-          }),
-        );
-        setNotice(`Skopiowano obiadów: ${result.copied}.`);
+        const result = await mutation.mutateAsync({ overwrite });
+        setNotice(`Skopiowano obiadów: ${result.type === 'write' ? result.writes.length : 0}.`);
         setCopying(false);
       }
     } catch {
@@ -94,9 +81,7 @@ function MealWeek() {
             <Group gap="xs" className="meal-week-actions">
               <Button
                 disabled={
-                  !writable ||
-                  query.isError ||
-                  !query.data?.days.some((day) => day.meals.some((meal) => meal.ingredients.length))
+                  !writable || !query.data?.days.some((day) => day.meals.some((meal) => meal.ingredients.length))
                 }
                 onClick={() => setExportMeals(query.data!.days.flatMap((day) => day.meals))}
               >
@@ -104,7 +89,7 @@ function MealWeek() {
               </Button>
               <Button
                 variant="light"
-                disabled={!writable || !query.data || query.isError}
+                disabled={!writable || !previousWeek.data}
                 onClick={() => {
                   mutation.reset();
                   setOverwrite(false);
@@ -118,10 +103,68 @@ function MealWeek() {
           )
         }
       />
-      {offline && (
-        <Alert color="yellow" role="alert">
-          Obiady są dostępne online. Połącz się z internetem, aby pobrać aktualny plan i zapisać zmiany.
+      <OfflineNotice offline={offline} syncedAt={query.syncedAt} issue={query.status.storageIssue}>
+        Zapisane tygodnie można przeglądać i zmieniać. Zmiany wyślemy po odzyskaniu połączenia.
+      </OfflineNotice>
+      {query.status.pendingCount > 0 && (
+        <Text role="status">Oczekujące zmiany obiadów: {query.status.pendingCount}.</Text>
+      )}
+      {query.status.reviewCount > 0 && (
+        <Alert color="red" role="alert">
+          Zmiany wymagają sprawdzenia i zostały zachowane na urządzeniu. {query.status.lastError}
+          {savedState.operations
+            .filter((op) => op.status === 'needs-review')
+            .map((op) => (
+              <Stack key={op.operationId} gap="xs" mt="sm">
+                <Text size="sm">
+                  {op.payload.type === 'write'
+                    ? op.payload.writes
+                        .map(
+                          (write) =>
+                            `${write.date}: ${write.data?.title ?? 'usunięcie obiadu'}${write.data ? ` — ${write.data.ingredients.map((item) => `${item.name} ${item.quantity ?? ''}`).join(', ')}` : ''}`,
+                        )
+                        .join(', ')
+                    : `Eksport: ${(op.payload.data.snapshot ?? []).map((meal) => `${meal.date}: ${meal.ingredients.map((item) => `${item.name} ${item.quantity ?? ''}`).join(', ')}`).join('; ')}`}
+                  . {op.lastError}
+                </Text>
+                {op.payload.type === 'export' &&
+                  !op.payload.data.confirmRepeat &&
+                  op.reviewReason === 'MEAL_EXPORT_CONFIRMATION_REQUIRED' && (
+                    <Button
+                      onClick={() =>
+                        void confirmMealExport(op.operationId).catch((error: Error) => setNotice(error.message))
+                      }
+                    >
+                      Potwierdź ponowne dodanie ilości
+                    </Button>
+                  )}
+                <Button
+                  variant="subtle"
+                  color="red"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        'Odrzucić tę zmianę i późniejsze zależne zmiany obiadów oraz zakupów? Te zmiany zostaną usunięte z urządzenia.',
+                      )
+                    )
+                      void discardMealOperation(op.operationId).catch((error: Error) => setNotice(error.message));
+                  }}
+                >
+                  Odrzuć zmianę i zależne zmiany
+                </Button>
+              </Stack>
+            ))}
         </Alert>
+      )}
+      {query.ready && !query.data && (offline || query.isError) && (
+        <Alert color="yellow" role="alert">
+          Ten tydzień nie został pobrany. Połącz się z internetem, aby poznać jego zawartość.
+        </Alert>
+      )}
+      {offline && query.data && !previousWeek.data && canEdit && (
+        <Text size="sm" c="dimmed">
+          Poprzedni tydzień nie jest zapisany. Połącz się z internetem, aby pobrać go przed kopiowaniem.
+        </Text>
       )}
       <Group justify="space-between" className="meal-week-navigation">
         <Group gap="xs">
@@ -158,7 +201,7 @@ function MealWeek() {
           </Button>
         </Alert>
       )}
-      {!offline && !query.isError && query.data && (
+      {query.data && (
         <div className="meal-week-grid">
           {query.data.days.map(({ date, meals }) => {
             const meal = meals[0];
@@ -275,7 +318,7 @@ function MealWeek() {
             pending={mutation.isPending}
             onCancel={() => setEditor(null)}
             onSave={async (data: PutMeal) => {
-              await mutation.mutateAsync({ path: `/api/meals/${editor}/dinner`, method: 'PUT', data });
+              await mutation.mutateAsync({ date: editor, data });
               setNotice('Obiad został zapisany.');
             }}
           />

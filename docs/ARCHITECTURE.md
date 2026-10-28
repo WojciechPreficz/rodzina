@@ -3,7 +3,7 @@
 ## Produkt i platformy
 
 Rodzina organizuje kalendarz, zakupy, zadania, dokumenty i kontakty.
-Obiady mają API, interfejs tygodnia, eksport do zakupów i dzisiejszą kartę online; obsługa offline pozostaje w [plan.md](plan.md). Rodzina ma wspólne konto
+Obiady mają plan tygodnia, eksport do zakupów i dzisiejszą kartę, również z trwałą obsługą offline. Rodzina ma wspólne konto
 z wieloma domownikami; listy zadań są prywatne lub udostępniane.
 WWW i APK korzystają ze wspólnego React. APK zawiera lokalny frontend
 i pobiera zdalne API. Alarmy dostarcza wyłącznie Android; zamknięta aplikacja
@@ -70,9 +70,11 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   edytują i usuwają obiady; formularz pozwala wybrać wcześniejsze danie
   z jego składnikami, zmienić notatkę i składniki. Kopiowanie poprzedniego
   tygodnia wymaga potwierdzenia z opcjonalnym nadpisaniem zajętych dni.
-  Dziecko widzi wyłącznie odczyt. Interfejs wymaga sieci, nie zapisuje
-  obiadów ani mutacji w trwałym magazynie; błąd odczytu nie oznacza pustego
-  tygodnia. Niezapisany formularz ma ochronę przed przypadkowym zamknięciem.
+  Dziecko widzi wyłącznie odczyt. Pobrane tygodnie i podpowiedzi są zapisywane
+  w istniejącym IndexedDB dla rodziny i użytkownika. Dorośli mogą przeglądać,
+  edytować i usuwać obiady offline oraz kopiować znany tydzień do znanego
+  tygodnia. Niepobrany tydzień nie oznacza pustego planu i blokuje zapis.
+  Niezapisany formularz ma ochronę przed przypadkowym zamknięciem.
   `POST /api/meals/to-shopping-list?operationId=<UUID>` przyjmuje `weekStart`,
   `listId`, opcjonalne `mealIds` (1–7 ID z tego tygodnia) i `confirmRepeat`
   (domyślnie false). Brak filtra wybiera cały tydzień; nieznane ID daje 404,
@@ -99,12 +101,41 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   podsumowanie pozycji dodanych i uzupełnionych oraz link do docelowej listy.
   Ostrzeżenie o ponownym eksporcie wymaga osobnego zaznaczenia potwierdzenia.
   Po wysłaniu wybór jest zablokowany; ponowienie po błędzie zachowuje ID i treść
-  żądania w otwartym oknie. Eksport nie trafia do kolejki offline.
+  żądania. Eksport jest pojedynczą operacją istniejącego wspólnego outboxa,
+  z kopią składników (`snapshot`) i docelowych identyfikatorów pozycji (`targets`).
+  Edycja obiadu po zleceniu nie zmienia kopii. Lokalna projekcja zakupów
+  uwzględnia eksport w kolejności operacji; adapter zakupów go nie wysyła.
+  Serwer zwraca również aktualne pozycje i mapowanie identyfikatorów po scaleniu.
+  Jedna transakcja IndexedDB aktualizuje bazę zakupów, potwierdzenie eksportu
+  i identyfikatory późniejszych zmian, zachowując ich treść. Eksport czeka
+  na utworzenie lokalnej listy oraz wcześniejsze zmiany obiadów i zakupów.
+  Docelowa lista i jej zawartość muszą być wcześniej zapisane; nowa lokalna
+  lista ma znaną pustą bazę. Odczyty zakupów zachowują dotychczasowego właściciela
+  odświeżania i są wstrzymywane na czas synchronizacji obiadów.
   Karta „Dziś na obiad” na górze kalendarza pokazuje nazwę i notatkę obiadu
   według strefy rodziny, niezależnie od oglądanej daty kalendarza. Współdzieli
   odczyt tygodnia z zakładką Obiady; zapis, usunięcie lub kopiowanie odświeża
-  kartę. Brak obiadu, błąd odczytu i brak sieci mają osobne komunikaty.
-  Integracja ze wspólną kolejką offline należy do 6.5.
+  kartę. Uwzględnia cache i oczekujące zmiany; brak zapisanej zawartości nie
+  oznacza braku obiadu. Baner tygodnia pokazuje tryb offline, czas pobrania,
+  stan kolejki i zmiany wymagające reakcji.
+  Mutacje z kolejki trafiają do `POST /api/meals/offline?operationId=<UUID>&actorId=<UUID>`.
+  Operacja `write` zawiera tydzień i zamrożone zapisy dni (`date`, `id`,
+  `expectedId`, `data`, a `data=null` oznacza usunięcie). Kopiowanie jest jedną
+  atomową operacją. Niezgodność tożsamości daje konflikt zamiast odtworzenia
+  usuniętego obiadu. Istniejące endpointy online zachowują kontrakty.
+  Idempotencja obiadów używa istniejącej tabeli `shopping_operations`, bez
+  nowej migracji; rola jest sprawdzana również przed odtworzeniem odpowiedzi.
+  Moduł jest zarejestrowany w cyklu życia magazynów konta i wspólnym nadawcy,
+  bez osobnego silnika ani odpytywania pustej kolejki. Powrót sieci i wznowienie
+  aplikacji uruchamiają synchronizację. WWW obsługuje otwarte okno bez sieci,
+  APK również restart lokalnego frontendu. Zamknięte APK nie synchronizuje.
+  Cache obiadów ma budżet 4 MiB, z kolejką do 6 MiB; najstarsze tygodnie bez
+  oczekujących zmian mogą być usuwane. Bazy oczekujących zmian są przypięte;
+  brak miejsca przerywa zapis zamiast potwierdzać pozorny sukces.
+  Konflikty i zmiany starsze niż 30 dni pozostają do sprawdzenia. Ponowny
+  eksport można potwierdzić; odrzucenie zmiany i jej zależności wymaga osobnej
+  decyzji użytkownika. Wylogowanie i zmiana konta czyszczą również obiady,
+  a spóźnione odpowiedzi nie przywracają danych poprzedniej osoby.
 
 ## API i bezpieczeństwo
 
@@ -125,7 +156,7 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   i uruchamia czyszczenie danych konta.
 - Limity logowania: 10 prób/15 minut dla IP–konto, osobno hasło i PIN,
   trwałe w SQLite. Poprawne logowanie usuwa własny licznik.
-- Operacje zakupów i zadań zachowują identyfikatory przy ponowieniu.
+- Operacje zakupów, zadań i obiadów zachowują identyfikatory przy ponowieniu.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
   90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
 

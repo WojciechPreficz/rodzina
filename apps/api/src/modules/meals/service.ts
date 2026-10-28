@@ -4,6 +4,7 @@ import {
   type CopyMealWeek,
   type PutMeal,
   type MealsToShoppingList,
+  type MealOfflineChange,
 } from '@rodzina/shared';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { DatabaseConnection } from '../../db/client.js';
@@ -11,7 +12,7 @@ import type { FamilyRole } from '../../permissions.js';
 import { ApiError } from '../../http/errors.js';
 import { createMealRepository } from './repository.js';
 import { createShoppingService } from '../shopping/service.js';
-import { mealShoppingExports } from '../../db/schema.js';
+import { mealShoppingExports, meals, shoppingItems } from '../../db/schema.js';
 
 // Calendar dates are floating days, so DST must not affect week offsets.
 function day(start: string, offset: number) {
@@ -32,14 +33,48 @@ export function createMealService(database: DatabaseConnection) {
   }
   return {
     requireExportAccess,
+    requireAdult,
+    offline(familyId: string, actorId: string, role: FamilyRole, change: MealOfflineChange) {
+      requireAdult(role);
+      if (change.type !== 'write') throw new ApiError(400, 'VALIDATION_ERROR', 'Nieprawidłowa zmiana obiadów.');
+      return database.db.transaction(() => {
+        const current = repository.week(familyId, change.weekStart, day(change.weekStart, 6));
+        for (const write of change.writes) {
+          if (write.date < change.weekStart || write.date > day(change.weekStart, 6))
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Data nie należy do zapisanego tygodnia.');
+          const existing = current.find((meal) => meal.date === write.date);
+          if ((existing?.id ?? null) !== write.expectedId || (existing && write.id !== existing.id))
+            throw new ApiError(
+              409,
+              'MEAL_CONFLICT',
+              'Plan zmienił się na innym urządzeniu. Sprawdź oczekującą zmianę.',
+            );
+          if (!existing && database.db.select().from(meals).where(eq(meals.id, write.id)).get())
+            throw new ApiError(409, 'MEAL_CONFLICT', 'Identyfikator obiadu jest już używany.');
+          if (write.data) repository.put(familyId, actorId, write.date, write.data, write.id);
+          else if (existing) repository.remove(familyId, write.date);
+        }
+        return { ok: true, week: { ok: true, ...this.week(familyId, change.weekStart) } };
+      });
+    },
     toShoppingList(familyId: string, actorId: string, role: FamilyRole, data: MealsToShoppingList) {
       return database.db.transaction(
         () => {
           const items = requireExportAccess(familyId, role, data.listId);
           const available = repository.week(familyId, data.weekStart, day(data.weekStart, 6));
-          if (data.mealIds?.some((id) => !available.some((meal) => meal.id === id)))
+          if (!data.snapshot && data.mealIds?.some((id) => !available.some((meal) => meal.id === id)))
             throw new ApiError(404, 'NOT_FOUND', 'Wybrany obiad nie istnieje w tym tygodniu.');
-          const selected = available.filter((meal) => !data.mealIds || data.mealIds.includes(meal.id));
+          const selected = data.snapshot
+            ? data.snapshot.map((snapshot) => {
+                if (
+                  snapshot.date < data.weekStart ||
+                  snapshot.date > day(data.weekStart, 6) ||
+                  !available.some((meal) => meal.id === snapshot.mealId && meal.date === snapshot.date)
+                )
+                  throw new ApiError(409, 'MEAL_CONFLICT', 'Eksportowany obiad został usunięty lub zastąpiony.');
+                return { id: snapshot.mealId, ingredients: snapshot.ingredients };
+              })
+            : available.filter((meal) => !data.mealIds || data.mealIds.includes(meal.id));
           const ids = selected.map((meal) => meal.id);
           const previous = ids.length
             ? database.db
@@ -66,6 +101,7 @@ export function createMealService(database: DatabaseConnection) {
             }
           let added = 0;
           let updated = 0;
+          const aliases: Record<string, string> = {};
           for (const [key, ingredient] of grouped) {
             // Checked purchases describe past needs and must not absorb new ingredients.
             const existing = items.find((item) => !item.isChecked && normalizeShoppingName(item.name) === key);
@@ -74,8 +110,22 @@ export function createMealService(database: DatabaseConnection) {
                 quantity: mergeQuantities(existing.quantity, ingredient.quantity),
               });
               updated++;
+              const target = data.targets?.find((target) => normalizeShoppingName(target.name) === key);
+              if (target) aliases[target.id] = existing.id;
             } else {
-              shopping.createItem(familyId, data.listId, actorId, ingredient);
+              const target = data.targets?.find((target) => normalizeShoppingName(target.name) === key);
+              // A locally merged item may have been bought or removed in the meantime.
+              // Keep that purchase intact and return an alias for the new need.
+              const reserved =
+                target && database.db.select().from(shoppingItems).where(eq(shoppingItems.id, target.id)).get();
+              const item = shopping.createItem(
+                familyId,
+                data.listId,
+                actorId,
+                ingredient,
+                reserved ? undefined : target?.id,
+              );
+              if (target) aliases[target.id] = item.id;
               added++;
             }
           }
@@ -91,7 +141,11 @@ export function createMealService(database: DatabaseConnection) {
               )
               .onConflictDoNothing()
               .run();
-          return { added, updated };
+          return {
+            added,
+            updated,
+            ...(data.snapshot ? { items: shopping.listItems(familyId, data.listId), aliases } : {}),
+          };
         },
         { behavior: 'immediate' },
       );

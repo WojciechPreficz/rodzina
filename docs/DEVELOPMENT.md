@@ -70,7 +70,7 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       sprawdzić pomijanie oraz nadpisanie zajętych dni, podpowiedzi składników,
       edycję, usuwanie i odczyt dziecka. Odbiór przy 390/1280 px i w fizycznym
       APK, w tym klawiatura, fokus oraz systemowy Wstecz. Test transportu Androida
-      w Playwright nie zastępuje próby telefonu. Offline należy do 6.5.
+      w Playwright nie zastępuje próby telefonu.
 - [ ] Obiady (6.4): wyeksportować pięć dań do niepustej listy, sprawdzić
       scalanie nazw i ilości, podsumowanie dodanych/uzupełnionych pozycji oraz
       pozostawienie kupionych pozycji bez zmian. Sprawdzić wybór części dań,
@@ -79,6 +79,17 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       pokazuje dzisiejszy plan według strefy rodziny, także po zmianie daty
       kalendarza; dziecko ma podgląd bez eksportu. Odbiór przy 390/1280 px
       i w fizycznym APK, w tym systemowy Wstecz i utrata sieci w oknie eksportu.
+- [ ] Obiady (6.5): na fizycznym APK pobrać tygodnie i niepustą listę zakupów,
+      odłączyć sieć, dodać/zmienić/usunąć obiad, skopiować zapisany tydzień
+      i wyeksportować składniki. Zmienić obiad po eksporcie, zamknąć proces
+      aplikacji i uruchomić bez internetu. Sprawdzić zachowanie zmian,
+      podpowiedzi, dzisiejszą kartę, projekcję zakupów i niepobrany tydzień.
+      Po powrocie sieci porównać z drugim urządzeniem: bez utraty zmian
+      i podwojenia ilości, także po utracie odpowiedzi. Sprawdzić ponowny
+      eksport, konflikty po usunięciu obiadu/listy na drugim urządzeniu,
+      wylogowanie i zmianę konta. Odbiór UI 390/1280 px oraz fizycznego APK
+      pozostaje wymagany; testy headless z transportem Androida nie potwierdzają
+      restartu procesu, klawiatury ani systemowego Wstecz na telefonie.
 - [ ] Dokumenty: wszystkie typy i filtry, szczegóły po nazwie, plakietka
       niezależna od filtra. „Odnowiono” zmienia termin i offsety; minione
       absolute pozostaje nieaktywne. Osobiste przypomnienia są prywatne;

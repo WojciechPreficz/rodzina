@@ -6,6 +6,8 @@ import { mealSuggestionsResponseSchema, putMealSchema, type Meal, type PutMeal }
 import { apiFetch } from '../../api.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import { allowNavigation } from '../../nativeNavigation.js';
+import { useOffline } from '../../connectivity.js';
+import { useMealState, visibleMeals, localMealSuggestions, saveMealSuggestions } from './mealOffline.js';
 
 export function MealForm({
   meal,
@@ -31,14 +33,24 @@ export function MealForm({
   );
   const [error, setError] = useState('');
   const [search] = useDebouncedValue(title.trim(), 250);
-  const suggestions = useQuery({
+  const state = useMealState();
+  const offline = useOffline();
+  const remote = useQuery({
     queryKey: ['meal-suggestions', account, search],
-    enabled: !disabled,
-    queryFn: async ({ signal }) =>
-      mealSuggestionsResponseSchema.parse(
+    enabled: !disabled && !offline && state.account === account && state.ready,
+    queryFn: async ({ signal }) => {
+      const suggestions = mealSuggestionsResponseSchema.parse(
         await apiFetch(`/api/meals/suggestions?q=${encodeURIComponent(search)}`, { signal }),
-      ).suggestions,
+      ).suggestions;
+      signal.throwIfAborted();
+      await saveMealSuggestions(account, suggestions);
+      return suggestions;
+    },
   });
+  const suggestions = {
+    ...remote,
+    data: state.account === account ? localMealSuggestions(visibleMeals(), search) : [],
+  };
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (disabled || pending) return;

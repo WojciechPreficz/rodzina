@@ -212,7 +212,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             const operations = await readOperations(tx, accountId);
             if (!operations.some((op) => op.operationId === operation.operationId)) return;
             await adapter.reconcile(tx, operation, response);
-            completeOperation(tx, operations, operation);
+            completeOperation(tx, await readOperations(tx, accountId), operation);
             await recountOutboxBudgets(tx, accountId);
             tx.objectStore('metadata').put({ accountId, key: `last-sync:${operation.module}`, value: Date.now() });
           });
@@ -246,9 +246,11 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
                 ? {
                     reviewReason: expired
                       ? 'expired'
-                      : error instanceof ApiRequestError && error.status === 409
-                        ? 'conflict'
-                        : 'rejected',
+                      : error instanceof ApiRequestError && error.code === 'MEAL_EXPORT_CONFIRMATION_REQUIRED'
+                        ? 'MEAL_EXPORT_CONFIRMATION_REQUIRED'
+                        : error instanceof ApiRequestError && error.status === 409
+                          ? 'conflict'
+                          : 'rejected',
                   }
                 : {}),
             });

@@ -16,6 +16,8 @@ export function useShopping(selected: string | null) {
   const key = shoppingKey(account);
   const online = useSyncExternalStore(onlineManager.subscribe, () => onlineManager.isOnline());
   const status = useOfflineSyncStatus(`${account.familyId}:${account.userId}`, 'shopping');
+  const mealsStatus = useOfflineSyncStatus(`${account.familyId}:${account.userId}`, 'meals');
+  const syncing = status.syncing || mealsStatus.syncing;
   const operationsQuery = useQuery<StoredShoppingOperation[]>({
     queryKey: [...key, 'operations'],
     queryFn: () => client.getQueryData<StoredShoppingOperation[]>([...key, 'operations']) ?? [],
@@ -23,13 +25,14 @@ export function useShopping(selected: string | null) {
   });
   const changes = operationsQuery.data ?? [];
   const refresh = {
-    refetchInterval: () => (status.syncing ? (false as const) : SYNC_INTERVAL_MS),
-    refetchOnWindowFocus: () => (status.syncing ? false : ('always' as const)),
-    refetchOnReconnect: () => (status.syncing ? false : ('always' as const)),
+    refetchInterval: () => (syncing ? (false as const) : SYNC_INTERVAL_MS),
+    refetchOnWindowFocus: () => (syncing ? false : ('always' as const)),
+    refetchOnReconnect: () => (syncing ? false : ('always' as const)),
   };
   const lists = useQuery({
     queryKey: [...key, 'lists'],
     queryFn: ({ signal }) => listShoppingLists(signal),
+    enabled: !syncing,
     ...refresh,
   });
   // Keep server data separate from pending changes: rejecting one write must
@@ -53,7 +56,8 @@ export function useShopping(selected: string | null) {
   const items = useQuery({
     queryKey: [...key, 'items', listId],
     queryFn: ({ signal }) => listShoppingItems(listId!, signal),
-    enabled: !!listId && !changes.some(({ change }) => change.type === 'createList' && change.id === listId),
+    enabled:
+      !syncing && !!listId && !changes.some(({ change }) => change.type === 'createList' && change.id === listId),
     ...refresh,
   });
   const visibleItems = (projected.get(JSON.stringify([...key, 'items', listId])) ??
@@ -70,7 +74,7 @@ export function useShopping(selected: string | null) {
     active,
     online,
     syncedAt: items.dataUpdatedAt || lists.dataUpdatedAt || undefined,
-    pendingCount: status.pendingCount,
+    pendingCount: changes.filter((op) => !op.review).length,
     syncError: status.reviewCount
       ? (status.lastError ?? 'Zapisane zmiany zakupów wymagają sprawdzenia. Zachowano je na urządzeniu.')
       : status.storageIssue,

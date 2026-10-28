@@ -1,22 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Anchor, Button, Checkbox, Group, Loader, Modal, Select, Stack, Text } from '@mantine/core';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { mealsToShoppingListResponseSchema, shoppingListsResponseSchema, type Meal } from '@rodzina/shared';
-import { ApiRequestError, apiFetch } from '../../api.js';
-import { isOffline, useOffline } from '../../connectivity.js';
+import { type Meal } from '@rodzina/shared';
+import { ApiRequestError } from '../../api.js';
+import { useOffline } from '../../connectivity.js';
 import { useMe } from '../../sessionContext.js';
-import { shoppingKey } from '../shopping/shoppingOptimistic.js';
+import { useShopping } from '../shopping/shoppingQueries.js';
+import { queueMealExport, useMealState, confirmMealExport } from './mealOffline.js';
 import { mealDateLabel } from './mealDates.js';
 import { addNativeBackHandler } from '../../nativeNavigation.js';
 
 export function MealShoppingDialog({ week, meals, onClose }: { week: string; meals: Meal[]; onClose: () => void }) {
-  const { family, user, familyConfirmed } = useMe();
+  const { user } = useMe();
   const offline = useOffline();
-  const client = useQueryClient();
   const [listId, setListId] = useState<string | null>(null);
   const [mealIds, setMealIds] = useState(meals.filter((meal) => meal.ingredients.length).map((meal) => meal.id));
-  const [attempt, setAttempt] = useState<{ id: string; confirmRepeat: boolean } | null>(null);
+  const [attempt, setAttempt] = useState<string | null>(null);
   const [repeat, setRepeat] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [pending, setPending] = useState(false);
@@ -29,38 +28,33 @@ export function MealShoppingDialog({ week, meals, onClose }: { week: string; mea
     [onClose],
   );
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ added: number; updated: number } | null>(null);
-  const writable = !!user && user.role !== 'child' && familyConfirmed && !offline;
-  const lists = useQuery({
-    queryKey: ['meal-export-lists', family?.id, user?.id],
-    enabled: writable,
-    queryFn: async ({ signal }) =>
-      shoppingListsResponseSchema.parse(await apiFetch('/api/shopping/lists', { signal })).lists,
-  });
+  const state = useMealState();
+  const shopping = useShopping(listId);
+  const lists = shopping.lists;
+  const result = attempt ? state.cache.results[attempt] : undefined;
+  const operation = state.operations.find((op) => op.operationId === attempt);
+  const needsConfirmation = operation?.reviewReason === 'MEAL_EXPORT_CONFIRMATION_REQUIRED';
+  const repeated = repeat || needsConfirmation;
+  const queued = !!attempt && !result && !repeated;
+  const writable = !!user && user.role !== 'child' && state.ready;
   const send = async () => {
-    if (sending.current || !writable || isOffline() || !listId || !mealIds.length || (repeat && !confirmed)) return;
-    const operation = attempt ?? { id: crypto.randomUUID(), confirmRepeat: false };
-    // Freeze the request after its first send. An uncertain response must retry the same payload and ID.
-    setAttempt(operation);
+    if (sending.current || !writable || !listId || !mealIds.length || (repeated && !confirmed)) return;
     sending.current = true;
     setPending(true);
     setError('');
     try {
-      const response = mealsToShoppingListResponseSchema.parse(
-        await apiFetch(`/api/meals/to-shopping-list?operationId=${operation.id}`, {
-          method: 'POST',
-          body: JSON.stringify({ weekStart: week, listId, mealIds, confirmRepeat: operation.confirmRepeat }),
-        }),
-      );
-      setResult(response);
-      void client.invalidateQueries({ queryKey: shoppingKey({ familyId: family!.id, userId: user!.id }) });
+      if (attempt && needsConfirmation) await confirmMealExport(attempt);
+      else {
+        const saved = await queueMealExport(week, listId, mealIds, confirmed);
+        setAttempt(saved.operationId);
+      }
+      setRepeat(false);
     } catch (cause) {
       if (cause instanceof ApiRequestError && cause.code === 'MEAL_EXPORT_CONFIRMATION_REQUIRED') {
         setRepeat(true);
-        setAttempt({ ...operation, confirmRepeat: true });
       } else {
         setError(
-          cause instanceof ApiRequestError
+          cause instanceof Error
             ? cause.message
             : 'Nie udało się potwierdzić eksportu. Spróbuj ponownie z tym samym wyborem — ilości nie zostaną dodane podwójnie.',
         );
@@ -83,10 +77,14 @@ export function MealShoppingDialog({ week, meals, onClose }: { week: string; mea
       closeButtonProps={{ disabled: pending, 'aria-label': 'Zamknij eksport' }}
     >
       <Stack>
-        {result ? (
+        {result || queued ? (
           <>
             <Alert color="sage" role="status">
-              Dodano pozycji: {result.added}. Uzupełniono pozycji: {result.updated}.
+              {result
+                ? `Dodano pozycji: ${result.added}. Uzupełniono pozycji: ${result.updated}.`
+                : operation?.status === 'needs-review'
+                  ? `Eksport wymaga sprawdzenia: ${operation.lastError}`
+                  : 'Eksport zapisany na urządzeniu. Oczekuje na synchronizację.'}
             </Alert>
             <Text size="sm">Późniejsze zmiany obiadów nie zmieniają listy zakupów.</Text>
             <Anchor component={Link} to={`/zakupy?lista=${listId}`} onClick={onClose}>
@@ -101,7 +99,7 @@ export function MealShoppingDialog({ week, meals, onClose }: { week: string; mea
               tekstowo. Kupione pozycje pozostaną bez zmian.
             </Text>
             {!writable && (
-              <Alert color="yellow">Połącz się z internetem i potwierdź dostęp do rodziny, aby dodać składniki.</Alert>
+              <Alert color="yellow">Pamięć obiadów nie jest gotowa lub nie masz uprawnień do zapisu.</Alert>
             )}
             {lists.isPending && !offline && <Loader size="sm" aria-label="Ładowanie list zakupów" />}
             {lists.isError && (
@@ -136,7 +134,7 @@ export function MealShoppingDialog({ week, meals, onClose }: { week: string; mea
                 ))}
               </Stack>
             </Checkbox.Group>
-            {repeat && (
+            {repeated && (
               <Alert color="yellow" role="alert">
                 Co najmniej jeden wybrany obiad był już eksportowany na tę listę. Ponowny eksport jeszcze raz doda
                 ilości wszystkich wybranych dań.
@@ -164,12 +162,15 @@ export function MealShoppingDialog({ week, meals, onClose }: { week: string; mea
                   !writable ||
                   !listId ||
                   !mealIds.length ||
-                  (!attempt && (lists.isError || !lists.data?.some((list) => list.id === listId))) ||
-                  (repeat && !confirmed)
+                  (!attempt &&
+                    (!lists.data?.some((list) => list.id === listId) ||
+                      !shopping.items.data ||
+                      shopping.active?.id !== listId)) ||
+                  (repeated && !confirmed)
                 }
                 onClick={() => void send()}
               >
-                {repeat ? 'Dodaj ponownie' : error ? 'Ponów eksport' : 'Dodaj składniki'}
+                {repeated ? 'Dodaj ponownie' : error ? 'Ponów eksport' : 'Dodaj składniki'}
               </Button>
             </Group>
           </>

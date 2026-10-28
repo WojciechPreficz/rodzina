@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mealResponseSchema, mealWeekResponseSchema, mealsToShoppingListResponseSchema } from '@rodzina/shared';
+import {
+  mealResponseSchema,
+  mealWeekResponseSchema,
+  mealsToShoppingListResponseSchema,
+  type MealOfflineChange,
+} from '@rodzina/shared';
 import { createShoppingService } from '../shopping/service.js';
 import { buildApp } from '../../app.js';
 import { hashToken } from '../../auth.js';
@@ -103,6 +108,102 @@ describe('meals API', () => {
   afterEach(async () => {
     await app?.close();
     database?.sqlite.close();
+  });
+
+  function offline(change: unknown, operationId = randomUUID(), user = admin) {
+    return request('POST', `/api/meals/offline?operationId=${operationId}&actorId=${user.id}`, change, user);
+  }
+  it('preserves offline identities and atomically replays writes and removals without resurrecting deleted meals', async () => {
+    const id = randomUUID();
+    const operationId = randomUUID();
+    const change = { type: 'write', weekStart: start, writes: [{ date: start, id, expectedId: null, data: meal }] };
+    const created = await offline(change, operationId);
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json().week.days[0].meals[0].id).toBe(id);
+    expect((await offline(change, operationId)).json()).toEqual(created.json());
+    const removal = { type: 'write', weekStart: start, writes: [{ date: start, id, expectedId: id, data: null }] };
+    const removeId = randomUUID();
+    expect((await offline(removal, removeId)).statusCode).toBe(200);
+    expect((await offline(removal, removeId)).statusCode).toBe(200);
+    expect((await offline({ ...change, writes: [{ ...change.writes[0], expectedId: id }] })).statusCode).toBe(409);
+    expect((await week()).days[0]!.meals).toEqual([]);
+    expect((await offline(change, operationId, child)).statusCode).toBe(403);
+    expect(
+      (await request('POST', `/api/meals/offline?operationId=${operationId}&actorId=${admin.id}`, change, outsider))
+        .statusCode,
+    ).toBe(401);
+  });
+  it('rolls back all frozen copy writes on a conflict and rejects operation payload changes', async () => {
+    const existing = await put();
+    const operationId = randomUUID();
+    const change: Extract<MealOfflineChange, { type: 'write' }> = {
+      type: 'write',
+      weekStart: start,
+      writes: [
+        { date: '2026-10-20', id: randomUUID(), expectedId: null, data: meal },
+        { date: start, id: randomUUID(), expectedId: null, data: meal },
+      ],
+    };
+    expect((await offline(change, operationId)).statusCode).toBe(409);
+    expect((await week()).days[1]!.meals).toEqual([]);
+    change.writes[1] = { ...change.writes[1]!, id: existing.id, expectedId: existing.id };
+    expect((await offline(change, operationId)).statusCode).toBe(200);
+    change.writes[0]!.data = { ...meal, title: 'Inne danie' };
+    expect((await offline(change, operationId)).json().error.code).toBe('OPERATION_CONFLICT');
+  });
+  it('exports frozen ingredients, reconciles identities, replays the same result and rechecks current list access', async () => {
+    const planned = await put();
+    const destination = list();
+    const targetId = randomUUID();
+    const snapshot = [{ mealId: planned.id, date: start, ingredients: [{ name: 'Ryż', quantity: '1 kg' }] }];
+    const operationId = randomUUID();
+    const exported = await exportMeals(
+      destination.id,
+      { snapshot, targets: [{ name: 'Ryż', id: targetId }] },
+      operationId,
+    );
+    expect(exported.statusCode, exported.body).toBe(200);
+    expect(exported.json().items).toEqual([expect.objectContaining({ id: targetId, name: 'Ryż', quantity: '1 kg' })]);
+    await put(start, { ...meal, ingredients: [{ name: 'Ryż', quantity: '10 kg' }] });
+    expect(
+      (await exportMeals(destination.id, { snapshot, targets: [{ name: 'Ryż', id: targetId }] }, operationId)).json(),
+    ).toEqual(exported.json());
+    expect(shopping().listItems(familyId, destination.id)[0]!.quantity).toBe('1 kg');
+    expect((await exportMeals(destination.id, { snapshot }, randomUUID())).statusCode).toBe(409);
+    const repeated = await exportMeals(destination.id, {
+      snapshot,
+      confirmRepeat: true,
+      targets: [{ name: 'Ryż', id: randomUUID() }],
+    });
+    expect(repeated.statusCode, repeated.body).toBe(200);
+    expect(shopping().listItems(familyId, destination.id)[0]!.quantity).toBe('1 kg + 1 kg');
+    expect((await exportMeals(list(outsider).id, { snapshot })).statusCode).toBe(404);
+    expect((await exportMeals(destination.id, { snapshot }, operationId, child)).statusCode).toBe(403);
+    shopping().removeList(familyId, destination.id, 'admin');
+    expect(
+      (await exportMeals(destination.id, { snapshot, targets: [{ name: 'Ryż', id: targetId }] }, operationId))
+        .statusCode,
+    ).toBe(404);
+  });
+  it('keeps a remote purchase checked and aliases the newly exported need', async () => {
+    const planned = await put();
+    const destination = list();
+    const bought = shopping().createItem(familyId, destination.id, admin.id, { name: 'Ryż', quantity: '1 kg' });
+    shopping().updateItem(familyId, bought.id, admin.id, 'admin', { isChecked: true });
+    const snapshot = [{ mealId: planned.id, date: start, ingredients: [{ name: 'Ryż', quantity: '2 kg' }] }];
+    const response = await exportMeals(destination.id, { snapshot, targets: [{ name: 'Ryż', id: bought.id }] });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().aliases[bought.id]).not.toBe(bought.id);
+    expect(shopping().listItems(familyId, destination.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: bought.id, isChecked: true, quantity: '1 kg' }),
+        expect.objectContaining({ isChecked: false, quantity: '2 kg' }),
+      ]),
+    );
+    await request('DELETE', `/api/meals/${start}/dinner`);
+    const missing = await exportMeals(destination.id, { snapshot, mealIds: [planned.id] });
+    expect(missing.statusCode).toBe(409);
+    expect(missing.json().error.code).toBe('MEAL_CONFLICT');
   });
 
   it('groups normalized ingredients, merges current unpurchased items and preserves categories and history', async () => {

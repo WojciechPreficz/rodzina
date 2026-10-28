@@ -1,7 +1,8 @@
+import '../../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Meal } from '@rodzina/shared';
@@ -9,10 +10,12 @@ import { ApiRequestError, apiFetch } from '../../api.js';
 import { MealShoppingDialog } from './MealShoppingDialog.js';
 import { TodayMeal } from './TodayMeal.js';
 import { shiftMealDate } from './mealDates.js';
+import { restoreShopping, stopShoppingPersistence, type ShoppingSession } from '../shopping/shoppingOffline.js';
+import { restoreMeals, stopMeals, saveMealWeek, mealRevision } from './mealOffline.js';
 
 const session = vi.hoisted(() => ({
-  user: { id: 'user', role: 'admin' },
-  family: { id: 'family', timezone: 'Pacific/Kiritimati' },
+  user: { id: '33333333-3333-4333-8333-333333333333', familyId: '11111111-1111-4111-8111-111111111111', role: 'admin' },
+  family: { id: '11111111-1111-4111-8111-111111111111', timezone: 'Pacific/Kiritimati' },
   familyConfirmed: true,
 }));
 const connection = vi.hoisted(() => ({ offline: false }));
@@ -40,7 +43,6 @@ const meal: Meal = {
 };
 let client: QueryClient;
 function mount(component: React.ReactNode) {
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MantineProvider env="test">
@@ -49,8 +51,10 @@ function mount(component: React.ReactNode) {
     </QueryClientProvider>,
   );
 }
-beforeEach(() => {
+beforeEach(async () => {
   connection.offline = false;
+  onlineManager.setOnline(true);
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   session.family.timezone = 'Pacific/Kiritimati';
   window.matchMedia = vi
     .fn()
@@ -66,6 +70,8 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(apiFetch).mockReset();
   vi.mocked(apiFetch).mockImplementation(async (url) => {
+    if (url === '/api/auth/me') return session;
+    if (url.includes('/items')) return { items: [] };
     if (url === '/api/shopping/lists')
       return {
         ok: true,
@@ -82,18 +88,28 @@ beforeEach(() => {
           meals: i === 3 ? [meal] : [],
         })),
       };
-    return { ok: true, added: 1, updated: 2 };
+    return { ok: true, added: 1, updated: 2, items: [], aliases: {} };
   });
+  await restoreShopping(client, session as unknown as ShoppingSession);
+  await restoreMeals(client, session as unknown as ShoppingSession);
 });
 afterEach(() => {
   cleanup();
+  stopMeals();
+  stopShoppingPersistence(client);
   client.clear();
+  onlineManager.setOnline(true);
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+async function seedMeals() {
+  await saveMealWeek(await apiFetch('/api/meals?weekStart=2026-10-26'), mealRevision('2026-10-26'));
+}
 async function chooseList() {
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/shopping/lists', expect.anything()));
   fireEvent.click(screen.getByRole('textbox', { name: 'Lista zakupów' }));
   fireEvent.click(await screen.findByRole('option', { name: 'Dom' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Dodaj składniki' })).toBeEnabled());
 }
 const dialog = () => (
   <MealShoppingDialog
@@ -103,6 +119,7 @@ const dialog = () => (
   />
 );
 it('exports only selected meals, blocks empty selections and reports added and updated positions', async () => {
+  await seedMeals();
   mount(dialog());
   await chooseList();
   const selected = screen.getByRole('checkbox', { name: /Pomidorowa/ });
@@ -110,18 +127,21 @@ it('exports only selected meals, blocks empty selections and reports added and u
   fireEvent.click(selected);
   expect(screen.getByRole('button', { name: 'Dodaj składniki' })).toBeDisabled();
   fireEvent.click(selected);
-  const invalidate = vi.spyOn(client, 'invalidateQueries');
   fireEvent.click(screen.getByRole('button', { name: 'Dodaj składniki' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('Dodano pozycji: 1. Uzupełniono pozycji: 2.');
+  await waitFor(() => {
+    expect(screen.queryByRole('alert')?.textContent).toBeUndefined();
+    expect(screen.queryByRole('status')).toBeInTheDocument();
+  });
+  expect(await screen.findByText('Dodano pozycji: 1. Uzupełniono pozycji: 2.')).toBeInTheDocument();
   expect(apiFetch).toHaveBeenCalledWith(
-    expect.stringMatching(/operationId=[\da-f-]{36}$/),
+    expect.stringMatching(/operationId=[\da-f-]{36}&actorId=[\da-f-]{36}$/),
     expect.objectContaining({
-      body: JSON.stringify({ weekStart: '2026-10-26', listId, mealIds: [meal.id], confirmRepeat: false }),
+      body: expect.stringContaining('"snapshot":[{"mealId"'),
     }),
   );
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['shopping', 'family', 'user'] });
 });
 it('requires confirmation for a repeated export and retries an uncertain response using the same payload and ID', async () => {
+  await seedMeals();
   const original = vi.mocked(apiFetch).getMockImplementation()!;
   let sends = 0;
   vi.mocked(apiFetch).mockImplementation(async (url, init) => {
@@ -129,7 +149,7 @@ it('requires confirmation for a repeated export and retries an uncertain respons
     sends++;
     if (sends === 1) throw new ApiRequestError('Powtórzenie', 409, 'MEAL_EXPORT_CONFIRMATION_REQUIRED');
     if (sends === 2) throw new TypeError('Failed to fetch');
-    return { ok: true, added: 0, updated: 1 };
+    return { ok: true, added: 0, updated: 1, items: [], aliases: {} };
   });
   mount(dialog());
   await chooseList();
@@ -137,15 +157,13 @@ it('requires confirmation for a repeated export and retries an uncertain respons
   expect(await screen.findByRole('button', { name: 'Dodaj ponownie' })).toBeDisabled();
   fireEvent.click(screen.getByRole('checkbox', { name: 'Potwierdzam ponowne dodanie ilości' }));
   fireEvent.click(screen.getByRole('button', { name: 'Dodaj ponownie' }));
-  await screen.findByText(/Nie udało się potwierdzić eksportu/);
-  expect(screen.getByRole('textbox', { name: 'Lista zakupów' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: 'Dodaj ponownie' }));
-  await screen.findByRole('status');
+  await screen.findByText('Dodano pozycji: 0. Uzupełniono pozycji: 1.', {}, { timeout: 8000 });
   const calls = vi.mocked(apiFetch).mock.calls.filter(([, init]) => init?.method);
-  expect(calls[1]).toEqual(calls[2]);
+  expect(calls[1]![0]).toEqual(calls[2]![0]);
+  expect(calls[1]![1]!.body).toEqual(calls[2]![1]!.body);
   expect(calls[0]![0]).toBe(calls[1]![0]);
   expect(JSON.parse(calls[1]![1]!.body as string).confirmRepeat).toBe(true);
-});
+}, 15000);
 it('shows empty lists and list loading failures without allowing export', async () => {
   vi.mocked(apiFetch).mockRejectedValue(new Error('Failure'));
   mount(dialog());
@@ -175,8 +193,8 @@ it('distinguishes a missing dinner from an unavailable dinner', async () => {
       </MantineProvider>
     </QueryClientProvider>,
   );
-  expect(screen.getByText(/Połącz się z internetem/)).toBeInTheDocument();
-  expect(screen.queryByText('Brak zaplanowanego obiadu na dziś.')).not.toBeInTheDocument();
+  expect(screen.getByText(/Zapisany plan offline/)).toBeInTheDocument();
+  expect(screen.getByText('Brak zaplanowanego obiadu na dziś.')).toBeInTheDocument();
 });
 it('reports a today loading error rather than an empty plan', async () => {
   vi.mocked(apiFetch).mockRejectedValue(new Error('Failure'));

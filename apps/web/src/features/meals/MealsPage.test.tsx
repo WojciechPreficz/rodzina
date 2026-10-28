@@ -1,12 +1,17 @@
+import '../../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MealsPage } from './MealsPage.js';
 import { MealForm } from './MealForm.js';
 import { mealWeekStart, shiftMealDate } from './mealDates.js';
 import { allowNavigation } from '../../nativeNavigation.js';
+import { activateOfflineAccount, transact } from '../../offline/database.js';
+import { readOperations } from '../../offline/outbox.js';
+import { restoreMeals, stopMeals } from './mealOffline.js';
+import type { ShoppingSession } from '../shopping/shoppingOffline.js';
 
 const session = vi.hoisted(() => ({
   user: { id: 'user', role: 'admin' },
@@ -19,16 +24,19 @@ vi.mock('../../connectivity.js', () => ({ useOffline: () => connection.offline, 
 let client: QueryClient;
 let request: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>>;
 function mount(component = <MealsPage />) {
-  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MantineProvider env="test">{component}</MantineProvider>
     </QueryClientProvider>,
   );
 }
-beforeEach(() => {
+beforeEach(async () => {
   session.user.role = 'admin';
   connection.offline = false;
+  onlineManager.setOnline(true);
+  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  await activateOfflineAccount('family:user');
+  await restoreMeals(client, session as unknown as ShoppingSession);
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -56,9 +64,14 @@ beforeEach(() => {
     };
   });
 });
-vi.mock('../../api.js', () => ({ apiFetch: (url: string, init?: RequestInit) => request(url, init) }));
+vi.mock('../../api.js', async (original) => ({
+  ...(await original<typeof import('../../api.js')>()),
+  apiFetch: (url: string, init?: RequestInit) => request(url, init),
+}));
 afterEach(() => {
   cleanup();
+  stopMeals();
+  onlineManager.setOnline(true);
   client?.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -129,14 +142,20 @@ it('navigates weeks and explicitly chooses whether to overwrite when copying', a
   const dialog = await screen.findByRole('dialog');
   expect(within(dialog).getByRole('checkbox')).not.toBeChecked();
   fireEvent.click(within(dialog).getByRole('checkbox'));
+  onlineManager.setOnline(false);
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kopiuj' }));
-  await screen.findByText('Skopiowano obiadów: 5.');
-  expect(request).toHaveBeenCalledWith(
-    '/api/meals/copy-week',
+  await screen.findByText('Skopiowano obiadów: 0.');
+  const operations = await transact('readonly', (tx) => readOperations(tx, 'family:user'));
+  expect(operations).toEqual([
     expect.objectContaining({
-      body: JSON.stringify({ fromWeekStart: start, toWeekStart: shiftMealDate(start, 7), overwrite: true }),
+      module: 'meals',
+      payload: {
+        type: 'write',
+        weekStart: shiftMealDate(start, 7),
+        writes: [],
+      },
     }),
-  );
+  ]);
 });
 it('shows seven read-only days for a child', async () => {
   session.user.role = 'child';
@@ -147,14 +166,16 @@ it('shows seven read-only days for a child', async () => {
   expect(screen.queryByRole('button', { name: 'Skopiuj poprzedni tydzień' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Dodaj składniki do listy zakupów' })).not.toBeInTheDocument();
 });
-it('blocks a save when connectivity changes after opening the editor', async () => {
+it('durably saves when connectivity changes after opening the editor', async () => {
   mount();
   fireEvent.click((await screen.findAllByRole('button', { name: /Dodaj obiad:/ }))[0]!);
   const dialog = await screen.findByRole('dialog');
   fireEvent.change(within(dialog).getByRole('textbox', { name: 'Nazwa dania' }), { target: { value: 'Obiad' } });
   connection.offline = true;
+  onlineManager.setOnline(false);
   fireEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
-  await screen.findByText('Połącz się z internetem, aby zapisać zmiany.');
+  await screen.findByText('Obiad został zapisany.', {}, { timeout: 5000 });
+  expect(await screen.findByRole('heading', { name: 'Obiad' })).toBeInTheDocument();
   expect(request.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method)).toBe(false);
 });
 it('shows loading errors without presenting the week as empty', async () => {

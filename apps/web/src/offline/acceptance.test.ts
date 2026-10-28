@@ -56,7 +56,10 @@ it('upgrades all five legacy stores directly, measures budgets and restarts with
   expect(fixture.entries.every(({ key }) => localStorage.getItem(key) === null)).toBe(true);
 
   const records = await transact('readonly', (tx) => requestValue<CacheEntry[]>(tx.objectStore('cache').getAll()));
-  expect(new Set(records.map((record) => record.module))).toEqual(new Set(adapters.keys()));
+  // Meals have no legacy cache to import; they are populated by their first online read.
+  expect(new Set(records.map((record) => record.module))).toEqual(
+    new Set([...adapters.keys()].filter((module) => module !== 'meals')),
+  );
   const measurements: Record<string, number> = {};
   for (const record of records) {
     const size = chargedBytes([account, record.module, record.key], record);

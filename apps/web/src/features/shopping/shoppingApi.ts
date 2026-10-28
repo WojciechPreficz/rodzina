@@ -17,6 +17,13 @@ export type ShoppingChange =
   | { type: 'remove'; listId: string; id: string }
   | { type: 'clear'; listId: string };
 
+export type MealShoppingProjection = {
+  type: 'mealExport';
+  listId: string;
+  id: string;
+  ingredients: { name: string; quantity: string | null; id: string }[];
+};
+
 export async function listShoppingLists(signal: AbortSignal) {
   return (await apiFetch<{ lists: ShoppingList[] }>('/api/shopping/lists', { signal })).lists;
 }

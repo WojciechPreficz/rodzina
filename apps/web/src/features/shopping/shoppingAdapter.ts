@@ -12,6 +12,7 @@ import {
   shoppingUsesOutbox,
   shoppingOperation,
   type ShoppingData,
+  type StoredShoppingOperation,
 } from './shoppingStorage.js';
 import type { QueuedShoppingChange, ShoppingSession } from './shoppingOffline.js';
 
@@ -34,11 +35,19 @@ export async function takeOverShopping(accountId: string) {
     if (await shoppingUsesOutbox(tx, accountId)) return;
     const data = await readShoppingTransaction(tx, accountId);
     if (!data) throw new Error('Brak pamięci zakupów do przeniesienia.');
-    for (const op of data.operations) await appendOperation(tx, accountId, 'shopping', shoppingIntent(op, op.review));
+    for (const op of data.operations) {
+      if (op.change.type === 'mealExport') throw new Error('Eksport wymaga wspólnej kolejki.');
+      await appendOperation(tx, accountId, 'shopping', shoppingIntent({ ...op, change: op.change }, op.review));
+    }
     await putShoppingTransaction(tx, data, true);
   });
 }
-function projected(data: ShoppingData, account: ShoppingAccount, op: QueuedShoppingChange, response: unknown) {
+function projected(
+  data: ShoppingData,
+  account: ShoppingAccount,
+  op: Pick<StoredShoppingOperation, 'change' | 'submittedAt'>,
+  response: unknown,
+) {
   const queries = new Map(data.queries.map((q) => [JSON.stringify(q.queryKey), q]));
   const cache = {
     setQueryData: (key: readonly unknown[], update: (old: unknown) => unknown) => {

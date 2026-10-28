@@ -30,9 +30,14 @@ export function TodayMeal() {
         <Title order={2} size="h4">
           Dziś na obiad
         </Title>
-        {offline ? (
-          <Text size="sm">Połącz się z internetem, aby sprawdzić dzisiejszy obiad.</Text>
-        ) : query.isError ? (
+        {offline && (
+          <Text size="sm" c="dimmed">
+            Zapisany plan offline. Oczekujące zmiany: {query.status.pendingCount}.
+          </Text>
+        )}
+        {!query.data && offline ? (
+          <Text size="sm">Dzisiejszy plan nie został pobrany. Połącz się z internetem.</Text>
+        ) : !query.data && query.isError ? (
           <Alert color="red" role="alert">
             Nie udało się pobrać dzisiejszego obiadu.
             <Button variant="subtle" onClick={() => void query.refetch()}>

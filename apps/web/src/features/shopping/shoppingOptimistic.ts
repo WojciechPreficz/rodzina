@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
-import type { ShoppingChange } from './shoppingApi.js';
+import { mergeQuantities, normalizeShoppingName, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
+import type { ShoppingChange, MealShoppingProjection } from './shoppingApi.js';
 
 export type ShoppingAccount = { familyId: string; userId: string };
 export const shoppingKey = (account: ShoppingAccount) => ['shopping', account.familyId, account.userId];
@@ -8,7 +8,7 @@ export const shoppingKey = (account: ShoppingAccount) => ['shopping', account.fa
 export function applyShoppingChange(
   client: Pick<QueryClient, 'setQueryData'>,
   account: ShoppingAccount,
-  change: ShoppingChange,
+  change: ShoppingChange | MealShoppingProjection,
   submittedAt: number,
 ) {
   const key = shoppingKey(account);
@@ -29,6 +29,29 @@ export function applyShoppingChange(
   } else {
     client.setQueryData<ShoppingItem[]>([...key, 'items', change.listId], (old = []) => {
       switch (change.type) {
+        case 'mealExport': {
+          const items = old.map((item) => ({ ...item }));
+          for (const ingredient of change.ingredients) {
+            const existing = items.find(
+              (item) => !item.isChecked && normalizeShoppingName(item.name) === normalizeShoppingName(ingredient.name),
+            );
+            if (existing) existing.quantity = mergeQuantities(existing.quantity, ingredient.quantity);
+            else
+              items.push({
+                ...metadata,
+                id: ingredient.id,
+                listId: change.listId,
+                name: ingredient.name,
+                quantity: ingredient.quantity,
+                category: 'other',
+                isChecked: false,
+                checkedBy: null,
+                checkedAt: null,
+                position: items.length,
+              });
+          }
+          return items;
+        }
         case 'add':
           return [
             ...old.filter((item) => item.id !== change.id),

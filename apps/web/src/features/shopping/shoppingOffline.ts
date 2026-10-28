@@ -62,6 +62,10 @@ export function stopShoppingPersistence(client: QueryClient) {
   runtimes.get(client)?.stop();
   runtimes.delete(client);
 }
+export async function flushShoppingPersistence(client: QueryClient) {
+  const runtime = runtimes.get(client);
+  if (runtime && current(client, runtime)) await runtime.schedule(async () => {});
+}
 export async function restoreShopping(client: QueryClient, session: ShoppingSession) {
   const accountId = identity(session);
   if (runtimes.get(client)?.account === accountId && current(client, runtimes.get(client)!)) return;

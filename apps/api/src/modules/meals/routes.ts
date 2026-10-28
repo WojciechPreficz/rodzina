@@ -12,6 +12,7 @@ import {
   putMealSchema,
   mealsToShoppingListSchema,
   mealsToShoppingListResponseSchema,
+  mealOfflineChangeSchema,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { parse } from '../../http/validation.js';
@@ -21,6 +22,22 @@ import { registerIdempotentMutations } from '../../http/idempotency.js';
 
 export function registerMealRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createMealService(database);
+  app.register(async (routes) => {
+    registerIdempotentMutations(routes, database, {
+      table: 'shopping_operations',
+      querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid() }).strict(),
+      validate: (request) => {
+        service.requireAdult(requireUser(request).role);
+        parse(mealOfflineChangeSchema, request.body);
+      },
+      recheckAccess: (request) => service.requireAdult(requireUser(request).role),
+      fingerprintParts: (request) => [requireUser(request).familyId, request.url, request.body],
+    });
+    routes.post('/api/meals/offline', (request) => {
+      const user = requireUser(request);
+      return service.offline(user.familyId, user.id, user.role, parse(mealOfflineChangeSchema, request.body));
+    });
+  });
   app.register(async (routes) => {
     registerIdempotentMutations(routes, database, {
       table: 'shopping_operations',

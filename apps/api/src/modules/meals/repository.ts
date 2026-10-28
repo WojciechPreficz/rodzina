@@ -40,12 +40,12 @@ export function createMealRepository(database: DatabaseConnection) {
           .all(),
       );
     },
-    put(familyId: string, actorId: string, date: string, data: PutMeal) {
+    put(familyId: string, actorId: string, date: string, data: PutMeal, id: string = randomUUID()) {
       const now = Date.now();
       const row = db
         .insert(meals)
         .values({
-          id: randomUUID(),
+          id,
           familyId,
           date,
           slot: 'dinner',
