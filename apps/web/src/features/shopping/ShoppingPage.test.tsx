@@ -9,7 +9,6 @@ import { ShoppingPage } from './ShoppingPage.js';
 import { MemoryRouter } from 'react-router';
 import { restoreShopping, stopShoppingPersistence, type ShoppingSession } from './shoppingOffline.js';
 import { readShoppingData } from './shoppingStorage.js';
-import { shoppingKey } from './shoppingOptimistic.js';
 
 const session = vi.hoisted(() => ({
   user: { id: 'adult', familyId: 'family', role: 'member', displayName: 'Ania' },
@@ -45,9 +44,13 @@ const item: ShoppingItem = {
 };
 let client: QueryClient;
 
-async function setup(initial: ShoppingItem[] = [item], patch?: () => Promise<Response>) {
+async function setup(
+  initial: ShoppingItem[] = [item],
+  patch?: () => Promise<Response>,
+  initialLists: ShoppingList[] = [list],
+) {
   let items = [...initial];
-  let lists = [list];
+  let lists = [...initialLists];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input).split('?')[0]!;
     const method = init?.method ?? 'GET';
@@ -289,18 +292,17 @@ describe('shopping UI', () => {
   });
 
   it('distinguishes an uncached offline list from an empty list and blocks adding', async () => {
-    await setup();
+    const fetchMock = await setup([item], undefined, [list, { ...list, id: 'uncached', name: 'Niepobrana' }]);
     await screen.findByRole('article', { name: 'Mleko' });
     act(() => {
-      client.setQueryData(
-        [...shoppingKey({ familyId: 'family', userId: 'adult' }), 'lists'],
-        [list, { ...list, id: 'uncached', name: 'Niepobrana' }],
-      );
       onlineManager.setOnline(false);
     });
     fireEvent.click(screen.getByRole('button', { name: 'Niepobrana' }));
+    expect(screen.getByRole('heading', { name: 'Niepobrana', level: 2 })).toBeInTheDocument();
     expect(await screen.findByText(/Brak zawartości tej listy na urządzeniu/)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Dodaj produkt' })).toBeDisabled();
     expect(screen.queryByText('Lista jest pusta. Dodaj pierwszy produkt.')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/lists/uncached/items'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 });
