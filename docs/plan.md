@@ -13,7 +13,7 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | ------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
 | Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                        | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
 | Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026             | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
-| Faza 6: obiady, kroki 6.1–6.2                                 | API zaimplementowane lokalnie                           | Końcowe CI; kroki 6.3–6.5 do implementacji                        |
+| Faza 6: obiady, kroki 6.1–6.3                                 | API i UI tygodnia zaimplementowane lokalnie             | Odbiór 6.3 i końcowe CI; kroki 6.4–6.5 do implementacji           |
 | Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026 | Odbiór telefonu i końcowe CI do potwierdzenia                     |
 | Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                               | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
 | K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                               | Końcowe CI i fizyczne APK do potwierdzenia                        |
@@ -109,6 +109,7 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 
 #### Krok 6.3 - UI: tydzień obiadów
 
+- **Status:** zaimplementowane lokalnie; końcowe CI i odbiór ręczny oraz fizyczne APK do potwierdzenia. Funkcje online, bez eksportu do zakupów i trwałej kolejki offline.
 - **Zakres:** zakładka Obiady z widokiem tygodnia (pon-nd), strzałkami i przyciskiem "dziś". Karta dnia albo "+ Dodaj obiad". Formularz (nazwa z podpowiedziami, które po wyborze uzupełniają składniki, notatka, lista składników), usuwanie, "Skopiuj poprzedni tydzień" z pytaniem o nadpisanie. Dziecko widzi tylko odczyt.
 - **Gotowe, gdy:** testy komponentów formularza i podpowiedzi. Ręcznie: zaplanowanie 5 obiadów i skopiowanie tygodnia.
 

@@ -1,0 +1,49 @@
+.meal-week-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mantine-spacing-md);
+}
+.meal-day {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.meal-notes {
+  white-space: pre-wrap;
+}
+.meal-ingredients {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.meal-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.meal-ingredient {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: var(--mantine-spacing-xs);
+  align-items: end;
+}
+.meals-page button,
+.meal-ingredient button {
+  min-height: 44px;
+}
+@media (max-width: 64em) {
+  .meal-week-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 47.99em) {
+  .meal-week-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .meal-ingredient {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+  .meal-ingredient button {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}

@@ -3,10 +3,9 @@ import { createBrowserRouter } from 'react-router';
 import { ProtectedRoute, PublicOnlyRoute } from './auth.js';
 import { AppShell } from './components/AppShell.js';
 import { LoginPage, RegisterPage } from './components/AuthPages.js';
-import { EmptyPage } from './components/EmptyPage.js';
 import { MorePage } from './components/MorePage.js';
 import { WelcomePage } from './components/WelcomePage.js';
-import { labels } from './i18n/pl.js';
+import { MealsPage } from './features/meals/MealsPage.js';
 import { FamilyPage } from './features/family/FamilyPage.js';
 import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/JoinPages.js';
 import { AuthLayout } from './components/AuthLayout.js';
@@ -68,7 +67,7 @@ export const router = createBrowserRouter([
               { path: 'zakupy', element: <ShoppingPage /> },
               { path: 'dokumenty', element: <DocumentsPage /> },
               { path: 'kontakty', element: <ContactsPage /> },
-              { path: 'obiady', element: <EmptyPage title={labels.meals} /> },
+              { path: 'obiady', element: <MealsPage /> },
               { path: 'wiecej', element: <MorePage /> },
               { path: 'wiecej/rodzina', element: <FamilyPage /> },
               { path: 'wiecej/powiadomienia', element: <NotificationsPage /> },

@@ -3,7 +3,7 @@
 ## Produkt i platformy
 
 Rodzina organizuje kalendarz, zakupy, zadania, dokumenty i kontakty.
-Obiady mają API online; interfejs i obsługa offline pozostają w [plan.md](plan.md). Rodzina ma wspólne konto
+Obiady mają API i interfejs tygodnia online; eksport w UI i obsługa offline pozostają w [plan.md](plan.md). Rodzina ma wspólne konto
 z wieloma domownikami; listy zadań są prywatne lub udostępniane.
 WWW i APK korzystają ze wspólnego React. APK zawiera lokalny frontend
 i pobiera zdalne API. Alarmy dostarcza wyłącznie Android; zamknięta aplikacja
@@ -65,6 +65,14 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   `GET /api/meals/suggestions?q=` zwraca do 20 różnych tytułów z aktualnie
   zapisanych obiadów rodziny wraz ze składnikami ostatnio zapisanego wariantu.
   Wyszukiwanie i grupowanie ignorują wielkość liter i różnice białych znaków.
+  Zakładka `/obiady` pokazuje siedem dni od poniedziałku, nawigację tygodni
+  i powrót do bieżącego tygodnia według strefy rodziny. Dorośli dodają,
+  edytują i usuwają obiady; formularz pozwala wybrać wcześniejsze danie
+  z jego składnikami, zmienić notatkę i składniki. Kopiowanie poprzedniego
+  tygodnia wymaga potwierdzenia z opcjonalnym nadpisaniem zajętych dni.
+  Dziecko widzi wyłącznie odczyt. Interfejs wymaga sieci, nie zapisuje
+  obiadów ani mutacji w trwałym magazynie; błąd odczytu nie oznacza pustego
+  tygodnia. Niezapisany formularz ma ochronę przed przypadkowym zamknięciem.
   `POST /api/meals/to-shopping-list?operationId=<UUID>` przyjmuje `weekStart`,
   `listId`, opcjonalne `mealIds` (1–7 ID z tego tygodnia) i `confirmRepeat`
   (domyślnie false). Brak filtra wybiera cały tydzień; nieznane ID daje 404,
