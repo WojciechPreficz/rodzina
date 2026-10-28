@@ -1,3 +1,11 @@
+import { parse } from '../../http/validation.js';
+import {
+  registerFamilySchema,
+  loginSchema,
+  familyMembersQuerySchema,
+  loginChildSchema,
+  resetPasswordSchema,
+} from './schemas.js';
 import {
   registerFamilyResponseSchema,
   loginResponseSchema,
@@ -21,21 +29,36 @@ export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConne
       .code(201)
       .send(
         registerFamilyResponseSchema.parse(
-          await service.registerFamily(request.body, (id, now) => createSession(reply, request, id, now)),
+          await service.registerFamily(
+            parse(registerFamilySchema, request.body, 'Dane rejestracji są niepoprawne.'),
+            (id, now) => createSession(reply, request, id, now),
+          ),
         ),
       );
   });
   app.post('/api/auth/login', { config: { auth: 'public' } }, async (request, reply) => {
     return loginResponseSchema.parse(
-      await service.login(request.body, request.ip ?? 'unknown', (id, now) => createSession(reply, request, id, now)),
+      await service.login(
+        parse(loginSchema, request.body, 'Dane logowania są niepoprawne.'),
+        request.ip ?? 'unknown',
+        (id, now) => createSession(reply, request, id, now),
+      ),
     );
   });
   app.get('/api/auth/family-members', { config: { auth: 'public' } }, async (request) => {
-    return familyMembersResponseSchema.parse(await service.familyMembers(request.query));
+    return familyMembersResponseSchema.parse(
+      await service.familyMembers(
+        parse(familyMembersQuerySchema, request.query, 'Kod rodziny jest wymagany.').joinCode,
+      ),
+    );
   });
   app.post('/api/auth/login-child', { config: { auth: 'public' } }, async (request, reply) => {
     return loginChildResponseSchema.parse(
-      await service.loginChild(request.body, request.ip ?? 'unknown', (id) => createSession(reply, request, id)),
+      await service.loginChild(
+        parse(loginChildSchema, request.body, 'Dane logowania dziecka są niepoprawne.'),
+        request.ip ?? 'unknown',
+        (id) => createSession(reply, request, id),
+      ),
     );
   });
   app.post('/api/auth/logout', async (request, reply) => {
@@ -47,6 +70,8 @@ export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConne
     return authMeResponseSchema.parse(await service.me(requireUser(request)));
   });
   app.post('/api/auth/reset-password', { config: { auth: 'public' } }, async (request) => {
-    return authOkResponseSchema.parse(await service.resetPassword(request.body));
+    return authOkResponseSchema.parse(
+      await service.resetPassword(parse(resetPasswordSchema, request.body, 'Dane resetu hasła są niepoprawne.')),
+    );
   });
 }

@@ -1,3 +1,13 @@
+import { parse } from '../../http/validation.js';
+import {
+  createChildSchema,
+  createInvitationSchema,
+  invitationParamsSchema,
+  memberParamsSchema,
+  acceptInvitationSchema,
+  updateMemberSchema,
+  updateFamilySchema,
+} from './schemas.js';
 import {
   membersResponseSchema,
   memberResponseSchema,
@@ -23,14 +33,28 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
     membersResponseSchema.parse(await service.listMembers(requireUser(request))),
   );
   app.post('/api/members/child', async (request, reply) =>
-    reply.code(201).send(memberResponseSchema.parse(await service.createChild(requireUser(request), request.body))),
+    reply
+      .code(201)
+      .send(
+        memberResponseSchema.parse(
+          await service.createChild(
+            requireUser(request),
+            parse(createChildSchema, request.body, 'Dane dziecka są niepoprawne.'),
+          ),
+        ),
+      ),
   );
   app.post('/api/invitations', async (request) =>
-    createInvitationResponseSchema.parse(await service.createInvitation(requireUser(request), request.body)),
+    createInvitationResponseSchema.parse(
+      await service.createInvitation(
+        requireUser(request),
+        parse(createInvitationSchema, request.body, 'Rola zaproszenia jest nieprawidłowa.'),
+      ),
+    ),
   );
   app.get('/api/invitations/:token', { config: { auth: 'public' } }, async (request) =>
     invitationResponseSchema.parse(
-      await service.getInvitation((request.params as { token?: string } | undefined)?.token),
+      await service.getInvitation(parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.').token),
     ),
   );
   app.post('/api/invitations/:token/accept', { config: { auth: 'public' } }, async (request, reply) =>
@@ -39,8 +63,8 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       .send(
         acceptInvitationResponseSchema.parse(
           await service.acceptInvitation(
-            (request.params as { token?: string } | undefined)?.token,
-            request.body,
+            parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.').token,
+            parse(acceptInvitationSchema, request.body, 'Dane akceptacji zaproszenia są niepoprawne.'),
             (id) => createSession(reply, request, id),
           ),
         ),
@@ -48,25 +72,36 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
   );
   app.post('/api/members/:id/password-reset-link', async (request) =>
     passwordResetLinkResponseSchema.parse(
-      await service.createPasswordResetLink(requireUser(request), (request.params as { id?: string } | undefined)?.id),
+      await service.createPasswordResetLink(
+        requireUser(request),
+        parse(memberParamsSchema, request.params, 'Brak identyfikatora użytkownika.').id,
+      ),
     ),
   );
   app.patch('/api/members/:id', async (request) =>
     memberResponseSchema.parse(
       await service.updateMember(
         requireUser(request),
-        (request.params as { id?: string } | undefined)?.id,
-        request.body,
+        parse(memberParamsSchema, request.params, 'Brak identyfikatora użytkownika.').id,
+        parse(updateMemberSchema, request.body, 'Dane użytkownika są niepoprawne.'),
       ),
     ),
   );
   app.delete('/api/members/:id', async (request) =>
     deleteMemberResponseSchema.parse(
-      await service.removeMember(requireUser(request), (request.params as { id?: string } | undefined)?.id),
+      await service.removeMember(
+        requireUser(request),
+        parse(memberParamsSchema, request.params, 'Brak identyfikatora użytkownika.').id,
+      ),
     ),
   );
   app.patch('/api/family', async (request) =>
-    familyResponseSchema.parse(await service.updateFamily(requireUser(request), request.body)),
+    familyResponseSchema.parse(
+      await service.updateFamily(
+        requireUser(request),
+        parse(updateFamilySchema, request.body, 'Nazwa rodziny jest niepoprawna.'),
+      ),
+    ),
   );
   app.post('/api/family/join-code/rotate', async (request) =>
     rotateJoinCodeResponseSchema.parse(await service.rotateJoinCode(requireUser(request))),

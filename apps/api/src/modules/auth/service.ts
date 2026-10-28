@@ -1,6 +1,6 @@
 import { serializeFamily } from '../../http/family.js';
 import crypto from 'node:crypto';
-import { z } from 'zod';
+import type { RegisterFamilyInput, LoginInput, LoginChildInput, ResetPasswordInput } from './schemas.js';
 import { hashPassword, hashToken, isValidPassword, normalizeEmail, verifyPassword, verifyPin } from '../../auth.js';
 import type { AppConfig } from '../../config.js';
 import type { DatabaseConnection } from '../../db/client.js';
@@ -10,32 +10,15 @@ import { createAuthRepository } from './repository.js';
 import { createAuthRateLimitService, createLoginRateLimitKey } from './rate-limit-service.js';
 
 export type StartSession = (userId: string, createdAt?: number) => Promise<void>;
-const registerFamilySchema = z.object({
-  familyName: z.string().trim().min(2),
-  displayName: z.string().trim().min(2),
-  email: z.string().trim().email(),
-  password: z.string().min(8),
-});
-
-const loginSchema = z.object({
-  email: z.string().trim().email(),
-  password: z.string().min(8),
-});
-
 export function createAuthService(database: DatabaseConnection, config: AppConfig) {
   const repository = createAuthRepository(database);
   const rateLimits = createAuthRateLimitService(database);
-  async function registerFamily(body: unknown, startSession: StartSession) {
-    const parsed = registerFamilySchema.safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Dane rejestracji są niepoprawne.');
-    }
-
+  async function registerFamily(data: RegisterFamilyInput, startSession: StartSession) {
     if (!config.RODZINA_ALLOW_REGISTRATION) {
       throw new ApiError(403, 'FORBIDDEN', 'Rejestracja rodziny jest wyłączona.');
     }
 
-    const { familyName, displayName, email, password } = parsed.data;
+    const { familyName, displayName, email, password } = data;
     const normalizedEmail = normalizeEmail(email);
     const existingUser = repository.findUserByEmail(normalizedEmail);
 
@@ -76,13 +59,8 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     };
   }
 
-  async function login(body: unknown, ip: string, startSession: StartSession) {
-    const parsed = loginSchema.safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Dane logowania są niepoprawne.');
-    }
-
-    const { email, password } = parsed.data;
+  async function login(data: LoginInput, ip: string, startSession: StartSession) {
+    const { email, password } = data;
     const normalizedEmail = normalizeEmail(email);
     const loginKey = createLoginRateLimitKey('password', ip, normalizedEmail);
     rateLimits.consume(loginKey);
@@ -113,12 +91,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     };
   }
 
-  async function familyMembers(query: unknown) {
-    const joinCode = String((query as Record<string, unknown> | undefined)?.joinCode ?? '').trim();
-    if (!joinCode) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Kod rodziny jest wymagany.');
-    }
-
+  async function familyMembers(joinCode: string) {
     const family = repository.findFamilyByCode(joinCode);
     if (!family) {
       throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
@@ -133,20 +106,8 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     };
   }
 
-  async function loginChild(body: unknown, ip: string, startSession: StartSession) {
-    const parsed = z
-      .object({
-        joinCode: z.string().trim().min(1),
-        userId: z.string().trim().min(1),
-        pin: z.string().trim().min(4).max(6),
-      })
-      .safeParse(body ?? {});
-
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Dane logowania dziecka są niepoprawne.');
-    }
-
-    const { joinCode, userId, pin } = parsed.data;
+  async function loginChild(data: LoginChildInput, ip: string, startSession: StartSession) {
+    const { joinCode, userId, pin } = data;
     const family = repository.findFamilyByCode(joinCode);
     if (!family) {
       throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
@@ -197,19 +158,8 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     };
   }
 
-  async function resetPassword(body: unknown) {
-    const parsed = z
-      .object({
-        token: z.string().trim().min(1),
-        password: z.string().min(8),
-      })
-      .safeParse(body ?? {});
-
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Dane resetu hasła są niepoprawne.');
-    }
-
-    const { token, password } = parsed.data;
+  async function resetPassword(data: ResetPasswordInput) {
+    const { token, password } = data;
     const resetRequest = repository.findPasswordReset(hashToken(token));
 
     if (!resetRequest) {

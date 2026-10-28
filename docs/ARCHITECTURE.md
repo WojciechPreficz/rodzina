@@ -57,8 +57,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 
 ## API i bezpieczeństwo
 
-- /api, JSON walidowany przez Zod. Błędy: { error: { code, message } },
-  komunikat po polsku. Publiczne trasy są jawnie określone w konfiguracji auth.
+- /api, dane wejściowe walidowane schematami Zod przez wspólny parser HTTP
+  przed przekazaniem do serwisów. Reguły biznesowe pozostają w serwisach.
+  Jeden globalny handler zwraca błędy { error: { code, message } } z komunikatem
+  po polsku, zachowuje statusy błędów HTTP klienta (w tym 413 i 415), a szczegóły
+  nieoczekiwanych błędów zapisuje tylko w logach. Błąd walidacji odpowiedzi
+  oznacza 500, nie błąd danych klienta.
+  Publiczne trasy są jawnie określone w konfiguracji auth.
 - Mutacje wymagają application/json i zgodnego źródła: Origin, a wyłącznie
   przy jego braku Referer. Porównujemy z hostem żądania. Proxy Vite zachowuje
   changeOrigin=false. Cookie sid: HttpOnly, SameSite=Lax, Secure w produkcji.

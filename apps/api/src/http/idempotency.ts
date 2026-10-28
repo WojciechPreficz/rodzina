@@ -1,3 +1,4 @@
+import { parse } from './validation.js';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, RouteOptions } from 'fastify';
 import { z } from 'zod';
@@ -29,9 +30,7 @@ export function registerIdempotentMutations(app: FastifyInstance, database: Data
     const handler = route.handler;
     route.handler = function (request, reply) {
       const user = requireUser(request);
-      const parsed = (options.querySchema ?? querySchema).safeParse(request.query);
-      if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Dane żądania są niepoprawne.');
-      const { operationId, actorId } = parsed.data;
+      const { operationId, actorId } = parse(options.querySchema ?? querySchema, request.query);
       if (actorId && actorId !== user.id)
         throw new ApiError(401, 'SESSION_CHANGED', 'Konto zostało zmienione. Zaloguj się ponownie.');
       if (!operationId) return handler.call(this, request, reply);

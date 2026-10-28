@@ -1,7 +1,8 @@
+import { parse } from '../../http/validation.js';
 import { requireUser } from '../../http/session-auth.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ApiError, registerApiErrorHandler } from '../../http/errors.js';
+import { ApiError } from '../../http/errors.js';
 import { registerIdempotentMutations } from '../../http/idempotency.js';
 import { createTaskListRepository } from './repository.js';
 import {
@@ -25,12 +26,10 @@ import { createTaskListService } from './service.js';
 export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createTaskListService(database);
   const idSchema = z.object({ id: z.string().uuid() });
-  function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown): T {
-    const parsed = schema.safeParse(input);
-    if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Dane żądania są niepoprawne.');
-    return parsed.data;
-  }
   app.register(async (routes) => {
+    routes.addHook('onRoute', (route) => {
+      route.config = { ...route.config, primaryKeyConflictMessage: 'Identyfikator zadania jest już używany.' };
+    });
     const repository = createTaskListRepository(database);
     const checkAccess = (request: import('fastify').FastifyRequest, listId: string) => {
       if (!service.canAccessList(requireUser(request).familyId, requireUser(request).id, listId))
@@ -63,11 +62,6 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       },
       // Saved responses contain private content; sharing may have changed since the write.
       recheckAccess: checkAccess,
-    });
-    registerApiErrorHandler(routes, {
-      primaryKeyConflictMessage: 'Identyfikator zadania jest już używany.',
-      internalMessage: 'Nie udało się obsłużyć zadań.',
-      logMessage: 'Task request failed',
     });
     routes.get('/api/tasks/snapshot', (request) => {
       const user = requireUser(request);

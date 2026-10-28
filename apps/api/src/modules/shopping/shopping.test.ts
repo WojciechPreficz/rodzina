@@ -413,7 +413,7 @@ describe('shopping API', () => {
     );
     const response = await request('POST', `${base}/lists/${id}/items`, { name: 'Mleko' });
     expect(response.statusCode).toBe(500);
-    expect(response.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Nie udało się obsłużyć zakupów.' } });
+    expect(response.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Nie udało się obsłużyć żądania.' } });
     expect(database.db.select().from(schema.shoppingItems).all()).toEqual([]);
     expect(database.db.select().from(schema.shoppingHistory).all()).toEqual([]);
   });

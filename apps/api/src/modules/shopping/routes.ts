@@ -1,7 +1,8 @@
+import { parse } from '../../http/validation.js';
 import { requireUser } from '../../http/session-auth.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ApiError, registerApiErrorHandler } from '../../http/errors.js';
+
 import { registerIdempotentMutations } from '../../http/idempotency.js';
 import {
   createShoppingListSchema,
@@ -23,12 +24,10 @@ import { createShoppingService } from './service.js';
 export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createShoppingService(database);
   const idSchema = z.object({ id: z.string().uuid() });
-  function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown): T {
-    const parsed = schema.safeParse(input);
-    if (!parsed.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Dane żądania są niepoprawne.');
-    return parsed.data;
-  }
   app.register(async (routes) => {
+    routes.addHook('onRoute', (route) => {
+      route.config = { ...route.config, primaryKeyConflictMessage: 'Identyfikator zmiany jest już używany.' };
+    });
     registerIdempotentMutations(routes, database, {
       table: 'shopping_operations',
       fingerprintParts: (request) => [
@@ -38,11 +37,6 @@ export function registerShoppingRoutes(app: FastifyInstance, database: DatabaseC
         request.url,
         request.body,
       ],
-    });
-    registerApiErrorHandler(routes, {
-      primaryKeyConflictMessage: 'Identyfikator zmiany jest już używany.',
-      internalMessage: 'Nie udało się obsłużyć zakupów.',
-      logMessage: 'Shopping request failed',
     });
     routes.get('/api/shopping/lists', async (request) =>
       shoppingListsResponseSchema.parse({

@@ -1,6 +1,12 @@
 import { serializeFamily } from '../../http/family.js';
 import crypto from 'node:crypto';
-import { z } from 'zod';
+import type {
+  CreateChildInput,
+  CreateInvitationInput,
+  AcceptInvitationInput,
+  UpdateMemberInput,
+  UpdateFamilyInput,
+} from './schemas.js';
 import {
   generateJoinCode,
   hashPassword,
@@ -37,28 +43,12 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     };
   }
 
-  async function createChild(user: PublicAuthUser, body: unknown) {
+  async function createChild(user: PublicAuthUser, data: CreateChildInput) {
     if (!canManageFamilyMembers(user.role) || !canSetChildPin(user.role)) {
       throw new ApiError(403, 'FORBIDDEN', 'Tylko administrator może dodać dziecko.');
     }
 
-    const parsed = z
-      .object({
-        displayName: z.string().trim().min(2),
-        pin: z.string().trim().min(4).max(6),
-        color: z
-          .string()
-          .trim()
-          .regex(/^#[0-9A-Fa-f]{6}$/)
-          .optional(),
-      })
-      .safeParse(body ?? {});
-
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Dane dziecka są niepoprawne.');
-    }
-
-    const { displayName, pin, color } = parsed.data;
+    const { displayName, pin, color } = data;
     if (!isValidPin(pin)) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'PIN musi mieć od 4 do 6 cyfr.');
     }
@@ -88,14 +78,9 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     return { ok: true, member: serializeUser(created) };
   }
 
-  async function createInvitation(user: PublicAuthUser, body: unknown) {
+  async function createInvitation(user: PublicAuthUser, data: CreateInvitationInput) {
     if (!canManageFamilyMembers(user.role)) {
       throw new ApiError(403, 'FORBIDDEN', 'Tylko administrator może tworzyć zaproszenia.');
-    }
-
-    const parsed = z.object({ role: z.enum(['admin', 'member']) }).safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Rola zaproszenia jest nieprawidłowa.');
     }
 
     const token = randomToken();
@@ -105,7 +90,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       id: invitationId,
       familyId: user.familyId,
       tokenHash: hashToken(token),
-      role: parsed.data.role,
+      role: data.role,
       createdBy: user.id,
       expiresAt: now + 1000 * 60 * 60 * 24 * 7,
       usedAt: null,
@@ -115,7 +100,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       ok: true,
       invitation: {
         id: invitationId,
-        role: parsed.data.role,
+        role: data.role,
         expiresAt: now + 1000 * 60 * 60 * 24 * 7,
       },
       link: `${config.RODZINA_PUBLIC_URL.replace(/\/$/, '')}/zaproszenie/${token}`,
@@ -154,21 +139,9 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     };
   }
 
-  async function acceptInvitation(token: string | undefined, body: unknown, startSession: StartSession) {
+  async function acceptInvitation(token: string | undefined, data: AcceptInvitationInput, startSession: StartSession) {
     if (!token) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Brak tokenu zaproszenia.');
-    }
-
-    const parsed = z
-      .object({
-        displayName: z.string().trim().min(2),
-        email: z.string().trim().email(),
-        password: z.string().min(8),
-      })
-      .safeParse(body ?? {});
-
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Dane akceptacji zaproszenia są niepoprawne.');
     }
 
     const invitation = repository.findInvitation(hashToken(token));
@@ -190,14 +163,14 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       throw new ApiError(404, 'NOT_FOUND', 'Rodzina z zaproszeniem nie istnieje.');
     }
 
-    const normalizedEmail = normalizeEmail(parsed.data.email);
+    const normalizedEmail = normalizeEmail(data.email);
     const existingUser = repository.findUserByEmail(normalizedEmail);
     if (existingUser) {
       throw new ApiError(409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
     }
 
     const userId = crypto.randomUUID();
-    const passwordHash = await hashPassword(parsed.data.password);
+    const passwordHash = await hashPassword(data.password);
     const now = Date.now();
 
     let accepted = false;
@@ -207,7 +180,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
         {
           id: userId,
           familyId: family.id,
-          displayName: parsed.data.displayName,
+          displayName: data.displayName,
           email: normalizedEmail,
           passwordHash,
           role: invitation.role,
@@ -279,7 +252,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     };
   }
 
-  async function updateMember(user: PublicAuthUser, memberId: string | undefined, body: unknown) {
+  async function updateMember(user: PublicAuthUser, memberId: string | undefined, data: UpdateMemberInput) {
     if (!memberId) {
       throw new ApiError(400, 'VALIDATION_ERROR', 'Brak identyfikatora użytkownika.');
     }
@@ -294,24 +267,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       throw new ApiError(403, 'FORBIDDEN', 'Brak uprawnień do edycji tego użytkownika.');
     }
 
-    const parsed = z
-      .object({
-        displayName: z.string().trim().min(2).optional(),
-        color: z
-          .string()
-          .trim()
-          .regex(/^#[0-9A-Fa-f]{6}$/)
-          .optional(),
-        role: z.enum(['admin', 'member', 'child']).optional(),
-        pin: z.string().trim().min(4).max(6).optional(),
-      })
-      .safeParse(body ?? {});
-
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Dane użytkownika są niepoprawne.');
-    }
-
-    const update = parsed.data;
+    const update = data;
     if (user.role !== 'admin' && !isSelf) {
       throw new ApiError(403, 'FORBIDDEN', 'Tylko administrator może edytować innych domowników.');
     }
@@ -409,17 +365,12 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     return { ok: true, deleted: true };
   }
 
-  async function updateFamily(user: PublicAuthUser, body: unknown) {
+  async function updateFamily(user: PublicAuthUser, data: UpdateFamilyInput) {
     if (!canManageFamilyMembers(user.role)) {
       throw new ApiError(403, 'FORBIDDEN', 'Tylko administrator może zmieniać nazwę rodziny.');
     }
 
-    const parsed = z.object({ name: z.string().trim().min(2) }).safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Nazwa rodziny jest niepoprawna.');
-    }
-
-    repository.updateFamily(user.familyId, { name: parsed.data.name });
+    repository.updateFamily(user.familyId, { name: data.name });
     const updated = repository.findFamily(user.familyId);
     if (!updated) {
       throw new ApiError(500, 'INTERNAL_ERROR', 'Nie można odczytać zaktualizowanej rodziny.');

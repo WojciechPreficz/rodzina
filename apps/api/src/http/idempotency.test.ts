@@ -38,7 +38,7 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
       request.familyId = familyId;
       request.user = { id: userId, familyId } as NonNullable<typeof request.user>;
     });
-    registerApiErrorHandler(app, { internalMessage: 'Błąd testu.', logMessage: 'Test failed' });
+    registerApiErrorHandler(app);
     registerIdempotentMutations(app, database, {
       table,
       fingerprintParts: (request) => [request.method, request.url, request.body],
@@ -80,10 +80,12 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
       app.post('/mutation', kind === 'async' ? async () => mutate() : mutate);
       const response = await app.inject({ method: 'POST', url: `/mutation?operationId=${crypto.randomUUID()}` });
       expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Błąd testu.' } });
+      expect(response.json()).toEqual({
+        error: { code: 'INTERNAL_ERROR', message: 'Nie udało się obsłużyć żądania.' },
+      });
       expect(log).toHaveBeenCalledWith(
         { err: expect.objectContaining({ message: expect.stringContaining('thenable') }) },
-        'Test failed',
+        'API request failed',
       );
       expect(database.sqlite.prepare(`SELECT * FROM ${table}`).all()).toHaveLength(0);
       expect(database.db.select().from(schema.families).get()?.name).toBe('Test');

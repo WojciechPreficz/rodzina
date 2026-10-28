@@ -1,5 +1,6 @@
+import { parse } from '../../http/validation.js';
 import { requireUser } from '../../http/session-auth.js';
-import { ApiError, registerApiErrorHandler } from '../../http/errors.js';
+
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
@@ -16,16 +17,7 @@ import { readReminderSchedule } from './schedule.js';
 
 export function registerReminderRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createReminderService(database);
-  function parse<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, input: unknown): T {
-    const result = schema.safeParse(input);
-    if (!result.success) throw new ApiError(400, 'VALIDATION_ERROR', 'Dane przypomnienia są niepoprawne.');
-    return result.data;
-  }
   app.register(async (routes) => {
-    registerApiErrorHandler(routes, {
-      internalMessage: 'Nie udało się obsłużyć przypomnienia.',
-      logMessage: 'Reminder request failed',
-    });
     routes.get('/api/reminders/schedule', async (request, reply) => {
       const query = parse(
         z
