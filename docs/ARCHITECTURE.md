@@ -3,7 +3,7 @@
 ## Produkt i platformy
 
 Rodzina organizuje kalendarz, zakupy, zadania, dokumenty i kontakty.
-Obiady mają API i interfejs tygodnia online; eksport w UI i obsługa offline pozostają w [plan.md](plan.md). Rodzina ma wspólne konto
+Obiady mają API, interfejs tygodnia, eksport do zakupów i dzisiejszą kartę online; obsługa offline pozostaje w [plan.md](plan.md). Rodzina ma wspólne konto
 z wieloma domownikami; listy zadań są prywatne lub udostępniane.
 WWW i APK korzystają ze wspólnego React. APK zawiera lokalny frontend
 i pobiera zdalne API. Alarmy dostarcza wyłącznie Android; zamknięta aplikacja
@@ -95,7 +95,16 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   zmiana danych pod tym samym ID daje 409. Po ostrzeżeniu można potwierdzić
   pod tym samym ID, ponieważ odrzucona operacja nie zapisuje odpowiedzi.
   Rola i dostęp do listy są sprawdzane również przed odtworzeniem odpowiedzi.
-  UI potwierdzenia należy do 6.4, integracja ze wspólną kolejką offline do 6.5.
+  UI eksportu pozwala wybrać zapisaną listę i dania ze składnikami, pokazuje
+  podsumowanie pozycji dodanych i uzupełnionych oraz link do docelowej listy.
+  Ostrzeżenie o ponownym eksporcie wymaga osobnego zaznaczenia potwierdzenia.
+  Po wysłaniu wybór jest zablokowany; ponowienie po błędzie zachowuje ID i treść
+  żądania w otwartym oknie. Eksport nie trafia do kolejki offline.
+  Karta „Dziś na obiad” na górze kalendarza pokazuje nazwę i notatkę obiadu
+  według strefy rodziny, niezależnie od oglądanej daty kalendarza. Współdzieli
+  odczyt tygodnia z zakładką Obiady; zapis, usunięcie lub kopiowanie odświeża
+  kartę. Brak obiadu, błąd odczytu i brak sieci mają osobne komunikaty.
+  Integracja ze wspólną kolejką offline należy do 6.5.
 
 ## API i bezpieczeństwo
 

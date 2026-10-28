@@ -145,6 +145,7 @@ it('shows seven read-only days for a child', async () => {
   expect(screen.getAllByText('Brak zaplanowanego obiadu.')).toHaveLength(7);
   expect(screen.queryByRole('button', { name: /Dodaj obiad/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Skopiuj poprzedni tydzień' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Dodaj składniki do listy zakupów' })).not.toBeInTheDocument();
 });
 it('blocks a save when connectivity changes after opening the editor', async () => {
   mount();

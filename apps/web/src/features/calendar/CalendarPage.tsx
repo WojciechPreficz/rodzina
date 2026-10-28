@@ -28,6 +28,7 @@ import { CreateEventView } from './CreateEventView.js';
 import { DistantEvents } from './DistantEvents.js';
 import { NotificationBanner } from '../notifications/NotificationBanner.js';
 import { TodayTasks } from '../tasks/TodayTasks.js';
+import { TodayMeal } from '../meals/TodayMeal.js';
 import { createCalendarSwipePlugin } from './calendarSwipe.js';
 import { CalendarHeader } from './CalendarHeader.js';
 import { CalendarAgendaEvent } from './CalendarAgendaEvent.js';
@@ -126,6 +127,7 @@ function CalendarView({
       />
       <CalendarOfflineNotice syncedAt={occurrences.syncedAt} />
       <NotificationBanner />
+      <TodayMeal />
       <TodayTasks />
       <div className="calendar-filters">
         <Text size="sm" fw={500} id="calendar-member-filter-label">

@@ -3,6 +3,13 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--mantine-spacing-md);
 }
+.meal-week-actions button {
+  height: auto;
+  padding-block: var(--mantine-spacing-xs);
+}
+.meal-week-actions .mantine-Button-label {
+  white-space: normal;
+}
 .meal-day {
   min-width: 0;
   overflow-wrap: anywhere;

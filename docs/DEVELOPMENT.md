@@ -70,7 +70,15 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       sprawdzić pomijanie oraz nadpisanie zajętych dni, podpowiedzi składników,
       edycję, usuwanie i odczyt dziecka. Odbiór przy 390/1280 px i w fizycznym
       APK, w tym klawiatura, fokus oraz systemowy Wstecz. Test transportu Androida
-      w Playwright nie zastępuje próby telefonu. Eksport i offline należą do 6.4–6.5.
+      w Playwright nie zastępuje próby telefonu. Offline należy do 6.5.
+- [ ] Obiady (6.4): wyeksportować pięć dań do niepustej listy, sprawdzić
+      scalanie nazw i ilości, podsumowanie dodanych/uzupełnionych pozycji oraz
+      pozostawienie kupionych pozycji bez zmian. Sprawdzić wybór części dań,
+      ostrzeżenie i potwierdzenie ponownego eksportu, ponowienie po błędzie
+      oraz brak zmian zakupów po edycji/usunięciu obiadu. Karta „Dziś na obiad”
+      pokazuje dzisiejszy plan według strefy rodziny, także po zmianie daty
+      kalendarza; dziecko ma podgląd bez eksportu. Odbiór przy 390/1280 px
+      i w fizycznym APK, w tym systemowy Wstecz i utrata sieci w oknie eksportu.
 - [ ] Dokumenty: wszystkie typy i filtry, szczegóły po nazwie, plakietka
       niezależna od filtra. „Odnowiono” zmienia termin i offsety; minione
       absolute pozostaje nieaktywne. Osobiste przypomnienia są prywatne;

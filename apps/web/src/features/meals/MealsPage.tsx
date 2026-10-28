@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, Paper, Stack, Text, Title } from '@mantine/core';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { copyMealWeekResponseSchema, mealWeekResponseSchema, type PutMeal } from '@rodzina/shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { copyMealWeekResponseSchema, type Meal, type PutMeal } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { PageHeader } from '../../components/PageHeader.js';
-import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { todayInTimezone } from '../calendar/toScheduleX.js';
 import { MealForm } from './MealForm.js';
+import { MealShoppingDialog } from './MealShoppingDialog.js';
+import { useMealWeek } from './mealQueries.js';
 import { mealDateLabel, mealWeekStart, shiftMealDate } from './mealDates.js';
 import './meals.css';
 
@@ -29,18 +30,12 @@ function MealWeek() {
   const [copying, setCopying] = useState(false);
   const [overwrite, setOverwrite] = useState(false);
   const [notice, setNotice] = useState('');
+  const [exportMeals, setExportMeals] = useState<Meal[] | null>(null);
   const account = `${family?.id}:${user?.id}`;
   const key = ['meals', family?.id, user?.id];
   const canEdit = !!user && user.role !== 'child';
   const writable = canEdit && familyConfirmed && !offline;
-  const query = useQuery({
-    queryKey: [...key, week],
-    enabled: !!user && !!family && familyConfirmed && !offline,
-    staleTime: 0,
-    queryFn: async ({ signal }) =>
-      mealWeekResponseSchema.parse(await apiFetch(`/api/meals?weekStart=${week}`, { signal })),
-    refetchInterval: SYNC_INTERVAL_MS,
-  });
+  const query = useMealWeek(week);
   const mutation = useMutation({
     networkMode: 'always',
     retry: false,
@@ -96,18 +91,30 @@ function MealWeek() {
         description="Zaplanuj wspólne obiady na cały tydzień."
         actions={
           canEdit && (
-            <Button
-              variant="light"
-              disabled={!writable || !query.data || query.isError}
-              onClick={() => {
-                mutation.reset();
-                setOverwrite(false);
-                setCopying(true);
-                setNotice('');
-              }}
-            >
-              Skopiuj poprzedni tydzień
-            </Button>
+            <Group gap="xs" className="meal-week-actions">
+              <Button
+                disabled={
+                  !writable ||
+                  query.isError ||
+                  !query.data?.days.some((day) => day.meals.some((meal) => meal.ingredients.length))
+                }
+                onClick={() => setExportMeals(query.data!.days.flatMap((day) => day.meals))}
+              >
+                Dodaj składniki do listy zakupów
+              </Button>
+              <Button
+                variant="light"
+                disabled={!writable || !query.data || query.isError}
+                onClick={() => {
+                  mutation.reset();
+                  setOverwrite(false);
+                  setCopying(true);
+                  setNotice('');
+                }}
+              >
+                Skopiuj poprzedni tydzień
+              </Button>
+            </Group>
           )
         }
       />
@@ -310,6 +317,7 @@ function MealWeek() {
           </Stack>
         )}
       </Modal>
+      {exportMeals && <MealShoppingDialog week={week} meals={exportMeals} onClose={() => setExportMeals(null)} />}
     </Stack>
   );
 }

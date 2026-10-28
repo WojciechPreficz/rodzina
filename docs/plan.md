@@ -9,19 +9,19 @@ aplikacji jest w [ARCHITECTURE.md](ARCHITECTURE.md).
 Stan dokumentacji na 28.10.2026. Brak potwierdzenia CI lub prób ręcznych
 nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 
-| Zakres                                                        | Stan                                                    | Pozostałe warunki                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
-| Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                        | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
-| Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026             | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
-| Faza 6: obiady, kroki 6.1–6.3                                 | API i UI tygodnia zaimplementowane lokalnie             | Odbiór 6.3 i końcowe CI; kroki 6.4–6.5 do implementacji           |
-| Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026 | Odbiór telefonu i końcowe CI do potwierdzenia                     |
-| Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                               | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
-| K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                               | Końcowe CI i fizyczne APK do potwierdzenia                        |
-| Redesign R.1–R.7                                              | Implementacja opisana w historii zmian                  | R.8: odbiór całości i gotowość aktualizacji do potwierdzenia      |
-| Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                               | Końcowe CI, alarmy, restart i pomiary urządzenia do potwierdzenia |
-| Oddzielenie sesji od modułów                                  | Implementacja opisana 28.10.2026                        | Końcowe CI i fizyczne APK do potwierdzenia                        |
-| Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
-| Reset hasła przez e-mail                                      | Zaplanowany, niezaimplementowany                        | Osobny krok poniżej                                               |
+| Zakres                                                        | Stan                                                                   | Pozostałe warunki                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                                       | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
+| Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026                            | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
+| Faza 6: obiady, kroki 6.1–6.4                                 | API, UI tygodnia, eksport i dzisiejsza karta zaimplementowane lokalnie | Odbiór 6.3–6.4 i końcowe CI; krok 6.5 do implementacji            |
+| Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026                | Odbiór telefonu i końcowe CI do potwierdzenia                     |
+| Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                                              | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
+| K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                                              | Końcowe CI i fizyczne APK do potwierdzenia                        |
+| Redesign R.1–R.7                                              | Implementacja opisana w historii zmian                                 | R.8: odbiór całości i gotowość aktualizacji do potwierdzenia      |
+| Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                                              | Końcowe CI, alarmy, restart i pomiary urządzenia do potwierdzenia |
+| Oddzielenie sesji od modułów                                  | Implementacja opisana 28.10.2026                                       | Końcowe CI i fizyczne APK do potwierdzenia                        |
+| Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                               | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
+| Reset hasła przez e-mail                                      | Zaplanowany, niezaimplementowany                                       | Osobny krok poniżej                                               |
 
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
@@ -115,6 +115,7 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 
 #### Krok 6.4 - UI: dodawanie do listy zakupów i karta "Dziś na obiad"
 
+- **Status:** zweryfikowane lokalnie, oczekuje na CI; odbiór ręczny i fizyczne APK do potwierdzenia.
 - **Zakres:** akcja "Dodaj składniki do listy zakupów" (wybór listy i dań, potem podsumowanie), karta "Dziś na obiad" na górze kalendarza.
 - **Gotowe, gdy:** ręcznie: 5 zaplanowanych obiadów i eksport do niepustej listy daje poprawnie pogrupowane zakupy ze scalonymi ilościami i podsumowaniem pozycji dodanych oraz uzupełnionych. Karta pokazuje dzisiejszy obiad. Zmiana planu po eksporcie nie zmienia zakupów. UI przy 390 i 1280 px, wspólny frontend APK i kontrole według AGENTS.md. Domknięcie fazy przeniesione do kroku 6.5.
 
