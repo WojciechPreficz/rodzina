@@ -2,7 +2,7 @@ import { PageHeader } from '../../components/PageHeader.js';
 import { useState } from 'react';
 import { Alert, Button, Card, Stack, Text } from '@mantine/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
 import { alarmStore, localScheduler } from './localSchedule.js';
 import { useLocalSchedule } from './scheduleSync.js';

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Badge, Button, Group, Loader, Paper, Stack, Text, Title } from '@mantine/core';
 import { Link, useParams } from 'react-router';
 import { getDocumentStatus } from '@rodzina/shared';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { useOffline } from '../../connectivity.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { ReminderList } from '../../components/ReminderPicker.js';

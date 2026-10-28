@@ -1,1 +1,1 @@
-export { useMe } from '../auth.js';
+export { useMe } from '../sessionContext.js';

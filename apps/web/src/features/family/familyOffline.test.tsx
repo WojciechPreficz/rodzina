@@ -15,7 +15,8 @@ vi.mock('../notifications/localSchedule.js', () => ({
   localScheduler: { invalidate: vi.fn(), clear: vi.fn(async () => {}) },
 }));
 import type { AuthUser } from '@rodzina/shared';
-import { AuthProvider, useMe } from '../../auth.js';
+import { AppSession as AuthProvider } from '../../AppSession.js';
+import { useMe } from '../../sessionContext.js';
 import { reportTransportFailure } from '../../connectivity.js';
 import {
   clearOfflineData,

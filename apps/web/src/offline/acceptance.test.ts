@@ -1,3 +1,4 @@
+import { registerApplicationStores } from '../accountAdapters.js';
 import './testSetup.js';
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -208,3 +209,5 @@ it('resumes a failed task handover without losing the already migrated shopping 
   expect(recovered.filter((op) => op.module === 'shopping')).toEqual(before);
   expect(recovered.filter((op) => op.module === 'tasks')).toHaveLength(1);
 });
+
+registerApplicationStores();

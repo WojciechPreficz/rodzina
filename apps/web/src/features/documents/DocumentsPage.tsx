@@ -5,7 +5,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDocumentStatus, type CreateDocument, type FamilyDocument } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { allowNavigation } from '../../nativeNavigation.js';

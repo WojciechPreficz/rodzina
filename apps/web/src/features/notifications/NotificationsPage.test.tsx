@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
     undefined | { result?: { complete: boolean; issues?: ('background' | 'missing')[] }; error?: string },
 }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => mocks.android }));
-vi.mock('../../auth.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
 vi.mock('./scheduleSync.js', () => ({ useLocalSchedule: () => ({ data: mocks.schedule }) }));
 vi.mock('../updates/AndroidUpdates.js', () => ({ AndroidDownload: () => <div>Pobieranie APK</div> }));
 vi.mock('./LocalAlarmsPage.js', () => ({ LocalAlarmsPage: () => <div>Alarmy Androida</div> }));

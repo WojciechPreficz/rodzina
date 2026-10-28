@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { QueryClient, QueryClientProvider, focusManager, onlineManager } from '@tanstack/react-query';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -167,4 +168,32 @@ it('does not start an old account download after a delayed permission check', as
     finish({ display: 'granted', exact: 'granted' });
   });
   expect(mocks.sync).not.toHaveBeenCalledWith('family:one');
+});
+
+it('keeps one registration per account through Strict Mode and removes delayed native handles', async () => {
+  const add = vi.spyOn(window, 'addEventListener');
+  const remove = vi.spyOn(window, 'removeEventListener');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const element = (account: string) => (
+    <StrictMode>
+      <QueryClientProvider client={client}>
+        <ScheduleSync account={account} />
+      </QueryClientProvider>
+    </StrictMode>
+  );
+  const view = render(element('family:one'));
+  await waitFor(() => expect(mocks.sync).toHaveBeenCalledWith('family:one'));
+  await waitFor(() => expect(mocks.remove).toHaveBeenCalledTimes(2));
+  const count = (calls: unknown[][]) => calls.filter(([name]) => name === 'rodzina:tasks-changed').length;
+  expect(count(add.mock.calls) - count(remove.mock.calls)).toBe(1);
+  view.rerender(element('family:two'));
+  await waitFor(() => expect(mocks.sync).toHaveBeenCalledWith('family:two'));
+  expect(mocks.remove).toHaveBeenCalledTimes(4);
+  expect(count(add.mock.calls) - count(remove.mock.calls)).toBe(1);
+  view.unmount();
+  expect(mocks.remove).toHaveBeenCalledTimes(6);
+  expect(count(add.mock.calls)).toBe(count(remove.mock.calls));
+  client.clear();
+  add.mockRestore();
+  remove.mockRestore();
 });

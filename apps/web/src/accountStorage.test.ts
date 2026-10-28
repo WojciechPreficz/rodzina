@@ -1,4 +1,6 @@
+import { registerApplicationStores } from './accountAdapters.js';
 import { readTaskData } from './features/tasks/taskStorage.js';
+import { invalidateOfflineContext } from './offline/database.js';
 import { readCache } from './offline/database.js';
 import './offline/testSetup.js';
 import { onlineManager, QueryClient } from '@tanstack/react-query';
@@ -233,4 +235,28 @@ describe('account storage cleanup', () => {
       unregister();
     }
   });
+});
+
+registerApplicationStores();
+
+it('does not clear the new account cache when an old cleanup completes late', async () => {
+  const client = newClient();
+  let finish!: () => void;
+  const unregister = registerAccountStore({
+    name: 'delayed-cleanup',
+    clear: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  });
+  try {
+    const clearing = clearAccountData('storage-changed', { queryClient: client });
+    invalidateOfflineContext();
+    client.setQueryData(['new-account'], 'fresh');
+    finish();
+    await clearing;
+    expect(client.getQueryData(['new-account'])).toBe('fresh');
+  } finally {
+    unregister();
+  }
 });

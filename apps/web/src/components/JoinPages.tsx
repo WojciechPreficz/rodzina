@@ -17,7 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { apiFetch, sanitizeNextPath } from '../api.js';
-import { useMe } from '../auth.js';
+import { useMe } from '../sessionContext.js';
 import { labels } from '../i18n/pl.js';
 import { errorMessage, validateDisplayName, validatePin } from '../features/family/familyRules.js';
 

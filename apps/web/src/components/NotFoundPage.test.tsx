@@ -7,8 +7,8 @@ import { NotFoundLayout, NotFoundPage } from './NotFoundPage.js';
 import { router } from '../router.js';
 
 const session = vi.hoisted(() => ({ user: null as null | { displayName: string; role: string }, isLoading: false }));
-vi.mock('../auth.js', async (original) => ({
-  ...(await original<typeof import('../auth.js')>()),
+vi.mock('../sessionContext.js', async (original) => ({
+  ...(await original<typeof import('../sessionContext.js')>()),
   useMe: () => session,
 }));
 

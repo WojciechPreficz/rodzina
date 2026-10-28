@@ -18,7 +18,7 @@ import { taskUrl, type Task } from '@rodzina/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useMediaQuery } from '@mantine/hooks';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
 import { addNativeBackHandler, allowNavigation } from '../../nativeNavigation.js';
 import { PageHeader } from '../../components/PageHeader.js';

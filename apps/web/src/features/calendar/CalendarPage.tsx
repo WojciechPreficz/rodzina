@@ -14,7 +14,7 @@ import { eventUrl } from '@rodzina/shared';
 import { useLocation, useNavigate } from 'react-router';
 import '@schedule-x/theme-default/dist/index.css';
 import './calendar.css';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';

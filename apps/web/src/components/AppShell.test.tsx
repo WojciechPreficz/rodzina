@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
 import { sanitizeNextPath } from '../api.js';
 import { LoginPage, RegisterPage } from './AuthPages.js';
 import { AppShell } from './AppShell.js';
-import { AuthProvider } from '../auth.js';
+import { AppSession as AuthProvider } from '../AppSession.js';
 import { addNavigationGuard } from '../nativeNavigation.js';
 import { theme, cssVariablesResolver } from '../theme.js';
 

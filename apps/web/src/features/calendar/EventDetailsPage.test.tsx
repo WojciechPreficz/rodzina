@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
   }),
   remove: vi.fn(async () => {}),
 }));
-vi.mock('../../auth.js', () => ({
+vi.mock('../../sessionContext.js', () => ({
   useMe: () => ({ user: { id: state.userId, role: state.role }, family: { timezone: 'Europe/Warsaw' } }),
 }));
 vi.mock('../family/familyQueries.js', () => ({ useMembersQuery: () => ({ data: [], error: null }) }));

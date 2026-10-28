@@ -1,7 +1,7 @@
 import { onlineManager, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { useOfflineSyncStatus } from '../../offline/status.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { listShoppingItems, listShoppingLists, type ShoppingChange } from './shoppingApi.js';

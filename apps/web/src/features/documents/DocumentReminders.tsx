@@ -2,7 +2,7 @@ import { Alert, Button, Loader, Stack, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateMyReminder, Reminder } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';

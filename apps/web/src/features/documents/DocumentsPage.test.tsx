@@ -15,7 +15,7 @@ const session = vi.hoisted(() => ({
   family: { id: 'family', timezone: 'Europe/Warsaw' },
   familyConfirmed: true,
 }));
-vi.mock('../../auth.js', () => ({ useMe: () => session }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => session }));
 vi.mock('../family/familyQueries.js', () => ({
   useMembersQuery: () => ({ data: [{ id: session.user.id, displayName: 'Anna' }] }),
 }));

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getDocumentStatus, type FamilyDocument } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 

@@ -1,15 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { calendarStore } from './features/calendar/calendarOffline.js';
-import { taskStore } from './features/tasks/taskOffline.js';
-import { clearShoppingStorage, stopShoppingPersistence } from './features/shopping/shoppingOffline.js';
-import { forgetOfflineData } from './offlineData.js';
-import { clearDatabase, accountToken, isAccountCurrent } from './offline/database.js';
+import { accountToken, isAccountCurrent } from './offline/database.js';
 import { reportStorageIssue, storageError } from './offline/status.js';
-import { contactsStore } from './features/contacts/contactsOffline.js';
-
+import type { AuthUser, Family } from '@rodzina/shared';
 type ClearReason = 'logout' | 'session-lost' | 'account-changed' | 'storage-changed';
 type ClearOptions = { removeStored: boolean; queryClient: QueryClient | undefined };
 type AccountStore = {
+  activate?: (account: string) => void | Promise<void>;
+  restore?: (client: QueryClient, session: { user: AuthUser; family: Family }) => void | Promise<void>;
+  stop?: (client: QueryClient | undefined) => void;
   name: string;
   // Invalidate in-memory store generations before invalidating the session and alarms.
   phase?: 'before-invalidation';
@@ -17,48 +15,11 @@ type AccountStore = {
 };
 const stores = new Map<string, AccountStore>();
 
-registerAccountStore({
-  name: 'contacts',
-  phase: 'before-invalidation',
-  clear: () => contactsStore.clear(false),
-});
-
 export function registerAccountStore(store: AccountStore) {
   if (stores.has(store.name)) throw new Error(`Account store already registered: ${store.name}`);
   stores.set(store.name, store);
   return () => stores.delete(store.name);
 }
-
-registerAccountStore({
-  name: 'calendar',
-  phase: 'before-invalidation',
-  clear: ({ removeStored }) => calendarStore.clear(removeStored),
-});
-registerAccountStore({
-  name: 'tasks',
-  phase: 'before-invalidation',
-  clear: () => taskStore.clear(false),
-});
-registerAccountStore({
-  name: 'shopping',
-  clear: ({ removeStored, queryClient }) => {
-    if (removeStored) clearShoppingStorage(queryClient);
-    else if (queryClient) stopShoppingPersistence(queryClient);
-  },
-});
-registerAccountStore({
-  name: 'offline-data',
-  phase: 'before-invalidation',
-  clear: () => {
-    forgetOfflineData();
-  },
-});
-registerAccountStore({
-  name: 'indexed-db',
-  phase: 'before-invalidation',
-  clear: ({ removeStored }) => clearDatabase(removeStored),
-});
-
 export function clearAccountData(
   reason: ClearReason,
   {
@@ -89,11 +50,28 @@ export function clearAccountData(
   else queryClient?.clear();
   const token = accountToken();
   return Promise.allSettled(clearing).then((results) => {
-    queryClient?.clear();
+    if (isAccountCurrent(token)) queryClient?.clear();
     const failure = results.find((result) => result.status === 'rejected');
     if (failure?.status === 'rejected' && isAccountCurrent(token)) {
       reportStorageIssue(`Nie można usunąć wszystkich danych konta. ${storageError(failure.reason)}`);
       throw failure.reason;
     }
   });
+}
+
+export async function restoreAccountStores(
+  session: { user: AuthUser; family: Family },
+  client: QueryClient | undefined,
+  current: () => boolean,
+) {
+  const account = session.family.id + ':' + session.user.id;
+  for (const store of stores.values()) {
+    if (!current()) return;
+    await store.activate?.(account);
+    if (!current()) return;
+    if (client) await store.restore?.(client, session);
+  }
+}
+export function stopAccountPersistence(client: QueryClient | undefined) {
+  for (const store of stores.values()) store.stop?.(client);
 }

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { EventPatch, EventScope } from '@rodzina/shared';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { ApiRequestError } from '../../api.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';

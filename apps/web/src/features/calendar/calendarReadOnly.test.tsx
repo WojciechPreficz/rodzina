@@ -11,7 +11,7 @@ import { reportTransportFailure } from '../../connectivity.js';
 import { createEvent, deleteEvent, updateEvent } from './calendarApi.js';
 
 const state = vi.hoisted(() => ({ confirmed: true }));
-vi.mock('../../auth.js', () => ({ useMe: () => ({ familyConfirmed: state.confirmed }) }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ familyConfirmed: state.confirmed }) }));
 vi.mock('./calendarApi.js', () => ({ createEvent: vi.fn(), deleteEvent: vi.fn(), updateEvent: vi.fn() }));
 const clients: QueryClient[] = [];
 function Wrapper({ children }: { children: ReactNode }) {

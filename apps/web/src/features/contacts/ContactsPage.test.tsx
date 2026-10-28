@@ -19,7 +19,7 @@ const session = vi.hoisted(() => ({
   familyConfirmed: true,
 }));
 const connection = vi.hoisted(() => ({ offline: false }));
-vi.mock('../../auth.js', () => ({ useMe: () => session }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => session }));
 vi.mock('../../connectivity.js', () => ({ useOffline: () => connection.offline, isOffline: () => connection.offline }));
 const native = vi.hoisted(() => ({ listeners: new Map<string, () => void>() }));
 vi.mock('@capacitor/app', () => ({

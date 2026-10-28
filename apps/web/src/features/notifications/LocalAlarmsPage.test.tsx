@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   settings: vi.fn(),
 }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => true }));
-vi.mock('../../auth.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
 vi.mock('./localSchedule.js', () => ({ localScheduler: mocks, alarmStore: { openAppSettings: mocks.settings } }));
 vi.mock('@capacitor/local-notifications', () => ({
   LocalNotifications: { requestPermissions: mocks.request, changeExactNotificationSetting: mocks.exact },

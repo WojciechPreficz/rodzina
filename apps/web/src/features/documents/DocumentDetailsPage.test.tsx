@@ -15,7 +15,7 @@ const session = vi.hoisted(() => ({
 }));
 const connection = vi.hoisted(() => ({ offline: false }));
 const refresh = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock('../../auth.js', () => ({ useMe: () => session }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => session }));
 vi.mock('../../connectivity.js', () => ({ useOffline: () => connection.offline, isOffline: () => connection.offline }));
 vi.mock('../family/familyQueries.js', () => ({ useMembersQuery: () => ({ data: [] }) }));
 vi.mock('../notifications/scheduleSync.js', () => ({ refreshLocalSchedule: refresh }));

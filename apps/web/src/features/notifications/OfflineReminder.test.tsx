@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 const f = vi.hoisted(() => ({ preview: vi.fn() }));
 vi.mock('./localSchedule.js', () => ({ alarmStore: { preview: f.preview } }));
-vi.mock('../../auth.js', () => ({ useMe: () => ({ refresh: vi.fn() }) }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ refresh: vi.fn() }) }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => true }));
 import { OfflineReminder } from './OfflineReminder.js';
 const url = '/kalendarz/wydarzenie/10000000-0000-4000-8000-000000000002?data=2026-10-20';

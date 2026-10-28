@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { familyMembersKey } from '../../offlineData.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import type { Member } from '@rodzina/shared';

@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import type { AuthUser, Family } from '@rodzina/shared';
-import { AuthProvider } from '../../auth.js';
+import { AppSession as AuthProvider } from '../../AppSession.js';
 import { FamilyPage } from './FamilyPage.js';
 
 const family: Family = { id: 'f1', name: 'Kowalscy', timezone: 'Europe/Warsaw', joinCode: 'ABC123' };

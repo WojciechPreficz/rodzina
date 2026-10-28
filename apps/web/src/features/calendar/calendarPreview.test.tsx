@@ -16,7 +16,7 @@ const state = vi.hoisted(() => ({
   familyId: '11111111-1111-4111-8111-111111111111',
   userId: '22222222-2222-4222-8222-222222222222',
 }));
-vi.mock('../../auth.js', () => ({
+vi.mock('../../sessionContext.js', () => ({
   useMe: () => ({
     user: { id: state.userId, role: 'admin' },
     family: { id: state.familyId, timezone: 'Europe/Warsaw' },

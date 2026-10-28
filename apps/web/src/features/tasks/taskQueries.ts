@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { focusManager, onlineManager, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CreateTask, CreateTaskList, PatchTask, PatchTaskList, Task, TaskList } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
@@ -11,37 +11,10 @@ import { useOfflineSyncStatus } from '../../offline/status.js';
 import { offlineTaskPatch, taskOfflineText, taskOperationBlocksAlarm, taskStore } from './taskOffline.js';
 
 export function useTaskData() {
-  const { user, family, familyConfirmed } = useMe();
+  const { user, family } = useMe();
   const offline = useOffline();
   const state = useSyncExternalStore(taskStore.subscribe, taskStore.getSnapshot);
   const account = user && family ? `${family.id}:${user.id}` : '';
-  useEffect(() => {
-    if (!account) return;
-    const ready = taskStore.activate(account);
-    const sync = () => {
-      if (onlineManager.isOnline() && focusManager.isFocused()) void ready.then(() => taskStore.synchronize());
-    };
-    if (familyConfirmed) sync();
-    const stopOnline = onlineManager.subscribe((online) => {
-      if (online) sync();
-    });
-    const stopFocus = focusManager.subscribe((focused) => {
-      if (focused) sync();
-    });
-    const storage = (event: StorageEvent) => {
-      if (event.key === TASK_SIGNAL) {
-        void taskStore.reload();
-      }
-    };
-    window.addEventListener('storage', storage);
-    const interval = window.setInterval(sync, SYNC_INTERVAL_MS);
-    return () => {
-      stopOnline();
-      stopFocus();
-      window.removeEventListener('storage', storage);
-      window.clearInterval(interval);
-    };
-  }, [account, familyConfirmed]);
   return {
     ...(state.account === account
       ? taskStore.project()
@@ -58,7 +31,40 @@ export function useTaskData() {
 }
 
 export function TaskPrefetch() {
-  useTaskData();
+  const { user, family, familyConfirmed } = useMe();
+  const account = user && family ? family.id + ':' + user.id : '';
+  useEffect(() => {
+    if (!account) return;
+    let disposed = false;
+    const ready = taskStore.activate(account);
+    const sync = () => {
+      if (onlineManager.isOnline() && focusManager.isFocused())
+        void ready.then(() => {
+          if (!disposed && taskStore.getSnapshot().account === account) return taskStore.synchronize();
+        });
+    };
+    if (familyConfirmed) sync();
+    const stopOnline = onlineManager.subscribe((online) => {
+      if (online) sync();
+    });
+    const stopFocus = focusManager.subscribe((focused) => {
+      if (focused) sync();
+    });
+    const storage = (event: StorageEvent) => {
+      if (event.key === TASK_SIGNAL) {
+        void taskStore.reload();
+      }
+    };
+    window.addEventListener('storage', storage);
+    const interval = window.setInterval(sync, SYNC_INTERVAL_MS);
+    return () => {
+      disposed = true;
+      stopOnline();
+      stopFocus();
+      window.removeEventListener('storage', storage);
+      window.clearInterval(interval);
+    };
+  }, [account, familyConfirmed]);
   return null;
 }
 

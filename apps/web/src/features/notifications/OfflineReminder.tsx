@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { reminderScheduleSchema, type ReminderSchedule } from '@rodzina/shared';
 import { alarmStore } from './localSchedule.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isAndroid } from '../../platform.js';
 import { notificationPath } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';

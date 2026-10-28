@@ -17,7 +17,7 @@ import { useMediaQuery } from '@mantine/hooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type Contact, type ContactGroup, type CreateContact } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { PageHeader } from '../../components/PageHeader.js';

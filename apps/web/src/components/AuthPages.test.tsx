@@ -7,7 +7,7 @@ import { LoginPage, RegisterPage } from './AuthPages.js';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn(), setSession: vi.fn() }));
 vi.mock('../api.js', () => ({ apiFetch: mocks.fetch, sanitizeNextPath: () => '/kalendarz' }));
-vi.mock('../auth.js', () => ({ useMe: () => ({ setSession: mocks.setSession }) }));
+vi.mock('../sessionContext.js', () => ({ useMe: () => ({ setSession: mocks.setSession }) }));
 
 beforeEach(() => {
   vi.stubGlobal(

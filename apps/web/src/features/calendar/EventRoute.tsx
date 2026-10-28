@@ -1,6 +1,7 @@
 import { Loader } from '@mantine/core';
 import { AppShell } from '../../components/AppShell.js';
-import { ProtectedRoute, useMe } from '../../auth.js';
+import { ProtectedRoute } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isAndroid } from '../../platform.js';
 import { OfflineReminder } from '../notifications/OfflineReminder.js';
 import { EventDetailsPage } from './EventDetailsPage.js';

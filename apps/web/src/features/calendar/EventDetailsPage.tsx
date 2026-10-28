@@ -11,7 +11,7 @@ import {
 } from '@rodzina/shared';
 import { Temporal } from 'temporal-polyfill';
 import { ApiRequestError } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
 import { useMembersQuery } from '../family/familyQueries.js';
 import { EventForm } from './EventForm.js';

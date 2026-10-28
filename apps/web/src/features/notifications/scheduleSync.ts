@@ -61,12 +61,13 @@ export function ScheduleSync({ account }: { account: string }) {
   useLocalSchedule(account, true);
   const client = useQueryClient();
   useEffect(() => {
+    if (!account) return;
     const changed = () => {
       void refreshLocalSchedule(client);
     };
     window.addEventListener('rodzina:tasks-changed', changed);
     return () => window.removeEventListener('rodzina:tasks-changed', changed);
-  }, [client]);
+  }, [account, client]);
   useEffect(() => {
     if (!isAndroid() || !account) return;
     let disposed = false;

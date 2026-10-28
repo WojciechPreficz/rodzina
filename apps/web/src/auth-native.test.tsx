@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import './offline/testSetup.js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,7 +10,8 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => ({ request, clearSession }),
 }));
 import type { AuthUser, Family } from '@rodzina/shared';
-import { AuthProvider, useMe } from './auth.js';
+import { AppSession as AuthProvider } from './AppSession.js';
+import { useMe } from './sessionContext.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
 import { ACCOUNT_SIGNAL_KEY, clearDatabase } from './offline/database.js';
 import { readShoppingData } from './features/shopping/shoppingStorage.js';
@@ -51,13 +53,15 @@ afterEach(async () => {
 function mount() {
   const client = new QueryClient();
   render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <AuthProvider>
-          <Harness />
-        </AuthProvider>
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AuthProvider>
+            <Harness />
+          </AuthProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </StrictMode>,
   );
   return client;
 }
@@ -142,4 +146,51 @@ describe('native session lifecycle', () => {
     await waitFor(() => expect(client.getQueryData(['events'])).toBeUndefined());
     expect(screen.queryByText('Anna')).toBeNull();
   });
+});
+
+it('cleans session polling and listeners after Strict Mode, account changes and remounting', async () => {
+  const set = vi.spyOn(window, 'setInterval');
+  const clear = vi.spyOn(window, 'clearInterval');
+  const add = vi.spyOn(window, 'addEventListener');
+  const remove = vi.spyOn(window, 'removeEventListener');
+  const intervals = () =>
+    set.mock.results.filter(
+      (result, i) =>
+        result.type === 'return' &&
+        set.mock.calls[i]?.[1] === 20000 &&
+        !clear.mock.calls.some(([id]) => id === result.value),
+    );
+  const listeners = () =>
+    add.mock.calls.filter(([name]) => name === 'rodzina:session-lost').length -
+    remove.mock.calls.filter(([name]) => name === 'rodzina:session-lost').length;
+  try {
+    request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
+    const client = mount();
+    await screen.findByText('Anna');
+    expect(intervals()).toHaveLength(2);
+    expect(listeners()).toBe(2);
+    fireEvent.click(screen.getByText('switch'));
+    await screen.findByText('Zosia');
+    expect(intervals()).toHaveLength(2);
+    expect(listeners()).toBe(2);
+    cleanup();
+    client.clear();
+    expect(intervals()).toHaveLength(0);
+    expect(listeners()).toBe(0);
+    request.mockRejectedValueOnce(new Error('offline'));
+    const remounted = mount();
+    await screen.findByText('Zosia');
+    expect(intervals()).toHaveLength(2);
+    expect(listeners()).toBe(2);
+    cleanup();
+    remounted.clear();
+    expect(intervals()).toHaveLength(0);
+    expect(listeners()).toBe(0);
+  } finally {
+    cleanup();
+    set.mockRestore();
+    clear.mockRestore();
+    add.mockRestore();
+    remove.mockRestore();
+  }
 });

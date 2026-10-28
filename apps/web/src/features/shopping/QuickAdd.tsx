@@ -3,7 +3,7 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { createShoppingItemSchema, parseShoppingInput, type CreateShoppingItem } from '@rodzina/shared';
 import { useState, type FormEvent } from 'react';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
 import { shoppingSuggestions } from './shoppingApi.js';
 

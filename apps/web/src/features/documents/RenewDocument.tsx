@@ -3,7 +3,7 @@ import { Alert, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/co
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { renewDocumentSchema, type FamilyDocument } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { useFormNavigation } from '../../useFormNavigation.js';

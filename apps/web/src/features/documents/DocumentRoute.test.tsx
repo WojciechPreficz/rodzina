@@ -2,10 +2,10 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 const state = vi.hoisted(() => ({ native: true, offline: true, user: true, isLoading: false }));
-vi.mock('../../auth.js', () => ({
+vi.mock('../../sessionContext.js', () => ({
   useMe: () => ({ user: state.user, isLoading: state.isLoading }),
-  ProtectedRoute: ({ children }: { children: React.ReactNode }) => children,
 }));
+vi.mock('../../auth.js', () => ({ ProtectedRoute: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => state.native }));
 vi.mock('../../connectivity.js', () => ({ useOffline: () => state.offline }));
 vi.mock('../../components/AppShell.js', () => ({

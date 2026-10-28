@@ -16,7 +16,7 @@ import { SHOPPING_CATEGORIES, createShoppingItemSchema, type ShoppingItem, type 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMediaQuery } from '@mantine/hooks';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { addNativeBackHandler } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';

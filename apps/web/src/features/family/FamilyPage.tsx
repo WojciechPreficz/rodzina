@@ -1,7 +1,7 @@
 import { PageHeader } from '../../components/PageHeader.js';
 import { Alert, Button, Card, ColorSwatch, Group, Loader, Radio, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
 import { LinkActions } from './LinkActions.js';
 import { AddChildModal, EditMemberModal } from './MemberDialogs.js';

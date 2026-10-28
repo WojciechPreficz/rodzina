@@ -2,7 +2,7 @@ import { Alert, Button, Loader } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CalendarEvent, CreateMyReminder } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';

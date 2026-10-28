@@ -2,7 +2,7 @@ import { Alert, Loader, Paper, Stack, Text, Title } from '@mantine/core';
 import { taskUrl } from '@rodzina/shared';
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
 import { isTaskOverdue } from './taskRules.js';
 import { useTaskData } from './taskQueries.js';

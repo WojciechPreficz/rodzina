@@ -4,7 +4,7 @@ import { Alert, Button, Group, Paper, PasswordInput, Stack, TextInput } from '@m
 import { useNavigate, useSearchParams } from 'react-router';
 import { useState } from 'react';
 import { apiFetch, sanitizeNextPath } from '../api.js';
-import { useMe } from '../auth.js';
+import { useMe } from '../sessionContext.js';
 
 import { labels } from '../i18n/pl.js';
 

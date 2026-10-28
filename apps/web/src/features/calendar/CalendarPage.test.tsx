@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { CalendarPage } from './CalendarPage.js';
 vi.mock('../notifications/NotificationBanner.js', () => ({ NotificationBanner: () => null }));
 
-vi.mock('../../auth.js', () => ({ useMe: () => ({ family: { timezone: 'Europe/Warsaw' } }) }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ family: { timezone: 'Europe/Warsaw' } }) }));
 vi.mock('../family/familyQueries.js', () => ({
   useMembersQuery: () => ({
     data: [

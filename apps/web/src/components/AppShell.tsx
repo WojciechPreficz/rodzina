@@ -15,7 +15,7 @@ import {
 import { useMediaQuery } from '@mantine/hooks';
 import { Link, Outlet, useLocation } from 'react-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useMe } from '../auth.js';
+import { useMe } from '../sessionContext.js';
 import { labels } from '../i18n/pl.js';
 import { allowNavigation } from '../nativeNavigation.js';
 import { isAndroid } from '../platform.js';

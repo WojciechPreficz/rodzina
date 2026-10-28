@@ -5,7 +5,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { AuthProvider, useMe } from '../auth.js';
+import { AppSession as AuthProvider } from '../AppSession.js';
+import { useMe } from '../sessionContext.js';
 import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './JoinPages.js';
 
 const session = { user: { id: 'c1', displayName: 'Zosia', role: 'child' }, family: { id: 'f1', name: 'Kowalscy' } };

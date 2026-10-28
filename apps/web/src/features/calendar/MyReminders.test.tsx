@@ -14,7 +14,7 @@ vi.mock('../../api.js', async (original) => ({
   ...(await original<typeof import('../../api.js')>()),
   apiFetch: vi.fn(),
 }));
-vi.mock('../../auth.js', () => ({
+vi.mock('../../sessionContext.js', () => ({
   useMe: () => ({
     familyConfirmed: true,
     user: { id: 'child', role: 'child' },

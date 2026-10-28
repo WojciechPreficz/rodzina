@@ -1,5 +1,6 @@
+import { AppSession } from './AppSession.js';
 import { createBrowserRouter } from 'react-router';
-import { AuthProvider, ProtectedRoute, PublicOnlyRoute } from './auth.js';
+import { ProtectedRoute, PublicOnlyRoute } from './auth.js';
 import { AppShell } from './components/AppShell.js';
 import { LoginPage, RegisterPage } from './components/AuthPages.js';
 import { EmptyPage } from './components/EmptyPage.js';
@@ -28,7 +29,7 @@ export const router = createBrowserRouter([
       <>
         <NativeNavigation />
         <AndroidUpdateMonitor />
-        <AuthProvider />
+        <AppSession />
       </>
     ),
     children: [

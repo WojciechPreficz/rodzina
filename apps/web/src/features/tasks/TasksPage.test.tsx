@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { updateTaskData } from './taskStorage.js';
 import '../../offline/testSetup.js';
 import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -7,6 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type Task, type TaskList } from '@rodzina/shared';
+import { TaskPrefetch, useTaskData } from './taskQueries.js';
 import { TasksPage } from './TasksPage.js';
 import { TodayTasks } from './TodayTasks.js';
 import { isTaskOverdue } from './taskRules.js';
@@ -20,7 +22,7 @@ const session = vi.hoisted(() => ({
   family: { id: '10000000-0000-4000-8000-000000000010', timezone: 'Europe/Warsaw' },
   familyConfirmed: true,
 }));
-vi.mock('../../auth.js', () => ({ useMe: () => session }));
+vi.mock('../../sessionContext.js', () => ({ useMe: () => session }));
 vi.mock('../family/familyQueries.js', () => ({
   useMembersQuery: () => ({
     data: [session.user, { id: '10000000-0000-4000-8000-000000000014', displayName: 'Bartek', color: '#2F9E44' }],
@@ -115,6 +117,7 @@ function setup(
     <QueryClientProvider client={client}>
       <MantineProvider env="test">
         <MemoryRouter initialEntries={[path]}>
+          <TaskPrefetch />
           <Routes>
             <Route path="/" element={<TodayTasks />} />
             <Route path="/zadania" element={<TasksPage />} />
@@ -580,4 +583,46 @@ it('evaluates date-only and timed deadlines in the family timezone, excluding co
   expect(isTaskOverdue({ ...task, dueDate: '2026-10-19' }, 'America/Los_Angeles', now)).toBe(false);
   expect(isTaskOverdue({ ...task, isDone: true }, 'Europe/Warsaw', now)).toBe(false);
   expect(isTaskOverdue({ ...task, dueDate: null }, 'Europe/Warsaw', now)).toBe(false);
+});
+
+it('registers one task poller for multiple readers and cleans it on account changes in Strict Mode', async () => {
+  onlineManager.setOnline(false);
+  const set = vi.spyOn(window, 'setInterval');
+  const clear = vi.spyOn(window, 'clearInterval');
+  const active = () =>
+    set.mock.results.filter(
+      (result, i) =>
+        result.type === 'return' &&
+        set.mock.calls[i]?.[1] === 20000 &&
+        !clear.mock.calls.some(([id]) => id === result.value),
+    );
+  const Reader = () => {
+    useTaskData();
+    return null;
+  };
+  client = new QueryClient();
+  const element = () => (
+    <StrictMode>
+      <QueryClientProvider client={client}>
+        <TaskPrefetch />
+        <Reader />
+        <Reader />
+      </QueryClientProvider>
+    </StrictMode>
+  );
+  const previous = session.user.id;
+  const view = render(element());
+  try {
+    await waitFor(() => expect(active()).toHaveLength(1));
+    session.user.id = '10000000-0000-4000-8000-000000000099';
+    view.rerender(element());
+    expect(active()).toHaveLength(1);
+    view.unmount();
+    expect(active()).toHaveLength(0);
+  } finally {
+    session.user.id = previous;
+    view.unmount();
+    set.mockRestore();
+    clear.mockRestore();
+  }
 });

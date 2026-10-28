@@ -1,5 +1,26 @@
 # Decyzje
 
+## 28.10.2026 — oddzielenie sesji od modułów funkcjonalnych
+
+- Kontekst i hook sesji są w niezależnym `sessionContext.ts`. Provider przyjmuje
+  stan i operacje sesji, a jawny koordynator `accountLifecycle.ts` obsługuje
+  odtworzenie oraz przejścia konta przez wstrzyknięte usługi i rejestr magazynów.
+- `AppSession.tsx` składa aplikację i jawnie rejestruje adaptery z
+  `accountAdapters.ts`. Rejestr zachowuje fazy czyszczenia i dodaje aktywację,
+  odtworzenie cache oraz zatrzymanie persystencji. Formatów danych i API nie zmieniamy.
+- Prefetching zadań, kalendarza i harmonogram APK działają wewnątrz kontekstu,
+  w osobnym komponencie o cyklu życia konta. Odczyt zadań nie zakłada kolejnych
+  interwałów; synchronizację rejestruje wyłącznie `TaskPrefetch`.
+- Zachowujemy rozróżnienie wylogowania, utraty sesji, zmiany konta i sygnału
+  innej karty. Opóźnione zakończenie czyszczenia nie usuwa cache nowego konta.
+  Odbiór fizycznego APK (odtworzenie danych i usunięcie alarmów po wylogowaniu)
+  pozostaje do wykonania; końcowe CI jest wymagane po wysłaniu zmian.
+- Lokalnie sprawdzono scenariusze sesji i offline, sprzątanie w Strict Mode,
+  typy, lint i formatowanie zmienionych plików oraz build WWW. Playwright
+  headless zaliczył 18 scenariuszy przy 390 i 1280 px (także transport Androida)
+  oraz 6 ponownych prób logowania i rodziny po poprawce sprzątania. To nie
+  zastępuje odbioru na fizycznym urządzeniu.
+
 ## 27.10.2026 — nadawca offline bez pollingu
 
 - Zastępujemy odpytywanie co 500 ms sygnałami po zatwierdzeniu zmian outbox,

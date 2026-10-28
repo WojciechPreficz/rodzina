@@ -22,7 +22,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { apiFetch } from '../../api.js';
-import { useMe } from '../../auth.js';
+import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput, type ReminderInput, type ReminderItem } from '../../components/reminderFields.js';

@@ -1,6 +1,6 @@
 import { Button, Center, Loader, Text, Title } from '@mantine/core';
 import { Link } from 'react-router';
-import { useMe } from '../auth.js';
+import { useMe } from '../sessionContext.js';
 import { labels } from '../i18n/pl.js';
 import { AppShell } from './AppShell.js';
 import { AuthLayout } from './AuthLayout.js';
