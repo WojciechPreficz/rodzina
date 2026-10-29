@@ -141,7 +141,7 @@ describe('persistent login limits', { timeout: 20000 }, () => {
     }
   });
 
-  it('uses the forwarded client IP under the existing trustProxy policy', async () => {
+  it('ignores untrusted forwarding so changing a client-supplied IP cannot bypass the limit', async () => {
     const request = (forwarded: string) =>
       app.inject({
         method: 'POST',
@@ -152,7 +152,7 @@ describe('persistent login limits', { timeout: 20000 }, () => {
       });
     for (let i = 0; i < 10; i++) expect((await request('192.0.2.1, 192.0.2.100')).statusCode).toBe(403);
     expect((await request('192.0.2.1, 192.0.2.100')).statusCode).toBe(429);
-    expect((await request('192.0.2.2, 192.0.2.100')).statusCode).toBe(403);
+    expect((await request('192.0.2.2, 192.0.2.100')).statusCode).toBe(429);
   });
 
   it.each(['password', 'child'] as const)(

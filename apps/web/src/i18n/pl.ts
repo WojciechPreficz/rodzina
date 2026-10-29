@@ -304,6 +304,14 @@ export const labels = {
   acceptInvitation: 'Dołącz do rodziny',
   alreadyLoggedIn: 'Aby dołączyć jako nowy domownik, najpierw wyloguj się z obecnego konta.',
   resetPassword: 'Ustaw nowe hasło',
+  forgotPassword: 'Nie pamiętam hasła',
+  recoveryRetry: 'Spróbuj ponownie',
+  sendResetLink: 'Wyślij link do zmiany hasła',
+  recoverySent:
+    'Jeśli istnieje konto z tym adresem e-mail, otrzymasz wiadomość z linkiem do zmiany hasła. Sprawdź też folder Spam.',
+  recoveryUnavailable: 'Odzyskiwanie hasła przez e-mail jest niedostępne.',
+  recoveryOffline:
+    'Nie można połączyć się z serwerem. Sprawdź internet i spróbuj ponownie. Reset hasła wymaga połączenia z internetem.',
   newPassword: 'Nowe hasło',
   confirmPassword: 'Powtórz hasło',
   passwordError: 'Hasło musi mieć co najmniej 8 znaków.',

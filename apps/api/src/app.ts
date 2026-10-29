@@ -19,6 +19,7 @@ import { registerDocumentRoutes } from './modules/documents/routes.js';
 import { registerContactRoutes } from './modules/contacts/routes.js';
 import { registerMealRoutes } from './modules/meals/routes.js';
 import { registerAndroidDownloads } from './android-downloads.js';
+import type { sendResetMail } from './modules/auth/reset-mail.js';
 
 const { version } = JSON.parse(
   readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'),
@@ -26,9 +27,13 @@ const { version } = JSON.parse(
   version: string;
 };
 
-export async function buildApp(config: AppConfig, database: DatabaseConnection): Promise<FastifyInstance> {
+export async function buildApp(
+  config: AppConfig,
+  database: DatabaseConnection,
+  mailSender?: typeof sendResetMail,
+): Promise<FastifyInstance> {
   const app = Fastify({
-    trustProxy: true,
+    trustProxy: config.RODZINA_TRUSTED_PROXIES.length ? config.RODZINA_TRUSTED_PROXIES : false,
     logger:
       config.NODE_ENV === 'test'
         ? false
@@ -44,7 +49,7 @@ export async function buildApp(config: AppConfig, database: DatabaseConnection):
   await app.register(fastifyCookie);
 
   registerSessionAuth(app, database, config);
-  registerAuthRoutes(app, database, config);
+  registerAuthRoutes(app, database, config, mailSender);
   registerFamilyRoutes(app, database, config);
 
   app.get('/api/health', { config: { auth: 'public' } }, async (_request, reply) => {

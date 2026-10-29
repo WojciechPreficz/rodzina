@@ -20,6 +20,7 @@ import { DocumentsPage } from './features/documents/DocumentsPage.js';
 import { ContactsPage } from './features/contacts/ContactsPage.js';
 import { DocumentRoute } from './features/documents/DocumentRoute.js';
 import { NotFoundLayout, NotFoundPage } from './components/NotFoundPage.js';
+import { ForgotPasswordPage } from './components/PasswordRecovery.js';
 
 export const router = createBrowserRouter([
   {
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
         children: [
           { path: 'zaproszenie/:token', element: <InvitationPage /> },
           { path: 'reset-hasla/:token', element: <ResetPasswordPage /> },
+          { path: 'nie-pamietam-hasla', element: <ForgotPasswordPage /> },
           {
             element: <PublicOnlyRoute />,
             children: [

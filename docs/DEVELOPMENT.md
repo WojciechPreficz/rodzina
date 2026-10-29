@@ -60,6 +60,18 @@ model telefonu, Android, wersje APK przed/po, datę i wynik. Nie zaliczaj
 historycznych terminów wstecz; mocki i test transportu nie dowodzą działania
 systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
 
+- [ ] Reset hasła: rzeczywista skrzynka SMTP według DEPLOY, odbiór i Spam,
+      SPF/DKIM/DMARC oraz brak tokenów w logach hostingu. Nadawca nie jest
+      skonfigurowany automatycznie; domyślnie funkcja pozostaje wyłączona.
+- [ ] Reset na fizycznym APK: zamówienie linku, otwarcie z poczty przy zamkniętej
+      i uruchomionej aplikacji, a także bez APK (WWW). Po zmianie hasła stare
+      hasło nie działa, nowe działa, własne dane i alarmy są czyszczone.
+      Reset innej osoby nie wylogowuje bieżącego konta. Drugie urządzenie online
+      traci sesję przy kontakcie z API; offline dopiero po powrocie sieci.
+- [ ] Reset: odbiór formularzy przy 390/1280 px i w APK, błędny/wygasły/użyty
+      link, ponowne zamówienie linku, brak sieci, limit i wyłączona funkcja.
+      Potwierdzić zaufane proxy i odporność limitu IP na własny X-Forwarded-For.
+
 - [ ] UI przy 390 i 1280 px oraz wspólny frontend APK: kalendarz, zadania,
       zakupy, rodzina, dokumenty, kontakty, powiadomienia, aktualizator i 404.
       Klawiatura, fokus, kontrast, safe area, duży tekst, formularze i błędy.

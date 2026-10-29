@@ -262,7 +262,8 @@ export function useAccountLifecycle(services: AccountServices) {
       await apiFetch<AuthOkResponse>('/api/auth/logout', { method: 'POST' });
       pendingLogout(false);
     } catch (error) {
-      if (!isAndroid() && error instanceof ApiRequestError) throw error;
+      if (error instanceof ApiRequestError && error.status === 401) pendingLogout(false);
+      else if (!isAndroid() && error instanceof ApiRequestError) throw error;
     } finally {
       await clearNativeSession();
       setUser(null);

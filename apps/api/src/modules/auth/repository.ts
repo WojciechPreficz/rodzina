@@ -25,9 +25,27 @@ export function createAuthRepository(database: DatabaseConnection) {
         .where(and(eq(schema.users.familyId, familyId), eq(schema.users.role, 'child')))
         .orderBy(asc(schema.users.createdAt))
         .all(),
-    insertSession: (values: typeof schema.sessions.$inferInsert) =>
-      database.db.insert(schema.sessions).values(values).run(),
+    insertSession(values: typeof schema.sessions.$inferInsert, expectedPasswordHash?: string) {
+      return database.sqlite
+        .transaction(() => {
+          if (
+            expectedPasswordHash &&
+            database.db.select().from(schema.users).where(eq(schema.users.id, values.userId)).get()?.passwordHash !==
+              expectedPasswordHash
+          )
+            return false;
+          database.db.insert(schema.sessions).values(values).run();
+          return true;
+        })
+        .immediate();
+    },
     deleteSession: (id: string) => database.db.delete(schema.sessions).where(eq(schema.sessions.id, id)).run(),
+    sessionBelongsTo: (id: string, userId: string, now: number) =>
+      !!database.db
+        .select()
+        .from(schema.sessions)
+        .where(and(eq(schema.sessions.id, id), eq(schema.sessions.userId, userId), gt(schema.sessions.expiresAt, now)))
+        .get(),
     findPasswordReset: (tokenHash: string) =>
       database.db.select().from(schema.passwordResets).where(eq(schema.passwordResets.tokenHash, tokenHash)).get(),
     registerFamily({
@@ -98,6 +116,11 @@ export function createAuthRepository(database: DatabaseConnection) {
           .set({ passwordHash, updatedAt: now })
           .where(eq(schema.users.id, resetRequest.userId))
           .run();
+        tx.update(schema.passwordResets)
+          .set({ usedAt: now })
+          .where(and(eq(schema.passwordResets.userId, resetRequest.userId), isNull(schema.passwordResets.usedAt)))
+          .run();
+        tx.delete(schema.sessions).where(eq(schema.sessions.userId, resetRequest.userId)).run();
         return true;
       });
     },

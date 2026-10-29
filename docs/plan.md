@@ -21,7 +21,7 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                                                       | Końcowe CI, alarmy, restart i pomiary urządzenia do potwierdzenia |
 | Oddzielenie sesji od modułów                                  | Implementacja opisana 28.10.2026                                                | Końcowe CI i fizyczne APK do potwierdzenia                        |
 | Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
-| Reset hasła przez e-mail                                      | Zaplanowany, niezaimplementowany                                                | Osobny krok poniżej                                               |
+| Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
 
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
@@ -151,6 +151,10 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 **Poza zakresem:** książka przepisów, wartości odżywcze, inne posiłki niż obiad. Kolumna `slot` jest już na to przygotowana.
 
 ## Reset hasła przez e-mail
+
+Status: zweryfikowane lokalnie, oczekuje na CI.
+Próby rzeczywistej poczty, hostingu i fizycznego APK pozostają do odbioru
+według DEVELOPMENT.md. Konfigurację opisuje DEPLOY.md.
 
 Jeden osobny krok dla dorosłych, również jedynego administratora, na WWW i w APK.
 Obecny reset linkiem administratora zachowuje kontrakt i ważność 24 godzin.

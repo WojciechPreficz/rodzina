@@ -14,10 +14,11 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { apiFetch, sanitizeNextPath } from '../api.js';
 import { useMe } from '../sessionContext.js';
+import { PasswordRecoveryLink } from './PasswordRecovery.js';
 import { labels } from '../i18n/pl.js';
 import { errorMessage, validateDisplayName, validatePin } from '../features/family/familyRules.js';
 
@@ -323,6 +324,9 @@ export function InvitationPage() {
 }
 
 export function ResetPasswordPage() {
+  const { user, logout, refresh } = useMe();
+  const currentUser = useRef(user);
+  currentUser.current = user;
   const { token = '' } = useParams();
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -331,6 +335,7 @@ export function ResetPasswordPage() {
   const [pending, setPending] = useState(false);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (pending) return;
     if (password.length < 8) {
       setError(labels.passwordError);
       return;
@@ -342,12 +347,28 @@ export function ResetPasswordPage() {
     setPending(true);
     setError('');
     try {
-      await apiFetch('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+      const submittedUser = currentUser.current;
+      const result = await apiFetch<{ ok: true; resetOwnSession?: boolean }>('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, password }),
+      });
+      if (submittedUser && currentUser.current?.id === submittedUser.id) {
+        if (result.resetOwnSession) {
+          // The reset already revoked the server session; logout still clears local stores and native alarms.
+          await logout().catch(() => undefined);
+        } else {
+          // A cached account may already have an expired/missing cookie. Probe its
+          // session so that its data is cleared without ending a different valid account.
+          await refresh();
+        }
+      }
       setPassword('');
       setConfirmation('');
       setSuccess(true);
     } catch (requestError) {
-      setError(errorMessage(requestError, labels.resetError));
+      setError(
+        requestError instanceof TypeError ? labels.recoveryOffline : errorMessage(requestError, labels.resetError),
+      );
     } finally {
       setPending(false);
     }
@@ -388,6 +409,7 @@ export function ResetPasswordPage() {
             {error}
           </Alert>
         ) : null}
+        {error && <PasswordRecoveryLink />}
         <Button component={Link} to="/login" variant="subtle">
           {labels.login}
         </Button>

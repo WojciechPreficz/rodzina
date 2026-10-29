@@ -149,13 +149,39 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 - Mutacje wymagają application/json i zgodnego źródła: Origin, a wyłącznie
   przy jego braku Referer. Porównujemy z hostem żądania. Proxy Vite zachowuje
   changeOrigin=false. Cookie sid: HttpOnly, SameSite=Lax, Secure w produkcji.
-- trustProxy=true wymaga zaufanego proxy nadpisującego X-Forwarded-*.
+- RODZINA_TRUSTED_PROXIES wskazuje zaufane IP/CIDR pośredników. Pusta lista
+  ignoruje X-Forwarded-For; zaufanie do całego łańcucha nie jest domyślne.
   Konfiguracja hostingu wymaga potwierdzenia; patrz DEPLOY.
 - Błędny e-mail, hasło lub PIN zwraca 403 `INVALID_CREDENTIALS`, bez sygnału
   utraty sesji. Brak lub wygaśnięcie sesji zwraca 401 `UNAUTHORIZED`
   i uruchamia czyszczenie danych konta.
 - Limity logowania: 10 prób/15 minut dla IP–konto, osobno hasło i PIN,
   trwałe w SQLite. Poprawne logowanie usuwa własny licznik.
+- GET /api/auth/password-recovery udostępnia wyłącznie dostępność funkcji.
+  Formularz /nie-pamietam-hasla wysyła POST /api/auth/forgot-password.
+  Domyślnie wysyłka jest wyłączona (503 bez sprawdzania konta). Po włączeniu
+  poprawne żądania dają jednakowe 202 dla znanych i nieznanych adresów,
+  kont bez hasła i dzieci oraz błędów SMTP. Nie potwierdza to dostarczenia maila.
+- Link e-mail ma losowy token 256 bitów, hash w password_resets i ważność
+  30 minut. Link administratora zachowuje 24 godziny. Zamówienie kolejnego linku
+  i samo otwarcie strony nie unieważniają wcześniejszych linków ani sesji.
+  SMTP wymusza TLS/STARTTLS z weryfikacją certyfikatu; wysyłka ma 4 s limitu,
+  a jednakowa minimalna odpowiedź 4,5 s ogranicza różnice czasowe. Błąd lub timeout
+  unieważnia tylko nowy token. Wysyłka działa w żądaniu, bez kolejki i crona.
+- Reset ma osobne klucze w auth_rate_limits: hash IP i znormalizowanego adresu,
+  10 prób/15 minut/IP i 3/godzinę/adres; wspólna transakcja immediate rezerwuje
+  limity przed wysyłką. Obejmują nieistniejące konta, przetrwają restart,
+  a odpowiedź 429 ma Retry-After. Wygasłe liczniki są czyszczone przy żądaniu.
+- POST /api/auth/reset-password atomowo wykorzystuje token, zapisuje hasło,
+  unieważnia pozostałe linki i wszystkie sesje resetowanej osoby. Dwa różne
+  tokeny nie pozwalają na dwa równoległe sukcesy. Odpowiedź zachowuje ok: true
+  i dodaje resetOwnSession; cookie kończymy tylko dla resetowanego konta.
+  Wspólny frontend uruchamia jego istniejące wylogowanie, czyszcząc dane i alarmy.
+  Inne urządzenia wykrywają utratę sesji przy kontakcie z API; telefon offline
+  nie dostaje natychmiastowego sygnału. Strona resetu i API mają no-store oraz
+  no-referrer; treść linku nie trafia do cache modułów ani logów aplikacji.
+  Utworzenie sesji hasłem sprawdza w transakcji aktualność zweryfikowanego
+  hasha, aby rozpoczęte wcześniej logowanie nie przywróciło sesji starym hasłem.
 - Operacje zakupów, zadań i obiadów zachowują identyfikatory przy ponowieniu.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
   90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.

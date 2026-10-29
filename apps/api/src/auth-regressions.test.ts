@@ -182,10 +182,12 @@ describe('authentication regressions', () => {
     );
     expect(responses.map((r) => r.statusCode).sort()).toEqual([200, 410]);
     const winner = responses.findIndex((r) => r.statusCode === 200);
-    expect(
-      (await post('/api/auth/login', { email: registerBody.email, password: ['newPassword1', 'newPassword2'][winner] }))
-        .statusCode,
-    ).toBe(200);
+    const login = await post('/api/auth/login', {
+      email: registerBody.email,
+      password: ['newPassword1', 'newPassword2'][winner],
+    });
+    expect(login.statusCode).toBe(200);
+    cookie = String(login.headers['set-cookie']).split(';')[0]!;
     const expired = await post(`/api/members/${admin.user.id}/password-reset-link`, undefined, cookie);
     database.db
       .update(schema.passwordResets)

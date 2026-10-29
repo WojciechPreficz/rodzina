@@ -31,11 +31,12 @@ it.each([
   { Component: RegisterPage, submit: 'Utwórz rodzinę', endpoint: '/api/auth/register-family' },
 ])('shows pending and API errors without duplicate submissions: $endpoint', async ({ Component, submit, endpoint }) => {
   let rejectRequest!: (error: Error) => void;
-  mocks.fetch.mockImplementationOnce(
-    () =>
-      new Promise((_, reject) => {
-        rejectRequest = reject;
-      }),
+  mocks.fetch.mockImplementation((url: string) =>
+    url === '/api/auth/password-recovery'
+      ? Promise.resolve({ enabled: false })
+      : new Promise((_, reject) => {
+          rejectRequest = reject;
+        }),
   );
   render(
     <MantineProvider>
@@ -57,7 +58,7 @@ it.each([
   fireEvent.submit(button.closest('form')!);
   expect(button).toBeDisabled();
   fireEvent.submit(button.closest('form')!);
-  expect(mocks.fetch).toHaveBeenCalledOnce();
+  expect(mocks.fetch.mock.calls.filter(([url]) => url === endpoint)).toHaveLength(1);
   expect(mocks.fetch).toHaveBeenCalledWith(endpoint, expect.objectContaining({ method: 'POST' }));
   await act(async () => rejectRequest(new Error('Brak połączenia. Spróbuj ponownie.')));
   expect(screen.getByRole('alert')).toHaveTextContent('Brak połączenia. Spróbuj ponownie.');

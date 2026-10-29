@@ -7,6 +7,7 @@ import { apiFetch, sanitizeNextPath } from '../api.js';
 import { useMe } from '../sessionContext.js';
 
 import { labels } from '../i18n/pl.js';
+import { PasswordRecoveryLink } from './PasswordRecovery.js';
 
 export function RegisterPage() {
   const [searchParams] = useSearchParams();
@@ -221,6 +222,7 @@ export function LoginPage() {
             <Button variant="subtle" onClick={() => navigate(`/login-child?next=${encodeURIComponent(next)}`)}>
               {labels.childLogin}
             </Button>
+            <PasswordRecoveryLink />
           </Stack>
         </form>
       </Stack>

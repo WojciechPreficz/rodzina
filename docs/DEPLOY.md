@@ -22,6 +22,14 @@ RODZINA_PUBLIC_URL=https://rodzina.preficze.pl
 RODZINA_ALLOW_REGISTRATION=false
 RODZINA_ANDROID_DOWNLOAD_DIR=/home/<user>/rodzina-android
 RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS=
+RODZINA_TRUSTED_PROXIES=
+RODZINA_PASSWORD_RESET_EMAIL_ENABLED=false
+RODZINA_SMTP_HOST=
+RODZINA_SMTP_PORT=587
+RODZINA_SMTP_SECURE=false
+RODZINA_SMTP_USER=
+RODZINA_SMTP_PASSWORD=
+RODZINA_MAIL_FROM=
 ```
 
 RODZINA_ALLOW_REGISTRATION włączamy tylko na czas zakładania rodziny.
@@ -30,11 +38,44 @@ wydania (404 JSON). SHA256_CERT_FINGERPRINTS to publiczne odciski certyfikatów,
 32 pary hex z dwukropkami, wiele wartości oddzielonych przecinkiem.
 Puste odciski wyłączają weryfikację App Links.
 
-trustProxy=true wymaga dostępu do API wyłącznie przez zaufane proxy,
-które nadpisuje nagłówki X-Forwarded-* klienta. Z operatorem potwierdź łańcuch
-proxy i brak bezpośredniego dostępu do portu API. Kontrolowana próba z własnym
-X-Forwarded-For nie może zmienić IP używanego przez limit logowania.
-Nie zakładamy niepotwierdzonej konfiguracji vh.pl.
+RODZINA_TRUSTED_PROXIES to lista IP/CIDR zaufanych pośredników, rozdzielona
+przecinkami. Domyślnie pusta: API nie ufa X-Forwarded-For i limity używają IP
+bezpośredniego połączenia. Za proxy może to oznaczać wspólny limit dla wielu osób.
+Przed włączeniem wysyłki ustal z operatorem faktyczne adresy i łańcuch proxy,
+nadpisywanie X-Forwarded-* oraz brak bezpośredniego dostępu do portu API.
+Nie wpisuj wszystkich adresów ani niepotwierdzonych zakresów. Kontrolowana próba
+z własnym X-Forwarded-For nie może zmienić IP używanego przez limity.
+
+### Reset hasła przez e-mail
+
+RODZINA_PASSWORD_RESET_EMAIL_ENABLED=false ukrywa akcję odzyskiwania; obecne
+logowanie i linki administratora działają nadal. Aby włączyć funkcję, przygotuj
+skrzynkę nadawczą i ustaw HOST, PORT, SECURE, USER, PASSWORD oraz MAIL_FROM.
+MAIL_FROM to sam adres skrzynki, np. rodzina@preficze.pl, a nie automatycznie
+utworzone konto. Wiadomości mają nazwę nadawcy „Rodzina”. Dane logowania i adres
+nadawcy muszą być dozwolone przez dostawcę SMTP.
+
+Port 587 z SECURE=false wymusza STARTTLS; port 465 z SECURE=true uruchamia TLS
+od początku. Weryfikacja certyfikatów jest obowiązkowa, minimum TLS 1.2.
+PUBLIC_URL musi być adresem origin HTTPS, bez ścieżki, danych logowania,
+query i fragmentu. Niepełna konfiguracja przy włączonej funkcji zatrzymuje start.
+Sekrety wpisz wyłącznie do prywatnego .env poza aplikacją; nie do repo ani Actions.
+Po zmianie konfiguracji zrestartuj aplikację.
+
+Wysyłka odbywa się w żądaniu, bez nowego crona ani workera. Cała próba SMTP ma
+limit 4 s; odpowiedź na przyjęte żądanie trwa co najmniej 4,5 s również dla
+nieznanego adresu i błędów wysyłki. Timeout lub niepewny wynik unieważnia nowy
+link. Nie ponawiamy wysyłki automatycznie. Publiczne 202 nie potwierdza dostawy.
+Limity korzystają z istniejącej tabeli auth_rate_limits: 10 przyjętych prób
+na 15 minut/IP i 3 na godzinę/adres, także dla nieistniejących kont.
+Nie ma nowej migracji; obowiązuje zwykła procedura sprawdzenia migracji wydania.
+
+Przed odbiorem sprawdź SPF, DKIM i DMARC według dostawcy oraz rzeczywisty odbiór
+wiadomości na kontrolowanej skrzynce, folder Spam i poprawność linku HTTPS.
+Sprawdź logi aplikacji i hostingu: URL /reset-hasla/:token nie może ujawniać
+tokenu w logach dostępowych. Aplikacja pomija URL w logach żądań i nie zapisuje
+surowych błędów SMTP; ustawienia logów hostingu wymagają osobnego potwierdzenia.
+Próby lokalne z atrapą nie potwierdzają dostarczalności produkcyjnej.
 
 ## Paczka i migracje
 

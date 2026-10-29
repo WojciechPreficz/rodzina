@@ -13,6 +13,9 @@ import {
   loginChildResponseSchema,
   authOkResponseSchema,
   authMeResponseSchema,
+  passwordResetResponseSchema,
+  passwordRecoveryAvailabilitySchema,
+  forgotPasswordInputSchema,
 } from '@rodzina/shared';
 import type { FastifyInstance } from 'fastify';
 import type { AppConfig } from '../../config.js';
@@ -20,10 +23,30 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { requireUser } from '../../http/session-auth.js';
 import { createAuthService } from './service.js';
 import { createSessionFactory } from './session.js';
+import { createPasswordRecovery, RecoveryRateLimitError } from './password-recovery.js';
+import type { sendResetMail } from './reset-mail.js';
 
-export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConnection, config: AppConfig) {
+export function registerAuthRoutes(
+  app: FastifyInstance,
+  database: DatabaseConnection,
+  config: AppConfig,
+  mailSender?: typeof sendResetMail,
+) {
   const service = createAuthService(database, config);
   const createSession = createSessionFactory(database, config);
+  const recoverPassword = createPasswordRecovery(database, config, app.log, mailSender);
+  app.get('/api/auth/password-recovery', { config: { auth: 'public' } }, async () =>
+    passwordRecoveryAvailabilitySchema.parse({ enabled: config.RODZINA_PASSWORD_RESET_EMAIL_ENABLED }),
+  );
+  app.post('/api/auth/forgot-password', { config: { auth: 'public' } }, async (request, reply) => {
+    try {
+      const email = parse(forgotPasswordInputSchema, request.body, 'Podaj poprawny adres e-mail.').email;
+      return reply.code(202).send(authOkResponseSchema.parse(await recoverPassword(email, request.ip)));
+    } catch (error) {
+      if (error instanceof RecoveryRateLimitError) reply.header('Retry-After', error.retryAfter);
+      throw error;
+    }
+  });
   app.post('/api/auth/register-family', { config: { auth: 'public' } }, async (request, reply) => {
     return reply
       .code(201)
@@ -41,7 +64,7 @@ export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConne
       await service.login(
         parse(loginSchema, request.body, 'Dane logowania są niepoprawne.'),
         request.ip ?? 'unknown',
-        (id, now) => createSession(reply, request, id, now),
+        (id, now, expectedPasswordHash) => createSession(reply, request, id, now, expectedPasswordHash),
       ),
     );
   });
@@ -69,9 +92,14 @@ export function registerAuthRoutes(app: FastifyInstance, database: DatabaseConne
   app.get('/api/auth/me', async (request) => {
     return authMeResponseSchema.parse(await service.me(requireUser(request)));
   });
-  app.post('/api/auth/reset-password', { config: { auth: 'public' } }, async (request) => {
-    return authOkResponseSchema.parse(
-      await service.resetPassword(parse(resetPasswordSchema, request.body, 'Dane resetu hasła są niepoprawne.')),
+  app.post('/api/auth/reset-password', { config: { auth: 'public' } }, async (request, reply) => {
+    const result = passwordResetResponseSchema.parse(
+      await service.resetPassword(
+        parse(resetPasswordSchema, request.body, 'Dane resetu hasła są niepoprawne.'),
+        request.cookies?.sid,
+      ),
     );
+    if (result.resetOwnSession) reply.clearCookie('sid', { path: '/' });
+    return result;
   });
 }

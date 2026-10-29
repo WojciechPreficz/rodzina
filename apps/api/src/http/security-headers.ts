@@ -13,7 +13,19 @@ export function registerSecurityHeaders(app: FastifyInstance, config: AppConfig)
     );
     if (request.url.startsWith('/api/') || request.url.startsWith('/downloads/android/latest.json'))
       reply.header('Cache-Control', 'no-store');
-    if (request.url.split('?')[0] === '/sw.js') reply.header('Cache-Control', 'no-store');
+    let pathname = request.url.split('?')[0] ?? '';
+    try {
+      pathname = decodeURIComponent(pathname);
+    } catch {
+      /* Invalid paths are handled by the router. */
+    }
+    if (
+      pathname.startsWith('/api/') ||
+      pathname === '/sw.js' ||
+      pathname.startsWith('/reset-hasla/') ||
+      pathname === '/nie-pamietam-hasla'
+    )
+      reply.header('Cache-Control', 'no-store');
     if (config.NODE_ENV === 'production' && new URL(config.RODZINA_PUBLIC_URL).protocol === 'https:')
       reply.header('Strict-Transport-Security', 'max-age=31536000');
   });

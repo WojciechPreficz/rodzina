@@ -9,7 +9,7 @@ import { serializeUser, type PublicAuthUser } from '../../http/user.js';
 import { createAuthRepository } from './repository.js';
 import { createAuthRateLimitService, createLoginRateLimitKey } from './rate-limit-service.js';
 
-export type StartSession = (userId: string, createdAt?: number) => Promise<void>;
+export type StartSession = (userId: string, createdAt?: number, expectedPasswordHash?: string) => Promise<void>;
 export function createAuthService(database: DatabaseConnection, config: AppConfig) {
   const repository = createAuthRepository(database);
   const rateLimits = createAuthRateLimitService(database);
@@ -77,7 +77,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
 
     rateLimits.clear(loginKey);
 
-    await startSession(user.id, Date.now());
+    await startSession(user.id, Date.now(), user.passwordHash);
 
     const family = repository.findFamily(user.familyId);
     if (!family) {
@@ -158,7 +158,7 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
     };
   }
 
-  async function resetPassword(data: ResetPasswordInput) {
+  async function resetPassword(data: ResetPasswordInput, sessionToken?: string) {
     const { token, password } = data;
     const resetRequest = repository.findPasswordReset(hashToken(token));
 
@@ -180,13 +180,15 @@ export function createAuthService(database: DatabaseConnection, config: AppConfi
 
     const passwordHash = await hashPassword(password);
     const now = Date.now();
+    const resetOwnSession =
+      !!sessionToken && repository.sessionBelongsTo(hashToken(sessionToken), resetRequest.userId, now);
 
     const reset = repository.resetPassword(resetRequest, passwordHash, now);
     if (!reset) {
       throw new ApiError(410, 'USED', 'Token resetu hasła wygasł lub został już wykorzystany.');
     }
 
-    return { ok: true };
+    return { ok: true, resetOwnSession };
   }
   return { registerFamily, login, familyMembers, loginChild, logout, me, resetPassword };
 }
