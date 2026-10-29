@@ -49,7 +49,35 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 - Zaproszenia są jednorazowe, ważne 7 dni. Reset tworzony przez administratora
   jest ważny 24 godziny. Hasła/PIN-y: Argon2id; tokeny: hash SHA-256.
   Sesje odnawiają się przy aktywności, ważność 60 dni. Nie usuwamy ostatniego
-  administratora ani nie zmieniamy dzieci w dorosłych i odwrotnie.
+  administratora pojedynczo; może on usunąć całą rodzinę. Nie zmieniamy dzieci
+  w dorosłych i odwrotnie.
+- Usuwanie kont działa wyłącznie online na ekranie „Rodzina”. Administrator
+  usuwa dowolnego domownika lub całą rodzinę; inny dorosły tylko siebie
+  i dowolne dziecko swojej rodziny. Dzieci nie usuwają kont. Własne konto
+  administrator usuwa tylko wtedy, gdy pozostanie inny administrator;
+  usunięcie siebie nie usuwa automatycznie dzieci. Uprawnienia edycji profilu
+  i PIN-u pozostają odrębne.
+- DELETE /api/members/:id wymaga JSON { password }, a DELETE /api/family
+  dodatkowo confirmationName zgodnego z aktualną nazwą rodziny po usunięciu
+  skrajnych spacji. Hasło należy do wykonującego operację. Limit potwierdzeń
+  jest wspólny: 10 prób/15 minut na konto, trwale w SQLite; 429 z Retry-After.
+  Odpowiedź { ok: true, deleted: true, resetOwnSession } wskazuje czyszczenie
+  własnej sesji i alarmów. Błędne hasło daje 403 INVALID_CREDENTIALS, ostatni
+  administrator 409 LAST_ADMIN, a brak hasła w starszym APK
+  409 ACCOUNT_DELETION_UPDATE_REQUIRED. Pozostałe funkcje starszego APK działają.
+- Usuwanie i przygotowanie zależności odbywają się w transakcji immediate,
+  z ponownym sprawdzeniem sesji, hasha hasła, ról i ostatniego administratora
+  po asynchronicznej weryfikacji hasła. Pojedyncze usunięcie zachowuje wspólne
+  treści i dotychczasowe przekazywanie list zadań. Usunięcie rodziny usuwa
+  jej dane w aktywnej bazie, najpierw listy zadań i kontakty, następnie rodzinę
+  z relacjami, kontami i sesjami; nie przekazuje list usuwanym osobom.
+- Interfejs wymaga hasła i potwierdzenia skutków, a dla rodziny wpisania nazwy.
+  Nie kolejkuje usuwania i nie ponawia go automatycznie. Nieznany wynik wymaga
+  sprawdzenia sesji lub obecności domownika przed kolejną próbą. Hasło nie jest
+  utrwalane w magazynach ani historii mutacji. Usunięcie siebie lub rodziny
+  uruchamia istniejące wylogowanie i czyszczenie danych, niewysłanych zmian
+  oraz alarmów, także w innych kartach. Inne urządzenia wykrywają usunięcie
+  przy kontakcie z API; offline mogą do tego czasu zachować dane i alarmy.
 - Kontakty: jedna grupa na kontakt, jedna nieusuwalna grupa domyślna „Inne”
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.

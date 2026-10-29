@@ -58,15 +58,5 @@ export function createFamilyRepository(database: DatabaseConnection) {
         return true;
       });
     },
-    removeMember(memberId: string, prepareRemoval: () => void) {
-      return database.db.transaction(
-        (tx) => {
-          prepareRemoval();
-          tx.delete(schema.sessions).where(eq(schema.sessions.userId, memberId)).run();
-          tx.delete(schema.users).where(eq(schema.users.id, memberId)).run();
-        },
-        { behavior: 'immediate' },
-      );
-    },
   };
 }

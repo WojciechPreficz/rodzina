@@ -7,7 +7,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { localDateTimeToUtc, reminderScheduleSchema, taskUrl, type Task, type TaskList } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
-import { hashToken } from '../../auth.js';
+import { hashToken, hashPassword } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
@@ -16,6 +16,8 @@ import { resolveRecipients } from './delivery.js';
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
 const offset = { type: 'offset', offsetValue: 0, offsetUnit: 'day' };
 const utc = (date: string, time = '09:00') => localDateTimeToUtc(date, time, 'Europe/Warsaw');
+
+const deletionPasswordHash = await hashPassword('password123');
 
 describe('task reminders', () => {
   let database: ReturnType<typeof createDatabase>;
@@ -33,7 +35,7 @@ describe('task reminders', () => {
       token = crypto.randomUUID();
     database.db
       .insert(schema.users)
-      .values({ id, familyId, displayName: role, role, createdAt: 1, updatedAt: 1 })
+      .values({ id, familyId, displayName: role, role, passwordHash: deletionPasswordHash, createdAt: 1, updatedAt: 1 })
       .run();
     database.db
       .insert(schema.sessions)
@@ -273,7 +275,7 @@ describe('task reminders', () => {
     const target = await list([member.id]);
     const source = await task(target.id);
     await mine(source.id, owner);
-    const response = await request('DELETE', `/api/members/${owner.id}`, {}, admin);
+    const response = await request('DELETE', `/api/members/${owner.id}`, { password: 'password123' }, admin);
     expect(response.statusCode, response.body).toBe(200);
     expect(stored(source.id)).toHaveLength(1);
     expect((await schedule(member))[0]?.sourceId).toBe(source.id);

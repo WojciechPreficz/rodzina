@@ -142,6 +142,7 @@ describe('authentication regressions', () => {
     const response = await app.inject({
       method: 'DELETE',
       url: `/api/members/${memberId}`,
+      payload: { password: registerBody.password },
       headers: { ...headers, cookie },
     });
     expect(response.statusCode).toBe(500);
@@ -338,6 +339,7 @@ describe('authentication regressions', () => {
         await app.inject({
           method: 'DELETE',
           url: `/api/members/${child.json().member.id}`,
+          payload: { password: registerBody.password },
           headers: { ...headers, cookie },
         })
       ).statusCode,

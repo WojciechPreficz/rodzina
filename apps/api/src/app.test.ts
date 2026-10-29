@@ -356,10 +356,11 @@ describe('auth API', () => {
     const lastAdminDeleteResponse = await app.inject({
       method: 'DELETE',
       url: `/api/members/${adminResponse.json().user.id}`,
+      payload: { password: '12345678' },
       headers: { cookie: adminCookie, origin: 'http://localhost:3000', host: 'localhost:3000' },
     });
 
-    expect(lastAdminDeleteResponse.statusCode).toBe(400);
+    expect(lastAdminDeleteResponse.statusCode).toBe(409);
 
     const secondFamilyResponse = await app.inject({
       method: 'POST',

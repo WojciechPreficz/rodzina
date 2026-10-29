@@ -63,7 +63,7 @@ const cases = [
     { ok: true, token: 'token', link: '/reset-hasla/token', expiresAt: 3000 },
   ],
   ['ok', authOkResponseSchema, { ok: true }],
-  ['delete member', deleteMemberResponseSchema, { ok: true, deleted: true }],
+  ['delete member', deleteMemberResponseSchema, { ok: true, deleted: true, resetOwnSession: false }],
 ] as const;
 
 describe('auth response contracts', () => {

@@ -5,6 +5,8 @@ import type {
   MembersResponse,
   MemberResponse,
   DeleteMemberResponse,
+  DeleteAccountInput,
+  DeleteFamilyInput,
   CreateInvitationResponse,
   PasswordResetLinkResponse,
   RotateJoinCodeResponse,
@@ -49,8 +51,15 @@ export async function updateMember(id: string, update: MemberUpdate): Promise<Me
   return response.member;
 }
 
-export async function deleteMember(id: string): Promise<void> {
-  await apiFetch<DeleteMemberResponse>(`/api/members/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export function deleteMember(id: string, input: DeleteAccountInput): Promise<DeleteMemberResponse> {
+  return apiFetch<DeleteMemberResponse>(`/api/members/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteFamily(input: DeleteFamilyInput): Promise<DeleteMemberResponse> {
+  return apiFetch<DeleteMemberResponse>('/api/family', { method: 'DELETE', body: JSON.stringify(input) });
 }
 
 export async function createInvitation(role: 'admin' | 'member'): Promise<string> {

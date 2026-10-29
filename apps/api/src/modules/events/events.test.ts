@@ -7,7 +7,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { localDateTimeToUtc } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
-import { hashToken } from '../../auth.js';
+import { hashToken, hashPassword } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
@@ -15,6 +15,8 @@ import { trustedMutationHeaders } from '../../test-helpers.js';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
 const single = { kind: 'single', title: 'Basen', startDate: '2026-10-13', startTime: '17:00', durationMinutes: 60 };
+
+const deletionPasswordHash = await hashPassword('password123');
 
 describe('events API', () => {
   it.each([null, '09:00'])(
@@ -50,6 +52,7 @@ describe('events API', () => {
         id,
         familyId: family,
         displayName: role,
+        passwordHash: deletionPasswordHash,
         role,
         color: '#123456',
         createdAt: Date.now(),
@@ -285,7 +288,7 @@ describe('events API', () => {
 
   it('keeps former members events, clears authorship and cascades participation and sessions', async () => {
     const event = await create({ ...single, participantIds: [child.id, member.id] }, child);
-    expect((await request('DELETE', `/api/members/${child.id}`)).statusCode).toBe(200);
+    expect((await request('DELETE', `/api/members/${child.id}`, { password: 'password123' })).statusCode).toBe(200);
     const remaining = (await request('GET', `/api/events/${event.id}`)).json().event;
     expect(remaining.createdBy).toBeNull();
     expect(remaining.participants.map((p: { id: string }) => p.id)).toEqual([member.id]);

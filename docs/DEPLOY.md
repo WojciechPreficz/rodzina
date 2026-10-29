@@ -121,6 +121,15 @@ Po udanym backupie job sprząta wygasłe sesje i limity logowania; błąd sprzą
 jest logowany oddzielnie i nie unieważnia kopii. Monitoruj log oraz wolne miejsce.
 Przed aktualizacją wykonaj polecenie crona bez harmonogramu i przekierowania.
 Backup zachowuje także odpowiedzi idempotentne operacji; nie usuwaj ich ręcznie.
+Usuwanie konta lub rodziny czyści aktywną bazę, nie przepisuje istniejących
+backupów; usunięte dane pozostają w nich do rotacji 14 kopii dziennych.
+Odtworzenie starszej kopii może przywrócić usunięte konta, dane i sesje;
+uwzględnij późniejsze usunięcia przy uzgadnianiu zakresu odtworzenia.
+
+Usuwanie kont wymaga nowego frontendu/APK z potwierdzeniem hasłem.
+Starsze APK zachowuje pozostałe funkcje, ale dotychczasowe usuwanie bez hasła
+otrzymuje 409 ACCOUNT_DELETION_UPDATE_REQUIRED z komunikatem aktualizacji.
+To uzgodniony wyjątek zgodności; ZIP i podpisane APK aktualizujemy osobno.
 
 Odtworzenie bazy wymaga zatrzymania API, zapisów i jobów, zachowania obecnej bazy,
 usunięcia jej starych WAL/SHM i umieszczenia kopii pod DATABASE_PATH.

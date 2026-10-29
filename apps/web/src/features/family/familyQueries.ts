@@ -7,7 +7,6 @@ import {
   createChild,
   createInvitation,
   createPasswordResetLink,
-  deleteMember,
   rotateJoinCode,
   updateMember,
   type MemberUpdate,
@@ -57,11 +56,6 @@ export function useCreateChild() {
 export function useUpdateMember() {
   const sync = useSyncAfterMemberChange();
   return useOnlineMutation(({ id, update }: { id: string; update: MemberUpdate }) => updateMember(id, update), sync);
-}
-
-export function useDeleteMember() {
-  const sync = useSyncAfterMemberChange();
-  return useOnlineMutation(deleteMember, sync);
 }
 
 export function useCreateInvitation() {

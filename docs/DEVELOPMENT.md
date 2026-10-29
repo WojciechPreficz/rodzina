@@ -60,6 +60,16 @@ model telefonu, Android, wersje APK przed/po, datę i wynik. Nie zaliczaj
 historycznych terminów wstecz; mocki i test transportu nie dowodzą działania
 systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
 
+- [ ] Usuwanie kont: UI przy 390/1280 px i fizyczne APK, klawiatura, fokus
+      i systemowy Wstecz. Administrator usuwa domownika lub rodzinę; inny dorosły
+      siebie i dowolne dziecko, dziecko nikogo. Ostatni administrator musi
+      przekazać rolę albo usunąć rodzinę. Sprawdzić błędne hasło, limit, nazwę
+      rodziny, anulowanie, offline i utratę odpowiedzi ze sprawdzeniem wyniku.
+      Usunięcie dziecka nie wylogowuje dorosłego; pojedyncze usunięcie zachowuje
+      wspólne treści i przekazuje listy. Usunięcie siebie/rodziny czyści lokalne
+      dane, kolejki i alarmy, również w drugiej karcie. Telefon offline traci
+      dostęp i czyści alarmy po kontakcie z API. Potwierdzić komunikat aktualizacji
+      przy usuwaniu bez hasła ze starszego APK i końcowe CI.
 - [ ] Reset hasła: rzeczywista skrzynka SMTP według DEPLOY, odbiór i Spam,
       SPF/DKIM/DMARC oraz brak tokenów w logach hostingu. Nadawca nie jest
       skonfigurowany automatycznie; domyślnie funkcja pozostaje wyłączona.

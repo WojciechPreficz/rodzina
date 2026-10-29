@@ -7,13 +7,15 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
-import { hashToken } from '../../auth.js';
+import { hashToken, hashPassword } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
 const base = '/api/shopping';
+
+const deletionPasswordHash = await hashPassword('password123');
 
 describe('shopping API', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -35,7 +37,15 @@ describe('shopping API', () => {
     const token = crypto.randomUUID();
     database.db
       .insert(schema.users)
-      .values({ id, familyId, displayName: role, role, createdAt: Date.now(), updatedAt: Date.now() })
+      .values({
+        id,
+        familyId,
+        displayName: role,
+        role,
+        passwordHash: deletionPasswordHash,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
       .run();
     database.db
       .insert(schema.sessions)
@@ -535,7 +545,7 @@ describe('shopping API', () => {
     const own = await list(member);
     const item = await add(own.id, { name: 'Mleko' }, member);
     await request('PATCH', `${base}/items/${item.id}`, { isChecked: true }, member);
-    expect((await request('DELETE', `/api/members/${member.id}`)).statusCode).toBe(200);
+    expect((await request('DELETE', `/api/members/${member.id}`, { password: 'password123' })).statusCode).toBe(200);
     expect((await list()).createdBy).toBeNull();
     const row = (await request('GET', `${base}/lists/${own.id}/items`)).json().items[0];
     expect(row).toMatchObject({ id: item.id, createdBy: null, checkedBy: null, isChecked: true });

@@ -7,7 +7,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { localDateTimeToUtc, type Reminder } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
-import { hashToken } from '../../auth.js';
+import { hashToken, hashPassword } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
@@ -16,6 +16,8 @@ const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url
 const single = { kind: 'single', title: 'Basen', startDate: '2026-10-20', startTime: '17:00', durationMinutes: 60 };
 const offset = { type: 'offset', offsetValue: 1, offsetUnit: 'day' };
 const utc = (date: string, time = '17:00') => localDateTimeToUtc(date, time, 'Europe/Warsaw');
+
+const deletionPasswordHash = await hashPassword('password123');
 
 describe('event reminders API', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -35,7 +37,15 @@ describe('event reminders API', () => {
     const token = crypto.randomUUID();
     database.db
       .insert(schema.users)
-      .values({ id, familyId, displayName: role, role, createdAt: Date.now(), updatedAt: Date.now() })
+      .values({
+        id,
+        familyId,
+        displayName: role,
+        role,
+        passwordHash: deletionPasswordHash,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
       .run();
     database.db
       .insert(schema.sessions)
@@ -214,7 +224,7 @@ describe('event reminders API', () => {
     const source = await event({ ...single, reminders: [offset] }, member);
     await mine(source.id, offset, member);
     const survivor = await mine(source.id, offset, child);
-    expect((await request('DELETE', `/api/members/${member.id}`)).statusCode).toBe(200);
+    expect((await request('DELETE', `/api/members/${member.id}`, { password: 'password123' })).statusCode).toBe(200);
     const rows = database.db.select().from(schema.reminders).all();
     expect(rows).toHaveLength(2);
     expect(rows).toEqual(

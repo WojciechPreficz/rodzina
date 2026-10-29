@@ -18,7 +18,7 @@ import { labels } from '../../i18n/pl.js';
 import { LinkActions } from './LinkActions.js';
 import type { Member } from '@rodzina/shared';
 import { MEMBER_COLORS, type MemberUpdate } from './familyApi.js';
-import { useCreateChild, useCreatePasswordResetLink, useDeleteMember, useUpdateMember } from './familyQueries.js';
+import { useCreateChild, useCreatePasswordResetLink, useUpdateMember } from './familyQueries.js';
 import { errorMessage, validateDisplayName, validatePin } from './familyRules.js';
 import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';
 
@@ -147,10 +147,11 @@ export function AddChildModal({ onClose }: { onClose: () => void }) {
 type EditMemberModalProps = {
   member: Member;
   actor: AuthUser;
+  onDelete: () => void;
   onClose: () => void;
 };
 
-export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps) {
+export function EditMemberModal({ member, actor, onClose, onDelete }: EditMemberModalProps) {
   const readOnly = useFamilyReadOnly();
   const isAdmin = actor.role === 'admin';
   const isSelf = actor.id === member.id;
@@ -163,11 +164,10 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
   const [fieldErrors, setFieldErrors] = useState({ displayName: '', pin: '' });
 
   const updateMutation = useUpdateMember();
-  const deleteMutation = useDeleteMember();
   const resetLinkMutation = useCreatePasswordResetLink();
 
-  const isSubmitting = updateMutation.isPending || deleteMutation.isPending;
-  const mutationError = updateMutation.error ?? deleteMutation.error ?? resetLinkMutation.error;
+  const isSubmitting = updateMutation.isPending;
+  const mutationError = updateMutation.error ?? resetLinkMutation.error;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -198,12 +198,6 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
     }
 
     updateMutation.mutate({ id: member.id, update }, { onSuccess: onClose });
-  };
-
-  const onDelete = () => {
-    if (window.confirm(`${labels.deleteMemberConfirm} ${member.displayName}?`)) {
-      deleteMutation.mutate(member.id, { onSuccess: onClose });
-    }
   };
 
   return (
@@ -253,7 +247,7 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
             <Button variant="default" onClick={onClose}>
               {labels.cancel}
             </Button>
-            <Button type="submit" loading={updateMutation.isPending} disabled={readOnly || deleteMutation.isPending}>
+            <Button type="submit" loading={updateMutation.isPending} disabled={readOnly}>
               {labels.save}
             </Button>
           </Group>
@@ -275,13 +269,7 @@ export function EditMemberModal({ member, actor, onClose }: EditMemberModalProps
           ) : null}
 
           {isAdmin && !isSelf ? (
-            <Button
-              color="red"
-              variant="light"
-              onClick={onDelete}
-              loading={deleteMutation.isPending}
-              disabled={readOnly || isSubmitting}
-            >
+            <Button color="red" variant="light" onClick={onDelete} disabled={readOnly || isSubmitting}>
               {labels.deleteMember}
             </Button>
           ) : null}

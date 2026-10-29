@@ -7,7 +7,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { taskResponseSchema, tasksResponseSchema, type Task, type TaskList } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
-import { hashToken } from '../../auth.js';
+import { hashToken, hashPassword } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
@@ -15,6 +15,8 @@ import { createTaskListService } from './service.js';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
 const base = '/api/tasks/lists';
+
+const deletionPasswordHash = await hashPassword('password123');
 
 describe('task lists API', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -36,7 +38,15 @@ describe('task lists API', () => {
     const token = crypto.randomUUID();
     database.db
       .insert(schema.users)
-      .values({ id, familyId, displayName: role, role, createdAt, updatedAt: createdAt })
+      .values({
+        id,
+        familyId,
+        displayName: role,
+        role,
+        passwordHash: deletionPasswordHash,
+        createdAt,
+        updatedAt: createdAt,
+      })
       .run();
     database.db
       .insert(schema.sessions)
@@ -406,7 +416,9 @@ describe('task lists API', () => {
     const list = await create([member.id]);
     const task = await addTask(list.id, { assigneeId: member.id }, member);
     await request('PATCH', taskUrl(task.id), { isDone: true }, member);
-    expect((await request('DELETE', `/api/members/${member.id}`, {}, admin)).statusCode).toBe(200);
+    expect((await request('DELETE', `/api/members/${member.id}`, { password: 'password123' }, admin)).statusCode).toBe(
+      200,
+    );
     expect((await readTasks(`${base}/${list.id}/tasks?status=done`))[0]).toMatchObject({
       id: task.id,
       createdBy: null,
@@ -619,7 +631,7 @@ describe('task lists API', () => {
     const shared = await create([child.id]);
     task(privateList.id);
     const survivingTaskId = task(shared.id);
-    const response = await request('DELETE', `/api/members/${owner.id}`, {}, admin);
+    const response = await request('DELETE', `/api/members/${owner.id}`, { password: 'password123' }, admin);
     expect(response.statusCode, response.body).toBe(200);
     expect(database.db.select().from(schema.users).where(eq(schema.users.id, owner.id)).get()).toBeUndefined();
     expect(
@@ -649,7 +661,7 @@ describe('task lists API', () => {
   it('removes a deleted member from other lists while preserving their tasks and owner', async () => {
     const list = await create([member.id]);
     const id = task(list.id, member.id);
-    const response = await request('DELETE', `/api/members/${member.id}`, {}, admin);
+    const response = await request('DELETE', `/api/members/${member.id}`, { password: 'password123' }, admin);
     expect(response.statusCode, response.body).toBe(200);
     expect((await lists())[1]).toMatchObject({ id: list.id, ownerId: owner.id, memberIds: [] });
     expect(database.db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get()).toMatchObject({
@@ -668,7 +680,7 @@ describe('task lists API', () => {
     database.sqlite.exec(
       `CREATE TRIGGER block_user_delete BEFORE DELETE ON users BEGIN SELECT RAISE(ABORT, 'blocked'); END`,
     );
-    const response = await request('DELETE', `/api/members/${owner.id}`, {}, admin);
+    const response = await request('DELETE', `/api/members/${owner.id}`, { password: 'password123' }, admin);
     expect(response.statusCode).toBe(500);
     expect(
       database.db.select().from(schema.taskLists).where(eq(schema.taskLists.id, privateList.id)).get(),
@@ -688,9 +700,15 @@ describe('task lists API', () => {
 
   it('does not touch lists for forbidden member deletion or attempts against another family', async () => {
     const list = await create([member.id]);
-    expect((await request('DELETE', `/api/members/${owner.id}`, {}, member)).statusCode).toBe(403);
-    expect((await request('DELETE', `/api/members/${owner.id}`, {}, outsider)).statusCode).toBe(404);
-    expect((await request('DELETE', `/api/members/${admin.id}`, {}, admin)).statusCode).toBe(400);
+    expect((await request('DELETE', `/api/members/${owner.id}`, { password: 'password123' }, member)).statusCode).toBe(
+      403,
+    );
+    expect(
+      (await request('DELETE', `/api/members/${owner.id}`, { password: 'password123' }, outsider)).statusCode,
+    ).toBe(404);
+    expect((await request('DELETE', `/api/members/${admin.id}`, { password: 'password123' }, admin)).statusCode).toBe(
+      409,
+    );
     expect((await lists())[1]).toEqual(list);
   });
 });

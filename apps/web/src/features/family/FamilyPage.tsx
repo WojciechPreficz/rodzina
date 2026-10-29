@@ -8,7 +8,8 @@ import { AddChildModal, EditMemberModal } from './MemberDialogs.js';
 import type { Member } from '@rodzina/shared';
 
 import { useCreateInvitation, useMembersQuery, useRotateJoinCode } from './familyQueries.js';
-import { canEditProfile, errorMessage, isFamilyAdmin } from './familyRules.js';
+import { canDeleteMember, canEditProfile, errorMessage, isFamilyAdmin } from './familyRules.js';
+import { DeleteAccountModal } from './DeleteAccountModal.js';
 import { onlineActionHint, useFamilyReadOnly } from './familyQueries.js';
 import { useOffline } from '../../connectivity.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
@@ -120,12 +121,14 @@ export function FamilyPage() {
   const membersQuery = useMembersQuery();
   const [editedMember, setEditedMember] = useState<Member | null>(null);
   const [isAddChildOpen, setIsAddChildOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Member | 'family' | null>(null);
 
   if (!user || !family) {
     return null;
   }
 
   const isAdmin = isFamilyAdmin(user);
+  const lastAdmin = isAdmin && (membersQuery.data?.filter((member) => member.role === 'admin').length ?? 1) <= 1;
 
   return (
     <Stack className="settings-page family-page" gap="lg">
@@ -180,18 +183,32 @@ export function FamilyPage() {
                       </Text>
                     </div>
                   </Group>
-                  {canEditProfile(user, member) ? (
-                    <Button
-                      disabled={readOnly}
-                      title={readOnly ? onlineActionHint : undefined}
-                      size="xs"
-                      variant="light"
-                      aria-label={`${labels.edit}: ${member.displayName}`}
-                      onClick={() => setEditedMember(member)}
-                    >
-                      {labels.edit}
-                    </Button>
-                  ) : null}
+                  <Group gap="xs" justify="flex-end">
+                    {canEditProfile(user, member) ? (
+                      <Button
+                        disabled={readOnly}
+                        title={readOnly ? onlineActionHint : undefined}
+                        size="xs"
+                        variant="light"
+                        aria-label={`${labels.edit}: ${member.displayName}`}
+                        onClick={() => setEditedMember(member)}
+                      >
+                        {labels.edit}
+                      </Button>
+                    ) : null}
+                    {member.id !== user.id && canDeleteMember(user, member) && (
+                      <Button
+                        size="xs"
+                        color="red"
+                        variant="light"
+                        disabled={readOnly}
+                        aria-label={`Usuń konto: ${member.displayName}`}
+                        onClick={() => setDeleteTarget(member)}
+                      >
+                        Usuń
+                      </Button>
+                    )}
+                  </Group>
                 </Group>
               ))}
             </Stack>
@@ -203,6 +220,36 @@ export function FamilyPage() {
 
       <JoinCodeCard joinCode={family.joinCode} canRotate={isAdmin} />
 
+      {user.role !== 'child' && (
+        <Card className="settings-card" withBorder p="lg">
+          <Stack gap="sm">
+            <Text fw={600}>Usuwanie konta</Text>
+            {lastAdmin && (
+              <Text size="sm">
+                Aby usunąć tylko swoje konto, najpierw nadaj rolę administratora innemu dorosłemu. Możesz też usunąć
+                całą rodzinę.
+              </Text>
+            )}
+            <Group>
+              <Button
+                color="red"
+                variant="light"
+                disabled={readOnly || lastAdmin}
+                onClick={() => setDeleteTarget(user)}
+              >
+                Usuń moje konto
+              </Button>
+              {isAdmin && (
+                <Button color="red" variant="light" disabled={readOnly} onClick={() => setDeleteTarget('family')}>
+                  Usuń całą rodzinę
+                </Button>
+              )}
+            </Group>
+            {readOnly && <Text size="sm">{onlineActionHint}</Text>}
+          </Stack>
+        </Card>
+      )}
+
       {isAddChildOpen ? <AddChildModal onClose={() => setIsAddChildOpen(false)} /> : null}
 
       {editedMember ? (
@@ -211,8 +258,13 @@ export function FamilyPage() {
           member={editedMember}
           actor={user}
           onClose={() => setEditedMember(null)}
+          onDelete={() => {
+            setEditedMember(null);
+            setDeleteTarget(editedMember);
+          }}
         />
       ) : null}
+      {deleteTarget && <DeleteAccountModal key={user.id} target={deleteTarget} onClose={() => setDeleteTarget(null)} />}
     </Stack>
   );
 }

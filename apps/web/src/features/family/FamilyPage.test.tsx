@@ -138,6 +138,10 @@ describe('FamilyPage', () => {
     const editButtons = screen.getAllByRole('button', { name: /^Edytuj:/ });
     expect(editButtons).toHaveLength(1);
     expect(editButtons[0]).toHaveAccessibleName('Edytuj: Piotr');
+    expect(screen.getByRole('button', { name: 'Usuń konto: Zosia' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Usuń moje konto' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Usuń konto: Anna' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Usuń całą rodzinę' })).not.toBeInTheDocument();
   });
 
   it('lets a child change only own name and color', async () => {
@@ -150,7 +154,7 @@ describe('FamilyPage', () => {
     expect(screen.getByRole('radiogroup', { name: 'Kolor' })).toBeInTheDocument();
     expect(screen.queryByText('Rola')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Nowy PIN')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Usuń domownika' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Usuń/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Edytuj:/ })).toHaveLength(1);
   });
 

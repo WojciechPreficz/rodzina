@@ -12,6 +12,10 @@ export function canEditProfile(actor: Actor, target: Pick<AuthUser, 'id'>): bool
   return actor.role === 'admin' || actor.id === target.id;
 }
 
+export function canDeleteMember(actor: Actor, target: Pick<AuthUser, 'id' | 'role'>): boolean {
+  return actor.role !== 'child' && (actor.role === 'admin' || actor.id === target.id || target.role === 'child');
+}
+
 export function validateDisplayName(value: string): string {
   return value.trim().length >= 2 ? '' : labels.displayNameError;
 }

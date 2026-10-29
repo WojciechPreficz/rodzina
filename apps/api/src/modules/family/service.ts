@@ -28,12 +28,10 @@ import {
   canUpdateMemberRole,
 } from '../../permissions.js';
 import type { StartSession } from '../auth/service.js';
-import { createTaskListService } from '../tasks/service.js';
 import { createFamilyRepository } from './repository.js';
 
 export function createFamilyService(database: DatabaseConnection, config: AppConfig) {
   const repository = createFamilyRepository(database);
-  const tasks = createTaskListService(database);
   async function listMembers(user: PublicAuthUser) {
     const members = repository.listMembers(user.familyId);
 
@@ -342,29 +340,6 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     };
   }
 
-  async function removeMember(user: PublicAuthUser, memberId: string | undefined) {
-    if (!canManageFamilyMembers(user.role)) {
-      throw new ApiError(403, 'FORBIDDEN', 'Tylko administrator może usuwać domowników.');
-    }
-
-    if (!memberId) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Brak identyfikatora użytkownika.');
-    }
-
-    const targetUser = repository.findMember(user.familyId, memberId);
-    if (!targetUser) {
-      throw new ApiError(404, 'NOT_FOUND', 'Użytkownik nie istnieje w tej rodzinie.');
-    }
-
-    if (targetUser.role === 'admin' && repository.countAdmins(user.familyId) <= 1) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Nie można usunąć ostatniego administratora.');
-    }
-
-    repository.removeMember(memberId, () => tasks.prepareMemberRemoval(user.familyId, memberId));
-
-    return { ok: true, deleted: true };
-  }
-
   async function updateFamily(user: PublicAuthUser, data: UpdateFamilyInput) {
     if (!canManageFamilyMembers(user.role)) {
       throw new ApiError(403, 'FORBIDDEN', 'Tylko administrator może zmieniać nazwę rodziny.');
@@ -407,7 +382,6 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     acceptInvitation,
     createPasswordResetLink,
     updateMember,
-    removeMember,
     updateFamily,
     rotateJoinCode,
   };

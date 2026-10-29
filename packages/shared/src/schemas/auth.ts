@@ -63,7 +63,17 @@ export const authOkResponseSchema = z.object({ ok: z.literal(true) });
 export const passwordResetResponseSchema = authOkResponseSchema.extend({ resetOwnSession: z.boolean() });
 export const passwordRecoveryAvailabilitySchema = z.object({ enabled: z.boolean() });
 export const forgotPasswordInputSchema = z.object({ email: z.string().trim().email().max(254) });
-export const deleteMemberResponseSchema = z.object({ ok: z.literal(true), deleted: z.literal(true) });
+export const deleteAccountInputSchema = z.object({ password: z.string().min(1).max(1024) });
+export const deleteFamilyInputSchema = deleteAccountInputSchema.extend({
+  confirmationName: z.string().trim().min(1),
+});
+export const deleteMemberResponseSchema = z.object({
+  ok: z.literal(true),
+  deleted: z.literal(true),
+  resetOwnSession: z.boolean(),
+});
+export type DeleteAccountInput = z.infer<typeof deleteAccountInputSchema>;
+export type DeleteFamilyInput = z.infer<typeof deleteFamilyInputSchema>;
 
 export type AuthRole = z.infer<typeof roleSchema>;
 export type AuthUser = z.infer<typeof publicUserSchema>;

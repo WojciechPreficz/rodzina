@@ -25,10 +25,13 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { requireUser } from '../../http/session-auth.js';
 import { createSessionFactory } from '../auth/session.js';
 import { createFamilyService } from './service.js';
+import { hashToken } from '../../auth.js';
+import { createAccountDeletion, DeletionRateLimitError } from './deletion.js';
 
 export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseConnection, config: AppConfig) {
   const service = createFamilyService(database, config);
   const createSession = createSessionFactory(database, config);
+  const deletion = createAccountDeletion(database);
   app.get('/api/members', async (request) =>
     membersResponseSchema.parse(await service.listMembers(requireUser(request))),
   );
@@ -87,14 +90,24 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       ),
     ),
   );
-  app.delete('/api/members/:id', async (request) =>
-    deleteMemberResponseSchema.parse(
-      await service.removeMember(
-        requireUser(request),
-        parse(memberParamsSchema, request.params, 'Brak identyfikatora użytkownika.').id,
-      ),
-    ),
-  );
+  for (const url of ['/api/members/:id', '/api/family']) {
+    app.delete(url, async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const actor = requireUser(request);
+        const sessionId = hashToken(request.cookies.sid!);
+        const result =
+          url === '/api/family'
+            ? await deletion.removeFamily(actor, request.body, sessionId)
+            : await deletion.removeMember(actor, parse(memberParamsSchema, request.params).id, request.body, sessionId);
+        if (result.resetOwnSession) reply.clearCookie('sid', { path: '/' });
+        return deleteMemberResponseSchema.parse(result);
+      } catch (error) {
+        if (error instanceof DeletionRateLimitError) reply.header('Retry-After', error.retryAfter);
+        throw error;
+      }
+    });
+  }
   app.patch('/api/family', async (request) =>
     familyResponseSchema.parse(
       await service.updateFamily(

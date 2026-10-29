@@ -6,7 +6,7 @@ aplikacji jest w [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Statusy
 
-Stan dokumentacji na 28.10.2026. Brak potwierdzenia CI lub prób ręcznych
+Stan dokumentacji na 29.10.2026. Brak potwierdzenia CI lub prób ręcznych
 nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 
 | Zakres                                                        | Stan                                                                            | Pozostałe warunki                                                 |
@@ -22,6 +22,9 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | Oddzielenie sesji od modułów                                  | Implementacja opisana 28.10.2026                                                | Końcowe CI i fizyczne APK do potwierdzenia                        |
 | Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
 | Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
+
+Usuwanie kont domowników i całej rodziny: zweryfikowane lokalnie, oczekuje na CI.
+Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
 
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
