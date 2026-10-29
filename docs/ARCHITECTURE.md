@@ -183,6 +183,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 - Błędny e-mail, hasło lub PIN zwraca 403 `INVALID_CREDENTIALS`, bez sygnału
   utraty sesji. Brak lub wygaśnięcie sesji zwraca 401 `UNAUTHORIZED`
   i uruchamia czyszczenie danych konta.
+  Po potwierdzeniu braku sesji frontend wstrzymuje automatyczne sprawdzanie
+  /api/auth/me przez timer, powrót do karty i odzyskanie sieci. Logowanie
+  przywraca sprawdzanie; zmiana konta w drugiej karcie pozwala wykryć nową sesję.
 - Limity logowania: 10 prób/15 minut dla IP–konto, osobno hasło i PIN,
   trwałe w SQLite. Poprawne logowanie usuwa własny licznik.
 - GET /api/auth/password-recovery udostępnia wyłącznie dostępność funkcji.

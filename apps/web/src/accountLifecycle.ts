@@ -60,6 +60,7 @@ export function useAccountLifecycle(services: AccountServices) {
   const generation = useRef(0);
   const refreshRevision = useRef(0);
   const currentSession = useRef<OfflineSession | undefined>(undefined);
+  const sessionRejected = useRef(false);
   const [familySyncedAt, setFamilySyncedAt] = useState<number>();
   const [familySyncError, setFamilySyncError] = useState<string>();
   const [familyConfirmed, setFamilyConfirmed] = useState(false);
@@ -101,6 +102,7 @@ export function useAccountLifecycle(services: AccountServices) {
         setFamilyConfirmed(false);
       }
       currentSession.current = response;
+      sessionRejected.current = false;
       await recoverPendingClear();
       if (!current()) return;
       await restoreAccountStores(response, queryClient, current);
@@ -138,6 +140,7 @@ export function useAccountLifecycle(services: AccountServices) {
       if (!current()) return;
       setFamilyConfirmed(false);
       if (error instanceof ApiRequestError && [401, 403].includes(error.status)) {
+        sessionRejected.current = true;
         generation.current += 1;
         const cleanupGeneration = generation.current;
         invalidateSessionRequests();
@@ -169,15 +172,18 @@ export function useAccountLifecycle(services: AccountServices) {
 
   useEffect(() => {
     void refresh();
+    const refreshAutomatically = () => {
+      if (!sessionRejected.current) void refresh();
+    };
     const reconnect = onlineManager.subscribe((online) => {
-      if (online) void refresh();
+      if (online) refreshAutomatically();
       else setFamilyConfirmed(false);
     });
     const focus = focusManager.subscribe((focused) => {
-      if (focused) void refresh();
+      if (focused) refreshAutomatically();
     });
     const interval = window.setInterval(() => {
-      if (onlineManager.isOnline() && focusManager.isFocused()) void refresh();
+      if (onlineManager.isOnline() && focusManager.isFocused()) refreshAutomatically();
     }, SYNC_INTERVAL_MS);
     return () => {
       refreshRevision.current += 1;
@@ -192,6 +198,7 @@ export function useAccountLifecycle(services: AccountServices) {
   const identity = user && family ? `${family.id}:${user.id}` : undefined;
   useEffect(() => {
     const loseSession = (removeStored: boolean) => {
+      sessionRejected.current = removeStored;
       const clearing = clearAccountData(removeStored ? 'session-lost' : 'storage-changed', {
         queryClient,
         invalidateSession: () => {
@@ -238,6 +245,7 @@ export function useAccountLifecycle(services: AccountServices) {
   }, [queryClient, identity, refresh, services]);
 
   const logout = async () => {
+    sessionRejected.current = true;
     let cleanupError: unknown;
     await clearAccountData('logout', {
       queryClient,
@@ -300,6 +308,7 @@ export function useAccountLifecycle(services: AccountServices) {
       if (current()) announceAccount(services.accountId({ user: nextUser, family: nextFamily }));
       if (!current()) return;
       currentSession.current = { user: nextUser, family: nextFamily };
+      sessionRejected.current = false;
       setUser(nextUser);
       setFamily(nextFamily);
       setFamilyConfirmed(false);
