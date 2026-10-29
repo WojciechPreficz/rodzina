@@ -51,6 +51,7 @@ test('browser displays a published same-domain HTTPS release and instructions', 
   // A local HTTPS document is served by Playwright routing; no external server is contacted.
   await page.route('https://rodzina.preficze.pl/**', async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/auth/password-recovery') return route.fulfill({ json: { enabled: false } });
     if (url.pathname === '/api/auth/me') {
       if (!authenticated)
         return route.fulfill({
