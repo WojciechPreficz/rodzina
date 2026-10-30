@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { ApiError } from '../../http/errors.js';
 import { registerIdempotentMutations } from '../../http/idempotency.js';
 import { createTaskListRepository } from './repository.js';
+import { createTaskRecurrenceService } from './recurrence.js';
 import {
   createTaskChecklistItemSchema,
   patchTaskChecklistItemSchema,
@@ -25,6 +26,11 @@ import {
   tasksResponseSchema,
   taskResponseSchema,
   taskDeletedResponseSchema,
+  configureTaskSeriesSchema,
+  taskSeriesVersionSchema,
+  closeTaskOccurrenceSchema,
+  taskSeriesResponseSchema,
+  taskSeriesHistoryResponseSchema,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { createTaskListService } from './service.js';
@@ -37,6 +43,7 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       route.config = { ...route.config, primaryKeyConflictMessage: 'Identyfikator zadania jest już używany.' };
     });
     const repository = createTaskListRepository(database);
+    const recurrence = createTaskRecurrenceService(database);
     const checkAccess = (request: import('fastify').FastifyRequest, listId: string) => {
       if (!service.canAccessList(requireUser(request).familyId, requireUser(request).id, listId))
         throw new ApiError(404, 'NOT_FOUND', 'Lista zadań nie istnieje.');
@@ -68,6 +75,73 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       },
       // Saved responses contain private content; sharing may have changed since the write.
       recheckAccess: checkAccess,
+    });
+    const recurrenceScope = (request: import('fastify').FastifyRequest) => {
+      const user = requireUser(request);
+      const { id } = parse(idSchema, request.params);
+      if (request.routeOptions.url?.startsWith('/api/tasks/series/'))
+        return recurrence.getSeries(user.familyId, user.id, id).listId;
+      const task = repository.findTask(user.familyId, user.id, id);
+      if (!task) throw new ApiError(404, 'NOT_FOUND', 'Zadanie nie istnieje.');
+      return task.listId;
+    };
+    registerIdempotentMutations(routes, database, {
+      table: 'task_operations',
+      matches: (route) =>
+        route.url.startsWith('/api/tasks/series/') ||
+        route.url === '/api/tasks/:id/recurrence' ||
+        route.url === '/api/tasks/:id/skip',
+      querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid().optional() }).strict(),
+      fingerprintParts: (request) => [requireUser(request).familyId, request.method, request.url, request.body],
+      resolveScope: recurrenceScope,
+      recheckAccess: (request, listId) => {
+        checkAccess(request, listId);
+        recurrenceScope(request);
+      },
+    });
+    routes.post('/api/tasks/:id/recurrence', (request, reply) => {
+      const user = requireUser(request);
+      const { id } = parse(idSchema, request.params);
+      const result = recurrence.configure(
+        user.familyId,
+        user.id,
+        id,
+        parse(configureTaskSeriesSchema, request.body),
+        true,
+      );
+      reply.code(201);
+      return taskSeriesResponseSchema.parse(result);
+    });
+    routes.patch('/api/tasks/series/:id', (request) => {
+      const user = requireUser(request);
+      const { id } = parse(idSchema, request.params);
+      return taskSeriesResponseSchema.parse(
+        recurrence.configure(user.familyId, user.id, id, parse(configureTaskSeriesSchema, request.body), false),
+      );
+    });
+    routes.post('/api/tasks/series/:id/stop', (request) => {
+      const user = requireUser(request);
+      const { id } = parse(idSchema, request.params);
+      return taskSeriesResponseSchema.parse(
+        recurrence.stop(user.familyId, user.id, id, parse(taskSeriesVersionSchema, request.body)),
+      );
+    });
+    routes.post('/api/tasks/:id/skip', (request) => {
+      const user = requireUser(request);
+      const { id } = parse(idSchema, request.params);
+      return taskResponseSchema.parse(
+        recurrence.skip(user.familyId, user.id, id, parse(closeTaskOccurrenceSchema, request.body)),
+      );
+    });
+    routes.get('/api/tasks/series/:id', (request) => {
+      const user = requireUser(request);
+      const { id } = parse(idSchema, request.params);
+      return taskSeriesResponseSchema.parse(recurrence.read(user.familyId, user.id, id));
+    });
+    routes.get('/api/tasks/series/:id/history', (request) => {
+      const user = requireUser(request);
+      const { id } = parse(idSchema, request.params);
+      return taskSeriesHistoryResponseSchema.parse(recurrence.history(user.familyId, user.id, id));
     });
     const checklist = createTaskChecklistService(database);
     const checklistParams = z.object({ id: z.string().uuid(), itemId: z.string().uuid().optional() });
@@ -128,6 +202,7 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       const { status } = parse(tasksQuerySchema, request.query);
       return tasksResponseSchema.parse({
         ok: true,
+        taskRecurrenceVersion: 1,
         tasks: service.listTasks(requireUser(request).familyId, requireUser(request).id, id, status),
       });
     });
@@ -142,13 +217,14 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
         (request.query as { taskId?: string }).taskId,
       );
       reply.code(201);
-      return taskResponseSchema.parse({ ok: true, task });
+      return taskResponseSchema.parse({ ok: true, taskRecurrenceVersion: 1, task });
     });
     routes.patch('/api/tasks/:id', (request) => {
       const { id } = parse(idSchema, request.params);
       const data = parse(patchTaskSchema, request.body);
       return taskResponseSchema.parse({
         ok: true,
+        taskRecurrenceVersion: 1,
         task: service.updateTask(requireUser(request).familyId, requireUser(request).id, id, data),
       });
     });
@@ -160,6 +236,7 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
     routes.get('/api/tasks/today', (request) =>
       tasksResponseSchema.parse({
         ok: true,
+        taskRecurrenceVersion: 1,
         tasks: service.todayTasks(requireUser(request).familyId, requireUser(request).id),
       }),
     );

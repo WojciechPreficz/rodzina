@@ -23,8 +23,8 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
 | Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
 
-Zadania cykliczne C.1 (#65): zweryfikowane lokalnie, oczekuje na CI.
-API, offline, UI i odbiór cykliczności należą do kolejnych kroków C.2–C.4.
+Zadania cykliczne C.1–C.2 (#65–#66): zweryfikowane lokalnie, oczekuje na CI.
+Offline, UI i odbiór cykliczności należą do kolejnych kroków C.3–C.4.
 
 Usuwanie kont domowników i całej rodziny: zweryfikowane lokalnie, oczekuje na CI.
 Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
@@ -237,7 +237,7 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
 - **C.1 (#65): zweryfikowane lokalnie, oczekuje na CI.** Reguły i kontrakty shared, model serii oddzielony
   od wystąpień oraz migracja bez zmiany zadań jednorazowych. Testy kalendarza,
   DST, spóźnień, końca serii, anomalii zegara i ograniczeń bazy; release:smoke.
-- **C.2 (#66): planowane.** API konfiguracji online, historia wykonania/pominięcia,
+- **C.2 (#66): zweryfikowane lokalnie, oczekuje na CI.** API konfiguracji online, historia wykonania/pominięcia,
   atomowe zamknięcie i następca, edycja jednego lub kolejnych, zatrzymanie,
   warunkowe cofnięcie oraz względne przypomnienia wspólne. Obecne uprawnienia
   list również dla dzieci, izolacja rodzin i task_operations z kontrolą dostępu
@@ -278,15 +278,15 @@ i bez podmieniania daty na czas synchronizacji. Cofnięcie zegara serwera
 również może zatrzymać operację do sprawdzenia. Brak następcy po końcu serii
 oznacza wyczerpanie reguły.
 
-C.2 rozszerzy odczyty addytywnie o opcjonalne recurrence i capability
+C.2 rozszerza odczyty addytywnie o opcjonalne recurrence i capability
 taskRecurrenceVersion=1; brak capability oznacza brak obsługi konfiguracji,
 brak recurrence oznacza nieznane dane starego cache, null — zadanie jednorazowe.
 Stare POST/PATCH bez pola cykliczności nigdy nie zmieniają serii. Konfiguracja
-będzie osobną wersjonowaną mutacją online (expectedVersion), a podstawowe
-odhaczenie starego APK przejdzie przez tę samą transakcję następcy co nowy
-klient. Stary klient bez czasu faktycznego użyje jawnie czasu odbioru serwera;
-nowy przekaże faktyczny czas oraz wersję wystąpienia. Konflikt cofnięcia lub
-zmiany serii będzie jawny, nigdy cichym odtworzeniem historii.
+jest osobną wersjonowaną mutacją online (expectedVersion), a podstawowe
+odhaczenie starego APK przechodzi przez tę samą transakcję następcy co nowy
+klient. Stary klient bez czasu faktycznego używa jawnie czasu odbioru serwera;
+nowy przekazuje faktyczny czas oraz wersję serii i wystąpienia. Konflikt cofnięcia
+lub zmiany serii jest jawny, nigdy cichym odtworzeniem historii.
 
 Poza zakresem: rotacja dyżurów, punkty, dowolne RRULE, wiele zaległych kopii,
 generowanie następców offline, dodatkowe kalendarze, iOS, PWA i Web Push.

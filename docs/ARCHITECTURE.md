@@ -131,17 +131,20 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   służy do tego osobny przycisk lub dotychczasowe odhaczenie na liście.
   Niewykonane albo nieznane kroki wymagają potwierdzenia ukończenia rodzica;
   jego cofnięcie pozostawia checklistę bez zmian.
-- Fundament cykliczności zadań (C.1): `task_series` przechowuje regułę
+- Cykliczność zadań (C.1–C.2): `task_series` przechowuje regułę
   kalendarzową (ze strefą), wzorcowe pola i wspólne względne przypomnienia,
   stan oraz wersję. `task_occurrences` wiąże widoczne zadanie z serią,
-  numerem kolejności od zera, niezmiennym planowanym terminem, stanem
+  numerem kolejności od zera, planowanym terminem, stanem
   active/done/skipped, faktycznym czasem zamknięcia i wersją. Numer dotyczy
   utworzonego wystąpienia, nie każdego pominiętego terminu harmonogramu;
   następca numeru N ma N+1. Unikalne (series_id, sequence) i częściowy
   indeks jednego active chronią przed podwójnym następcą. Złożone klucze
   obce wymuszają wspólną listę zadania i serii; dostęp dziedziczymy z listy.
-  Usunięcie listy usuwa serię i wystąpienia, zadania — jego wystąpienie,
-  historycznego wykonawcy — zeruje closedBy. Migracja 0028 nie zmienia
+  Usunięcie listy usuwa serię, wystąpienia i historię, zadania — jego wystąpienie.
+  `task_series_history` (migracja 0029) zachowuje tytuł, planowany termin,
+  wykonanie/pominięcie, czas i wykonawcę niezależnie od widocznego zadania.
+  Cofnięcie zapisuje undoneAt/undoneBy, bez kasowania wcześniejszego wpisu.
+  Usunięcie historycznego wykonawcy zeruje closedBy/undoneBy. Migracja 0028 nie zmienia
   żadnych pól ani stanu istniejących zadań, które pozostają jednorazowe.
   Walidowane schematami shared pola JSON reguły i wzorca nie stanowią
   dodatkowej konfiguracji środowiska.
@@ -155,10 +158,49 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Funkcja zwraca faktyczny czas bez zmiany i stan review przy przyszłości
   ponad 5 minut lub regresji przed utworzenie/poprzednie zamknięcie;
   wtedy nie wyznacza następcy. Brak terminu po granicy końca daje null.
-  Odczyt Task dopuszcza opcjonalne `recurrence` (brak — nieznane dane,
-  null — jednorazowe), ale C.1 nie publikuje jeszcze tego pola ani capability
-  w API. Istniejące POST/PATCH pozostają bez zmian. API i transakcje cyklu
-  życia należą do C.2; plan zgodności capability/version jest w plan.md.
+  Odczyty i odpowiedzi mutacji zadań publikują `recurrence` (null — jednorazowe)
+  oraz `taskRecurrenceVersion: 1`. Brak tych opcjonalnych pól oznacza stary
+  serwer/cache, bez znanej konfiguracji cykliczności. Relacje są odczytywane
+  grupowo, po najwyżej 400 zadań. recurrence zawiera również seriesVersion,
+  aby zapisane wystąpienie znało wersje wymagane do późniejszego zamknięcia.
+  `POST /api/tasks/:id/recurrence` dołącza niewykonane zadanie do nowej serii;
+  `PATCH /api/tasks/series/:id` zmienia aktywne wystąpienie i przyszły wzorzec.
+  Oba przyjmują `{ rule, template, expectedVersion, expectedOccurrenceVersion }`;
+  przy tworzeniu obie wersje wynoszą 0. Wzorzec zawiera title, notes, assigneeId
+  i wyłącznie względne wspólne reminders. Zmiana reguły ustawia aktywny termin
+  na `firstTaskOccurrence(rule)`; bez zmiany reguły zachowuje planowany termin.
+  Podgląd dat dla przyszłego UI korzysta z tych samych funkcji shared.
+  `GET /api/tasks/series/:id` zwraca serię, activeTaskId i occurrenceVersion,
+  a `/history` — historię zamknięć i ich cofnięć. Dostęp dziedziczy listę,
+  również dla dzieci. Cofnięcie udostępnienia lub usunięcie domownika czyści
+  przypisanie we wzorcu, aby kolejne zadanie nie wróciło do byłego odbiorcy.
+  `POST /api/tasks/series/:id/stop` wymaga obu wersji; zachowuje historię
+  i odłącza aktywne zadanie jako jednorazowe. `POST /api/tasks/:id/skip`
+  wymaga `{ expectedSeriesVersion, expectedOccurrenceVersion, closedAt }`.
+  Pominięte zadanie ma isDone=true, ale bez doneAt/doneBy; stan skipped
+  i wykonawca pominięcia są w recurrence oraz historii.
+  Te mutacje wymagają operationId w query, opcjonalnie actorId, i korzystają
+  z task_operations. Dostęp jest sprawdzany także przed replay; retencja
+  odpowiedzi wynosi 90 dni, automatyczny retry klienta do 30 dni.
+  Dotychczasowy PATCH zmienia tylko pojedyncze zadanie. isDone=true atomowo
+  zamyka aktywne wystąpienie i tworzy jednego następcę albo kończy serię;
+  ponowne true nie generuje kolejnej kopii, także z innym operationId.
+  Nowy klient przekazuje closedAt (UTC ms), expectedSeriesVersion oraz
+  expectedOccurrenceVersion; stary używa jawnie czasu odbioru przez serwer.
+  Konflikt wersji daje 409 TASK_RECURRENCE_CONFLICT, anomalia czasu —
+  409 TASK_CLOSURE_TIME_REVIEW bez zamknięcia i następcy.
+  isDone=false cofa zamknięcie tylko przy niezmienionej serii i nietkniętym
+  następcy. Transakcja usuwa następcę wraz z alarmami i otwiera poprzednika.
+  Kontrola obejmuje treść, wersję wystąpienia, checklistę i przypomnienia;
+  dostarczenie alarmu samo w sobie nie jest edycją. Usunięty, zmieniony
+  lub wykonany następca oznacza jawny konflikt, bez odtwarzania historii.
+  Stary DELETE aktywnego zadania oznacza pominięcie i utworzenie następcy;
+  usuwanie zamkniętych pozycji nie wyłącza serii ani nie usuwa historii.
+  Następca używa wzorca i jego odbiorcy. Względne wspólne przypomnienia
+  dostają nowe UUID i przeliczony termin; absolutne i osobiste nie są kopiowane.
+  Istniejący harmonogram i widok dzisiejszych zadań odczytują widoczne aktywne
+  wystąpienie bez crona ani workera. UI, outbox wykonania i wzorcowa checklista
+  kolejnych wystąpień należą do C.3–C.4.
 - Kontakty: jedna grupa na kontakt, jedna nieusuwalna grupa domyślna „Inne”
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.

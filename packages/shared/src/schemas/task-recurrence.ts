@@ -56,6 +56,7 @@ export const taskSeriesSchema = z.object({
 export const taskOccurrenceSchema = z
   .object({
     seriesId: z.string().uuid(),
+    seriesVersion: versionSchema.optional(),
     sequence: versionSchema,
     plannedDate: calendarDateSchema,
     plannedTime: timeSchema.nullable(),
@@ -73,3 +74,50 @@ export type TaskRecurrenceRule = z.infer<typeof taskRecurrenceRuleSchema>;
 export type TaskSeriesTemplate = z.infer<typeof taskSeriesTemplateSchema>;
 export type TaskSeries = z.infer<typeof taskSeriesSchema>;
 export type TaskOccurrence = z.infer<typeof taskOccurrenceSchema>;
+
+export const configureTaskSeriesSchema = z
+  .object({
+    rule: taskRecurrenceRuleSchema,
+    template: taskSeriesTemplateSchema,
+    expectedVersion: versionSchema,
+    expectedOccurrenceVersion: versionSchema,
+  })
+  .strict();
+export const taskSeriesVersionSchema = z
+  .object({
+    expectedVersion: versionSchema,
+    expectedOccurrenceVersion: versionSchema,
+  })
+  .strict();
+export const closeTaskOccurrenceSchema = z
+  .object({
+    expectedSeriesVersion: versionSchema,
+    expectedOccurrenceVersion: versionSchema,
+    closedAt: z.number().int().nonnegative().max(253402300799999),
+  })
+  .strict();
+export const taskSeriesHistoryItemSchema = z.object({
+  id: z.string().uuid(),
+  seriesId: z.string().uuid(),
+  taskId: z.string().uuid(),
+  sequence: versionSchema,
+  title: z.string(),
+  plannedDate: calendarDateSchema,
+  plannedTime: timeSchema.nullable(),
+  state: z.enum(['done', 'skipped']),
+  closedAt: z.number().int(),
+  closedBy: z.string().uuid().nullable(),
+  undoneAt: z.number().int().nullable(),
+  undoneBy: z.string().uuid().nullable(),
+});
+export const taskSeriesResponseSchema = z.object({
+  ok: z.literal(true),
+  series: taskSeriesSchema,
+  activeTaskId: z.string().uuid().nullable(),
+  occurrenceVersion: versionSchema.nullable(),
+});
+export const taskSeriesHistoryResponseSchema = z.object({
+  ok: z.literal(true),
+  history: z.array(taskSeriesHistoryItemSchema),
+});
+export type ConfigureTaskSeries = z.infer<typeof configureTaskSeriesSchema>;

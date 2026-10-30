@@ -3,10 +3,12 @@ import type { CreateTask, CreateTaskList, PatchTask, PatchTaskList, TaskStatus }
 import type { DatabaseConnection } from '../../db/client.js';
 import { createTaskListRepository } from './repository.js';
 import { createReminderRepository } from '../reminders/repository.js';
+import { createTaskRecurrenceService } from './recurrence.js';
 
 export function createTaskListService(database: DatabaseConnection) {
   const repository = createTaskListRepository(database);
   const reminders = createReminderRepository(database);
+  const recurrence = createTaskRecurrenceService(database);
   const transaction = <T>(operation: () => T) => database.db.transaction(operation, { behavior: 'immediate' });
   function getList(familyId: string, actorId: string, id: string) {
     const list = repository.findAccessibleList(familyId, actorId, id);
@@ -45,7 +47,7 @@ export function createTaskListService(database: DatabaseConnection) {
         const { reminders: shared, ...fields } = data;
         const task = repository.createTask(listId, actorId, fields, id);
         reminders.saveTask(familyId, task, actorId, shared, repository.timezone(familyId), Date.now());
-        return { ...task, checklist: [], reminders: reminders.listTask(familyId, task.id) };
+        return { ...task, recurrence: null, checklist: [], reminders: reminders.listTask(familyId, task.id) };
       });
     },
     updateTask(familyId: string, actorId: string, id: string, data: PatchTask) {
@@ -59,10 +61,16 @@ export function createTaskListService(database: DatabaseConnection) {
         if (data.reminders?.length && !merged.dueDate)
           throw new ApiError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
         const { reminders: shared, ...fields } = data;
+        delete fields.closedAt;
+        delete fields.expectedOccurrenceVersion;
+        delete fields.expectedSeriesVersion;
         const updated = repository.updateTask(task, actorId, fields);
-        reminders.saveTask(familyId, updated, actorId, shared, repository.timezone(familyId), Date.now());
+        recurrence.patch(familyId, actorId, task, updated, data);
+        const finalTask = getTask(familyId, actorId, id);
+        reminders.saveTask(familyId, finalTask, actorId, shared, repository.timezone(familyId), Date.now());
         return {
-          ...updated,
+          ...finalTask,
+          recurrence: recurrence.occurrence(id) ?? null,
           checklist: repository.checklistMany([task.id]).get(task.id) ?? [],
           reminders: reminders.listTask(familyId, task.id),
         };
@@ -70,7 +78,8 @@ export function createTaskListService(database: DatabaseConnection) {
     },
     removeTask(familyId: string, actorId: string, id: string) {
       transaction(() => {
-        getTask(familyId, actorId, id);
+        const task = getTask(familyId, actorId, id);
+        recurrence.beforeDelete(familyId, actorId, task);
         repository.removeTask(id);
       });
     },

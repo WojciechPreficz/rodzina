@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { and, asc, count, eq, inArray, lte, max, or, sql } from 'drizzle-orm';
 import type { CreateTask, PatchTask, TaskStatus } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { families, taskListMembers, taskLists, tasks, taskChecklistItems, users } from '../../db/schema.js';
+import { families, taskListMembers, taskLists, tasks, taskChecklistItems, taskSeries, users } from '../../db/schema.js';
+import { taskRecurrenceMany } from './recurrence-data.js';
 import { createReminderRepository } from '../reminders/repository.js';
 
 export function createTaskListRepository(database: DatabaseConnection) {
@@ -25,6 +26,10 @@ export function createTaskListRepository(database: DatabaseConnection) {
     return result;
   }
   function serializeMany(rows: (typeof tasks.$inferSelect)[]) {
+    const recurrence = taskRecurrenceMany(
+      database,
+      rows.map((task) => task.id),
+    );
     const checklist = checklistMany(rows.map((task) => task.id));
     const listIds = [...new Set(rows.map((task) => task.listId))];
     const familiesByList = new Map<string, string>();
@@ -45,6 +50,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
         reminders.set(id, values);
     return rows.map((task) => ({
       ...task,
+      recurrence: recurrence.get(task.id) ?? null,
       reminders: reminders.get(task.id) ?? [],
       checklist: checklist.get(task.id) ?? [],
     }));
@@ -158,9 +164,14 @@ export function createTaskListRepository(database: DatabaseConnection) {
         memberIds.get(row.listId)!.push(row.userId);
       }
       const checklist = checklistMany(taskRows.map((task) => task.id));
+      const recurrence = taskRecurrenceMany(
+        database,
+        taskRows.map((task) => task.id),
+      );
       for (const task of taskRows)
         items[task.listId]!.push({
           ...task,
+          recurrence: recurrence.get(task.id) ?? null,
           checklist: checklist.get(task.id) ?? [],
           reminders: shared.get(task.id) ?? [],
         });
@@ -169,7 +180,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
         memberIds: memberIds.get(list.id) ?? [],
         openTaskCount: items[list.id]!.filter((task) => !task.isDone).length,
       }));
-      return { ok: true as const, lists, items };
+      return { ok: true as const, taskRecurrenceVersion: 1 as const, lists, items };
     });
   }
   function areFamilyMembers(familyId: string, memberIds: string[]) {
@@ -185,6 +196,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
   function setMembers(listId: string, memberIds: string[]) {
     const removed = members(listId).filter((id) => !memberIds.includes(id));
     if (removed.length) {
+      clearTemplateAssignees(listId, removed);
       db.update(tasks)
         .set({ assigneeId: null, updatedAt: Date.now() })
         .where(and(eq(tasks.listId, listId), inArray(tasks.assigneeId, removed)))
@@ -236,6 +248,8 @@ export function createTaskListRepository(database: DatabaseConnection) {
     db.delete(taskLists).where(eq(taskLists.id, id)).run();
   }
   function prepareMemberRemoval(familyId: string, userId: string) {
+    for (const list of db.select().from(taskLists).where(eq(taskLists.familyId, familyId)).all())
+      clearTemplateAssignees(list.id, [userId]);
     const owned = db
       .select()
       .from(taskLists)
@@ -255,6 +269,18 @@ export function createTaskListRepository(database: DatabaseConnection) {
         .where(and(eq(taskListMembers.listId, list.id), eq(taskListMembers.userId, successor)))
         .run();
     }
+  }
+  function clearTemplateAssignees(listId: string, removed: string[]) {
+    for (const series of db.select().from(taskSeries).where(eq(taskSeries.listId, listId)).all())
+      if (series.template.assigneeId && removed.includes(series.template.assigneeId))
+        db.update(taskSeries)
+          .set({
+            template: { ...series.template, assigneeId: null },
+            version: series.version + 1,
+            updatedAt: Date.now(),
+          })
+          .where(eq(taskSeries.id, series.id))
+          .run();
   }
   function listTasks(listId: string, status: TaskStatus) {
     const rows = db

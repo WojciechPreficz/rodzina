@@ -49,10 +49,22 @@ export const createTaskSchema = taskFieldsSchema
   .strict()
   .refine((data) => !data.dueTime || !!data.dueDate, 'Godzina wymaga daty terminu.');
 export const patchTaskSchema = taskFieldsSchema
-  .extend({ isDone: z.boolean(), position: z.number().int().min(0).max(2147483647) })
+  .extend({
+    isDone: z.boolean(),
+    position: z.number().int().min(0).max(2147483647),
+    closedAt: z.number().int().nonnegative().max(253402300799999),
+    expectedOccurrenceVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    expectedSeriesVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
   .partial()
   .strict()
-  .refine((data) => Object.keys(data).length > 0, 'Brak danych do zmiany.');
+  .refine((data) => Object.keys(data).length > 0, 'Brak danych do zmiany.')
+  .refine((data) => data.closedAt === undefined || data.isDone === true, 'Czas dotyczy wykonania.')
+  .refine(
+    (data) => (data.expectedOccurrenceVersion === undefined) === (data.expectedSeriesVersion === undefined),
+    'Podaj obie wersje.',
+  )
+  .refine((data) => data.closedAt === undefined || data.expectedOccurrenceVersion !== undefined, 'Czas wymaga wersji.');
 const versionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const taskChecklistItemSchema = z.object({
   id: z.string().uuid(),
@@ -111,8 +123,16 @@ export const taskSchema = taskFieldsSchema.extend({
 });
 export const taskStatusSchema = z.enum(['open', 'done', 'all']);
 export const tasksQuerySchema = z.object({ status: taskStatusSchema.default('open') }).strict();
-export const tasksResponseSchema = z.object({ ok: z.literal(true), tasks: z.array(taskSchema) });
-export const taskResponseSchema = z.object({ ok: z.literal(true), task: taskSchema });
+export const tasksResponseSchema = z.object({
+  ok: z.literal(true),
+  taskRecurrenceVersion: z.literal(1).optional(),
+  tasks: z.array(taskSchema),
+});
+export const taskResponseSchema = z.object({
+  ok: z.literal(true),
+  taskRecurrenceVersion: z.literal(1).optional(),
+  task: taskSchema,
+});
 export const taskDeletedResponseSchema = z.object({ ok: z.literal(true), deleted: z.literal(true) });
 
 export type Task = z.infer<typeof taskSchema>;
@@ -124,6 +144,7 @@ export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export const taskSnapshotResponseSchema = z
   .object({
     ok: z.literal(true),
+    taskRecurrenceVersion: z.literal(1).optional(),
     lists: z.array(taskListSchema),
     items: z.record(z.array(taskSchema)),
   })

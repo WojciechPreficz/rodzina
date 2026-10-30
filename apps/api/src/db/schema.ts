@@ -487,6 +487,37 @@ export const taskOccurrences = sqliteTable(
   ],
 );
 
+// Independent of visible tasks: deleting completed rows must preserve series history.
+export const taskSeriesHistory = sqliteTable(
+  'task_series_history',
+  {
+    id: text('id').primaryKey(),
+    seriesId: text('series_id')
+      .notNull()
+      .references(() => taskSeries.id, { onDelete: 'cascade' }),
+    taskId: text('task_id').notNull(),
+    sequence: integer('sequence').notNull(),
+    title: text('title').notNull(),
+    plannedDate: text('planned_date').notNull(),
+    plannedTime: text('planned_time'),
+    state: text('state', { enum: ['done', 'skipped'] }).notNull(),
+    closedAt: integer('closed_at').notNull(),
+    closedBy: text('closed_by').references(() => users.id, { onDelete: 'set null' }),
+    seriesVersion: integer('series_version').notNull(),
+    successorId: text('successor_id'),
+    successorFingerprint: text('successor_fingerprint'),
+    undoneAt: integer('undone_at'),
+    undoneBy: text('undone_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (table) => [
+    index('task_series_history_series_idx').on(table.seriesId, table.sequence),
+    uniqueIndex('task_series_history_closure_idx')
+      .on(table.seriesId, table.sequence)
+      .where(sql`${table.undoneAt} IS NULL`),
+    check('task_series_history_state', sql`${table.state} IN ('done', 'skipped')`),
+  ],
+);
+
 export const taskChecklistItems = sqliteTable(
   'task_checklist_items',
   {

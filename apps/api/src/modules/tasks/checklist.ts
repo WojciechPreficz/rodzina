@@ -9,6 +9,7 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { taskChecklistItems, tasks } from '../../db/schema.js';
 import { ApiError } from '../../http/errors.js';
 import { createTaskListRepository } from './repository.js';
+import { bumpTaskOccurrence } from './recurrence-data.js';
 
 export function createTaskChecklistService(database: DatabaseConnection) {
   const repository = createTaskListRepository(database);
@@ -60,6 +61,7 @@ export function createTaskChecklistService(database: DatabaseConnection) {
             })
             .run();
           bumpOrder(taskId);
+          bumpTaskOccurrence(database, taskId);
           return read(familyId, actorId, taskId);
         },
         { behavior: 'immediate' },
@@ -105,6 +107,7 @@ export function createTaskChecklistService(database: DatabaseConnection) {
               .where(filter)
               .run();
           }
+          bumpTaskOccurrence(database, taskId);
           return read(familyId, actorId, taskId);
         },
         { behavior: 'immediate' },
@@ -132,6 +135,7 @@ export function createTaskChecklistService(database: DatabaseConnection) {
               .run(),
           );
           bumpOrder(taskId);
+          bumpTaskOccurrence(database, taskId);
           return read(familyId, actorId, taskId);
         },
         { behavior: 'immediate' },

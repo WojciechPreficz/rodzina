@@ -6,6 +6,7 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { createEventRepository } from '../events/repository.js';
 import { createReminderRepository } from './repository.js';
 import { createTaskListRepository } from '../tasks/repository.js';
+import { bumpTaskOccurrence } from '../tasks/recurrence-data.js';
 import { createDocumentRepository } from '../documents/repository.js';
 
 export function createReminderService(database: DatabaseConnection) {
@@ -55,18 +56,40 @@ export function createReminderService(database: DatabaseConnection) {
       );
     }
     if (data.taskId) {
-      const task = getTask(familyId, userId, data.taskId);
-      if (!task.dueDate) throw new ApiError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
-      return repository.insertTask(familyId, task, userId, data, 'user', events.timezone(familyId), Date.now(), userId);
+      return database.db.transaction(
+        () => {
+          const task = getTask(familyId, userId, data.taskId!);
+          if (!task.dueDate) throw new ApiError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
+          const result = repository.insertTask(
+            familyId,
+            task,
+            userId,
+            data,
+            'user',
+            events.timezone(familyId),
+            Date.now(),
+            userId,
+          );
+          bumpTaskOccurrence(database, task.id);
+          return result;
+        },
+        { behavior: 'immediate' },
+      );
     }
     const event = getSource(familyId, data.eventId!);
     return repository.insert(familyId, event, userId, data, 'user', events.timezone(familyId), Date.now(), userId);
   }
   function removeMine(familyId: string, userId: string, id: string) {
-    const row = database.db.select().from(reminders).where(eq(reminders.id, id)).get();
-    if (row?.taskId) getTask(familyId, userId, row.taskId);
-    if (!repository.removeMine(familyId, userId, id))
-      throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono przypomnienia.');
+    database.db.transaction(
+      () => {
+        const row = database.db.select().from(reminders).where(eq(reminders.id, id)).get();
+        if (row?.taskId) getTask(familyId, userId, row.taskId);
+        if (!repository.removeMine(familyId, userId, id))
+          throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono przypomnienia.');
+        if (row?.taskId) bumpTaskOccurrence(database, row.taskId);
+      },
+      { behavior: 'immediate' },
+    );
   }
   return { listMine, createMine, removeMine };
 }

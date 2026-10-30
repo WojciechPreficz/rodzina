@@ -27,10 +27,13 @@ Testy nie używają lokalnej bazy rodziny. Dane migracji w test-fixtures/offline
 są współdzielone przez Vitest i Playwright; nie są dokumentacją.
 Raporty i zrzuty zapisujemy w ignorowanych katalogach coverage i test-results.
 
-Fundament cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
+Reguły cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
 modules/tasks/recurrence-migrations: końce miesięcy, lata przestępne, tygodnie
 ISO, DST, opóźniona synchronizacja, anomalie zegara, granica końca i unikalność
-wystąpień. Migracja 0028 wymaga builda i release:smoke. C.1 nie zmienia UI
+wystąpień. Testy modules/tasks/recurrence sprawdzają C.2: konfigurację,
+wykonanie z dwóch urządzeń, retry, historię, pominięcie, zatrzymanie,
+cofnięcie i konflikty, anomalie czasu, uprawnienia oraz przypomnienia.
+Migracje 0028–0029 wymagają builda i release:smoke. C.2 nie zmienia UI
 ani transportu Androida; próby interfejsu 390/1280 px i fizycznego APK dla
 cykliczności pozostają do wykonania po C.4, wraz z odbiorem dwóch urządzeń,
 restartu offline, checklist i alarmów. Końcowe CI pozostaje do potwierdzenia.
