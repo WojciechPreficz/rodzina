@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { calendarDateSchema } from './events.js';
 import { reminderSchema, sharedTaskReminderSchema } from './reminders.js';
+import { taskOccurrenceSchema } from './task-recurrence.js';
 
 const nameSchema = z.string().trim().min(1).max(200);
 const memberIdsSchema = z.array(z.string().uuid()).max(200);
@@ -94,6 +95,7 @@ export type DeleteTaskChecklistItem = z.infer<typeof deleteTaskChecklistItemSche
 export type ReorderTaskChecklist = z.infer<typeof reorderTaskChecklistSchema>;
 
 export const taskSchema = taskFieldsSchema.extend({
+  recurrence: taskOccurrenceSchema.nullable().optional(),
   checklist: z.array(taskChecklistItemSchema).max(100).optional(),
   checklistOrderVersion: versionSchema.optional(),
   reminders: z.array(reminderSchema).optional(),

@@ -13,6 +13,8 @@ export * from './schemas/android-release.js';
 export * from './schemas/shopping.js';
 export * from './shopping.js';
 export * from './schemas/tasks.js';
+export * from './schemas/task-recurrence.js';
+export * from './task-recurrence.js';
 export * from './schemas/auth.js';
 export * from './documents.js';
 export * from './schemas/documents.js';

@@ -131,6 +131,34 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   służy do tego osobny przycisk lub dotychczasowe odhaczenie na liście.
   Niewykonane albo nieznane kroki wymagają potwierdzenia ukończenia rodzica;
   jego cofnięcie pozostawia checklistę bez zmian.
+- Fundament cykliczności zadań (C.1): `task_series` przechowuje regułę
+  kalendarzową (ze strefą), wzorcowe pola i wspólne względne przypomnienia,
+  stan oraz wersję. `task_occurrences` wiąże widoczne zadanie z serią,
+  numerem kolejności od zera, niezmiennym planowanym terminem, stanem
+  active/done/skipped, faktycznym czasem zamknięcia i wersją. Numer dotyczy
+  utworzonego wystąpienia, nie każdego pominiętego terminu harmonogramu;
+  następca numeru N ma N+1. Unikalne (series_id, sequence) i częściowy
+  indeks jednego active chronią przed podwójnym następcą. Złożone klucze
+  obce wymuszają wspólną listę zadania i serii; dostęp dziedziczymy z listy.
+  Usunięcie listy usuwa serię i wystąpienia, zadania — jego wystąpienie,
+  historycznego wykonawcy — zeruje closedBy. Migracja 0028 nie zmienia
+  żadnych pól ani stanu istniejących zadań, które pozostają jednorazowe.
+  Walidowane schematami shared pola JSON reguły i wzorca nie stanowią
+  dodatkowej konfiguracji środowiska.
+  Czyste funkcje `firstTaskOccurrence` i `nextTaskOccurrence` zachowują
+  pierwotną kotwicę miesięcy/lat, tygodnie ISO oraz granicę końca włącznie.
+  Stały rytm wraca do kotwicy po spóźnieniu; odstęp po wykonaniu używa
+  lokalnej daty faktycznego zamknięcia zamiast synchronizacji. Godzina
+  pochodzi z reguły. Konwersje przez time.ts zachowują DST: luka przesuwa
+  czas do przodu, powtórzenie wybiera wcześniejszy moment UTC. Obliczenia
+  dat używają kalendarza, nie stałej długości doby w strefie rodziny.
+  Funkcja zwraca faktyczny czas bez zmiany i stan review przy przyszłości
+  ponad 5 minut lub regresji przed utworzenie/poprzednie zamknięcie;
+  wtedy nie wyznacza następcy. Brak terminu po granicy końca daje null.
+  Odczyt Task dopuszcza opcjonalne `recurrence` (brak — nieznane dane,
+  null — jednorazowe), ale C.1 nie publikuje jeszcze tego pola ani capability
+  w API. Istniejące POST/PATCH pozostają bez zmian. API i transakcje cyklu
+  życia należą do C.2; plan zgodności capability/version jest w plan.md.
 - Kontakty: jedna grupa na kontakt, jedna nieusuwalna grupa domyślna „Inne”
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.

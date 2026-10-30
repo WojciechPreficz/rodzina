@@ -27,6 +27,14 @@ Testy nie używają lokalnej bazy rodziny. Dane migracji w test-fixtures/offline
 są współdzielone przez Vitest i Playwright; nie są dokumentacją.
 Raporty i zrzuty zapisujemy w ignorowanych katalogach coverage i test-results.
 
+Fundament cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
+modules/tasks/recurrence-migrations: końce miesięcy, lata przestępne, tygodnie
+ISO, DST, opóźniona synchronizacja, anomalie zegara, granica końca i unikalność
+wystąpień. Migracja 0028 wymaga builda i release:smoke. C.1 nie zmienia UI
+ani transportu Androida; próby interfejsu 390/1280 px i fizycznego APK dla
+cykliczności pozostają do wykonania po C.4, wraz z odbiorem dwóch urządzeń,
+restartu offline, checklist i alarmów. Końcowe CI pozostaje do potwierdzenia.
+
 ## Android lokalnie
 
 JDK 21, SDK 36, Gradle Wrapper 8.14.3, platform-tools/ADB i debugowanie USB.

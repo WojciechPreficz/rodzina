@@ -79,6 +79,13 @@ Próby lokalne z atrapą nie potwierdzają dostarczalności produkcyjnej.
 
 ## Paczka i migracje
 
+Migracja 0028 dodaje fundament serii i wystąpień zadań, bez zmiany danych
+zadań jednorazowych. C.1 nie udostępnia jeszcze tworzenia serii przez API
+ani UI. Wymaga zwykłego backupu i jawnego joba migracji opisanego poniżej;
+bez nowych zmiennych, zależności runtime i crona. Przed cofnięciem API
+po uruchomieniu cykliczności w kolejnych krokach trzeba sprawdzić zgodność
+zapisanych serii ze starszym kodem.
+
 Migracja 0027 dodaje checklisty i licznik wersji kolejno�ci do zada�, zachowuj�c
 ich tre�� i stan wykonania. Stosuj poni�sz� procedur� backupu i jawnego joba;
 nie wymaga nowych zmiennych ani crona. Wdro�enie API nie publikuje nowego APK.

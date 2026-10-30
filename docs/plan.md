@@ -23,6 +23,9 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
 | Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
 
+Zadania cykliczne C.1 (#65): zweryfikowane lokalnie, oczekuje na CI.
+API, offline, UI i odbiór cykliczności należą do kolejnych kroków C.2–C.4.
+
 Usuwanie kont domowników i całej rodziny: zweryfikowane lokalnie, oczekuje na CI.
 Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
 
@@ -228,6 +231,66 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
   oraz zgodność starszego APK. Domknięcie modułu wymaga sukcesu pełnego CI
   dla końcowego commita. Checklisty kolejnych wystąpień
   zadań cyklicznych należą do końcowej integracji modułu cykliczności.
+
+## Zadania cykliczne
+
+- **C.1 (#65): zweryfikowane lokalnie, oczekuje na CI.** Reguły i kontrakty shared, model serii oddzielony
+  od wystąpień oraz migracja bez zmiany zadań jednorazowych. Testy kalendarza,
+  DST, spóźnień, końca serii, anomalii zegara i ograniczeń bazy; release:smoke.
+- **C.2 (#66): planowane.** API konfiguracji online, historia wykonania/pominięcia,
+  atomowe zamknięcie i następca, edycja jednego lub kolejnych, zatrzymanie,
+  warunkowe cofnięcie oraz względne przypomnienia wspólne. Obecne uprawnienia
+  list również dla dzieci, izolacja rodzin i task_operations z kontrolą dostępu
+  przed replay. Bez nowego crona ani workera.
+- **C.3 (#67): planowane.** Wykonanie pobranych wystąpień offline w istniejącym
+  IndexedDB i outboxie. Faktyczny czas wykonania, retry do 30 dni, retencja
+  odpowiedzi 90 dni, anomalie do sprawdzenia. Następca dopiero po synchronizacji;
+  bez drugiego silnika i bez generowania wystąpień offline.
+- **C.4 (#68): planowane.** UI reguł, podgląd terminu, historia i konflikty,
+  wzorcowa checklista kopiowana z nowymi UUID i zerowym postępem. Próby WWW
+  390/1280 px i fizycznego APK, dwa urządzenia, alarmy i zgodność starszego APK.
+
+Reguła wymaga daty startu, opcjonalnej godziny, strefy Europe/Warsaw,
+interwału 1–1000 oraz opcjonalnej końcowej daty (włącznie). Tryby:
+stały harmonogram i odstęp po wykonaniu/pominięciu. Jedno aktywne wystąpienie;
+zaległe pozostaje do jawnego zamknięcia, bez stosu kopii.
+
+Stały rytm liczymy zawsze od oryginalnej kotwicy. Tygodnie zaczynają się
+w poniedziałek; wybrane dni (ISO 1–7) obowiązują w co N-tym tygodniu od
+tygodnia startowego, z pominięciem dni przed startem. Bez wyboru dni używamy
+dnia startowego. Miesiące/lata obcinają nieistniejący dzień do końca miesiąca,
+ale kolejny termin znów używa kotwicy: 31.01 → 28.02 → 31.03;
+29.02.2024 → 28.02.2025 → 29.02.2028. Po zamknięciu wybieramy pierwszy
+termin ściśle po późniejszym z planowanego terminu i faktycznego zamknięcia.
+Przykład: wtorki, termin 03.03.2026, wykonanie 20.03 → 24.03.
+W trybie po wykonaniu dodajemy N jednostek kalendarzowych do lokalnej daty
+faktycznego zamknięcia, zachowując godzinę reguły; 20.03 + 2 tygodnie → 03.04.
+Wybór dni tygodnia dotyczy tylko stałego harmonogramu tygodniowego.
+
+Konwersja przez shared/time.ts zachowuje jego politykę DST: nieistniejąca
+godzina przesuwa się o lukę, powtórzona wybiera wcześniejszy moment UTC
+(Warszawa: 29.03.2026 02:30 → 01:30Z, 25.10.2026 02:30 → 00:30Z).
+Kotwica i godzina reguły pozostają niezmienione. Nie dodajemy stałych
+milisekund do terminów. Czas zamknięcia offline zachowujemy jako UTC;
+przyszłość ponad 5 minut względem serwera, czas przed utworzeniem wystąpienia
+lub wcześniejszy od poprzedniego zamknięcia wymagają sprawdzenia, bez następcy
+i bez podmieniania daty na czas synchronizacji. Cofnięcie zegara serwera
+również może zatrzymać operację do sprawdzenia. Brak następcy po końcu serii
+oznacza wyczerpanie reguły.
+
+C.2 rozszerzy odczyty addytywnie o opcjonalne recurrence i capability
+taskRecurrenceVersion=1; brak capability oznacza brak obsługi konfiguracji,
+brak recurrence oznacza nieznane dane starego cache, null — zadanie jednorazowe.
+Stare POST/PATCH bez pola cykliczności nigdy nie zmieniają serii. Konfiguracja
+będzie osobną wersjonowaną mutacją online (expectedVersion), a podstawowe
+odhaczenie starego APK przejdzie przez tę samą transakcję następcy co nowy
+klient. Stary klient bez czasu faktycznego użyje jawnie czasu odbioru serwera;
+nowy przekaże faktyczny czas oraz wersję wystąpienia. Konflikt cofnięcia lub
+zmiany serii będzie jawny, nigdy cichym odtworzeniem historii.
+
+Poza zakresem: rotacja dyżurów, punkty, dowolne RRULE, wiele zaległych kopii,
+generowanie następców offline, dodatkowe kalendarze, iOS, PWA i Web Push.
+Domknięcie modułu wymaga C.4 i końcowego CI; deploy i APK są osobnymi operacjami.
 
 ## Pozostałe warunki i pomysły
 

@@ -1,7 +1,7 @@
 import { foreignKey, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { check } from 'drizzle-orm/sqlite-core';
-import type { DocumentType, ShoppingCategory } from '@rodzina/shared';
+import type { DocumentType, ShoppingCategory, TaskRecurrenceRule, TaskSeriesTemplate } from '@rodzina/shared';
 
 export const meals = sqliteTable(
   'meals',
@@ -421,7 +421,70 @@ export const tasks = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [index('tasks_list_position_idx').on(table.listId, table.position)],
+  (table) => [
+    index('tasks_list_position_idx').on(table.listId, table.position),
+    uniqueIndex('tasks_id_list_idx').on(table.id, table.listId),
+  ],
+);
+
+export const taskSeries = sqliteTable(
+  'task_series',
+  {
+    id: text('id').primaryKey(),
+    listId: text('list_id')
+      .notNull()
+      .references(() => taskLists.id, { onDelete: 'cascade' }),
+    rule: text('rule', { mode: 'json' }).$type<TaskRecurrenceRule>().notNull(),
+    template: text('template', { mode: 'json' }).$type<TaskSeriesTemplate>().notNull(),
+    state: text('state', { enum: ['active', 'stopped', 'ended'] })
+      .notNull()
+      .default('active'),
+    version: integer('version').notNull().default(0),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('task_series_id_list_idx').on(table.id, table.listId),
+    index('task_series_list_idx').on(table.listId),
+    check('task_series_state', sql`${table.state} IN ('active', 'stopped', 'ended')`),
+    check('task_series_version', sql`${table.version} >= 0`),
+  ],
+);
+
+// The task remains the visible item. Its immutable planned deadline and history live here.
+export const taskOccurrences = sqliteTable(
+  'task_occurrences',
+  {
+    taskId: text('task_id').primaryKey(),
+    listId: text('list_id').notNull(),
+    seriesId: text('series_id').notNull(),
+    sequence: integer('sequence').notNull(),
+    plannedDate: text('planned_date').notNull(),
+    plannedTime: text('planned_time'),
+    state: text('state', { enum: ['active', 'done', 'skipped'] })
+      .notNull()
+      .default('active'),
+    closedAt: integer('closed_at'),
+    closedBy: text('closed_by').references(() => users.id, { onDelete: 'set null' }),
+    version: integer('version').notNull().default(0),
+  },
+  (table) => [
+    foreignKey({ columns: [table.taskId, table.listId], foreignColumns: [tasks.id, tasks.listId] }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.seriesId, table.listId],
+      foreignColumns: [taskSeries.id, taskSeries.listId],
+    }).onDelete('cascade'),
+    uniqueIndex('task_occurrences_sequence_idx').on(table.seriesId, table.sequence),
+    uniqueIndex('task_occurrences_active_idx')
+      .on(table.seriesId)
+      .where(sql`${table.state} = 'active'`),
+    check('task_occurrences_sequence', sql`${table.sequence} >= 0 AND ${table.version} >= 0`),
+    check(
+      'task_occurrences_closure',
+      sql`(${table.state} = 'active' AND ${table.closedAt} IS NULL AND ${table.closedBy} IS NULL) OR (${table.state} IN ('done', 'skipped') AND ${table.closedAt} IS NOT NULL AND ${table.closedAt} >= 0)`,
+    ),
+  ],
 );
 
 export const taskChecklistItems = sqliteTable(
