@@ -53,6 +53,19 @@ connectedDebugAndroidTest wymaga urządzenia lub emulatora; nie zastępuje
 odbioru alarmów. Debug nie aktualizuje release podpisanego innym kluczem.
 Podpisywanie i publikację opisuje [DEPLOY.md](DEPLOY.md).
 
+## Odbiór podzadań
+
+Właściciel potwierdził 30.10.2026 zakończenie prób S.4 (#63): WWW przy
+390/1280 px i wspólny frontend w fizycznym APK, dwa konta/urządzenia,
+niezależne odhaczenia i konflikty, restart offline z synchronizacją bez
+duplikatów, postęp i licznik rodziców, ukończenie/cofnięcie oraz usuwanie
+rodzica i zbiorcze usuwanie ukończonych zadań. Odbiór obejmuje prywatność list,
+dostęp dziecka, cofnięcie udostępnienia, wylogowanie, zmianę konta, zgodność
+starszego APK oraz klawiaturę, systemowy Wstecz, fokus i komunikaty błędów.
+Końcowe CI należy potwierdzić dla commita domykającego S.4; status jest
+w [plan.md](plan.md). Integracja checklist kolejnych wystąpień zadań cyklicznych
+pozostaje w module cykliczności.
+
 ## Pozostały odbiór
 
 Poniższe próby nie mają potwierdzenia wykonania. Dla każdej zapisz commit,
@@ -60,19 +73,6 @@ model telefonu, Android, wersje APK przed/po, datę i wynik. Nie zaliczaj
 historycznych terminów wstecz; mocki i test transportu nie dowodzą działania
 systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
 
-- [ ] Podzadania S.1–S.3: potwierdzić na fizycznym wspieranym APK odczyt
-      i edycję rodzica po migracji API, bez utraty checklisty utworzonej przez
-      API. Warstwa offline jest sprawdzana testami store/adaptera i outboxa;
-      nie oznacza to próby fizycznego telefonu. W interfejsie checklisty sprawdzić
-      dwa urządzenia, restart APK offline, migrację starego cache z oczekującymi
-      zmianami, utratę odpowiedzi, konflikty i cofnięcie dostępu. Próby UI
-      w fizycznym APK pozostają do odbioru w S.3–S.4. Ręcznie przy 390/1280 px
-      sprawdzić dodawanie, edycję, odhaczanie, usuwanie, kolejność klawiaturą
-      i przyciskami, postęp na liście oraz kalendarzu, świadome ukończenie
-      i cofnięcie rodzica z zachowaniem kroków. Potwierdzić ochronę szkiców
-      rodzica i podzadań, systemowy Wstecz, klawiaturę ekranową i safe area.
-      Test `e2e/task-checklist.spec.ts` sprawdza WWW i transport Androida
-      headless przy obu szerokościach; nie zastępuje fizycznego telefonu.
 - [ ] Usuwanie kont: UI przy 390/1280 px i fizyczne APK, klawiatura, fokus
       i systemowy Wstecz. Administrator usuwa domownika lub rodzinę; inny dorosły
       siebie i dowolne dziecko, dziecko nikogo. Ostatni administrator musi

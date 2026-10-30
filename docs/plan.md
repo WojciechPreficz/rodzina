@@ -6,7 +6,7 @@ aplikacji jest w [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Statusy
 
-Stan dokumentacji na 29.10.2026. Brak potwierdzenia CI lub prób ręcznych
+Stan dokumentacji na 30.10.2026. Brak potwierdzenia CI lub prób ręcznych
 nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 
 | Zakres                                                        | Stan                                                                            | Pozostałe warunki                                                 |
@@ -219,10 +219,14 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
   rodzica z ostrzeżeniem o niewykonanych lub nieznanych krokach. Istniejący
   magazyn offline i outbox; ochrona formularza, błędy i konflikty.
   Komponenty i headless Playwright 390/1280 px obejmują WWW i transport
-  Androida. Odbiór ręczny, fizyczne APK i końcowe CI do potwierdzenia
-  według DEVELOPMENT.md. Bez zakresu S.4.
-- **S.4 (#63): planowane.** Odbiór WWW/APK, dwa urządzenia, restart offline,
-  zgodność starszego APK i domknięcie modułu. Checklisty kolejnych wystąpień
+  Androida. Odbiór ręczny i fizyczne APK potwierdzone przez właściciela w S.4;
+  końcowe CI do potwierdzenia. Bez zakresu S.4.
+- **S.4 (#63): zweryfikowane lokalnie, oczekuje na CI.** Właściciel potwierdził
+  30.10.2026 zakończenie prób odbioru z #63: WWW 390/1280 px i fizyczne APK,
+  dwa konta/urządzenia, konflikty, restart offline i synchronizacja,
+  ukończenie i usuwanie rodzica, uprawnienia, wylogowanie i zmiana konta
+  oraz zgodność starszego APK. Domknięcie modułu wymaga sukcesu pełnego CI
+  dla końcowego commita. Checklisty kolejnych wystąpień
   zadań cyklicznych należą do końcowej integracji modułu cykliczności.
 
 ## Pozostałe warunki i pomysły
