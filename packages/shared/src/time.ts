@@ -1,4 +1,4 @@
-import { TZDate } from '@date-fns/tz';
+import { TZDate, tzOffset } from '@date-fns/tz';
 import { addDays, addMonths, addWeeks, subDays, subMonths, subWeeks } from 'date-fns';
 import * as rrule from 'rrule';
 import type { RRule as RecurrenceRule } from 'rrule';
@@ -71,16 +71,14 @@ function timeString(value: Date): string {
 
 /** The UTC fields of a floating date represent wall-clock fields, not an instant. */
 function floatingToZoned(value: Date, tz: string): TZDate {
-  return new TZDate(
-    value.getUTCFullYear(),
-    value.getUTCMonth(),
-    value.getUTCDate(),
-    value.getUTCHours(),
-    value.getUTCMinutes(),
-    value.getUTCSeconds(),
-    value.getUTCMilliseconds(),
-    tz,
-  );
+  const wallTime = value.getTime();
+  // Adjacent dates cover both offsets at a transition without using the host timezone.
+  const offsets = new Set([-DAY_MS, 0, DAY_MS].map((delta) => tzOffset(tz, new Date(wallTime + delta))));
+  const candidates = [...offsets].map((offset) => new TZDate(wallTime - offset * MINUTE_MS, tz));
+  const matches = candidates.filter((candidate) => zonedToFloating(candidate).getTime() === wallTime);
+  // Folds choose the earlier instant; gaps advance by the offset change.
+  const instant = matches.length ? Math.min(...matches.map(Number)) : Math.max(...candidates.map(Number));
+  return new TZDate(instant, tz);
 }
 
 function zonedToFloating(value: TZDate): Date {

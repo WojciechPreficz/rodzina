@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   computeNextFireAt,
@@ -341,6 +342,34 @@ describe('computeNextFireAt', () => {
 });
 
 describe('localDateTimeToUtc', () => {
+  it.each(['UTC', 'Europe/Warsaw', 'America/New_York'])(
+    'resolves DST gaps and folds independently of the host timezone %s',
+    (hostTimezone) => {
+      const samples = [
+        ['2026-03-29', '02:30', TZ, '2026-03-29T01:30:00.000Z'],
+        ['2026-10-25', '02:30', TZ, '2026-10-25T00:30:00.000Z'],
+        ['2026-10-25', '03:30', TZ, '2026-10-25T02:30:00.000Z'],
+        ['2026-03-08', '02:30', 'America/New_York', '2026-03-08T07:30:00.000Z'],
+        ['2026-11-01', '01:30', 'America/New_York', '2026-11-01T05:30:00.000Z'],
+        ['2026-04-05', '01:45', 'Australia/Lord_Howe', '2026-04-04T14:45:00.000Z'],
+        ['2026-10-04', '02:15', 'Australia/Lord_Howe', '2026-10-03T15:45:00.000Z'],
+      ];
+      const script = `
+        import { localDateTimeToUtc } from ${JSON.stringify(new URL('./time.ts', import.meta.url).href)};
+        const samples = ${JSON.stringify(samples)};
+        console.log(JSON.stringify(samples.map(([date, time, tz]) =>
+          new Date(localDateTimeToUtc(date, time, tz)).toISOString())));
+      `;
+      const result = execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
+        env: { ...process.env, TZ: hostTimezone },
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
+      expect(JSON.parse(result)).toEqual(samples.map((sample) => sample[3]));
+    },
+    15_000,
+  );
+
   it('converts wall-clock fields using the supplied timezone', () => {
     expect(localDateTimeToUtc('2026-03-31', '17:00', TZ)).toBe(utc('2026-03-31T15:00:00Z'));
     expect(localDateTimeToUtc('2026-03-31', '17:00', 'UTC')).toBe(utc('2026-03-31T17:00:00Z'));
