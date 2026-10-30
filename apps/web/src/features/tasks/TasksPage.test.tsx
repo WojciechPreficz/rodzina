@@ -593,10 +593,12 @@ describe('task checklist UI', () => {
     await section.findByText('Podzadania: 1 z 3');
     expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
     expect(taskStore.project().lists?.find((item) => item.id === list.id)?.openTaskCount).toBe(1);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     await waitFor(() => expect(section.getByRole('button', { name: 'Usuń podzadanie: Lustra' })).toBeEnabled());
     fireEvent.click(section.getByRole('button', { name: 'Usuń podzadanie: Lustra' }));
+    expect(confirm).toHaveBeenCalledWith('Usunąć podzadanie „Lustra”?');
     await waitFor(() => expect(section.queryByRole('checkbox', { name: 'Lustra' })).not.toBeInTheDocument());
+    expect(section.queryByRole('alert')).not.toBeInTheDocument();
     expect(section.getByText('Podzadania: 0 z 2')).toBeVisible();
     expect(screen.getAllByText(/Zmiany oczekujące na wysłanie:/).length).toBeGreaterThan(0);
   }, 15000);

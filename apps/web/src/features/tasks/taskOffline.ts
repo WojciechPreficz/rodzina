@@ -1,5 +1,5 @@
 import { taskSnapshotResponseSchema, type TaskSnapshotResponse, type Task, type PatchTask } from '@rodzina/shared';
-import { readTaskData, updateTaskData, clearTaskData } from './taskStorage.js';
+import { readTaskData, readTaskTransaction, updateTaskData, clearTaskData } from './taskStorage.js';
 import {
   ensureMigrated,
   activateOfflineAccount,
@@ -320,14 +320,18 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
           }),
           async () => {
             if (captured !== revision || !isAccountCurrent(sessionToken)) return;
-            const data = await readTaskData(account);
-            const operations = await transact('readonly', (tx) => readOperations(tx, account));
+            // Publish one committed view; a second transaction could let a newer enqueue
+            // reach the UI before this callback restores an older journal.
+            const { data, operations } = await transact('readonly', async (tx) => ({
+              data: await readTaskTransaction(tx, account),
+              operations: await readOperations(tx, account),
+            }));
             current(captured);
             emit({
               ...state,
-              ...data!.snapshot,
-              pending: data!.operations,
-              error: data!.rejection ?? operations.find((op) => op.module === 'tasks' && op.lastError)?.lastError,
+              ...data.snapshot,
+              pending: data.operations,
+              error: data.rejection ?? operations.find((op) => op.module === 'tasks' && op.lastError)?.lastError,
             });
             window.dispatchEvent(new Event('rodzina:tasks-changed'));
           },
