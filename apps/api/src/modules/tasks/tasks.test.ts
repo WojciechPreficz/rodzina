@@ -110,6 +110,153 @@ describe('task lists API', () => {
       .run();
     return id;
   }
+  async function checklistFixture(memberIds: string[] = []) {
+    const list = await create(memberIds);
+    const response = await request('POST', `${base}/${list.id}/tasks`, { title: 'Packing' });
+    return { list, id: response.json().task.id as string };
+  }
+  function checklistWrite(
+    method: 'POST' | 'PATCH' | 'DELETE',
+    id: string,
+    suffix: string,
+    data: unknown,
+    user = owner,
+    operationId = crypto.randomUUID(),
+  ) {
+    return request(
+      method,
+      `/api/tasks/${id}/checklist${suffix}?operationId=${operationId}&actorId=${user.id}`,
+      data,
+      user,
+    );
+  }
+  it('supports checklist CRUD, order, independent completion and legacy parent mutations', async () => {
+    const { id, list } = await checklistFixture([child.id]);
+    const a = crypto.randomUUID();
+    const b = crypto.randomUUID();
+    expect((await checklistWrite('POST', id, '', { id: a, title: ' Clothes ' })).statusCode).toBe(201);
+    const second = await checklistWrite('POST', id, '', { id: b, title: 'Tickets' }, child);
+    expect(second.statusCode, second.body).toBe(201);
+    expect(second.json().orderVersion).toBe(2);
+    expect(
+      (await checklistWrite('PATCH', id, '/order', { itemIds: [b, a], orderVersion: 2 }))
+        .json()
+        .items.map((item: { id: string }) => item.id),
+    ).toEqual([b, a]);
+    expect((await checklistWrite('PATCH', id, '/order', { itemIds: [a, b], orderVersion: 2 })).statusCode).toBe(409);
+    expect((await checklistWrite('PATCH', id, '/' + a, { title: 'Clothes updated', version: 0 })).statusCode).toBe(200);
+    expect((await checklistWrite('PATCH', id, '/' + a, { title: 'Stale', version: 0 })).statusCode).toBe(409);
+    expect((await checklistWrite('PATCH', id, '/' + a, { isDone: true, doneVersion: 0 }, child)).statusCode).toBe(200);
+    const completed = await checklistWrite('PATCH', id, '/' + b, { isDone: true, doneVersion: 0 });
+    expect(completed.json().items.every((item: { isDone: boolean }) => item.isDone)).toBe(true);
+    expect((await checklistWrite('PATCH', id, '/' + a, { isDone: false, doneVersion: 0 })).statusCode).toBe(409);
+    const before = (await request('GET', `/api/tasks/${id}/checklist`)).json();
+    expect(before.items.find((item: { id: string }) => item.id === a).doneBy).toBe(child.id);
+    const listed = (await request('GET', `${base}/${list.id}/tasks?status=all`)).json().tasks[0];
+    expect(listed.isDone).toBe(false);
+    expect(listed.checklist).toEqual(before.items);
+    for (const isDone of [true, false]) {
+      const legacy = await request('PATCH', '/api/tasks/' + id, { title: 'Parent', isDone });
+      expect(legacy.statusCode).toBe(200);
+      expect(taskResponseSchema.safeParse(legacy.json()).success).toBe(true);
+      expect(legacy.json().task.checklist).toEqual(before.items);
+    }
+    const snapshot = (await request('GET', '/api/tasks/snapshot')).json();
+    expect(snapshot.items[list.id][0].checklist).toEqual(before.items);
+    expect((await checklistWrite('DELETE', id, '/' + a, { version: 1, doneVersion: 0 })).statusCode).toBe(409);
+    const removed = await checklistWrite('DELETE', id, '/' + a, { version: 1, doneVersion: 1 });
+    expect(removed.json().items).toEqual([expect.objectContaining({ id: b, position: 0 })]);
+    await request('DELETE', '/api/tasks/' + id);
+    expect(database.db.select().from(schema.taskChecklistItems).all()).toEqual([]);
+    expect((await checklistWrite('POST', id, '', { id: crypto.randomUUID(), title: 'Late' })).statusCode).toBe(404);
+  });
+  it('checks checklist access on writes, reads and replay including revoked shares and deleted parents', async () => {
+    const { id, list } = await checklistFixture([member.id, child.id]);
+    const op = crypto.randomUUID();
+    const data = { id: crypto.randomUUID(), title: 'Private step' };
+    const first = await checklistWrite('POST', id, '', data, member, op);
+    expect(first.statusCode).toBe(201);
+    expect((await checklistWrite('POST', id, '', data, member, op)).body).toBe(first.body);
+    expect((await checklistWrite('POST', id, '', { ...data, title: 'Changed' }, member, op)).statusCode).toBe(409);
+    expect(database.db.select().from(schema.taskChecklistItems).all()).toHaveLength(1);
+    for (const user of [admin, outsider]) {
+      expect((await request('GET', `/api/tasks/${id}/checklist`, undefined, user)).statusCode).toBe(404);
+      expect(
+        (await checklistWrite('POST', id, '', { id: crypto.randomUUID(), title: 'Forbidden' }, user)).statusCode,
+      ).toBe(404);
+      expect(
+        (await checklistWrite('PATCH', id, '/' + data.id, { isDone: true, doneVersion: 0 }, user)).statusCode,
+      ).toBe(404);
+      expect((await checklistWrite('DELETE', id, '/' + data.id, { version: 0, doneVersion: 0 }, user)).statusCode).toBe(
+        404,
+      );
+      expect(
+        (await checklistWrite('PATCH', id, '/order', { itemIds: [data.id], orderVersion: 1 }, user)).statusCode,
+      ).toBe(404);
+    }
+    await request('PATCH', `${base}/${list.id}`, { memberIds: [child.id] });
+    expect((await checklistWrite('POST', id, '', data, member, op)).statusCode).toBe(404);
+    const ownerOp = crypto.randomUUID();
+    const other = { id: crypto.randomUUID(), title: 'Other' };
+    await checklistWrite('POST', id, '', other, owner, ownerOp);
+    await request('DELETE', '/api/tasks/' + id);
+    expect((await checklistWrite('POST', id, '', other, owner, ownerOp)).statusCode).toBe(404);
+  });
+  it('validates checklist titles, UUIDs, order, foreign items, limit and atomic operation persistence', async () => {
+    const { id } = await checklistFixture();
+    for (const title of ['', '  ', 'a'.repeat(201)])
+      expect((await checklistWrite('POST', id, '', { id: crypto.randomUUID(), title })).statusCode).toBe(400);
+    expect((await checklistWrite('POST', id, '', { id: 'invalid', title: 'Step' })).statusCode).toBe(400);
+    expect(
+      (await request('POST', `/api/tasks/${id}/checklist`, { id: crypto.randomUUID(), title: 'Step' })).statusCode,
+    ).toBe(400);
+    const a = crypto.randomUUID();
+    database.sqlite.exec(
+      "CREATE TRIGGER fail_checklist_operation BEFORE INSERT ON task_operations BEGIN SELECT RAISE(ABORT, 'test'); END",
+    );
+    expect((await checklistWrite('POST', id, '', { id: a, title: 'Rollback' })).statusCode).toBe(500);
+    expect((await request('GET', `/api/tasks/${id}/checklist`)).json()).toMatchObject({ items: [], orderVersion: 0 });
+    database.sqlite.exec('DROP TRIGGER fail_checklist_operation');
+    expect((await checklistWrite('POST', id, '', { id: a, title: 'Step' })).statusCode).toBe(201);
+    const other = await checklistFixture();
+    expect((await checklistWrite('POST', other.id, '', { id: a, title: 'Duplicate' })).statusCode).toBe(409);
+    expect((await checklistWrite('PATCH', other.id, '/' + a, { title: 'Foreign', version: 0 })).statusCode).toBe(404);
+    for (const itemIds of [[], [a, a], [crypto.randomUUID()]])
+      expect((await checklistWrite('PATCH', id, '/order', { itemIds, orderVersion: 1 })).statusCode).toBe(400);
+    for (let i = 1; i < 100; i++)
+      database.db
+        .insert(schema.taskChecklistItems)
+        .values({ id: crypto.randomUUID(), taskId: id, title: 'Step', position: i, createdAt: 1, updatedAt: 1 })
+        .run();
+    expect((await checklistWrite('POST', id, '', { id: crypto.randomUUID(), title: 'Too many' })).statusCode).toBe(400);
+  });
+
+  it('loads checklist snapshots in bounded batches without per-task queries', async () => {
+    const { id, list } = await checklistFixture();
+    for (let i = 0; i < 401; i++) {
+      const taskId = i === 0 ? id : crypto.randomUUID();
+      if (i)
+        database.db
+          .insert(schema.tasks)
+          .values({ id: taskId, listId: list.id, title: 'Task', createdAt: 1, updatedAt: 1 })
+          .run();
+      database.db
+        .insert(schema.taskChecklistItems)
+        .values({ id: crypto.randomUUID(), taskId, title: 'Step', position: 0, createdAt: 1, updatedAt: 1 })
+        .run();
+    }
+    for (const url of ['/api/tasks/snapshot', `${base}/${list.id}/tasks?status=all`]) {
+      const spy = vi.spyOn(database.sqlite, 'prepare');
+      const response = await request('GET', url);
+      expect(response.statusCode).toBe(200);
+      const rows = url.endsWith('snapshot') ? response.json().items[list.id] : response.json().tasks;
+      expect(rows).toHaveLength(401);
+      expect(rows.every((row: Task) => row.checklist?.length === 1)).toBe(true);
+      expect(spy.mock.calls.filter(([query]) => query.includes('from "task_checklist_items"'))).toHaveLength(2);
+      spy.mockRestore();
+    }
+  });
+
   it('returns only accessible complete lists in snapshots and removes revoked shares', async () => {
     const shared = await create([member.id]);
     const privateList = await create();

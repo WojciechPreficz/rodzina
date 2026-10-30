@@ -130,3 +130,51 @@ it('adds task tables without changing existing family, session, calendar, remind
     rmSync(oldMigrations, { recursive: true, force: true });
   }
 });
+
+it('adds checklists preserving existing tasks and cascades deletions', () => {
+  const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
+  const oldMigrations = mkdtempSync(path.join(tmpdir(), 'rodzina-before-checklists-'));
+  const database = createDatabase(loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' }));
+  try {
+    const journal = JSON.parse(readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'));
+    journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx < 27);
+    mkdirSync(path.join(oldMigrations, 'meta'));
+    writeFileSync(path.join(oldMigrations, 'meta/_journal.json'), JSON.stringify(journal));
+    for (const entry of journal.entries)
+      copyFileSync(path.join(migrationsFolder, `${entry.tag}.sql`), path.join(oldMigrations, `${entry.tag}.sql`));
+    migrate(database.db, { migrationsFolder: oldMigrations });
+    const familyId = crypto.randomUUID(),
+      userId = crypto.randomUUID(),
+      listId = crypto.randomUUID(),
+      taskId = crypto.randomUUID();
+    database.db.insert(schema.families).values({ id: familyId, name: 'Test', joinCode: familyId, createdAt: 1 }).run();
+    database.db
+      .insert(schema.users)
+      .values({ id: userId, familyId, displayName: 'Test', role: 'admin', createdAt: 1, updatedAt: 1 })
+      .run();
+    database.db
+      .insert(schema.taskLists)
+      .values({ id: listId, familyId, ownerId: userId, name: 'Test', createdAt: 1, updatedAt: 1 })
+      .run();
+    database.sqlite
+      .prepare(
+        'INSERT INTO tasks (id, list_id, title, is_done, done_by, done_at, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 5, 1, 5)',
+      )
+      .run(taskId, listId, 'Old task', userId);
+    const before = database.sqlite.prepare('SELECT * FROM tasks').get() as Record<string, unknown>;
+    migrate(database.db, { migrationsFolder });
+    expect(database.sqlite.prepare('SELECT * FROM tasks').get()).toEqual({ ...before, checklist_order_version: 0 });
+    expect(database.db.select().from(schema.taskChecklistItems).all()).toEqual([]);
+    database.db
+      .insert(schema.taskChecklistItems)
+      .values({ id: crypto.randomUUID(), taskId, title: 'Step', position: 0, createdAt: 1, updatedAt: 1 })
+      .run();
+    database.sqlite.prepare('DELETE FROM task_lists WHERE id = ?').run(listId);
+    expect(database.db.select().from(schema.tasks).all()).toEqual([]);
+    expect(database.db.select().from(schema.taskChecklistItems).all()).toEqual([]);
+    expect(database.sqlite.pragma('foreign_key_check')).toEqual([]);
+  } finally {
+    database.sqlite.close();
+    rmSync(oldMigrations, { recursive: true, force: true });
+  }
+});

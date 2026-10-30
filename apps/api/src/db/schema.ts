@@ -407,6 +407,7 @@ export const tasks = sqliteTable(
     listId: text('list_id')
       .notNull()
       .references(() => taskLists.id, { onDelete: 'cascade' }),
+    checklistOrderVersion: integer('checklist_order_version').notNull().default(0),
     title: text('title').notNull(),
     notes: text('notes'),
     dueDate: text('due_date'),
@@ -421,6 +422,27 @@ export const tasks = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (table) => [index('tasks_list_position_idx').on(table.listId, table.position)],
+);
+
+export const taskChecklistItems = sqliteTable(
+  'task_checklist_items',
+  {
+    id: text('id').primaryKey(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    position: integer('position').notNull(),
+    isDone: integer('is_done', { mode: 'boolean' }).notNull().default(false),
+    doneBy: text('done_by').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: integer('done_at'),
+    version: integer('version').notNull().default(0),
+    doneVersion: integer('done_version').notNull().default(0),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('task_checklist_task_position_idx').on(table.taskId, table.position)],
 );
 
 export const taskOperations = sqliteTable(

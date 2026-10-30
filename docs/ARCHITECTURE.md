@@ -78,6 +78,31 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   uruchamia istniejące wylogowanie i czyszczenie danych, niewysłanych zmian
   oraz alarmów, także w innych kartach. Inne urządzenia wykrywają usunięcie
   przy kontakcie z API; offline mogą do tego czasu zachować dane i alarmy.
+- Checklisty zada�: `task_checklist_items` dziedzicz� dost�p przez list� rodzica,
+  r�wnie� dla dziecka. Usuni�cie rodzica/listy usuwa kroki kaskadowo. Uko�czenie
+  lub ponowne otwarcie rodzica nie zmienia krok�w i odwrotnie. Limit to 100
+  pozycji i 200 znak�w tytu�u. Czasy s� znacznikami UTC w milisekundach.
+  `GET /api/tasks/:id/checklist` zwraca `{ ok, items, orderVersion }`;
+  `POST` pod ten sam adres przyjmuje `{ id, title }` z UUID klienta.
+  `PATCH /api/tasks/:id/checklist/:itemId` przyjmuje `{ title, version }`
+  albo `{ isDone, doneVersion }`. Tre�� i wykonanie maj� niezale�ne liczniki
+  wersji, zwi�kszane przy zapisie; niezgodno�� daje 409 `CHECKLIST_CONFLICT`.
+  `DELETE` pozycji wymaga `{ version, doneVersion }`, aby nie usun�� zmienionego
+  kroku bez sprawdzenia. Odhaczenie zapisuje wykonawc� i czas, cofni�cie je czy�ci.
+  `PATCH /api/tasks/:id/checklist/order` wymaga `{ itemIds, orderVersion }`:
+  kompletu unikalnych ID bie��cej checklisty. Dodanie, usuni�cie i przestawienie
+  zwi�kszaj� wersj� kolejno�ci rodzica; odhaczenia i edycja nazwy jej nie zmieniaj�.
+  Niezale�ne odhaczenia r�nych krok�w scalaj� si�, sprzeczne zmiany tego samego
+  kroku wymagaj� sprawdzenia. Pozycje s� numerowane od zera bez luk.
+  Mutacje wymagaj� `operationId` w query i opcjonalnie `actorId`, u�ywaj�
+  istniej�cego `task_operations` i transakcji immediate. Replay sprawdza aktualny
+  dost�p i istnienie rodzica; usuni�tego zadania nie odtwarza. Odpowiedzi maj�
+  istniej�c� retencj� 90 dni; automatyczny retry klienta pozostaje do 30 dni.
+  Snapshot, listy, widok dzisiejszy i odpowiedzi mutacji rodzica zawieraj�
+  `checklist` oraz `checklistOrderVersion`; odczyt krok�w jest grupowy, porcje
+  do 400 rodzic�w. Pola s� opcjonalne w kontrakcie odczytu dla wcze�niejszych
+  danych APK. Dotychczasowy PATCH rodzica nie zast�puje checklisty. Interfejs
+  i trwa�a obs�uga offline checklist nale�� do S.2�S.3.
 - Kontakty: jedna grupa na kontakt, jedna nieusuwalna grupa domyślna „Inne”
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.

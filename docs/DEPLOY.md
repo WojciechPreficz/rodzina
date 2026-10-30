@@ -79,6 +79,10 @@ Próby lokalne z atrapą nie potwierdzają dostarczalności produkcyjnej.
 
 ## Paczka i migracje
 
+Migracja 0027 dodaje checklisty i licznik wersji kolejno�ci do zada�, zachowuj�c
+ich tre�� i stan wykonania. Stosuj poni�sz� procedur� backupu i jawnego joba;
+nie wymaga nowych zmiennych ani crona. Wdro�enie API nie publikuje nowego APK.
+
 Lokalnie dobieramy kontrole do zmiany według [AGENTS.md](../AGENTS.md).
 npm run release buduje release.zip: server.cjs, dist, public, drizzle oraz
 produkcyjny manifest i lockfile. Nie kopiujemy lokalnego node_modules.

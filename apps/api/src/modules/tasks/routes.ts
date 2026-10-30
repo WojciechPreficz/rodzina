@@ -1,3 +1,4 @@
+import { createTaskChecklistService } from './checklist.js';
 import { parse } from '../../http/validation.js';
 import { requireUser } from '../../http/session-auth.js';
 import type { FastifyInstance } from 'fastify';
@@ -6,6 +7,11 @@ import { ApiError } from '../../http/errors.js';
 import { registerIdempotentMutations } from '../../http/idempotency.js';
 import { createTaskListRepository } from './repository.js';
 import {
+  createTaskChecklistItemSchema,
+  patchTaskChecklistItemSchema,
+  deleteTaskChecklistItemSchema,
+  reorderTaskChecklistSchema,
+  taskChecklistResponseSchema,
   createTaskListSchema,
   patchTaskListSchema,
   taskListsResponseSchema,
@@ -62,6 +68,55 @@ export function registerTaskListRoutes(app: FastifyInstance, database: DatabaseC
       },
       // Saved responses contain private content; sharing may have changed since the write.
       recheckAccess: checkAccess,
+    });
+    const checklist = createTaskChecklistService(database);
+    const checklistParams = z.object({ id: z.string().uuid(), itemId: z.string().uuid().optional() });
+    const checkParent = (request: import('fastify').FastifyRequest) => {
+      const { id } = parse(checklistParams, request.params);
+      const user = requireUser(request);
+      return checklist.parent(user.familyId, user.id, id);
+    };
+    registerIdempotentMutations(routes, database, {
+      table: 'task_operations',
+      matches: (route) => route.url.startsWith('/api/tasks/:id/checklist'),
+      querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid().optional() }).strict(),
+      fingerprintParts: (request) => [requireUser(request).familyId, request.method, request.url, request.body],
+      resolveScope: (request) => checkParent(request).listId,
+      recheckAccess: (request, listId) => {
+        checkAccess(request, listId);
+        checkParent(request);
+      },
+    });
+    routes.get('/api/tasks/:id/checklist', (request) => {
+      const { id } = parse(checklistParams, request.params);
+      const user = requireUser(request);
+      return taskChecklistResponseSchema.parse(checklist.read(user.familyId, user.id, id));
+    });
+    routes.post('/api/tasks/:id/checklist', (request, reply) => {
+      const { id } = parse(checklistParams, request.params);
+      const data = parse(createTaskChecklistItemSchema, request.body);
+      const user = requireUser(request);
+      const result = checklist.create(user.familyId, user.id, id, data);
+      reply.code(201);
+      return taskChecklistResponseSchema.parse(result);
+    });
+    routes.patch('/api/tasks/:id/checklist/order', (request) => {
+      const { id } = parse(checklistParams, request.params);
+      const data = parse(reorderTaskChecklistSchema, request.body);
+      const user = requireUser(request);
+      return taskChecklistResponseSchema.parse(checklist.reorder(user.familyId, user.id, id, data));
+    });
+    routes.patch('/api/tasks/:id/checklist/:itemId', (request) => {
+      const { id, itemId } = parse(checklistParams, request.params);
+      const data = parse(patchTaskChecklistItemSchema, request.body);
+      const user = requireUser(request);
+      return taskChecklistResponseSchema.parse(checklist.change(user.familyId, user.id, id, itemId!, data));
+    });
+    routes.delete('/api/tasks/:id/checklist/:itemId', (request) => {
+      const { id, itemId } = parse(checklistParams, request.params);
+      const data = parse(deleteTaskChecklistItemSchema, request.body);
+      const user = requireUser(request);
+      return taskChecklistResponseSchema.parse(checklist.change(user.familyId, user.id, id, itemId!, data, true));
     });
     routes.get('/api/tasks/snapshot', (request) => {
       const user = requireUser(request);

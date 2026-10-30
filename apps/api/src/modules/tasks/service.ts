@@ -45,7 +45,7 @@ export function createTaskListService(database: DatabaseConnection) {
         const { reminders: shared, ...fields } = data;
         const task = repository.createTask(listId, actorId, fields, id);
         reminders.saveTask(familyId, task, actorId, shared, repository.timezone(familyId), Date.now());
-        return { ...task, reminders: reminders.listTask(familyId, task.id) };
+        return { ...task, checklist: [], reminders: reminders.listTask(familyId, task.id) };
       });
     },
     updateTask(familyId: string, actorId: string, id: string, data: PatchTask) {
@@ -61,7 +61,11 @@ export function createTaskListService(database: DatabaseConnection) {
         const { reminders: shared, ...fields } = data;
         const updated = repository.updateTask(task, actorId, fields);
         reminders.saveTask(familyId, updated, actorId, shared, repository.timezone(familyId), Date.now());
-        return { ...updated, reminders: reminders.listTask(familyId, task.id) };
+        return {
+          ...updated,
+          checklist: repository.checklistMany([task.id]).get(task.id) ?? [],
+          reminders: reminders.listTask(familyId, task.id),
+        };
       });
     },
     removeTask(familyId: string, actorId: string, id: string) {

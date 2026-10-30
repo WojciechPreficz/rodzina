@@ -2,19 +2,52 @@ import crypto from 'node:crypto';
 import { and, asc, count, eq, inArray, lte, max, or, sql } from 'drizzle-orm';
 import type { CreateTask, PatchTask, TaskStatus } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { families, taskListMembers, taskLists, tasks, users } from '../../db/schema.js';
+import { families, taskListMembers, taskLists, tasks, taskChecklistItems, users } from '../../db/schema.js';
 import { createReminderRepository } from '../reminders/repository.js';
 
 export function createTaskListRepository(database: DatabaseConnection) {
   const db = database.db;
   const reminderRepository = createReminderRepository(database);
-  function serializeTask(task: typeof tasks.$inferSelect) {
-    const familyId = db
-      .select({ familyId: taskLists.familyId })
-      .from(taskLists)
-      .where(eq(taskLists.id, task.listId))
-      .get()!.familyId;
-    return { ...task, reminders: reminderRepository.listTask(familyId, task.id) };
+  function checklistMany(ids: string[]) {
+    const result = new Map<string, (typeof taskChecklistItems.$inferSelect)[]>();
+    for (let offset = 0; offset < ids.length; offset += 400) {
+      const rows = db
+        .select()
+        .from(taskChecklistItems)
+        .where(inArray(taskChecklistItems.taskId, ids.slice(offset, offset + 400)))
+        .orderBy(asc(taskChecklistItems.position), asc(taskChecklistItems.id))
+        .all();
+      for (const row of rows) {
+        if (!result.has(row.taskId)) result.set(row.taskId, []);
+        result.get(row.taskId)!.push(row);
+      }
+    }
+    return result;
+  }
+  function serializeMany(rows: (typeof tasks.$inferSelect)[]) {
+    const checklist = checklistMany(rows.map((task) => task.id));
+    const listIds = [...new Set(rows.map((task) => task.listId))];
+    const familiesByList = new Map<string, string>();
+    for (let offset = 0; offset < listIds.length; offset += 400)
+      for (const row of db
+        .select()
+        .from(taskLists)
+        .where(inArray(taskLists.id, listIds.slice(offset, offset + 400)))
+        .all())
+        familiesByList.set(row.id, row.familyId);
+    const reminders = new Map<string, ReturnType<typeof reminderRepository.listTask>>();
+    for (const familyId of new Set(familiesByList.values()))
+      for (const [id, values] of reminderRepository.listMany(
+        familyId,
+        'taskId',
+        rows.filter((task) => familiesByList.get(task.listId) === familyId).map((task) => task.id),
+      ))
+        reminders.set(id, values);
+    return rows.map((task) => ({
+      ...task,
+      reminders: reminders.get(task.id) ?? [],
+      checklist: checklist.get(task.id) ?? [],
+    }));
   }
   const accessFilter = (familyId: string, actorId: string) =>
     and(
@@ -116,7 +149,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
         'taskId',
         taskRows.map((task) => task.id),
       );
-      const items: Record<string, ReturnType<typeof serializeTask>[]> = Object.fromEntries(
+      const items: Record<string, ReturnType<typeof serializeMany>> = Object.fromEntries(
         rows.map((list) => [list.id, []]),
       );
       const memberIds = new Map<string, string[]>();
@@ -124,7 +157,13 @@ export function createTaskListRepository(database: DatabaseConnection) {
         if (!memberIds.has(row.listId)) memberIds.set(row.listId, []);
         memberIds.get(row.listId)!.push(row.userId);
       }
-      for (const task of taskRows) items[task.listId]!.push({ ...task, reminders: shared.get(task.id) ?? [] });
+      const checklist = checklistMany(taskRows.map((task) => task.id));
+      for (const task of taskRows)
+        items[task.listId]!.push({
+          ...task,
+          checklist: checklist.get(task.id) ?? [],
+          reminders: shared.get(task.id) ?? [],
+        });
       const lists = rows.map((list) => ({
         ...list,
         memberIds: memberIds.get(list.id) ?? [],
@@ -218,13 +257,13 @@ export function createTaskListRepository(database: DatabaseConnection) {
     }
   }
   function listTasks(listId: string, status: TaskStatus) {
-    return db
+    const rows = db
       .select()
       .from(tasks)
       .where(and(eq(tasks.listId, listId), status === 'all' ? undefined : eq(tasks.isDone, status === 'done')))
       .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
-      .all()
-      .map(serializeTask);
+      .all();
+    return serializeMany(rows);
   }
   function findTask(familyId: string, actorId: string, id: string) {
     return db
@@ -277,17 +316,19 @@ export function createTaskListRepository(database: DatabaseConnection) {
     db.delete(tasks).where(eq(tasks.id, id)).run();
   }
   function todayTasks(familyId: string, actorId: string, today: string) {
-    return db
+    const rows = db
       .select({ task: tasks })
       .from(tasks)
       .innerJoin(taskLists, eq(tasks.listId, taskLists.id))
       .where(and(accessFilter(familyId, actorId), eq(tasks.isDone, false), lte(tasks.dueDate, today)))
       .orderBy(asc(tasks.dueDate), asc(tasks.dueTime), asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
       .all()
-      .map(({ task }) => serializeTask(task));
+      .map(({ task }) => task);
+    return serializeMany(rows);
   }
   return {
     snapshot,
+    checklistMany,
     findAccessibleList,
     ensureDefault,
     listLists,

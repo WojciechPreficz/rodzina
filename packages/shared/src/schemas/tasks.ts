@@ -52,7 +52,50 @@ export const patchTaskSchema = taskFieldsSchema
   .partial()
   .strict()
   .refine((data) => Object.keys(data).length > 0, 'Brak danych do zmiany.');
+const versionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const taskChecklistItemSchema = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  title: nameSchema,
+  position: z.number().int().nonnegative(),
+  isDone: z.boolean(),
+  doneBy: z.string().uuid().nullable(),
+  doneAt: z.number().int().nullable(),
+  version: versionSchema,
+  doneVersion: versionSchema,
+  createdBy: z.string().uuid().nullable(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export const createTaskChecklistItemSchema = z.object({ id: z.string().uuid(), title: nameSchema }).strict();
+export const patchTaskChecklistItemSchema = z.union([
+  z.object({ title: nameSchema, version: versionSchema }).strict(),
+  z.object({ isDone: z.boolean(), doneVersion: versionSchema }).strict(),
+]);
+export const deleteTaskChecklistItemSchema = z.object({ version: versionSchema, doneVersion: versionSchema }).strict();
+export const reorderTaskChecklistSchema = z
+  .object({
+    orderVersion: versionSchema,
+    itemIds: z
+      .array(z.string().uuid())
+      .max(100)
+      .refine((ids) => new Set(ids).size === ids.length),
+  })
+  .strict();
+export const taskChecklistResponseSchema = z.object({
+  ok: z.literal(true),
+  items: z.array(taskChecklistItemSchema).max(100),
+  orderVersion: versionSchema,
+});
+export type TaskChecklistItem = z.infer<typeof taskChecklistItemSchema>;
+export type CreateTaskChecklistItem = z.infer<typeof createTaskChecklistItemSchema>;
+export type PatchTaskChecklistItem = z.infer<typeof patchTaskChecklistItemSchema>;
+export type DeleteTaskChecklistItem = z.infer<typeof deleteTaskChecklistItemSchema>;
+export type ReorderTaskChecklist = z.infer<typeof reorderTaskChecklistSchema>;
+
 export const taskSchema = taskFieldsSchema.extend({
+  checklist: z.array(taskChecklistItemSchema).max(100).optional(),
+  checklistOrderVersion: versionSchema.optional(),
   reminders: z.array(reminderSchema).optional(),
   id: z.string().uuid(),
   listId: z.string().uuid(),

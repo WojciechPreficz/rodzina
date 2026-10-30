@@ -195,6 +195,27 @@ Obecny reset linkiem administratora zachowuje kontrakt i ważność 24 godzin.
 - Poza zakresem: konta dzieci, weryfikacja i zmiana e-maila, 2FA, Google,
   wysyłka zaproszeń i przypomnień, newsletter oraz worker pocztowy.
 
+## Podzadania — checklisty w zadaniach
+
+Jeden poziom kroków dziedziczących dostęp z listy rodzica, również dla dzieci.
+Maksymalnie 100 pozycji na zadanie, tytuł do 200 znaków, kolejność i metadane
+wykonania. Ukończenie rodzica i kroków są niezależne; usunięcie rodzica usuwa
+checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
+
+- **S.1 (#60): zweryfikowane lokalnie, oczekuje na CI.** Model i migracja zachowująca stare zadania,
+  kontrakty shared, dedykowane mutacje CRUD i kolejności, UUID klienta,
+  idempotencja przez task_operations i ponowna kontrola dostępu przy replay.
+  Grupowe odczyty bez N+1, zgodność wcześniejszego APK i wersjonowanie
+  konfliktów treści/kolejności z niezależnym odhaczaniem. Odbiór: testy API,
+  migracji, uprawnień, limitów, retry i zgodności, release:smoke i końcowe CI.
+- **S.2 (#61): planowane.** Trwały zapis offline i synchronizacja w istniejącym
+  IndexedDB i wspólnym outboxie, także dla lokalnie utworzonego rodzica.
+- **S.3 (#62): planowane.** Interfejs checklisty, postęp i świadome ukończenie
+  rodzica z ostrzeżeniem o niewykonanych krokach.
+- **S.4 (#63): planowane.** Odbiór WWW/APK, dwa urządzenia, restart offline,
+  zgodność starszego APK i domknięcie modułu. Checklisty kolejnych wystąpień
+  zadań cyklicznych należą do końcowej integracji modułu cykliczności.
+
 ## Pozostałe warunki i pomysły
 
 - R.8: sprawdzić wszystkie istniejące ekrany przy 390 i 1280 px oraz w APK,

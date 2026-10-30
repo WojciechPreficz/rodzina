@@ -60,6 +60,9 @@ model telefonu, Android, wersje APK przed/po, datę i wynik. Nie zaliczaj
 historycznych terminów wstecz; mocki i test transportu nie dowodzą działania
 systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
 
+- [ ] Podzadania S.1: potwierdzi� na fizycznym wspieranym APK odczyt i edycj�
+      rodzica po migracji API, bez utraty checklisty utworzonej przez API.
+      Interfejs, restart offline i test dw�ch urz�dze� nale�� do S.2�S.4.
 - [ ] Usuwanie kont: UI przy 390/1280 px i fizyczne APK, klawiatura, fokus
       i systemowy Wstecz. Administrator usuwa domownika lub rodzinę; inny dorosły
       siebie i dowolne dziecko, dziecko nikogo. Ostatni administrator musi
