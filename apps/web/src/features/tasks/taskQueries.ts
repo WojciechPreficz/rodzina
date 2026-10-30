@@ -171,7 +171,12 @@ export function useTasks(listId?: string) {
       await submitChanges(completed.map((task) => ({ id: task.id, change: { type: 'remove' } })));
     },
   });
+  const checklist = useMutation({
+    networkMode: 'always',
+    mutationFn: ({ id, change }: { id: string; change: Parameters<typeof taskStore.enqueue>[2] }) => submit(id, change),
+  });
   return {
+    checklist,
     lists: query(data.lists),
     tasks: query(items),
     active,

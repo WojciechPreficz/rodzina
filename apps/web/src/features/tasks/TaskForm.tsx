@@ -32,10 +32,15 @@ import { useFormNavigation } from '../../useFormNavigation.js';
 import { taskOfflineText } from './taskOffline.js';
 import type { Member } from '@rodzina/shared';
 import './tasks.css';
+import { TaskChecklist, type ChecklistChange } from './TaskChecklist.js';
 
 const t = labels.tasksUi;
 
 type TaskFormProps = {
+  onChecklistChange?: ChecklistChange | undefined;
+  checklistPending?: boolean | undefined;
+  onToggleDone?: (() => void) | undefined;
+  checklistStatus?: string | undefined;
   task?: Task | undefined;
   members: Member[];
   shared: boolean;
@@ -83,12 +88,22 @@ function TaskEditor({
   pending,
   error,
   openedOffline,
+  onChecklistChange,
+  checklistPending,
+  onToggleDone,
+  checklistStatus,
 }: TaskFormProps & { personal: Reminder[]; openedOffline: boolean }) {
   const { family, user } = useMe();
   const offline = useOffline();
   const configurationOffline = offline || openedOffline;
   const client = useQueryClient();
-  const navigation = useFormNavigation();
+  const checklistDirty = useRef(false);
+  const navigation = useFormNavigation({
+    isDirty: () => checklistDirty.current,
+    discard: () => {
+      checklistDirty.current = false;
+    },
+  });
   const savedId = useRef(task?.id);
   const baseline = useRef(task);
   const [saving, setSaving] = useState(false);
@@ -196,7 +211,10 @@ function TaskEditor({
   };
   return (
     <form data-navigation-guard="true" onChange={navigation.changed} onSubmit={(event) => void submit(event)}>
-      <fieldset disabled={pending || saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <fieldset
+        disabled={pending || saving || checklistPending}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+      >
         <Stack>
           {configurationOffline && (
             <Alert>
@@ -314,6 +332,20 @@ function TaskEditor({
               </Stack>
             </Paper>
           </div>
+          {checklistStatus && <Alert>{checklistStatus}</Alert>}
+          <TaskChecklist
+            task={task}
+            onChange={onChecklistChange}
+            pending={checklistPending ?? false}
+            onDraftChange={(dirty) => {
+              checklistDirty.current = dirty;
+            }}
+          />
+          {task && onToggleDone && (
+            <Button variant="light" mih={44} onClick={onToggleDone}>
+              {task.isDone ? 'Oznacz zadanie jako niewykonane' : 'Ukończ zadanie'}
+            </Button>
+          )}
           <Group justify="flex-end">
             <Button variant="default" onClick={onCancel} disabled={pending}>
               {t.cancel}

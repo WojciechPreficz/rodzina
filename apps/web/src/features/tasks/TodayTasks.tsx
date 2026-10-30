@@ -8,6 +8,7 @@ import { isTaskOverdue } from './taskRules.js';
 import { useTaskData } from './taskQueries.js';
 import { taskOfflineText } from './taskOffline.js';
 import './todayTasks.css';
+import { TaskProgress } from './TaskProgress.js';
 
 const t = labels.tasksUi;
 export function TodayTasks() {
@@ -67,6 +68,7 @@ export function TodayTasks() {
             >
               {task.title}
             </Text>
+            <TaskProgress task={task} />
             <Text size="sm" c={isTaskOverdue(task, family?.timezone ?? 'Europe/Warsaw') ? 'red' : 'dimmed'}>
               {task.dueDate?.split('-').reverse().join('.')}
               {task.dueTime ? `, ${task.dueTime}` : ''}

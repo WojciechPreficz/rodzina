@@ -117,7 +117,20 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   zatwierdza jedna transakcja. Pełny snapshot zachowuje niewysłane operacje;
   retry zachowuje ID. Brak pojedynczego kroku nie usuwa rodzica z cache.
   Obowiązuje istniejący cykl życia konta, czyszczenie dostępu, alarmów i danych
-  oraz ochrona przed spóźnionymi odpowiedziami. UI checklisty należy do S.3.
+  oraz ochrona przed spóźnionymi odpowiedziami.
+  Formularz istniejącego zadania zawiera sekcję „Podzadania”: dodawanie Enterem
+  lub przyciskiem, edycję, usuwanie z potwierdzeniem, odhaczanie i przyciski
+  kolejności dostępne klawiaturą. Nowy rodzic wymaga najpierw zapisu.
+  Mutacje podzadań zapisują się od razu, niezależnie od przycisku „Zapisz”
+  formularza rodzica. Szkice obu części chroni wspólna kontrola nawigacji,
+  również dla systemowego Wstecz Androida. Błąd zapisu zachowuje szkic;
+  kolejka i konflikty mają widoczny komunikat, z odesłaniem do istniejącego
+  panelu sprawdzania zmian. Brak zapisanej checklisty blokuje jej edycję.
+  Lista zadań i karta „Dziś do zrobienia” pokazują postęp „2 z 5”, bez zmiany
+  licznika otwartych zadań. Ukończenie wszystkich kroków nie kończy rodzica:
+  służy do tego osobny przycisk lub dotychczasowe odhaczenie na liście.
+  Niewykonane albo nieznane kroki wymagają potwierdzenia ukończenia rodzica;
+  jego cofnięcie pozostawia checklistę bez zmian.
 - Kontakty: jedna grupa na kontakt, jedna nieusuwalna grupa domyślna „Inne”
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.

@@ -60,6 +60,16 @@ export function TaskReviewPanel({
     chains.set(key, [...(chains.get(key) ?? []), op]);
   }
   const inspected = operations.filter((op) => selected?.includes(op.id));
+  const itemTitle = (op: TaskOperation, id: string) => {
+    const current = items[op.listId]?.find((task) => task.id === op.taskId)?.checklist?.find((item) => item.id === id);
+    if (current) return current.title;
+    const created = operations.find(
+      (entry) => entry.taskId === op.taskId && entry.change.type === 'checklist-create' && entry.change.data.id === id,
+    );
+    return created?.change.type === 'checklist-create'
+      ? created.change.data.title
+      : 'Podzadanie niedostępne na serwerze';
+  };
   const close = () => {
     if (!saving) {
       setSelected(null);
@@ -121,8 +131,17 @@ export function TaskReviewPanel({
                   ? 'Utworzenie zadania'
                   : op.change.type === 'update'
                     ? 'Edycja zadania'
-                    : 'Usunięcie zadania'}
+                    : op.change.type === 'checklist-create'
+                      ? 'Dodanie podzadania'
+                      : op.change.type === 'checklist-update'
+                        ? 'Zmiana podzadania'
+                        : op.change.type === 'checklist-remove'
+                          ? 'Usunięcie podzadania'
+                          : op.change.type === 'checklist-order'
+                            ? 'Kolejność podzadań'
+                            : 'Usunięcie zadania'}
               </Title>
+              {'itemId' in op.change && <Text>Podzadanie: {itemTitle(op, op.change.itemId)}</Text>}
               <Text size="sm">{new Date(op.submittedAt).toLocaleString('pl-PL')}</Text>
               <Text size="sm" c="orange.9">
                 {op.reason === 'dependency'
@@ -133,12 +152,19 @@ export function TaskReviewPanel({
                       ? taskOfflineText.rejected
                       : taskOfflineText.expired}
               </Text>
+              {op.change.type === 'checklist-order' && (
+                <Text>Kolejność: {op.change.data.itemIds.map((id) => itemTitle(op, id)).join(' → ')}</Text>
+              )}
               {op.change.type !== 'remove' &&
-                Object.entries(op.change.data).map(([key, value]) => (
-                  <Text key={key} style={{ whiteSpace: 'pre-wrap' }}>
-                    <strong>{fieldNames[key] ?? key}:</strong> {valueText(key, value, members, timezone)}
-                  </Text>
-                ))}
+                op.change.type !== 'checklist-order' &&
+                op.change.type !== 'checklist-remove' &&
+                Object.entries(op.change.data)
+                  .filter(([key]) => !op.change.type.startsWith('checklist-') || ['title', 'isDone'].includes(key))
+                  .map(([key, value]) => (
+                    <Text key={key} style={{ whiteSpace: 'pre-wrap' }}>
+                      <strong>{fieldNames[key] ?? key}:</strong> {valueText(key, value, members, timezone)}
+                    </Text>
+                  ))}
             </Paper>
           ))}
           {error && <Alert color="red">{error}</Alert>}

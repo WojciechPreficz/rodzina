@@ -14,6 +14,7 @@ import { TodayTasks } from './TodayTasks.js';
 import { isTaskOverdue } from './taskRules.js';
 import { taskStore } from './taskOffline.js';
 import { reportTransportFailure } from '../../connectivity.js';
+import { IDBObjectStore } from 'fake-indexeddb';
 
 configure({ asyncUtilTimeout: 4000 });
 
@@ -44,6 +45,8 @@ const task: Task = {
   id: '10000000-0000-4000-8000-000000000013',
   listId: list.id,
   title: 'Kupić farbę',
+  checklist: [],
+  checklistOrderVersion: 0,
   notes: 'Biała',
   dueDate: '2020-01-01',
   dueTime: null,
@@ -538,7 +541,170 @@ describe('tasks UI', () => {
   });
 });
 
+const checklistTask: Task = {
+  ...task,
+  checklistOrderVersion: 0,
+  checklist: ['Okna', 'Podłoga'].map((title, position) => ({
+    id: `10000000-0000-4000-8000-00000000002${position}`,
+    taskId: task.id,
+    title,
+    position,
+    isDone: false,
+    doneBy: null,
+    doneAt: null,
+    version: 0,
+    doneVersion: 0,
+    createdBy: session.user.id,
+    createdAt: 1,
+    updatedAt: 1,
+  })),
+};
+const taskPath = `/zadania/${list.id}?zadanie=${task.id}`;
+async function openOfflineChecklist(initial = checklistTask) {
+  setup(taskPath, [structuredClone(initial)]);
+  await screen.findByRole('region', { name: 'Podzadania' });
+  act(() => onlineManager.setOnline(false));
+  return within(screen.getByRole('region', { name: 'Podzadania' }));
+}
+
+describe('task checklist UI', () => {
+  it('lets a child add, edit, reorder, check and remove offline without changing parent counts', async () => {
+    const section = await openOfflineChecklist();
+    const draft = section.getByRole('textbox', { name: 'Nowe podzadanie' });
+    fireEvent.change(draft, { target: { value: '  Drzwi  ' } });
+    fireEvent.keyDown(draft, { key: 'Enter' });
+    await section.findByRole('checkbox', { name: 'Drzwi' });
+    await waitFor(() => expect(draft).toHaveValue(''));
+    fireEvent.click(section.getByRole('button', { name: 'Edytuj podzadanie: Drzwi' }));
+    fireEvent.change(section.getByRole('textbox', { name: 'Nazwa podzadania' }), { target: { value: 'Lustra' } });
+    fireEvent.click(section.getByRole('button', { name: 'Zapisz podzadanie' }));
+    await section.findByRole('checkbox', { name: 'Lustra' });
+    await waitFor(() => expect(section.getByRole('button', { name: 'Przenieś wyżej: Lustra' })).toBeEnabled());
+    fireEvent.click(section.getByRole('button', { name: 'Przenieś wyżej: Lustra' }));
+    await waitFor(() =>
+      expect(taskStore.project().items[list.id]![0]!.checklist?.map((item) => item.title)).toEqual([
+        'Okna',
+        'Lustra',
+        'Podłoga',
+      ]),
+    );
+    await waitFor(() => expect(section.getByRole('checkbox', { name: 'Lustra' })).toBeEnabled());
+    fireEvent.click(section.getByRole('checkbox', { name: 'Lustra' }));
+    await section.findByText('Podzadania: 1 z 3');
+    expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
+    expect(taskStore.project().lists?.find((item) => item.id === list.id)?.openTaskCount).toBe(1);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await waitFor(() => expect(section.getByRole('button', { name: 'Usuń podzadanie: Lustra' })).toBeEnabled());
+    fireEvent.click(section.getByRole('button', { name: 'Usuń podzadanie: Lustra' }));
+    await waitFor(() => expect(section.queryByRole('checkbox', { name: 'Lustra' })).not.toBeInTheDocument());
+    expect(section.getByText('Podzadania: 0 z 2')).toBeVisible();
+    expect(screen.getAllByText(/Zmiany oczekujące na wysłanie:/).length).toBeGreaterThan(0);
+  }, 15000);
+
+  it('warns before completing unfinished steps, accepts cancellation and preserves steps when reopening', async () => {
+    await openOfflineChecklist();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Ukończ zadanie' }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('niewykonane podzadania: 2'));
+    expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Ukończ zadanie' }));
+    await screen.findByRole('button', { name: 'Oznacz zadanie jako niewykonane' });
+    fireEvent.click(screen.getByRole('button', { name: 'Oznacz zadanie jako niewykonane' }));
+    await screen.findByRole('button', { name: 'Ukończ zadanie' });
+    expect(taskStore.project().items[list.id]![0]!.checklist).toEqual(checklistTask.checklist);
+  });
+
+  it('keeps the parent open after the last step and completes it only on explicit action', async () => {
+    const initial = structuredClone(checklistTask);
+    initial.checklist![0]!.isDone = true;
+    const section = await openOfflineChecklist(initial);
+    fireEvent.click(section.getByRole('checkbox', { name: 'Podłoga' }));
+    await section.findByText('Podzadania: 2 z 2');
+    expect(taskStore.project().items[list.id]![0]!.isDone).toBe(false);
+    const confirm = vi.spyOn(window, 'confirm');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ukończ zadanie' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Ukończ zadanie' }));
+    await screen.findByRole('button', { name: 'Oznacz zadanie jako niewykonane' });
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('explains an unknown checklist and warns on completion from the list', async () => {
+    const initial = { ...task, checklist: undefined, checklistOrderVersion: undefined };
+    const section = await openOfflineChecklist(initial);
+    expect(section.getByText(/pobrać pełną checklistę/)).toBeVisible();
+    expect(section.queryByRole('textbox')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Anuluj' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Nie znamy pełnej checklisty'));
+    expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
+  });
+
+  it('keeps the draft and confirmed checklist on durable storage failure', async () => {
+    const section = await openOfflineChecklist();
+    const failure = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+      throw new Error('Brak miejsca na urządzeniu');
+    });
+    fireEvent.change(section.getByRole('textbox', { name: 'Nowe podzadanie' }), { target: { value: 'Nie zapisano' } });
+    fireEvent.click(section.getByRole('button', { name: 'Dodaj podzadanie' }));
+    await section.findByText(/Brak miejsca na urządzeniu/);
+    expect(section.getByRole('textbox', { name: 'Nowe podzadanie' })).toHaveValue('Nie zapisano');
+    expect(section.queryByRole('checkbox', { name: 'Nie zapisano' })).not.toBeInTheDocument();
+    failure.mockRestore();
+  });
+
+  it('protects unsaved parent fields after a checklist save and protects checklist drafts on close', async () => {
+    const section = await openOfflineChecklist();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.change(screen.getByLabelText('Notatka'), { target: { value: 'Nie zapisano notatki' } });
+    fireEvent.click(section.getByRole('checkbox', { name: 'Okna' }));
+    await section.findByText('Podzadania: 1 z 2');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Anuluj' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Anuluj' }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.change(section.getByRole('textbox', { name: 'Nowe podzadanie' }), { target: { value: 'Szkic' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Anuluj' }));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(section.getByRole('textbox', { name: 'Nowe podzadanie' })).toHaveValue('Szkic');
+  });
+
+  it('shows rejected checklist changes for review without applying them to confirmed data', async () => {
+    setup(taskPath, [checklistTask], false, (url, method) =>
+      url.includes('/checklist') && method === 'POST'
+        ? new Response(JSON.stringify({ error: { code: 'OPERATION_CONFLICT', message: 'Konflikt podzadania' } }), {
+            status: 409,
+          })
+        : undefined,
+    );
+    const section = within(await screen.findByRole('region', { name: 'Podzadania' }));
+    fireEvent.change(section.getByRole('textbox', { name: 'Nowe podzadanie' }), {
+      target: { value: 'Sprzeczny krok' },
+    });
+    fireEvent.click(section.getByRole('button', { name: 'Dodaj podzadanie' }));
+    await screen.findByText(/Zamknij formularz i wybierz/);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Anuluj' })).toBeEnabled());
+    expect(section.queryByRole('checkbox', { name: 'Sprzeczny krok' })).not.toBeInTheDocument();
+    expect(section.getByRole('textbox', { name: 'Nowe podzadanie' })).toHaveValue('Sprzeczny krok');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Anuluj' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Sprawdź zmiany' }));
+    expect(await screen.findByText('1. Dodanie podzadania')).toBeVisible();
+    expect(screen.getByText('Sprzeczny krok', { exact: false })).toBeVisible();
+  }, 15000);
+});
+
 describe('today tasks card', () => {
+  it('shows checklist progress without counting its steps as tasks', async () => {
+    const initial = structuredClone(checklistTask);
+    initial.checklist![0]!.isDone = true;
+    setup('/', [initial]);
+    expect(await screen.findByText('Podzadania: 1 z 2')).toBeVisible();
+    expect(screen.getAllByRole('link', { name: task.title })).toHaveLength(1);
+  });
   it('recomputes today after midnight offline in the family timezone', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(new Date('2026-10-20T21:59:30Z'));

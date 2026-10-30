@@ -156,6 +156,34 @@
   background: var(--app-tint);
 }
 
+.task-checklist .mantine-Button-root {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.task-checklist .mantine-TextInput-input {
+  min-height: 44px;
+}
+
+.task-checklist-item {
+  border-bottom: 1px solid var(--app-border);
+  padding-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+
+.task-checklist .mantine-Checkbox-body {
+  min-height: 44px;
+  align-items: center;
+}
+
+.task-checklist .mantine-Checkbox-labelWrapper {
+  min-width: 0;
+}
+
+.task-checklist .mantine-Checkbox-label {
+  padding-block: 12px;
+}
+
 .task-reminders .mantine-Button-root[data-variant='subtle']:not(:disabled) {
   color: var(--mantine-color-red-9);
 }

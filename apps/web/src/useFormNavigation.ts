@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { addNavigationGuard, confirmDiscard } from './nativeNavigation.js';
 
-export function useFormNavigation() {
+export function useFormNavigation(additionalChanges?: { isDirty: () => boolean; discard: () => void }) {
   const dirty = useRef(false);
+  const additional = useRef(additionalChanges);
+  additional.current = additionalChanges;
   useEffect(() => {
     const allow = () => {
-      if (!dirty.current) return true;
+      if (!dirty.current && !additional.current?.isDirty()) return true;
       if (!confirmDiscard()) return false;
       dirty.current = false;
+      additional.current?.discard();
       return true;
     };
     const remove = addNavigationGuard(allow);
@@ -18,7 +21,7 @@ export function useFormNavigation() {
       }
     };
     const close = (event: BeforeUnloadEvent) => {
-      if (dirty.current) event.preventDefault();
+      if (dirty.current || additional.current?.isDirty()) event.preventDefault();
     };
     document.addEventListener('click', click, true);
     window.addEventListener('beforeunload', close);

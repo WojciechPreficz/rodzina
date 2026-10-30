@@ -27,3 +27,28 @@ it('retains an edited form after rejected Back and allows leaving after save', (
   expect(allowNavigation()).toBe(true);
   expect(confirm).toHaveBeenCalledOnce();
 });
+
+it('preserves an additional draft after saving the parent and discards it once for repeated navigation checks', () => {
+  let draft = true;
+  let saved!: () => void;
+  function Form() {
+    const nav = useFormNavigation({
+      isDirty: () => draft,
+      discard: () => {
+        draft = false;
+      },
+    });
+    saved = nav.saved;
+    return null;
+  }
+  render(<Form />);
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  saved();
+  expect(allowNavigation()).toBe(false);
+  expect(draft).toBe(true);
+  confirm.mockReturnValue(true);
+  expect(allowNavigation()).toBe(true);
+  expect(draft).toBe(false);
+  expect(allowNavigation()).toBe(true);
+  expect(confirm).toHaveBeenCalledTimes(2);
+});

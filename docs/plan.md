@@ -213,8 +213,14 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
   CRUD, odhaczanie i kolejność checklist, projekcja postępu, nieznane dane
   starszego cache, konflikty wersji i atomowe potwierdzenie bez utraty pending.
   Bez interfejsu checklisty (S.3) i końcowego odbioru modułu (S.4).
-- **S.3 (#62): planowane.** Interfejs checklisty, postęp i świadome ukończenie
-  rodzica z ostrzeżeniem o niewykonanych krokach.
+- **S.3 (#62): zweryfikowane lokalnie, oczekuje na CI.** Sekcja „Podzadania” w formularzu zadania:
+  dodawanie, edycja, usuwanie, odhaczanie i dostępne przyciski kolejności.
+  Postęp na liście i karcie dzisiejszych zadań oraz świadome ukończenie
+  rodzica z ostrzeżeniem o niewykonanych lub nieznanych krokach. Istniejący
+  magazyn offline i outbox; ochrona formularza, błędy i konflikty.
+  Komponenty i headless Playwright 390/1280 px obejmują WWW i transport
+  Androida. Odbiór ręczny, fizyczne APK i końcowe CI do potwierdzenia
+  według DEVELOPMENT.md. Bez zakresu S.4.
 - **S.4 (#63): planowane.** Odbiór WWW/APK, dwa urządzenia, restart offline,
   zgodność starszego APK i domknięcie modułu. Checklisty kolejnych wystąpień
   zadań cyklicznych należą do końcowej integracji modułu cykliczności.

@@ -35,6 +35,8 @@ import { taskOfflineText } from './taskOffline.js';
 import { isAndroid } from '../../platform.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
 import './tasks.css';
+import { TaskProgress } from './TaskProgress.js';
+import { confirmTaskCompletion } from './taskCompletion.js';
 
 const t = labels.tasksUi;
 
@@ -122,6 +124,7 @@ function TaskListPage() {
     }
   };
   const closeTask = () => {
+    if (data.checklist.isPending) return;
     if (!allowNavigation()) return;
     setAddingTask(false);
     setParams((current) => {
@@ -181,6 +184,7 @@ function TaskListPage() {
             disabled={data.update.isPending || data.clearDone.isPending}
             onChange={(event) => {
               const isDone = event.currentTarget.checked;
+              if (!confirmTaskCompletion(task, isDone)) return;
               void run(() => data.update.mutateAsync({ id: task.id, data: { isDone } }));
             }}
           />
@@ -197,6 +201,7 @@ function TaskListPage() {
           >
             {task.title}
           </Text>
+          <TaskProgress task={task} />
           {task.dueDate && (
             <Text size="sm" c={isTaskOverdue(task, family!.timezone) ? 'red.9' : 'dimmed'}>
               {t.due}: {task.dueDate.split('-').reverse().join('.')}
@@ -539,6 +544,27 @@ function TaskListPage() {
           <TaskForm
             key={`${active.id}:${editedTask?.id ?? 'new'}`}
             task={editedTask}
+            onChecklistChange={
+              editedTask ? (change) => data.checklist.mutateAsync({ id: editedTask.id, change }) : undefined
+            }
+            checklistPending={data.checklist.isPending}
+            checklistStatus={
+              editedTask && data.reviewOperations.some((op) => op.taskId === editedTask.id)
+                ? 'Zmiany tego zadania wymagają sprawdzenia. Zamknij formularz i wybierz „Sprawdź zmiany” na liście.'
+                : data.pendingCount > 0
+                  ? `Zmiany oczekujące na wysłanie: ${data.pendingCount}`
+                  : undefined
+            }
+            onToggleDone={
+              editedTask
+                ? () => {
+                    if (confirmTaskCompletion(editedTask, !editedTask.isDone))
+                      void run(() =>
+                        data.update.mutateAsync({ id: editedTask.id, data: { isDone: !editedTask.isDone } }),
+                      );
+                  }
+                : undefined
+            }
             members={listMembers}
             shared={active.memberIds.length > 0}
             pending={data.create.isPending || data.update.isPending || data.remove.isPending}
