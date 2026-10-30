@@ -15,7 +15,7 @@ for (const native of [false, true]) {
           data: {
             familyName: 'Podzadania',
             displayName: 'Ania',
-            email: `checklist-${native}-${info.project.name}@example.com`,
+            email: `checklist-${native}-${info.project.name}-${info.repeatEachIndex}@example.com`,
             password: 'password123',
           },
         })
@@ -116,16 +116,23 @@ for (const native of [false, true]) {
     page.once('dialog', (dialog) => dialog.accept());
     await form.getByRole('button', { name: 'Ukończ zadanie', exact: true }).click();
     await form.getByRole('button', { name: 'Oznacz zadanie jako niewykonane' }).click();
+    // The optimistic task state precedes synchronization, which disables the parent fields.
+    await expect(form.getByRole('button', { name: 'Ukończ zadanie', exact: true })).toBeEnabled();
     await expect(section.getByRole('checkbox', { name: 'Lustra', exact: true })).not.toBeChecked();
 
     // The same guard protects the parent draft even after a checklist operation.
     await form.getByLabel('Notatka', { exact: true }).fill('Szkic rodzica');
+    await expect(form.getByLabel('Notatka', { exact: true })).toHaveValue('Szkic rodzica');
     await section.getByRole('checkbox', { name: 'Lustra', exact: true }).click();
     await expect(section.getByText('Podzadania: 2 z 2')).toBeVisible();
     await expect(form.getByRole('button', { name: 'Anuluj', exact: true })).toBeEnabled();
-    page.once('dialog', (dialog) => dialog.dismiss());
-    if (native) await page.evaluate(() => (window as unknown as { checklistBack: () => void }).checklistBack());
-    else await form.getByRole('button', { name: 'Anuluj', exact: true }).click();
+    const discard = page.waitForEvent('dialog').then((dialog) => dialog.dismiss());
+    await Promise.all([
+      discard,
+      native
+        ? page.evaluate(() => (window as unknown as { checklistBack: () => void }).checklistBack())
+        : form.getByRole('button', { name: 'Anuluj', exact: true }).click(),
+    ]);
     await expect(form).toBeVisible();
     await expect(form.getByLabel('Notatka', { exact: true })).toHaveValue('Szkic rodzica');
     await form.getByRole('button', { name: 'Zapisz', exact: true }).click();
