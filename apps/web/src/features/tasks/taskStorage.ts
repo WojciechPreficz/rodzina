@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { operationSchema, snapshotSchema, discardSchema, classify, TASK_STORAGE_KEY } from './taskSchemas.js';
+import {
+  operationSchema,
+  snapshotSchema,
+  discardSchema,
+  classify,
+  taskOrderingKeys,
+  TASK_STORAGE_KEY,
+} from './taskSchemas.js';
 import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/registry.js';
 import { registerRecordMigration } from '../../offline/recordMigration.js';
 import { accountToken, assertContext, transact, requestValue, CLEAR_PENDING_KEY } from '../../offline/database.js';
@@ -30,7 +37,13 @@ function parse(value: unknown): TaskData {
       ([id, tasks]) =>
         (lists && !lists.some((list) => list.id === id)) ||
         new Set(tasks.map((task) => task.id)).size !== tasks.length ||
-        tasks.some((task) => task.listId !== id),
+        tasks.some(
+          (task) =>
+            task.listId !== id ||
+            (task.checklist &&
+              (new Set(task.checklist.map((item) => item.id)).size !== task.checklist.length ||
+                task.checklist.some((item) => item.taskId !== task.id))),
+        ),
     ) ||
     new Set(data.operations.map((op) => op.id)).size !== data.operations.length
   )
@@ -156,8 +169,10 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
   for (const old of existing)
     if (!classified.some((op) => op.id === old.operationId)) store.delete([data.account, old.operationId]);
   const previous = new Map<string, string>();
+  const parents = new Map<string, string>();
   for (const op of classified) {
     const key = `tasks:list:${op.listId}:task:${op.taskId}`;
+    const keys = taskOrderingKeys(op);
     const old = existing.find((entry) => entry.operationId === op.id);
     if (old) {
       const updated = {
@@ -174,13 +189,19 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
         operationId: op.id,
         submittedAt: op.submittedAt,
         entityId: op.taskId,
-        orderingKeys: [key],
+        orderingKeys: keys,
         payload: { listId: op.listId, taskId: op.taskId, change: op.change },
-        dependsOn: previous.has(key) ? [previous.get(key)!] : [],
+        dependsOn: [
+          ...new Set([
+            ...keys.flatMap((value) => (previous.has(value) ? [previous.get(value)!] : [])),
+            ...(parents.has(key) ? [parents.get(key)!] : []),
+          ]),
+        ],
         ...(op.status === 'needs-review' ? { reviewReason: op.reason ?? 'expired' } : {}),
       });
     }
-    previous.set(key, op.id);
+    keys.forEach((value) => previous.set(value, op.id));
+    if (op.change.type === 'create') parents.set(key, op.id);
   }
   // The outbox is the only durable journal after takeover. Cache holds only the base.
   await putTaskBaseTransaction(tx, data);

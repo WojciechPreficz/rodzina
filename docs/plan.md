@@ -208,8 +208,11 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
   Grupowe odczyty bez N+1, zgodność wcześniejszego APK i wersjonowanie
   konfliktów treści/kolejności z niezależnym odhaczaniem. Odbiór: testy API,
   migracji, uprawnień, limitów, retry i zgodności, release:smoke i końcowe CI.
-- **S.2 (#61): planowane.** Trwały zapis offline i synchronizacja w istniejącym
+- **S.2 (#61): zweryfikowane lokalnie, oczekuje na CI.** Trwały zapis offline i synchronizacja w istniejącym
   IndexedDB i wspólnym outboxie, także dla lokalnie utworzonego rodzica.
+  CRUD, odhaczanie i kolejność checklist, projekcja postępu, nieznane dane
+  starszego cache, konflikty wersji i atomowe potwierdzenie bez utraty pending.
+  Bez interfejsu checklisty (S.3) i końcowego odbioru modułu (S.4).
 - **S.3 (#62): planowane.** Interfejs checklisty, postęp i świadome ukończenie
   rodzica z ostrzeżeniem o niewykonanych krokach.
 - **S.4 (#63): planowane.** Odbiór WWW/APK, dwa urządzenia, restart offline,

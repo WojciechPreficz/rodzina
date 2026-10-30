@@ -1,4 +1,4 @@
-import type { Task, TaskList } from '@rodzina/shared';
+import { taskChecklistResponseSchema, taskSchema, type TaskList } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
 import type { SyncAdapter } from '../../offline/sync.js';
 import { readTaskTransaction, putTaskTransaction, putTaskBaseTransaction, taskOperation } from './taskStorage.js';
@@ -26,16 +26,23 @@ export function taskAdapter(
     },
     send: async (operation, signal) => {
       const op = taskOperation(operation);
+      const change = op.change;
+      const checklist = change.type.startsWith('checklist-');
       const path =
         op.change.type === 'create'
           ? `/api/tasks/lists/${encodeURIComponent(op.listId)}/tasks`
-          : `/api/tasks/${encodeURIComponent(op.taskId)}`;
+          : `/api/tasks/${encodeURIComponent(op.taskId)}${checklist ? '/checklist' : ''}${change.type === 'checklist-order' ? '/order' : 'itemId' in change ? `/${encodeURIComponent(change.itemId)}` : ''}`;
       try {
         return await transport(
           `${path}?operationId=${op.id}&actorId=${encodeURIComponent(account.split(':')[1]!)}${op.change.type === 'create' ? `&taskId=${op.taskId}` : ''}`,
           {
             signal,
-            method: op.change.type === 'create' ? 'POST' : op.change.type === 'update' ? 'PATCH' : 'DELETE',
+            method:
+              change.type === 'create' || change.type === 'checklist-create'
+                ? 'POST'
+                : change.type === 'remove' || change.type === 'checklist-remove'
+                  ? 'DELETE'
+                  : 'PATCH',
             ...(op.change.type === 'remove' ? {} : { body: JSON.stringify(op.change.data) }),
           },
         );
@@ -46,6 +53,16 @@ export function taskAdapter(
             if (!signal.aborted) hideList?.(op.listId);
             throw new ApiRequestError(revokedTaskText, 403, 'TASK_LIST_REVOKED');
           }
+          if (checklist && error.status === 404) {
+            // A missing item is not evidence that its parent was deleted.
+            try {
+              await transport(`/api/tasks/${encodeURIComponent(op.taskId)}/checklist`, { signal });
+            } catch (parentError) {
+              if (parentError instanceof ApiRequestError && parentError.status === 404)
+                throw new ApiRequestError('Zadanie zostało usunięte.', 404, 'TASK_PARENT_DELETED');
+              throw parentError;
+            }
+          }
         }
         throw error;
       }
@@ -53,12 +70,24 @@ export function taskAdapter(
     reconcile: async (tx, operation, response) => {
       const data = await readTaskTransaction(tx, account);
       const op = taskOperation(operation);
-      const result = response as { task?: Task };
       const tasks = data.snapshot.items[op.listId];
-      if (tasks)
-        data.snapshot.items[op.listId] = result.task
-          ? [...tasks.filter((task) => task.id !== op.taskId), result.task]
-          : tasks.filter((task) => task.id !== op.taskId);
+      if (op.change.type.startsWith('checklist-')) {
+        const result = taskChecklistResponseSchema.parse(response);
+        if (tasks)
+          data.snapshot.items[op.listId] = tasks.map((task) =>
+            task.id === op.taskId
+              ? { ...task, checklist: result.items, checklistOrderVersion: result.orderVersion }
+              : task,
+          );
+      } else if (tasks) {
+        data.snapshot.items[op.listId] =
+          op.change.type === 'remove'
+            ? tasks.filter((task) => task.id !== op.taskId)
+            : [
+                ...tasks.filter((task) => task.id !== op.taskId),
+                taskSchema.parse((response as { task: unknown }).task),
+              ];
+      }
       await putTaskBaseTransaction(tx, data);
     },
     invalidateAccess: async (tx, operation, error) => {
@@ -74,7 +103,10 @@ export function taskAdapter(
           Object.entries(data.discards).filter(([, entry]) => entry.listId !== op.listId),
         );
         data.rejection = revokedTaskText;
-      } else if (error.status === 404) {
+      } else if (
+        error.status === 404 &&
+        (!op.change.type.startsWith('checklist-') || error.code === 'TASK_PARENT_DELETED')
+      ) {
         data.snapshot.items[op.listId] = data.snapshot.items[op.listId]?.filter((task) => task.id !== op.taskId) ?? [];
       }
       await putTaskTransaction(tx, data);

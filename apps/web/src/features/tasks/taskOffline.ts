@@ -12,6 +12,8 @@ import { apiFetch, ApiRequestError } from '../../api.js';
 import { joinSync } from '../../offline/sync.js';
 import { taskAdapter, revokedTaskText } from './taskAdapter.js';
 import { classify, operationSchema, type TaskOperation, type Snapshot } from './taskSchemas.js';
+import { projectChecklist, unknownChecklistText } from './taskChecklistOffline.js';
+export { checklistProgress } from './taskChecklistOffline.js';
 export { TASK_STORAGE_KEY, type TaskOperation } from './taskSchemas.js';
 
 export const taskOfflineText = {
@@ -115,10 +117,10 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
     emit({ account: '', items: {}, pending: [], syncing: false });
     if (removeStored && account) return clearTaskData(account);
   }
-  function project(): TaskOfflineState {
-    const items = Object.fromEntries(Object.entries(state.items).map(([id, tasks]) => [id, [...tasks]]));
-    const userId = state.account.split(':')[1]!;
-    const pending = classify(state.pending);
+  function project(source = state): TaskOfflineState {
+    const items = Object.fromEntries(Object.entries(source.items).map(([id, tasks]) => [id, [...tasks]]));
+    const userId = source.account.split(':')[1]!;
+    const pending = classify(source.pending);
     for (const op of pending) {
       if (op.status === 'needs-review') continue;
       const tasks = items[op.listId];
@@ -142,8 +144,10 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
             createdBy: userId,
             createdAt: op.submittedAt,
             updatedAt: op.submittedAt,
+            checklist: [],
+            checklistOrderVersion: 0,
           });
-      } else {
+      } else if (op.change.type === 'update') {
         const data = Object.fromEntries(
           Object.entries(op.change.data).filter(([, value]) => value !== undefined),
         ) as Partial<Task>;
@@ -160,13 +164,22 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
                 updatedAt: op.submittedAt,
               },
         );
+      } else {
+        items[op.listId] = tasks.map((task) => {
+          if (task.id !== op.taskId) return task;
+          try {
+            return projectChecklist(task, op, userId, false);
+          } catch {
+            return task;
+          } // Never resurrect a missing parent/item or invent an unknown checklist.
+        });
       }
     }
     return {
-      ...state,
+      ...source,
       pending,
       items,
-      lists: state.lists?.map((list) => ({
+      lists: source.lists?.map((list) => ({
         ...list,
         openTaskCount: items[list.id]?.filter((task) => !task.isDone).length ?? list.openTaskCount,
       })),
@@ -181,20 +194,31 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
       if (!data.snapshot.lists?.some((list) => list.id === listId) || !data.snapshot.items[listId])
         throw new Error(taskOfflineText.empty);
       const operations = classify(data.operations);
-      if (operations.some((op) => op.listId === listId && op.taskId === taskId && op.status === 'needs-review'))
+      const candidate = operationSchema.parse({
+        id: crypto.randomUUID(),
+        submittedAt: Math.max(Date.now(), (operations.at(-1)?.submittedAt ?? 0) + 1),
+        listId,
+        taskId,
+        change,
+      });
+      if (
+        classify([...operations, candidate]).at(-1)?.status === 'needs-review' ||
+        (!change.type.startsWith('checklist-') &&
+          operations.some((op) => op.listId === listId && op.taskId === taskId && op.status === 'needs-review'))
+      )
         throw new Error(taskOfflineText.blocked);
       if (Object.values(data.discards).some((entry) => entry.listId === listId && entry.requiresRefresh))
         throw new Error('Po odrzuceniu zmian połącz się z internetem i odśwież listę przed nowym zapisem.');
-      data.operations = [
-        ...operations,
-        operationSchema.parse({
-          id: crypto.randomUUID(),
-          submittedAt: Math.max(Date.now(), (operations.at(-1)?.submittedAt ?? 0) + 1),
-          listId,
-          taskId,
-          change,
-        }),
-      ];
+      if (change.type.startsWith('checklist-')) {
+        const task = project({ ...data.snapshot, pending: operations, syncing: false }).items[listId]?.find(
+          (task) => task.id === taskId,
+        );
+        if (!task) throw new Error('Zadanie nie istnieje.');
+        if (task.checklist === undefined || task.checklistOrderVersion === undefined)
+          throw new Error(unknownChecklistText);
+        projectChecklist(task, candidate, account.split(':')[1]!);
+      }
+      data.operations = [...operations, candidate];
     });
     current(captured);
     emit({ ...state, ...result.snapshot, pending: result.operations, error: undefined });
@@ -208,7 +232,11 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
     const result = await updateTaskData(state.account, (data) => {
       const operations = classify(data.operations);
       const first = operations.find((op) => op.id === operationIds[0]);
-      const chain = first && operations.filter((op) => op.listId === first.listId && op.taskId === first.taskId);
+      const chain =
+        first &&
+        operations.filter(
+          (op) => op.listId === first.listId && op.taskId === first.taskId && op.status === 'needs-review',
+        );
       if (
         !chain?.length ||
         chain.some((op) => op.status !== 'needs-review') ||
