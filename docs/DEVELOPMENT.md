@@ -33,10 +33,17 @@ ISO, DST, opóźniona synchronizacja, anomalie zegara, granica końca i unikalno
 wystąpień. Testy modules/tasks/recurrence sprawdzają C.2: konfigurację,
 wykonanie z dwóch urządzeń, retry, historię, pominięcie, zatrzymanie,
 cofnięcie i konflikty, anomalie czasu, uprawnienia oraz przypomnienia.
-Migracje 0028–0029 wymagają builda i release:smoke. C.2 nie zmienia UI
-ani transportu Androida; próby interfejsu 390/1280 px i fizycznego APK dla
-cykliczności pozostają do wykonania po C.4, wraz z odbiorem dwóch urządzeń,
-restartu offline, checklist i alarmów. Końcowe CI pozostaje do potwierdzenia.
+Migracje 0028–0029 wymagają builda i release:smoke. C.3 sprawdzają testy
+taskRecurrenceOffline, taskStorage i wspólnego outboxa: trwały czas wykonania,
+restart, retry, utrata odpowiedzi/snapshotu, stara kolejka, wersje po edycjach,
+cofnięcie, konflikty, wygaśnięcie, dostęp i błędy pamięci. Headless Playwright
+task-recurrence-offline sprawdza wykonanie i restart offline przy 390/1280 px
+dla WWW i transportu Androida oraz historię z rzeczywistym czasem wykonania.
+Test transportu nie zastępuje fizycznego APK. Do odbioru pozostają fizyczny
+restart offline i uzgodnienie na dwóch urządzeniach, zatrzymanie/usunięcie
+serii na drugim urządzeniu, alarmy pending i po synchronizacji, utrata dostępu
+i zmiana konta. Pełny odbiór UI reguł, checklist kolejnych wystąpień i zgodności
+starszego APK należy do C.4. Końcowe CI pozostaje do potwierdzenia.
 
 ## Android lokalnie
 

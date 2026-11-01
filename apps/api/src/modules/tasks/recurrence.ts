@@ -318,10 +318,16 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
     patch(familyId: string, actorId: string, previous: TaskRow, updated: TaskRow, data: PatchTask) {
       const current = occurrence(previous.id);
       if (!current) {
-        if (data.expectedOccurrenceVersion !== undefined || data.closedAt !== undefined) conflict();
+        if (
+          data.expectedOccurrenceVersion !== undefined ||
+          data.expectedSeriesId !== undefined ||
+          data.closedAt !== undefined
+        )
+          conflict();
         return;
       }
       const series = getSeries(familyId, actorId, current.seriesId);
+      if (data.expectedSeriesId !== undefined && data.expectedSeriesId !== current.seriesId) conflict();
       if (data.expectedOccurrenceVersion !== undefined)
         checkVersions(series, current, {
           expectedVersion: data.expectedSeriesVersion!,
@@ -332,7 +338,10 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
       else if (data.isDone === false && current.state !== 'active') undo(familyId, actorId, previous);
       else if (
         Object.keys(data).some(
-          (key) => !['isDone', 'closedAt', 'expectedSeriesVersion', 'expectedOccurrenceVersion'].includes(key),
+          (key) =>
+            !['isDone', 'closedAt', 'expectedSeriesVersion', 'expectedOccurrenceVersion', 'expectedSeriesId'].includes(
+              key,
+            ),
         )
       )
         bumpTaskOccurrence(database, previous.id);

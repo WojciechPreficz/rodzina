@@ -36,6 +36,7 @@ import { isAndroid } from '../../platform.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
 import './tasks.css';
 import { TaskProgress } from './TaskProgress.js';
+import { TaskRecurrenceNotice } from './TaskRecurrenceNotice.js';
 import { confirmTaskCompletion } from './taskCompletion.js';
 
 const t = labels.tasksUi;
@@ -241,6 +242,7 @@ function TaskListPage() {
       {data.pendingCount > 0 && (
         <Alert>
           <Text>Zmiany oczekujące na wysłanie: {data.pendingCount}</Text>
+          <TaskRecurrenceNotice pending={data.pendingSuccessor} />
           {isAndroid() && data.pendingAlarms && <Text size="sm">{taskOfflineText.alarms}</Text>}
         </Alert>
       )}

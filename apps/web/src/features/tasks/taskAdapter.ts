@@ -1,4 +1,4 @@
-import { taskChecklistResponseSchema, taskSchema, type TaskList } from '@rodzina/shared';
+import { taskChecklistResponseSchema, taskSchema, taskSnapshotResponseSchema, type TaskList } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
 import type { SyncAdapter } from '../../offline/sync.js';
 import { readTaskTransaction, putTaskTransaction, putTaskBaseTransaction, taskOperation } from './taskStorage.js';
@@ -33,7 +33,7 @@ export function taskAdapter(
           ? `/api/tasks/lists/${encodeURIComponent(op.listId)}/tasks`
           : `/api/tasks/${encodeURIComponent(op.taskId)}${checklist ? '/checklist' : ''}${change.type === 'checklist-order' ? '/order' : 'itemId' in change ? `/${encodeURIComponent(change.itemId)}` : ''}`;
       try {
-        return await transport(
+        const response = await transport(
           `${path}?operationId=${op.id}&actorId=${encodeURIComponent(account.split(':')[1]!)}${op.change.type === 'create' ? `&taskId=${op.taskId}` : ''}`,
           {
             signal,
@@ -46,6 +46,17 @@ export function taskAdapter(
             ...(op.change.type === 'remove' ? {} : { body: JSON.stringify(op.change.data) }),
           },
         );
+        // A compatible API returns only the parent. Keep the operation pending
+        // until its successor and current access can be committed with its ACK.
+        if (
+          op.occurrence ||
+          change.type === 'remove' ||
+          (change.type === 'update' && change.data.isDone !== undefined)
+        ) {
+          const snapshot = taskSnapshotResponseSchema.parse(await transport('/api/tasks/snapshot', { signal }));
+          return { response, snapshot };
+        }
+        return response;
       } catch (error) {
         if (error instanceof ApiRequestError && [403, 404].includes(error.status)) {
           const { lists } = await transport<{ lists: TaskList[] }>('/api/tasks/lists', { signal });
@@ -70,6 +81,12 @@ export function taskAdapter(
     reconcile: async (tx, operation, response) => {
       const data = await readTaskTransaction(tx, account);
       const op = taskOperation(operation);
+      if (response && typeof response === 'object' && 'snapshot' in response) {
+        const snapshot = taskSnapshotResponseSchema.parse(response.snapshot);
+        data.snapshot = { account, lists: snapshot.lists, items: snapshot.items, syncedAt: Date.now() };
+        await putTaskBaseTransaction(tx, data);
+        return;
+      }
       const tasks = data.snapshot.items[op.listId];
       if (op.change.type.startsWith('checklist-')) {
         const result = taskChecklistResponseSchema.parse(response);

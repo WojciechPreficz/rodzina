@@ -13,10 +13,15 @@ const fieldNames: Record<string, string> = {
   isDone: 'Zrobione',
   reminders: 'Przypomnienia',
   position: 'Kolejność',
+  closedAt: 'Faktyczny czas wykonania',
 };
 function valueText(field: string, value: unknown, members: Member[], timezone: string): string {
   if (value === null || value === '') return 'Brak';
   if (typeof value === 'boolean') return value ? 'Tak' : 'Nie';
+  if (field === 'closedAt')
+    return new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short', timeZone: timezone }).format(
+      Number(value),
+    );
   if (field === 'assigneeId') return members.find((member) => member.id === value)?.displayName ?? 'Nieobecny domownik';
   if (field === 'reminders')
     return (
@@ -159,6 +164,10 @@ export function TaskReviewPanel({
                 op.change.type !== 'checklist-order' &&
                 op.change.type !== 'checklist-remove' &&
                 Object.entries(op.change.data)
+                  .filter(
+                    ([key]) =>
+                      !['expectedSeriesId', 'expectedSeriesVersion', 'expectedOccurrenceVersion'].includes(key),
+                  )
                   .filter(([key]) => !op.change.type.startsWith('checklist-') || ['title', 'isDone'].includes(key))
                   .map(([key, value]) => (
                     <Text key={key} style={{ whiteSpace: 'pre-wrap' }}>

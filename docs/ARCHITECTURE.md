@@ -199,8 +199,30 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Następca używa wzorca i jego odbiorcy. Względne wspólne przypomnienia
   dostają nowe UUID i przeliczony termin; absolutne i osobiste nie są kopiowane.
   Istniejący harmonogram i widok dzisiejszych zadań odczytują widoczne aktywne
-  wystąpienie bez crona ani workera. UI, outbox wykonania i wzorcowa checklista
-  kolejnych wystąpień należą do C.3–C.4.
+  wystąpienie bez crona ani workera. UI reguł i wzorcowa checklista kolejnych
+  wystąpień należą do C.4.
+  Wykonanie pobranego wystąpienia korzysta z istniejącego IndexedDB i outboxa.
+  Przy trwałym zapisie kolejka utrwala faktyczny czas UTC, tożsamość serii
+  i wystąpienia oraz ich wersje. PATCH wykonania/cofnięcia przekazuje także
+  opcjonalne expectedSeriesId; inna seria daje konflikt nawet przy zgodnych
+  numerach wersji. Retry nie podmienia czasu ani identyfikatora operacji.
+  Rozszerzenie magazynu jest addytywne, bez zmiany wersji 1; stare operacje
+  zachowują dotychczasowe żądania i semantykę czasu serwera.
+  Edycje treści i checklisty poprzedzające wykonanie uwzględniamy w wersji
+  wystąpienia i zależnościach kolejki. Offline nie generujemy następcy ani
+  jego alarmów; UI pokazuje „Kolejne zadanie po synchronizacji”. Cofnięcie
+  wykonania przed wysyłką przywraca lokalnie zadanie, a kolejka zachowuje
+  deterministyczne wykonanie i warunkowe cofnięcie na serwerze.
+  Po mutacji cyklicznej, zmianie wykonania lub usunięciu adapter pobiera pełny
+  snapshot, również gdy odpowiedź zgodnego API zawiera tylko rodzica.
+  Zapis snapshotu z następcą i potwierdzenie outboxa są jedną transakcją.
+  Błąd pobrania lub zapisu pozostawia operację do retry z tym samym ID;
+  odświeżenie w tle nie publikuje następcy przed potwierdzeniem wykonania.
+  Konflikty, anomalie czasu i wiek ponad 30 dni wymagają sprawdzenia;
+  dostęp sprawdzamy przed replay, a zmiana konta odrzuca spóźnione odpowiedzi.
+  Istniejący taskOperationBlocksAlarm wstrzymuje alarmy pending także po
+  restarcie i w stanie do sprawdzenia; uzgodnienie odświeża harmonogram.
+  Konfiguracja, pominięcie i zatrzymanie serii wymagają internetu.
 - Kontakty: jedna grupa na kontakt, jedna nieusuwalna grupa domyślna „Inne”
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.

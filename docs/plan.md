@@ -24,7 +24,8 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
 
 Zadania cykliczne C.1–C.2 (#65–#66): zweryfikowane lokalnie, oczekuje na CI.
-Offline, UI i odbiór cykliczności należą do kolejnych kroków C.3–C.4.
+Wykonanie offline C.3 (#67): zweryfikowane lokalnie, oczekuje na CI.
+UI reguł i końcowy odbiór cykliczności należą do C.4.
 
 Usuwanie kont domowników i całej rodziny: zweryfikowane lokalnie, oczekuje na CI.
 Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
@@ -242,10 +243,13 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
   warunkowe cofnięcie oraz względne przypomnienia wspólne. Obecne uprawnienia
   list również dla dzieci, izolacja rodzin i task_operations z kontrolą dostępu
   przed replay. Bez nowego crona ani workera.
-- **C.3 (#67): planowane.** Wykonanie pobranych wystąpień offline w istniejącym
+- **C.3 (#67): zweryfikowane lokalnie, oczekuje na CI.** Wykonanie pobranych wystąpień offline w istniejącym
   IndexedDB i outboxie. Faktyczny czas wykonania, retry do 30 dni, retencja
   odpowiedzi 90 dni, anomalie do sprawdzenia. Następca dopiero po synchronizacji;
-  bez drugiego silnika i bez generowania wystąpień offline.
+  bez drugiego silnika i bez generowania wystąpień offline. Stabilny czas UTC
+  i wersje wystąpienia w kolejce, zachowanie semantyki starej kolejki,
+  ponowne otwarcie w projekcji oraz atomowe uzgodnienie pełnego snapshotu
+  z potwierdzeniem outboxa. Konfiguracja, pominięcie i zatrzymanie tylko online.
 - **C.4 (#68): planowane.** UI reguł, podgląd terminu, historia i konflikty,
   wzorcowa checklista kopiowana z nowymi UUID i zerowym postępem. Próby WWW
   390/1280 px i fizycznego APK, dwa urządzenia, alarmy i zgodność starszego APK.

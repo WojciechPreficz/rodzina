@@ -170,6 +170,7 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
     if (!classified.some((op) => op.id === old.operationId)) store.delete([data.account, old.operationId]);
   const previous = new Map<string, string>();
   const parents = new Map<string, string>();
+  const previousTask = new Map<string, string>();
   for (const op of classified) {
     const key = `tasks:list:${op.listId}:task:${op.taskId}`;
     const keys = taskOrderingKeys(op);
@@ -178,7 +179,7 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
       const updated = {
         ...old,
         submittedAt: op.submittedAt,
-        payload: { listId: op.listId, taskId: op.taskId, change: op.change },
+        payload: { listId: op.listId, taskId: op.taskId, change: op.change, occurrence: op.occurrence },
         ...(op.status === 'needs-review' ? { status: 'needs-review', reviewReason: op.reason } : {}),
       };
       queueChanged ||= JSON.stringify(old) !== JSON.stringify(updated);
@@ -190,17 +191,19 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
         submittedAt: op.submittedAt,
         entityId: op.taskId,
         orderingKeys: keys,
-        payload: { listId: op.listId, taskId: op.taskId, change: op.change },
+        payload: { listId: op.listId, taskId: op.taskId, change: op.change, occurrence: op.occurrence },
         dependsOn: [
           ...new Set([
             ...keys.flatMap((value) => (previous.has(value) ? [previous.get(value)!] : [])),
             ...(parents.has(key) ? [parents.get(key)!] : []),
+            ...(op.occurrence && previousTask.has(key) ? [previousTask.get(key)!] : []),
           ]),
         ],
         ...(op.status === 'needs-review' ? { reviewReason: op.reason ?? 'expired' } : {}),
       });
     }
     keys.forEach((value) => previous.set(value, op.id));
+    previousTask.set(key, op.id);
     if (op.change.type === 'create') parents.set(key, op.id);
   }
   // The outbox is the only durable journal after takeover. Cache holds only the base.

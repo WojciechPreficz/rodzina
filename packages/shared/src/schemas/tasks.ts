@@ -55,6 +55,7 @@ export const patchTaskSchema = taskFieldsSchema
     closedAt: z.number().int().nonnegative().max(253402300799999),
     expectedOccurrenceVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     expectedSeriesVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    expectedSeriesId: z.string().uuid(),
   })
   .partial()
   .strict()

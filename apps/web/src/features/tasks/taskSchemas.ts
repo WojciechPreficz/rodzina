@@ -17,6 +17,14 @@ export const operationSchema = z.object({
   submittedAt: z.number(),
   listId: z.string(),
   taskId: z.string(),
+  occurrence: z
+    .object({
+      seriesId: z.string().uuid(),
+      sequence: z.number().int().nonnegative(),
+      version: z.number().int().nonnegative(),
+      seriesVersion: z.number().int().nonnegative(),
+    })
+    .optional(),
   status: z.enum(['pending', 'needs-review']).default('pending'),
   reason: z.enum(['expired', 'dependency', 'conflict', 'rejected']).optional(),
   change: z.discriminatedUnion('type', [
@@ -30,9 +38,11 @@ export const operationSchema = z.object({
   ]),
 });
 export type TaskOperation = z.infer<typeof operationSchema>;
-export function taskOrderingKeys(op: Pick<TaskOperation, 'listId' | 'taskId' | 'change'>): string[] {
+export function taskOrderingKeys(op: Pick<TaskOperation, 'listId' | 'taskId' | 'change' | 'occurrence'>): string[] {
   const base = `tasks:list:${op.listId}:task:${op.taskId}`;
   const change = op.change;
+  // Checklist writes also bump the occurrence version on the server.
+  if (op.occurrence) return [base];
   if (change.type === 'checklist-order') return [`${base}:order`];
   if (change.type === 'checklist-create')
     return [`${base}:item:${change.data.id}:title`, `${base}:item:${change.data.id}:done`, `${base}:order`];

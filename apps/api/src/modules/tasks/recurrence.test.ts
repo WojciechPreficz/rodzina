@@ -191,6 +191,29 @@ describe('task recurrence API', () => {
     expect(await history(id)).toHaveLength(1);
   });
 
+  it('rejects a different series identity even when both versions match', async () => {
+    const id = await configure();
+    const result = await complete(taskId, {
+      expectedSeriesId: randomUUID(),
+      expectedSeriesVersion: 0,
+      expectedOccurrenceVersion: 0,
+      closedAt: now,
+    });
+    expect(result.statusCode).toBe(409);
+    expect(await history(id)).toEqual([]);
+    expect(await tasks()).toHaveLength(1);
+    expect(
+      (
+        await complete(taskId, {
+          expectedSeriesId: id,
+          expectedSeriesVersion: 0,
+          expectedOccurrenceVersion: 0,
+          closedAt: now,
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
   it('distinguishes one-off edits and this-and-future configuration, and rejects pending stale completion', async () => {
     const id = await configure();
     expect(

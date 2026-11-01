@@ -9,10 +9,12 @@ import {
 } from '../../offline/database.js';
 import { readOperations } from '../../offline/outbox.js';
 import { apiFetch, ApiRequestError } from '../../api.js';
+import { isOffline } from '../../connectivity.js';
 import { joinSync } from '../../offline/sync.js';
 import { taskAdapter, revokedTaskText } from './taskAdapter.js';
 import { classify, operationSchema, type TaskOperation, type Snapshot } from './taskSchemas.js';
 import { projectChecklist, unknownChecklistText } from './taskChecklistOffline.js';
+import { projectTaskOccurrence } from './taskRecurrenceOffline.js';
 export { checklistProgress } from './taskChecklistOffline.js';
 export { TASK_STORAGE_KEY, type TaskOperation } from './taskSchemas.js';
 
@@ -148,8 +150,13 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
             checklistOrderVersion: 0,
           });
       } else if (op.change.type === 'update') {
+        const closedAt = op.change.data.closedAt ?? op.submittedAt;
         const data = Object.fromEntries(
-          Object.entries(op.change.data).filter(([, value]) => value !== undefined),
+          Object.entries(op.change.data).filter(
+            ([key, value]) =>
+              value !== undefined &&
+              !['closedAt', 'expectedSeriesId', 'expectedSeriesVersion', 'expectedOccurrenceVersion'].includes(key),
+          ),
         ) as Partial<Task>;
         items[op.listId] = tasks.map((task) =>
           task.id !== op.taskId
@@ -160,7 +167,7 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
                 reminders: task.reminders,
                 ...(data.isDone === undefined || data.isDone === task.isDone
                   ? {}
-                  : { doneBy: data.isDone ? userId : null, doneAt: data.isDone ? op.submittedAt : null }),
+                  : { doneBy: data.isDone ? userId : null, doneAt: data.isDone ? closedAt : null }),
                 updatedAt: op.submittedAt,
               },
         );
@@ -174,6 +181,15 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
           } // Never resurrect a missing parent/item or invent an unknown checklist.
         });
       }
+      items[op.listId] = items[op.listId]!.map((task) =>
+        task.id === op.taskId ? projectTaskOccurrence(task, op, userId) : task,
+      );
+      if (op.occurrence && op.change.type === 'update' && op.change.data.isDone === false)
+        items[op.listId] = items[op.listId]!.filter(
+          (task) =>
+            task.recurrence?.seriesId !== op.occurrence!.seriesId ||
+            task.recurrence.sequence <= op.occurrence!.sequence,
+        );
     }
     return {
       ...source,
@@ -194,11 +210,47 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
       if (!data.snapshot.lists?.some((list) => list.id === listId) || !data.snapshot.items[listId])
         throw new Error(taskOfflineText.empty);
       const operations = classify(data.operations);
+      const task = project({ ...data.snapshot, pending: operations, syncing: false }).items[listId]?.find(
+        (task) => task.id === taskId,
+      );
+      const recurrence = task?.recurrence;
+      if (change.type === 'remove' && recurrence?.state === 'active' && isOffline())
+        throw new Error('Pominięcie wystąpienia zadania cyklicznego wymaga internetu.');
+      if (
+        recurrence &&
+        recurrence.seriesVersion === undefined &&
+        change.type === 'update' &&
+        change.data.isDone !== undefined
+      )
+        throw new Error('Połącz się z internetem, aby pobrać wersję serii zadania.');
+      const occurrence =
+        recurrence?.seriesVersion !== undefined
+          ? {
+              seriesId: recurrence.seriesId,
+              sequence: recurrence.sequence,
+              version: recurrence.version,
+              seriesVersion: recurrence.seriesVersion!,
+            }
+          : undefined;
+      const actualAt = Date.now();
+      if (change.type === 'update' && change.data.isDone !== undefined && occurrence) {
+        change = {
+          ...change,
+          data: {
+            ...change.data,
+            expectedSeriesVersion: occurrence.seriesVersion,
+            expectedSeriesId: occurrence.seriesId,
+            expectedOccurrenceVersion: occurrence.version,
+            ...(change.data.isDone ? { closedAt: actualAt } : {}),
+          },
+        };
+      }
       const candidate = operationSchema.parse({
         id: crypto.randomUUID(),
         submittedAt: Math.max(Date.now(), (operations.at(-1)?.submittedAt ?? 0) + 1),
         listId,
         taskId,
+        occurrence,
         change,
       });
       if (
@@ -363,6 +415,18 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
         const savedSnapshot = await updateTaskData(account, (data) => {
           current(captured);
           if (JSON.stringify(data.snapshot.items) !== before) return;
+          // An uncertain closure is reconciled by the sender with its ACK.
+          // A background refresh must not publish its successor ahead of that.
+          if (
+            data.operations.some(
+              (op) =>
+                op.status !== 'needs-review' &&
+                op.occurrence &&
+                op.change.type === 'update' &&
+                op.change.data.isDone !== undefined,
+            )
+          )
+            return;
           data.snapshot = { account, lists: snapshot.lists, items: snapshot.items, syncedAt: Date.now() };
           const allowed = new Set(snapshot.lists.map((list) => list.id));
           if (data.operations.some((op) => !allowed.has(op.listId))) data.rejection = revokedTaskText;

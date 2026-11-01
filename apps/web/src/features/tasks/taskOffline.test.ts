@@ -326,7 +326,7 @@ it.each(['auth', 'refresh', 'mutation'] as const)(
     f.request.mockImplementation(async (path, init) => {
       if (
         (phase === 'auth' && path === '/api/auth/me' && !init?.signal) ||
-        (phase === 'refresh' && path === '/api/tasks/snapshot') ||
+        (phase === 'refresh' && path === '/api/tasks/snapshot' && !init?.signal) ||
         (phase === 'mutation' && !!init?.method)
       )
         return new Promise((resolve) => {

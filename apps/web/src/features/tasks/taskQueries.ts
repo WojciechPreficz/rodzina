@@ -9,6 +9,7 @@ import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import { TASK_SIGNAL } from './taskStorage.js';
 import { useOfflineSyncStatus } from '../../offline/status.js';
 import { offlineTaskPatch, taskOfflineText, taskOperationBlocksAlarm, taskStore } from './taskOffline.js';
+import { pendingTaskSuccessor } from './taskRecurrenceOffline.js';
 
 export function useTaskData() {
   const { user, family } = useMe();
@@ -184,6 +185,7 @@ export function useTasks(listId?: string) {
     offline: data.offline,
     syncedAt: data.syncedAt,
     pendingCount: data.pending.filter((op) => op.status === 'pending').length,
+    pendingSuccessor: pendingTaskSuccessor(items ?? [], data.pending),
     reviewOperations: data.pending.filter((op) => op.status === 'needs-review'),
     reviewItems: data.items,
     discardReview: async (operationIds: string[]) => {

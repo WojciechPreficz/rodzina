@@ -64,6 +64,7 @@ export function createTaskListService(database: DatabaseConnection) {
         delete fields.closedAt;
         delete fields.expectedOccurrenceVersion;
         delete fields.expectedSeriesVersion;
+        delete fields.expectedSeriesId;
         const updated = repository.updateTask(task, actorId, fields);
         recurrence.patch(familyId, actorId, task, updated, data);
         const finalTask = getTask(familyId, actorId, id);
