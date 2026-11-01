@@ -63,17 +63,25 @@ test('filters events by clicking member buttons', async ({ page, baseURL }, test
   if (testInfo.project.name === 'phone') {
     const time = page.locator('.calendar-agenda-time').filter({ hasText: 'Całodniowe' });
     await expect(time).toBeVisible();
-    expect(
-      await time.evaluate((element) => {
-        const label = element.querySelector('b')!;
-        const range = document.createRange();
-        range.selectNodeContents(label);
-        return (
-          range.getClientRects().length === 1 &&
-          label.getBoundingClientRect().width <= element.getBoundingClientRect().width + 0.5
-        );
-      }),
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        time.evaluate((element) => {
+          const label = element.querySelector('b')!;
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          const rects = Array.from(range.getClientRects());
+          const bounds = range.getBoundingClientRect();
+          const column = element.getBoundingClientRect();
+          // Font fallback can split one line into multiple text rectangles.
+          return (
+            rects.length > 0 &&
+            Math.max(...rects.map((rect) => rect.top)) < Math.min(...rects.map((rect) => rect.bottom)) &&
+            bounds.left >= column.left - 0.5 &&
+            bounds.right <= column.right + 0.5
+          );
+        }),
+      )
+      .toBe(true);
   }
   const filters = page.getByRole('group', { name: 'Pokaż tylko', exact: true });
   const anna = filters.getByRole('button', { name: 'Anna', exact: true });
