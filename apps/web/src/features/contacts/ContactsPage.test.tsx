@@ -217,8 +217,29 @@ describe('contacts online', () => {
     expect(add).toHaveAttribute('data-block', 'true');
     fireEvent.click(add);
     const dialog = await screen.findByRole('dialog');
-    for (const label of ['Grupa', 'Opis relacji', 'Telefon', 'Adres'])
+    for (const label of ['Grupa', 'Opis relacji', 'Telefon', 'Adres', 'Data urodzin'])
       expect(within(dialog).getByLabelText(label)).toBeInTheDocument();
+  });
+  it('saves, displays, edits and clears birthdays without reminder settings', async () => {
+    setup();
+    await loaded();
+    fireEvent.click(screen.getByRole('button', { name: '＋ Dodaj kontakt' }));
+    fireEvent.change(screen.getByLabelText(/Imię i nazwisko lub nazwa/), { target: { value: 'Anna' } });
+    fireEvent.change(screen.getByLabelText('Data urodzin'), { target: { value: '1990-10-20' } });
+    expect(screen.getByText(/Przypomnienie dla wszystkich domowników/)).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    const contactButton = await screen.findByRole('button', { name: 'Szczegóły kontaktu: Anna' });
+    const row = within(contactButton.closest('article')!);
+    expect(row.getByText('Data urodzin: 20.10.1990')).toBeInTheDocument();
+    fireEvent.click(contactButton);
+    expect(within(await screen.findByRole('dialog')).getByText('Data urodzin: 20.10.1990')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edytuj' }));
+    expect(screen.getByLabelText('Data urodzin')).toHaveValue('1990-10-20');
+    fireEvent.change(screen.getByLabelText('Data urodzin'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() => expect(items.find((item) => item.name === 'Anna')?.birthday).toBeNull());
+    await waitFor(() => expect(row.queryByText(/Data urodzin:/)).not.toBeInTheDocument());
   });
   it('sorts Polish names, filters every optional field and telephone separators, and preserves full counts', async () => {
     setup([
@@ -333,7 +354,7 @@ describe('contacts online', () => {
     const input = within(form).getByLabelText(/Imię i nazwisko/);
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.submit(input.closest('form')!);
-    expect(await screen.findByText('Sprawdź nazwę i długość wpisanych danych.')).toBeInTheDocument();
+    expect(await screen.findByText('Sprawdź nazwę, datę urodzin i długość wpisanych danych.')).toBeInTheDocument();
     fail = 'Błąd zapisu';
     fireEvent.change(input, { target: { value: 'Anna' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Zapisz' }));

@@ -10,6 +10,7 @@ import { hashToken, hashPassword } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
+import { createInitialContactGroups } from '../contacts/repository.js';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
 const single = { kind: 'single', title: 'Basen', startDate: '2026-10-20', startTime: '17:00', durationMinutes: 60 };
@@ -99,6 +100,71 @@ describe('reminder schedule API', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     return reminderScheduleSchema.parse(response.json());
   }
+
+  async function birthdaySchedule(user = admin) {
+    const response = await request('GET', '/api/reminders/schedule?includeContacts=true', undefined, user);
+    expect(response.statusCode, response.body).toBe(200);
+    return reminderScheduleSchema.parse(response.json()).reminders;
+  }
+  async function birthday(date: string) {
+    createInitialContactGroups(database, familyId, admin.id, Date.now());
+    const response = await request('POST', '/api/contacts', { name: 'Anna', birthday: date });
+    expect(response.statusCode, response.body).toBe(201);
+    return response.json().contact.id as string;
+  }
+  it('automatically schedules annual birthdays for the whole family and updates or removes alarms', async () => {
+    const id = await birthday('1990-10-20');
+    const expected = {
+      sourceType: 'contact',
+      sourceId: id,
+      occurrenceDate: '2026-10-20',
+      fireAt: utc('2026-10-20', '09:00'),
+      body: 'Dziś urodziny obchodzi Anna.',
+      url: '/kontakty',
+    };
+    for (const user of [admin, member, child]) expect(await birthdaySchedule(user)).toMatchObject([expected]);
+    expect(await birthdaySchedule(outsider)).toEqual([]);
+    expect((await schedule()).reminders).toEqual([]);
+    const key = (await birthdaySchedule())[0]!.key;
+    expect((await birthdaySchedule())[0]!.key).toBe(key);
+    await request('PATCH', `/api/contacts/${id}`, { birthday: '1990-10-21', name: 'Ania' });
+    expect(await birthdaySchedule()).toMatchObject([
+      { occurrenceDate: '2026-10-21', body: 'Dziś urodziny obchodzi Ania.' },
+    ]);
+    await request('PATCH', `/api/contacts/${id}`, { birthday: null });
+    expect(await birthdaySchedule()).toEqual([]);
+    await request('PATCH', `/api/contacts/${id}`, { birthday: '1990-10-20' });
+    await request('DELETE', `/api/contacts/${id}`);
+    expect(await birthdaySchedule()).toEqual([]);
+  });
+  it('uses local 09:00, the next year and the schedule horizon without replaying past birthdays', async () => {
+    database.db
+      .update(schema.sessions)
+      .set({ expiresAt: utc('2029-01-01') })
+      .run();
+    await birthday('1990-01-01');
+    expect(await birthdaySchedule()).toMatchObject([
+      { occurrenceDate: '2027-01-01', fireAt: utc('2027-01-01', '09:00') },
+    ]);
+    vi.mocked(Date.now).mockReturnValue(utc('2027-01-01', '09:00'));
+    expect(await birthdaySchedule()).toHaveLength(1);
+    vi.mocked(Date.now).mockReturnValue(utc('2027-01-01', '09:01'));
+    expect(await birthdaySchedule()).toEqual([]);
+  });
+  it.each([
+    ['2027', '28'],
+    ['2028', '29'],
+  ])('handles February 29 in %s', async (year, day) => {
+    database.db
+      .update(schema.sessions)
+      .set({ expiresAt: utc('2029-01-01') })
+      .run();
+    vi.mocked(Date.now).mockReturnValue(utc(`${year}-02-01`, '12:00'));
+    await birthday('2000-02-29');
+    expect(await birthdaySchedule()).toMatchObject([
+      { occurrenceDate: `${year}-02-${day}`, fireAt: utc(`${year}-02-${day}`, '09:00') },
+    ]);
+  });
 
   it('includes shared and personal reminders only for current recipients and family', async () => {
     for (const audience of ['family', 'adults', 'participants', 'owner'])

@@ -382,8 +382,20 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 
 ## Przypomnienia
 
+Opcjonalna data urodzin kontaktu (`birthday`, YYYY-MM-DD) automatycznie dodaje
+do harmonogramu coroczne przypomnienie dla wszystkich domowników o 09:00
+w strefie rodziny. Nie ma konfiguracji przypomnienia. Dla 29 lutego w latach
+nieprzestępnych używamy 28 lutego. Alarmy wynikają z aktualnych kontaktów;
+zmiana daty lub usunięcie kontaktu usuwa poprzedni alarm po synchronizacji.
+Kliknięcie otwiera Kontakty. WWW służy do zapisu daty; alarm dostarcza Android.
+Data urodzin jest widoczna na liście kontaktów i w szczegółach, w formacie DD.MM.YYYY.
+Nowy klient pobiera źródła `contact` przez `includeContacts=true`, więc starsze
+APK zachowują dotychczasowy harmonogram. Stare żądania zapisu bez `birthday`
+nie zmieniają daty, a stare snapshoty offline mogą nie zawierać tego pola.
+
 Jedna tabela reminders i GET /api/reminders/schedule dla APK. Źródłem jest
-dokładnie jedno wydarzenie, zadanie albo dokument. Serwer wyznacza odbiorców
+dokładnie jedno wydarzenie, zadanie albo dokument; urodziny kontaktów są
+wyliczane bez osobnego rekordu w reminders. Serwer wyznacza odbiorców
 i terminy; Android zapisuje alarmy systemowe. Historyczne next_fire_at
 i last_sent_at nie sterują dostarczaniem APK.
 

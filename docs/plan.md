@@ -304,6 +304,15 @@ Domknięcie modułu wymaga C.4 i końcowego CI; deploy i APK są osobnymi operac
 
 ## Pozostałe warunki i pomysły
 
+- Urodziny kontaktów — jeden krok rozszerzenia fazy 9: opcjonalna data urodzin,
+  automatyczny coroczny alarm o 09:00 w dniu urodzin dla wszystkich domowników,
+  bez ustawień przypomnienia. Dla 29 lutego: 28 lutego w latach nieprzestępnych.
+  Zmiana/usunięcie daty aktualizuje harmonogram po synchronizacji. W zakresie:
+  migracja, zgodność starego APK, API, wspólny UI WWW/APK, testy i odbiór.
+  Poza zakresem: e-mail, Web Push i konfigurowanie godziny/wyprzedzenia.
+  Status: zweryfikowane lokalnie, oczekuje na CI. Testy headless 390/1280 px
+  obejmują WWW i transport Androida; odbiór ręczny i fizyczne APK do potwierdzenia.
+
 - R.8: sprawdzić wszystkie istniejące ekrany przy 390 i 1280 px oraz w APK,
   klawiaturę, fokus, kontrast, safe area i stany błędów. Potwierdzić aktualizację
   z zachowaniem danych; publikacja wymaga osobnego polecenia.

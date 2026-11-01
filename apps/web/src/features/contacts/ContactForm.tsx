@@ -37,15 +37,23 @@ export function ContactForm({
   const [relationship, setRelationship] = useState(contact?.relationship ?? '');
   const [phone, setPhone] = useState(contact?.phone ?? '');
   const [address, setAddress] = useState(contact?.address ?? '');
+  const [birthday, setBirthday] = useState(contact?.birthday ?? '');
   const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (disabled || pending) return;
     const result = groupOnly
       ? createContactGroupSchema.safeParse({ name })
-      : createContactSchema.safeParse({ name, groupId: selectedGroup, relationship, phone, address });
+      : createContactSchema.safeParse({
+          name,
+          groupId: selectedGroup,
+          relationship,
+          phone,
+          address,
+          birthday: birthday || null,
+        });
     if (!result.success) {
-      setError('Sprawdź nazwę i długość wpisanych danych.');
+      setError('Sprawdź nazwę, datę urodzin i długość wpisanych danych.');
       return;
     }
     setError('');
@@ -104,6 +112,13 @@ export function ContactForm({
                   maxLength={1000}
                   value={address}
                   onChange={(event) => setAddress(event.currentTarget.value)}
+                />
+                <TextInput
+                  label="Data urodzin"
+                  type="date"
+                  description="Przypomnienie dla wszystkich domowników co roku w dniu urodzin o 09:00."
+                  value={birthday}
+                  onChange={(event) => setBirthday(event.currentTarget.value)}
                 />
               </>
             )}

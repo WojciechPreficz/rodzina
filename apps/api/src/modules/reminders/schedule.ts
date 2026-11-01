@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import {
   computeNextFireAt,
+  localDateTimeToUtc,
   eventUrl,
   taskUrl,
   documentUrl,
@@ -9,7 +10,7 @@ import {
   type TimeReminder,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { users } from '../../db/schema.js';
+import { users, contacts } from '../../db/schema.js';
 import { createEventRepository } from '../events/repository.js';
 import { resolveRecipients } from './delivery.js';
 import { createReminderRepository } from './repository.js';
@@ -24,6 +25,7 @@ export function readReminderSchedule(
   includeTasks = false,
   includeDocuments = false,
   now = () => Date.now(),
+  includeContacts = false,
 ): ReminderSchedule {
   return database.db.transaction(() => {
     const generatedAt = now();
@@ -143,6 +145,32 @@ export function readReminderSchedule(
           body: `${document.label} — ważne do ${document.expiresOn.split('-').reverse().join('.')}`,
           url: documentUrl(document.id),
         });
+      }
+    }
+    if (includeContacts && members.some((member) => member.id === userId)) {
+      const year = Number(new Intl.DateTimeFormat('en', { timeZone: tz, year: 'numeric' }).format(generatedAt));
+      const birthdays = database.db.select().from(contacts).where(eq(contacts.familyId, familyId)).all();
+      for (const contact of birthdays) {
+        if (!contact.birthday) continue;
+        for (const occurrenceYear of [year, year + 1]) {
+          if (occurrenceYear < Number(contact.birthday.slice(0, 4))) continue;
+          let date = `${occurrenceYear}-${contact.birthday.slice(5)}`;
+          if (date.endsWith('-02-29') && new Date(`${date}T00:00:00Z`).getUTCMonth() !== 1)
+            date = `${occurrenceYear}-02-28`;
+          const fireAt = localDateTimeToUtc(date, '09:00', tz);
+          if (fireAt < generatedAt || fireAt > validUntil) continue;
+          reminders.push({
+            key: `contact:${contact.id}:birthday:${date}`,
+            reminderId: contact.id,
+            sourceType: 'contact',
+            sourceId: contact.id,
+            occurrenceDate: date,
+            fireAt,
+            title: 'Urodziny',
+            body: `Dziś urodziny obchodzi ${contact.name}.`,
+            url: '/kontakty',
+          });
+        }
       }
     }
     reminders.sort((a, b) => a.fireAt - b.fireAt || a.key.localeCompare(b.key));

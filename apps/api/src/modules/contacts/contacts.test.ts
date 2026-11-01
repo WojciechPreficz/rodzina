@@ -92,6 +92,21 @@ describe('contacts API', () => {
     await app?.close();
     database?.sqlite.close();
   });
+  it('saves, preserves with legacy patches, changes and clears birthdays', async () => {
+    const contact = await add({ birthday: '2000-02-29' });
+    expect(contact.birthday).toBe('2000-02-29');
+    expect((await request('PATCH', `/api/contacts/${contact.id}`, { phone: '123' })).json().contact.birthday).toBe(
+      '2000-02-29',
+    );
+    expect((await snapshot()).contacts[0]?.birthday).toBe('2000-02-29');
+    expect((await request('PATCH', `/api/contacts/${contact.id}`, { birthday: '2001-02-29' })).statusCode).toBe(400);
+    expect(
+      (await request('PATCH', `/api/contacts/${contact.id}`, { birthday: '1990-10-12' })).json().contact.birthday,
+    ).toBe('1990-10-12');
+    expect(
+      (await request('PATCH', `/api/contacts/${contact.id}`, { birthday: null })).json().contact.birthday,
+    ).toBeNull();
+  });
   it('creates initial groups transactionally when a new family registers', async () => {
     const response = await request('POST', '/api/auth/register-family', {
       familyName: 'Nowa rodzina',

@@ -14,6 +14,20 @@ const data = {
 };
 
 describe('contacts IndexedDB snapshot', () => {
+  it('keeps birthdays after an offline restart while accepting older snapshots without them', async () => {
+    const store = createContactsStore();
+    await store.activate(account);
+    await store.fetch(account, async () => ({
+      ...data,
+      contacts: data.contacts.map((contact) => ({ ...contact, birthday: '2000-02-29' })),
+    }));
+    await closeDatabase();
+    const restarted = createContactsStore();
+    await restarted.activate(account);
+    expect(restarted.snapshot().saved?.data.contacts[0]?.birthday).toBe('2000-02-29');
+    await restarted.fetch(account, async () => data);
+    expect(restarted.snapshot().saved?.data.contacts[0]?.birthday).toBeUndefined();
+  });
   it('restores complete data and its original download time after offline process restart', async () => {
     const store = createContactsStore();
     await store.activate(account);

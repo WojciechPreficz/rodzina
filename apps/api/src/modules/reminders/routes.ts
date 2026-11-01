@@ -24,6 +24,7 @@ export function registerReminderRoutes(app: FastifyInstance, database: DatabaseC
           .object({
             includeTasks: z.enum(['true', 'false']).optional(),
             includeDocuments: z.enum(['true', 'false']).optional(),
+            includeContacts: z.enum(['true', 'false']).optional(),
           })
           .strict(),
         request.query,
@@ -36,6 +37,8 @@ export function registerReminderRoutes(app: FastifyInstance, database: DatabaseC
           requireUser(request).id,
           query.includeTasks === 'true',
           query.includeDocuments === 'true',
+          undefined,
+          query.includeContacts === 'true',
         ),
       );
     });

@@ -171,6 +171,7 @@ export const contacts = sqliteTable(
     name: text('name').notNull(),
     address: text('address'),
     phone: text('phone'),
+    birthday: text('birthday'),
     relationship: text('relationship'),
     createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: integer('created_at').notNull(),

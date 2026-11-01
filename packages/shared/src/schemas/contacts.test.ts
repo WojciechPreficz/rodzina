@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { createContactSchema, patchContactSchema, createContactGroupSchema } from './contacts.js';
 
 describe('contact contracts', () => {
+  it('validates birthday dates and supports clearing them without changing older requests', () => {
+    expect(createContactSchema.parse({ name: 'Anna', birthday: '2000-02-29' }).birthday).toBe('2000-02-29');
+    expect(patchContactSchema.parse({ birthday: null })).toEqual({ birthday: null });
+    for (const birthday of ['2001-02-29', '2000-04-31', '', '29.02.2000'])
+      expect(createContactSchema.safeParse({ name: 'Anna', birthday }).success).toBe(false);
+  });
   it('accepts a name alone, trims fields and normalizes blank optional values', () => {
     expect(createContactSchema.parse({ name: ' Anna ' })).toEqual({ name: 'Anna' });
     expect(createContactSchema.parse({ name: 'Anna', address: ' \n ', phone: null, relationship: '' })).toEqual({

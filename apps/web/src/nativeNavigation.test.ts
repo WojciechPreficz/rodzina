@@ -82,6 +82,8 @@ it('rejects external URLs, backslashes, encoded escapes and control characters i
   expect(notificationPath(url)).toBe(url);
   expect(notificationPath('/wiecej')).toBeNull();
   expect(notificationPath('/dokumenty/document-1')).toBe('/dokumenty/document-1');
+  expect(notificationPath('/kontakty')).toBe('/kontakty');
+  expect(notificationPath('/kontakty?redirect=https://example.com')).toBeNull();
   for (const path of ['/dokumenty', '/dokumenty/document-1?evil=1', '/dokumenty/../wiecej', '/dokumenty/%2fid']) {
     expect(notificationPath(path)).toBeNull();
   }

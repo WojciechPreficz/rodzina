@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDateSchema } from './events.js';
 
 const optionalText = (max: number) =>
   z
@@ -12,6 +13,7 @@ const contactFields = z.object({
   groupId: z.string().uuid(),
   address: optionalText(1000),
   phone: optionalText(50),
+  birthday: calendarDateSchema.nullable().optional(),
   relationship: optionalText(120),
 });
 const metadata = {

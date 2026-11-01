@@ -27,6 +27,7 @@ import { contactInitials, contactPhoneHref, matchesContact, sortContacts } from 
 import './contacts.css';
 import { CONTACTS_SIGNAL, contactsStore } from './contactsOffline.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
+import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 
 type Editor = { kind: 'contact'; contact?: Contact } | { kind: 'group'; group?: ContactGroup };
 type Removal = { kind: 'contact'; item: Contact } | { kind: 'group'; item: ContactGroup };
@@ -94,7 +95,7 @@ export function ContactsPage() {
       return apiFetch(path, { method, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
     },
     onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: key });
+      await Promise.all([client.invalidateQueries({ queryKey: key }), refreshLocalSchedule(client)]);
     },
   });
   const openEditor = (value: Editor) => {
@@ -298,6 +299,11 @@ export function ContactsPage() {
                         {contact.address}
                       </Text>
                     )}
+                    {contact.birthday && (
+                      <Text size="sm" c="dimmed">
+                        Data urodzin: {contact.birthday.split('-').reverse().join('.')}
+                      </Text>
+                    )}
                   </div>
                 </article>
               ))}
@@ -347,6 +353,9 @@ export function ContactsPage() {
             {currentContact.relationship && <Text>{currentContact.relationship}</Text>}
             {currentContact.phone && <a href={contactPhoneHref(currentContact.phone)}>{currentContact.phone}</a>}
             {currentContact.address && <Text className="contact-address">{currentContact.address}</Text>}
+            {currentContact.birthday && (
+              <Text>Data urodzin: {currentContact.birthday.split('-').reverse().join('.')}</Text>
+            )}
             {canEdit && (
               <Group>
                 <Button disabled={!writable} onClick={() => openEditor({ kind: 'contact', contact: currentContact })}>

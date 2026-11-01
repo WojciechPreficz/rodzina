@@ -208,6 +208,13 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       otwiera zapisany podgląd. Zdalne odnowienie/usunięcie po sync anuluje
       lub zastępuje stary alarm. Wydarzenia: zmiana/anulowanie i podział serii
       nie pozostawiają duplikatów. Wymagane zgody powiadomień i alarmów.
+- [ ] Urodziny kontaktu: na WWW 390/1280 px i fizycznym APK zapisać datę,
+      zmienić ją i wyczyścić. Na dwóch kontach potwierdzić alarm w dniu
+      urodzin o 09:00 Europe/Warsaw, także offline po zamknięciu APK
+      i restarcie telefonu. Kliknięcie otwiera Kontakty. Po synchronizacji
+      zmiana/usunięcie daty lub kontaktu usuwa stary alarm, bez duplikatów.
+      Starsze wspierane APK zachowuje odczyt kontaktów, zapis bez zmiany daty
+      i dotychczasowe alarmy. Wymagane systemowe zgody powiadomień i alarmów.
 - [ ] Migracja pięciu magazynów: aktualizacja ze wspieranych źródeł, także
       pominięcie wydań, po zamknięciu starych instancji. Bez sieci dane i zmiany
       zakupów/zadań przetrwają zakończenie procesu; powrót sieci nie dubluje zapisów.
