@@ -32,6 +32,7 @@ export const taskSeriesTemplateSchema = z
     title: z.string().trim().min(1).max(200),
     notes: z.string().trim().max(10000).nullable(),
     assigneeId: z.string().uuid().nullable(),
+    checklist: z.array(z.string().trim().min(1).max(200)).max(100).optional(),
     reminders: z
       .array(sharedTaskReminderSchema)
       .max(20)

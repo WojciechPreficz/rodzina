@@ -39,7 +39,13 @@ for (const native of [false, true]) {
           timezone: 'Europe/Warsaw',
           endDate: null,
         },
-        template: { title: 'Podlej kwiaty', notes: null, assigneeId: null, reminders: [] },
+        template: {
+          title: 'Podlej kwiaty',
+          notes: null,
+          assigneeId: null,
+          reminders: [],
+          checklist: ['Napełnij konewkę', 'Podlej'],
+        },
       },
     });
     expect(configured.ok()).toBe(true);
@@ -82,6 +88,10 @@ for (const native of [false, true]) {
     await expect(article.getByRole('checkbox')).not.toBeChecked();
     const saved = await (await page.request.get(`/api/tasks/lists/${listId}/tasks?status=all`)).json();
     expect(saved.tasks).toHaveLength(2);
+    const successor = saved.tasks.find((entry: { isDone: boolean }) => !entry.isDone);
+    expect(successor.checklist.map((entry: { title: string }) => entry.title)).toEqual(['Napełnij konewkę', 'Podlej']);
+    expect(successor.checklist.every((entry: { isDone: boolean }) => !entry.isDone)).toBe(true);
+    await expect(article.getByText('Podzadania: 0 z 2')).toBeVisible();
     const closed = saved.tasks.find((entry: { id: string }) => entry.id === task.id);
     expect(closed.doneAt).toBeGreaterThanOrEqual(before);
     expect(closed.doneAt).toBeLessThanOrEqual(after);

@@ -8,7 +8,14 @@ import {
   type TaskSeriesTemplate,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { taskOccurrences, taskSeries, taskSeriesHistory, tasks, reminders as reminderRows } from '../../db/schema.js';
+import {
+  taskChecklistItems,
+  taskOccurrences,
+  taskSeries,
+  taskSeriesHistory,
+  tasks,
+  reminders as reminderRows,
+} from '../../db/schema.js';
 import { ApiError } from '../../http/errors.js';
 import { createTaskListRepository } from './repository.js';
 import { createReminderRepository } from '../reminders/repository.js';
@@ -139,7 +146,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
         assigneeId:
           assigneeId && (assigneeId === list.ownerId || list.memberIds.includes(assigneeId)) ? assigneeId : null,
       };
-      const { reminders: shared, ...fields } = template;
+      const { reminders: shared, checklist = [], ...fields } = template;
       const successor = repository.createTask(series.listId, actorId, {
         ...fields,
         dueDate: next.nextDate,
@@ -147,6 +154,19 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
       });
       successorId = successor.id;
       insertOccurrence(series, successor.id, current.sequence + 1, next.nextDate);
+      checklist.forEach((title, position) => {
+        db.insert(taskChecklistItems)
+          .values({
+            id: crypto.randomUUID(),
+            taskId: successor.id,
+            title,
+            position,
+            createdBy: actorId,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+      });
       reminders.saveTask(familyId, successor, actorId, shared, series.rule.timezone, now);
     }
     db.insert(taskSeriesHistory)
@@ -235,6 +255,14 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
           checkVersions(existing, active, data);
         } else if (data.expectedVersion !== 0 || data.expectedOccurrenceVersion !== 0) conflict();
         validateTemplate(familyId, actorId, target.listId, data.template);
+        // Older clients omit the checklist; preserve the stored template on edits.
+        const template = {
+          ...data.template,
+          checklist:
+            data.template.checklist ??
+            existing?.template.checklist ??
+            (repository.checklistMany([target.id]).get(target.id) ?? []).map((item) => item.title),
+        };
         const changedRule = !existing || JSON.stringify(existing.rule) !== JSON.stringify(data.rule);
         const date = changedRule ? firstTaskOccurrence(data.rule) : active!.plannedDate;
         if (!date) throw new ApiError(400, 'VALIDATION_ERROR', 'Reguła nie zawiera żadnego terminu.');
@@ -242,7 +270,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
         const seriesId = existing?.id ?? crypto.randomUUID();
         if (existing)
           db.update(taskSeries)
-            .set({ rule: data.rule, template: data.template, version: existing.version + 1, updatedAt: now })
+            .set({ rule: data.rule, template, version: existing.version + 1, updatedAt: now })
             .where(eq(taskSeries.id, id))
             .run();
         else
@@ -251,7 +279,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
               id: seriesId,
               listId: target.listId,
               rule: data.rule,
-              template: data.template,
+              template,
               createdBy: actorId,
               createdAt: now,
               updatedAt: now,
@@ -264,8 +292,14 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
             .where(eq(taskOccurrences.taskId, target.id))
             .run();
         else insertOccurrence(series, target.id, 0, date);
-        const { reminders: shared, ...fields } = data.template;
-        const updated = repository.updateTask(target, actorId, { ...fields, dueDate: date, dueTime: data.rule.time });
+        const { reminders: shared, title, notes, assigneeId } = template;
+        const updated = repository.updateTask(target, actorId, {
+          title,
+          notes,
+          assigneeId,
+          dueDate: date,
+          dueTime: data.rule.time,
+        });
         reminders.saveTask(familyId, updated, actorId, shared, data.rule.timezone, now);
         return read(familyId, actorId, seriesId);
       });

@@ -131,7 +131,7 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   służy do tego osobny przycisk lub dotychczasowe odhaczenie na liście.
   Niewykonane albo nieznane kroki wymagają potwierdzenia ukończenia rodzica;
   jego cofnięcie pozostawia checklistę bez zmian.
-- Cykliczność zadań (C.1–C.2): `task_series` przechowuje regułę
+- Cykliczność zadań (C.1–C.4): `task_series` przechowuje regułę
   kalendarzową (ze strefą), wzorcowe pola i wspólne względne przypomnienia,
   stan oraz wersję. `task_occurrences` wiąże widoczne zadanie z serią,
   numerem kolejności od zera, planowanym terminem, stanem
@@ -167,9 +167,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   `PATCH /api/tasks/series/:id` zmienia aktywne wystąpienie i przyszły wzorzec.
   Oba przyjmują `{ rule, template, expectedVersion, expectedOccurrenceVersion }`;
   przy tworzeniu obie wersje wynoszą 0. Wzorzec zawiera title, notes, assigneeId
-  i wyłącznie względne wspólne reminders. Zmiana reguły ustawia aktywny termin
+  i wyłącznie względne wspólne reminders oraz opcjonalną uporządkowaną tablicę
+  tytułów checklisty. Wzorzec jest zapisany w istniejącym JSON, bez migracji.
+  Przy dołączeniu do serii brak checklisty we wzorcu pobiera bieżące kroki;
+  przy edycji brak pola zachowuje wcześniejszy wzorzec (zgodność starszego klienta).
+  Zmiana reguły ustawia aktywny termin
   na `firstTaskOccurrence(rule)`; bez zmiany reguły zachowuje planowany termin.
-  Podgląd dat dla przyszłego UI korzysta z tych samych funkcji shared.
+  Podgląd dat w formularzu korzysta z tych samych funkcji shared.
   `GET /api/tasks/series/:id` zwraca serię, activeTaskId i occurrenceVersion,
   a `/history` — historię zamknięć i ich cofnięć. Dostęp dziedziczy listę,
   również dla dzieci. Cofnięcie udostępnienia lub usunięcie domownika czyści
@@ -199,8 +203,22 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Następca używa wzorca i jego odbiorcy. Względne wspólne przypomnienia
   dostają nowe UUID i przeliczony termin; absolutne i osobiste nie są kopiowane.
   Istniejący harmonogram i widok dzisiejszych zadań odczytują widoczne aktywne
-  wystąpienie bez crona ani workera. UI reguł i wzorcowa checklista kolejnych
-  wystąpień należą do C.4.
+  wystąpienie bez crona ani workera. Następca w tej samej transakcji otrzymuje
+  kroki wzorca z nowymi UUID, zerowymi wersjami i niewykonanym stanem.
+  Retry nie kopiuje kroków ponownie; historia i postęp poprzednika pozostają.
+  Formularz „Powtarzaj” konfiguruje oba tryby, interwał, dni, godzinę i koniec.
+  Pokazuje termin, przewidywanego następcę po zamknięciu teraz i pomijane daty
+  stałego rytmu (lista ograniczona do ośmiu dat z informacją o dalszych).
+  „Zapisz tylko to zadanie” nie zmienia wzorca; „Zapisz to i kolejne” zapisuje
+  pola formularza i regułę. Zastąpienie wzorcowej checklisty bieżącą wymaga
+  jawnego zaznaczenia. Nie zmienia to bieżących ani historycznych kroków.
+  Osobiste przypomnienia zapisuje się osobno przez zapis pojedynczego zadania;
+  stała data przypomnienia wspólnego blokuje zapis wzorca. Formularz udostępnia
+  historię, pominięcie i zatrzymanie online, z kontrolą wersji i komunikatem
+  konfliktu. Ponowienie żądania w otwartym formularzu zachowuje ID i czas.
+  Zmiana checklisty podnosi wersję wystąpienia, więc konfiguracja i wykonanie
+  na nieaktualnych danych nie nadpisują nowszych kroków. Lista i „Dziś”
+  oznaczają serię; zaległość i oczekiwanie na synchronizację są jawne.
   Wykonanie pobranego wystąpienia korzysta z istniejącego IndexedDB i outboxa.
   Przy trwałym zapisie kolejka utrwala faktyczny czas UTC, tożsamość serii
   i wystąpienia oraz ich wersje. PATCH wykonania/cofnięcia przekazuje także

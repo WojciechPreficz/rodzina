@@ -33,6 +33,7 @@ import { taskOfflineText } from './taskOffline.js';
 import type { Member } from '@rodzina/shared';
 import './tasks.css';
 import { TaskChecklist, type ChecklistChange } from './TaskChecklist.js';
+import { TaskRecurrenceEditor } from './TaskRecurrenceEditor.js';
 
 const t = labels.tasksUi;
 
@@ -332,6 +333,43 @@ function TaskEditor({
               </Stack>
             </Paper>
           </div>
+          <TaskRecurrenceEditor
+            task={task}
+            disabled={configurationOffline}
+            onDirty={navigation.changed}
+            personalChanged={
+              JSON.stringify(
+                reminders.filter((item) => item.audience === 'user').map((item) => reminderInputForSave(item)),
+              ) !== JSON.stringify(storedPersonal.current.map((item) => item.input))
+            }
+            template={{
+              title,
+              notes: notes.trim() || null,
+              assigneeId,
+              reminders: reminders
+                .filter((item) => item.audience !== 'user')
+                .map((item) => sharedTaskReminderSchema.parse(reminderInputForSave(item))),
+            }}
+            onBusy={setSaving}
+            onSaved={() => {
+              navigation.saved();
+              onCancel();
+            }}
+            prepare={async () => {
+              if (baseline.current) return baseline.current;
+              const input = createTaskSchema.parse({
+                title,
+                notes: notes.trim() || null,
+                assigneeId,
+                dueDate: dueDate || null,
+                dueTime: dueDate && dueTime ? dueTime : null,
+              });
+              const saved = await onSave(input, savedId.current);
+              savedId.current = saved.id;
+              baseline.current = saved;
+              return saved;
+            }}
+          />
           {checklistStatus && <Alert>{checklistStatus}</Alert>}
           <TaskChecklist
             task={task}
@@ -351,7 +389,7 @@ function TaskEditor({
               {t.cancel}
             </Button>
             <Button type="submit" loading={pending || saving}>
-              {t.save}
+              {task?.recurrence ? 'Zapisz tylko to zadanie' : t.save}
             </Button>
           </Group>
         </Stack>

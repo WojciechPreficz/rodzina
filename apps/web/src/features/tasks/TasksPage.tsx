@@ -203,6 +203,16 @@ function TaskListPage() {
             {task.title}
           </Text>
           <TaskProgress task={task} />
+          {task.recurrence && (
+            <Text size="sm" c="dimmed">
+              ↻ Seria ·{' '}
+              {task.recurrence.state === 'skipped'
+                ? 'Pominięto'
+                : task.recurrence.state === 'done'
+                  ? 'Wykonano'
+                  : 'Jedno aktywne wystąpienie'}
+            </Text>
+          )}
           {task.dueDate && (
             <Text size="sm" c={isTaskOverdue(task, family!.timezone) ? 'red.9' : 'dimmed'}>
               {t.due}: {task.dueDate.split('-').reverse().join('.')}

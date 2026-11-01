@@ -483,6 +483,9 @@ describe('task recurrence API', () => {
       { rule: { ...rule, interval: 0 } },
       { rule: { ...rule, timezone: 'UTC' } },
       { template: { ...config.template, assigneeId: outsider.id } },
+      { template: { ...config.template, checklist: Array.from({ length: 101 }, () => 'Step') } },
+      { template: { ...config.template, checklist: [' '] } },
+      { template: { ...config.template, checklist: ['x'.repeat(201)] } },
       { template: { ...config.template, reminders: [{ type: 'absolute', remindAt: now, audience: 'owner' }] } },
     ])
       expect((await write('POST', `/api/tasks/${taskId}/recurrence`, { ...config, ...fields })).statusCode).toBe(400);
@@ -524,5 +527,100 @@ describe('task recurrence API', () => {
       .where(eq(schema.reminders.taskId, successor.id))
       .run();
     expect((await reopen()).statusCode).toBe(200);
+  });
+
+  it('copies the ordered template once with fresh IDs and zero progress, preserving history and old clients', async () => {
+    const item = (await write('POST', `/api/tasks/${taskId}/checklist`, { id: randomUUID(), title: 'Water' })).json()
+      .items[0];
+    await write('PATCH', `/api/tasks/${taskId}/checklist/${item.id}`, { isDone: true, doneVersion: 0 });
+    const id = await configure();
+    expect((await series(id)).series.template.checklist).toEqual(['Water']);
+    await write('PATCH', `/api/tasks/${taskId}/checklist/${item.id}`, { title: 'Only this', version: 0 });
+    const operationId = randomUUID();
+    const first = await write('PATCH', `/api/tasks/${taskId}`, { isDone: true }, owner, operationId);
+    expect(first.statusCode, first.body).toBe(200);
+    expect((await write('PATCH', `/api/tasks/${taskId}`, { isDone: true }, owner, operationId)).body).toBe(first.body);
+    const next = (await tasks('open'))[0]!;
+    expect(next.checklist).toHaveLength(1);
+    expect(next.checklist![0]).toMatchObject({
+      title: 'Water',
+      isDone: false,
+      doneAt: null,
+      doneBy: null,
+      version: 0,
+      doneVersion: 0,
+    });
+    expect(next.checklist![0]!.id).not.toBe(item.id);
+    expect((await tasks()).find((entry) => entry.id === taskId)!.checklist![0]).toMatchObject({
+      title: 'Only this',
+      isDone: true,
+    });
+    expect(await history(id)).toHaveLength(1);
+    expect(database.db.select().from(schema.taskChecklistItems).all()).toHaveLength(2);
+    expect((await reopen()).statusCode).toBe(200);
+    expect(database.db.select().from(schema.taskChecklistItems).all()).toHaveLength(1);
+  });
+
+  it('updates the future checklist explicitly and rejects stale configuration and closure after checklist edits', async () => {
+    const id = await configure({ ...config, template: { ...config.template, checklist: ['Original template'] } });
+    const before = (await tasks('open'))[0]!;
+    await write('POST', `/api/tasks/${taskId}/checklist`, { id: randomUUID(), title: 'New step' });
+    const stale = {
+      ...config,
+      expectedOccurrenceVersion: before.recurrence!.version,
+      template: { ...config.template, checklist: ['Stale'] },
+    };
+    expect((await write('PATCH', `/api/tasks/series/${id}`, stale)).statusCode).toBe(409);
+    expect(
+      (
+        await complete(taskId, {
+          expectedSeriesVersion: 0,
+          expectedOccurrenceVersion: before.recurrence!.version,
+          closedAt: now,
+        })
+      ).statusCode,
+    ).toBe(409);
+    const current = (await tasks('open'))[0]!;
+    const updated = await write('PATCH', `/api/tasks/series/${id}`, {
+      ...config,
+      expectedOccurrenceVersion: current.recurrence!.version,
+      template: { ...config.template, checklist: ['New step', 'Second'] },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    // A supported older client omits checklist in a later template update.
+    const version = await series(id);
+    expect(
+      (
+        await write('PATCH', `/api/tasks/series/${id}`, {
+          ...config,
+          expectedVersion: version.series.version,
+          expectedOccurrenceVersion: version.occurrenceVersion,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await series(id)).series.template.checklist).toEqual(['New step', 'Second']);
+    await complete();
+    const next = (await tasks('open'))[0]!;
+    expect(next.checklist!.map((entry) => entry.title)).toEqual(['New step', 'Second']);
+    expect((await tasks()).find((entry) => entry.id === taskId)!.checklist!.map((entry) => entry.title)).toEqual([
+      'New step',
+    ]);
+  });
+
+  it('rolls back copied steps on failure and protects undo after successor checklist changes', async () => {
+    await configure({ ...config, template: { ...config.template, checklist: ['Step'] } });
+    database.sqlite.exec(
+      "CREATE TRIGGER fail_steps BEFORE INSERT ON task_checklist_items BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+    );
+    expect((await complete()).statusCode).toBe(500);
+    expect(await tasks()).toHaveLength(1);
+    expect((await tasks())[0]!.isDone).toBe(false);
+    expect(database.db.select().from(schema.taskSeriesHistory).all()).toHaveLength(0);
+    database.sqlite.exec('DROP TRIGGER fail_steps');
+    expect((await complete()).statusCode).toBe(200);
+    const next = (await tasks('open'))[0]!;
+    await write('PATCH', `/api/tasks/${next.id}/checklist/${next.checklist![0]!.id}`, { isDone: true, doneVersion: 0 });
+    expect((await reopen()).statusCode).toBe(409);
+    expect((await tasks('open'))[0]!.checklist![0]!.isDone).toBe(true);
   });
 });

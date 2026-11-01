@@ -69,6 +69,11 @@ export function TodayTasks() {
               {task.title}
             </Text>
             <TaskProgress task={task} />
+            {task.recurrence && (
+              <Text size="sm" c="dimmed">
+                ↻ Seria · jedno aktywne wystąpienie
+              </Text>
+            )}
             <Text size="sm" c={isTaskOverdue(task, family?.timezone ?? 'Europe/Warsaw') ? 'red' : 'dimmed'}>
               {task.dueDate?.split('-').reverse().join('.')}
               {task.dueTime ? `, ${task.dueTime}` : ''}

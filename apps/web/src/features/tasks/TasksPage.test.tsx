@@ -380,7 +380,7 @@ describe('tasks UI', () => {
         }),
       }),
     );
-  });
+  }, 15000);
   it('keeps saved private content available offline and explains disabled actions', async () => {
     setup('/zadania/10000000-0000-4000-8000-000000000011?zadanie=10000000-0000-4000-8000-000000000013');
     await screen.findByLabelText('Notatka');

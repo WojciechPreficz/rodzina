@@ -42,8 +42,50 @@ dla WWW i transportu Androida oraz historię z rzeczywistym czasem wykonania.
 Test transportu nie zastępuje fizycznego APK. Do odbioru pozostają fizyczny
 restart offline i uzgodnienie na dwóch urządzeniach, zatrzymanie/usunięcie
 serii na drugim urządzeniu, alarmy pending i po synchronizacji, utrata dostępu
-i zmiana konta. Pełny odbiór UI reguł, checklist kolejnych wystąpień i zgodności
-starszego APK należy do C.4. Końcowe CI pozostaje do potwierdzenia.
+i zmiana konta. C.4 sprawdzają testy TaskRecurrenceEditor, taskRecurrencePreview
+oraz API recurrence: formularz obu trybów, błędy, historia, wzorzec checklisty,
+nowe UUID i postęp 0/N, retry, atomowy rollback i konflikty wersji. Headless
+Playwright task-recurrence-ui sprawdza oba tryby, zakresy edycji, checklisty,
+historię, pominięcie i zatrzymanie przy 390/1280 px dla WWW i transportu Androida.
+Końcowe CI i poniższy odbiór ręczny pozostają do potwierdzenia.
+
+## Odbiór cykliczności C.4
+
+Uruchom npm run dev, a po zmianie shared uruchom je ponownie. W formularzu
+zadania wybierz „Powtarzaj”, początek i godzinę oraz „Utwórz serię”. Przy nowym
+zadaniu przycisk najpierw zapisuje rodzica; checklistę dodaj po ponownym otwarciu.
+Przy istniejącym zadaniu dołączenie do serii przejmuje jego checklistę.
+
+- [ ] Przy 390 i 1280 px sprawdź oba tryby, interwał 1–1000, tygodniowe dni,
+      koniec włącznie, datę i opcjonalną godzinę. Koniec przed początkiem blokuje
+      zapis. Sprawdź podgląd oraz 31 stycznia, 29 lutego i zmianę czasu.
+- [ ] Dodaj dwa kroki, zaznacz jeden i utwórz serię. Zmień nazwę i kroki tylko
+      tego zadania; następca nadal używa wzorca. Następnie wybierz „Użyj bieżącej
+      checklisty jako wzorca kolejnych zadań” i „Zapisz to i kolejne”. Wykonaj:
+      dokładnie jeden następca ma nową nazwę i checklistę 0/N z nowymi ID.
+      Postęp poprzednika pozostaje w ukończonym zadaniu.
+- [ ] Sprawdź serię na liście i w „Dziś”, zaległy termin bez stosu kopii,
+      pomijane daty rytmu, „Pomiń wystąpienie”, historię i „Zatrzymaj serię”.
+      Zatrzymane bieżące zadanie pozostaje jednorazowe. Cofnij wykonanie przed
+      edycją następcy, potem powtórz po jego edycji: drugi przypadek daje konflikt.
+- [ ] Na dwóch urządzeniach zmień regułę/checklistę i równolegle wykonaj zadanie;
+      sprawdź jawny konflikt oraz odświeżenie bez utraty kroków. Zweryfikuj dostęp
+      dziecka do udostępnionej listy, prywatne listy, cofnięcie udostępnienia,
+      wylogowanie i zmianę konta. Stary wspierany APK ma edytować i kończyć
+      wystąpienia bez usuwania serii, wzorca i checklist.
+- [ ] W fizycznym APK na dwóch urządzeniach sprawdź wykonanie online, potem
+      offline → wykonanie → zamknięcie procesu → otwarcie offline → online.
+      Przed synchronizacją brak następcy i jego alarmu; po niej dokładnie jeden
+      następca z poprawną datą i checklistą 0/N na obu urządzeniach. Konfiguracja,
+      pominięcie, zatrzymanie i pobranie historii offline są zablokowane.
+- [ ] Ustaw wspólne względne przypomnienie, odbierz rzeczywisty alarm następcy
+      po synchronizacji. Zmień termin, uruchom telefon ponownie i sprawdź nowy
+      alarm oraz brak alarmu ukończonego/usuniętego zadania. Potwierdź, że zamknięte
+      APK nie pobiera zmian z drugiego urządzenia; trzeba je otworzyć i uzgodnić.
+      Sprawdź klawiaturę, fokus, systemowy Wstecz i safe area formularza.
+
+Żadna z powyższych prób ręcznych i fizycznych nie jest potwierdzona przez
+testy automatyczne. Bez commita nie ma końcowego CI; deploy pozostaje osobny.
 
 ## Android lokalnie
 

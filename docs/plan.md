@@ -6,7 +6,7 @@ aplikacji jest w [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Statusy
 
-Stan dokumentacji na 30.10.2026. Brak potwierdzenia CI lub prób ręcznych
+Stan dokumentacji na 01.11.2026. Brak potwierdzenia CI lub prób ręcznych
 nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 
 | Zakres                                                        | Stan                                                                            | Pozostałe warunki                                                 |
@@ -25,7 +25,8 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 
 Zadania cykliczne C.1–C.2 (#65–#66): zweryfikowane lokalnie, oczekuje na CI.
 Wykonanie offline C.3 (#67): zweryfikowane lokalnie, oczekuje na CI.
-UI reguł i końcowy odbiór cykliczności należą do C.4.
+UI reguł i wzorcowe checklisty C.4 (#68): zweryfikowane lokalnie, oczekuje na CI.
+Odbiór ręczny, fizyczne APK, alarmy i zgodność starszego APK do potwierdzenia.
 
 Usuwanie kont domowników i całej rodziny: zweryfikowane lokalnie, oczekuje na CI.
 Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
@@ -250,9 +251,14 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
   i wersje wystąpienia w kolejce, zachowanie semantyki starej kolejki,
   ponowne otwarcie w projekcji oraz atomowe uzgodnienie pełnego snapshotu
   z potwierdzeniem outboxa. Konfiguracja, pominięcie i zatrzymanie tylko online.
-- **C.4 (#68): planowane.** UI reguł, podgląd terminu, historia i konflikty,
-  wzorcowa checklista kopiowana z nowymi UUID i zerowym postępem. Próby WWW
-  390/1280 px i fizycznego APK, dwa urządzenia, alarmy i zgodność starszego APK.
+- **C.4 (#68): zweryfikowane lokalnie, oczekuje na CI.** UI reguł
+  obu trybów, podgląd terminu i pomijanych dat, oznaczenia serii, historia,
+  pominięcie, zatrzymanie, zakresy edycji i konflikty. Wzorcowa checklista
+  kopiowana atomowo z nowymi UUID i zerowym postępem; jawna aktualizacja
+  wzorca bez zmiany historii. Testy komponentów i headless Playwright
+  390/1280 px dla WWW i transportu Androida. Odbiór ręczny, fizyczne APK
+  na dwóch urządzeniach, alarmy i zgodność starszego APK do potwierdzenia
+  według DEVELOPMENT.md. Moduł nie ma jeszcze końcowego odbioru ani CI.
 
 Reguła wymaga daty startu, opcjonalnej godziny, strefy Europe/Warsaw,
 interwału 1–1000 oraz opcjonalnej końcowej daty (włącznie). Tryby:
