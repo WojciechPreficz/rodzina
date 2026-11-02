@@ -104,7 +104,12 @@ export async function buildApp(
       } catch {
         return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'Niepoprawna ścieżka żądania.' } });
       }
-      if (pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/downloads/')) {
+      if (
+        pathname === '/api' ||
+        pathname.startsWith('/api/') ||
+        pathname.startsWith('/downloads/') ||
+        pathname.startsWith('/ocr/')
+      ) {
         return reply.code(404).send({
           error: { code: 'NOT_FOUND', message: 'Nie znaleziono zasobu.' },
         });

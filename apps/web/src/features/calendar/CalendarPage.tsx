@@ -35,6 +35,8 @@ import { CalendarAgendaEvent } from './CalendarAgendaEvent.js';
 import { isHolidayRangeSupported, polishHolidaysInRange, type PolishHoliday } from './polishHolidays.js';
 import { holidayCalendars, holidaysToScheduleX, readHolidayLayers, saveHolidayLayers } from './holidayLayers.js';
 import { HolidayDetails } from './HolidayDetails.js';
+import { isAndroid } from '../../platform.js';
+import { PhotoEventPreview } from './PhotoEventPreview.js';
 
 const text = labels.calendarUi;
 // The adapter destroys the calendar when this object changes identity.
@@ -58,6 +60,7 @@ function CalendarView({
   selected,
   setSelected,
   onCreate,
+  onPhoto,
 }: {
   members: Member[];
   timezone: string;
@@ -66,6 +69,7 @@ function CalendarView({
   selected: string[];
   setSelected: Dispatch<SetStateAction<string[]>>;
   onCreate: () => void;
+  onPhoto: () => void;
 }) {
   const navigate = useNavigate();
   const [range, setRange] = useState(() => monthRange(date));
@@ -111,18 +115,25 @@ function CalendarView({
         title={labels.calendar}
         description={Temporal.PlainDate.from(date).toLocaleString('pl-PL', { month: 'long', year: 'numeric' })}
         actions={
-          <Button
-            className="calendar-add"
-            aria-label={text.add}
-            disabled={readOnly}
-            title={readOnly ? calendarOnlineHint : undefined}
-            onClick={onCreate}
-          >
-            <span aria-hidden="true" className="calendar-add-icon">
-              ＋
-            </span>
-            <span className="calendar-add-label">{text.add}</span>
-          </Button>
+          <Group gap="xs" wrap="wrap">
+            {!isAndroid() && (
+              <Button className="calendar-photo-add" variant="default" mih={44} onClick={onPhoto}>
+                Dodaj ze zdjęcia
+              </Button>
+            )}
+            <Button
+              className="calendar-add"
+              aria-label={text.add}
+              disabled={readOnly}
+              title={readOnly ? calendarOnlineHint : undefined}
+              onClick={onCreate}
+            >
+              <span aria-hidden="true" className="calendar-add-icon">
+                ＋
+              </span>
+              <span className="calendar-add-label">{text.add}</span>
+            </Button>
+          </Group>
         }
       />
       <CalendarOfflineNotice syncedAt={occurrences.syncedAt} />
@@ -213,7 +224,7 @@ function CalendarView({
 }
 
 export function CalendarPage() {
-  const { family } = useMe();
+  const { family, user } = useMe();
   const members = useMembersQuery();
   const offline = useOffline();
   const location = useLocation();
@@ -222,17 +233,24 @@ export function CalendarPage() {
   const [selectedDate, setDate] = useState<string>();
   const date = selectedDate ?? todayInTimezone(family?.timezone ?? 'Europe/Warsaw');
   const creating = location.state?.calendarCreate === true;
+  const photo = location.state?.calendarPhoto === true && !isAndroid();
+  const editing = creating || photo;
   const scrollPosition = useRef(0);
-  const wasCreating = useRef(creating);
+  const wasCreating = useRef(editing);
+  const lastPhoto = useRef(photo);
   useEffect(() => {
-    if (creating === wasCreating.current) return;
-    wasCreating.current = creating;
+    if (editing === wasCreating.current) return;
+    wasCreating.current = editing;
+    if (editing) lastPhoto.current = photo;
     const frame = requestAnimationFrame(() => {
-      window.scrollTo(0, creating ? 0 : scrollPosition.current);
-      if (!creating) document.querySelector<HTMLButtonElement>('.calendar-add')?.focus({ preventScroll: true });
+      window.scrollTo(0, editing ? 0 : scrollPosition.current);
+      if (!editing)
+        document
+          .querySelector<HTMLButtonElement>(lastPhoto.current ? '.calendar-photo-add' : '.calendar-add')
+          ?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
-  }, [creating]);
+  }, [editing, photo]);
   return (
     <Stack>
       {(!family || !members.data) && (
@@ -260,7 +278,14 @@ export function CalendarPage() {
       {members.isPending && !offline && <Loader aria-label={text.loading} />}
       {family &&
         members.data &&
-        (creating ? (
+        (photo ? (
+          <PhotoEventPreview
+            key={`${family.id}:${user?.id}`}
+            onClose={() => {
+              void navigate(-1);
+            }}
+          />
+        ) : creating ? (
           <CreateEventView
             members={members.data}
             initialDate={date}
@@ -281,6 +306,10 @@ export function CalendarPage() {
             onCreate={() => {
               scrollPosition.current = window.scrollY;
               void navigate(`${location.pathname}${location.search}`, { state: { calendarCreate: true } });
+            }}
+            onPhoto={() => {
+              scrollPosition.current = window.scrollY;
+              void navigate(`${location.pathname}${location.search}`, { state: { calendarPhoto: true } });
             }}
           />
         ))}

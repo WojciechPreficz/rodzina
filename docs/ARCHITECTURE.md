@@ -383,13 +383,15 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
   90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
 
-## Parser propozycji wydarzeń ze zdjęcia (OCR.1)
+## Wydarzenia ze zdjęcia (OCR.1–OCR.2)
 
 Shared eksportuje `ocrDocumentSchema`, `OcrDocument` i `parseOcrEvents`.
 Adapter przekazuje wymiary obrazu po korekcie orientacji i zmniejszeniu oraz
 linie z unikalnym w obrębie wyniku `id`, tekstem i `box` (x, y, width, height
 w zakresie 0–1, początek w lewym górnym rogu tego obrazu). Opcjonalny `blockId`
-jest lokalnym identyfikatorem bloku silnika. Kontrakt nie zależy od silnika OCR.
+jest lokalnym identyfikatorem bloku silnika. Opcjonalne `confidence` (0–100)
+przekazuje ocenę silnika, bez deklarowania prawdopodobieństwa poprawności.
+Kontrakt nie zależy od silnika OCR.
 
 Parser jest lokalną, czystą funkcją bez zegara, sieci i zapisu. Respektuje bloki
 adaptera i rozdziela fragmenty przez odstępy poziome/pionowe; szeroki nagłówek
@@ -406,7 +408,53 @@ przedziały są lokalne; pojedyncza godzina nie otrzymuje domyślnego czasu
 trwania, a przedział przez północ wymaga decyzji. Brak godziny nie oznacza
 automatycznie wydarzenia całodniowego. Każda propozycja wymaga zatwierdzenia.
 Układ jest heurystyką: nieczytelne i rozdzielone fragmenty mogą wymagać ręcznego
-połączenia lub rozdzielenia. Silniki, interfejs i zapis należą do OCR.2–OCR.5.
+połączenia lub rozdzielenia.
+
+W WWW kalendarz zawiera akcję „Dodaj ze zdjęcia”: wybór JPEG, PNG lub WebP
+do 20 MB i korekta orientacji EXIF. Małe obrazy powiększamy do dłuższego boku
+2000 px (najwyżej trzykrotnie), duże zmniejszamy do 3200 px; obrazy pomiędzy
+tymi progami zachowują rozdzielczość.
+Tesseract.js 6 działa w lokalnym workerze uruchamianym dopiero po wyborze
+zdjęcia. Tryb rozproszonego tekstu rozpoznaje osobne fragmenty plakatów;
+adapter rozdziela słowa o odległych położeniach lub różnych liniach bazowych.
+Zwraca linie z położeniem i oceną pewności dla wspólnego parsera. Podgląd
+zawiera zdjęcie, częściowe propozycje, tekst źródłowy i ostrzeżenia; bez zapisu
+wydarzeń. Brak roku lub godziny nie otrzymuje domyślnej wartości.
+
+WWW używa `parseOcrEvents(document, { groupByDates: true })`: daty wyznaczają
+kolumny i karty, a sąsiadujące alternatywne daty pozostają niejednoznaczne.
+Jawne granice bloków adaptera nadal obowiązują. Tytuł może łączyć kilka
+wierszy podobnej wielkości; ceny, pojedyncze znaki i metadane biletu nie są
+tytułami. Adres zawierający „ul.” może występować po nazwie miasta.
+Rozpoznane daty porządkują propozycje. Niska ocena istotnego fragmentu daje
+ostrzeżenie; nie poprawiamy automatycznie liter ani treści na podstawie
+oczekiwanego słowa. Domyślny tryb parsera zachowuje dotychczasową segmentację.
+
+W podglądzie jednoznaczny zapis „12–14 marca 2024” daje `dateRange` z oboma
+końcami włącznie, zamiast alternatywnych dat. Wyliczenia „12 i 14” pozostają
+niejednoznaczne. Powtórzony ten sam zakres przy etykiecie godzin otwarcia
+nie tworzy drugiego wydarzenia; `openingHours` jest osobne od czasu trwania
+wydarzenia. Dodatkowe godziny programu nie zastępują jawnego „start”.
+Brak roku pozostaje do potwierdzenia także przy zapisie „14 06”; nie pobieramy
+roku z nazwy edycji ani nie interpretujemy „już jutro” według bieżącego zegara.
+
+Jeżeli pierwszy przebieg nie znajduje poprawnej daty, worker wykonuje najwyżej
+trzy dodatkowe lokalne odczyty: luminancja, luminancja w mniejszej skali
+i kanał czerwony. Współrzędne są normalizowane do wspólnego obrazu, a fragmenty
+nakładające się po położeniu są uzgadniane, bez dublowania wierszy. Przygotowanie
+kontrastu oddaje sterowanie interfejsowi i sprawdza anulowanie; obowiązuje
+wspólny limit 120 s. Zwykłe poprawnie odczytane obrazy zachowują pierwszy przebieg.
+
+Vite dołącza worker, cztery warianty silnika z osadzonym WASM, polski model
+i licencje pod `/ocr/<hash>/`; manifest jest w `/ocr/manifest.json`.
+Nie korzystamy z CDN ani trwałego cache OCR. CSP dopuszcza `wasm-unsafe-eval`
+i podgląd obrazów `blob:`, zachowując skrypty oraz workery wyłącznie z `self`.
+Brak gwarancji uruchamiania WWW offline. Zdjęcie i wynik pozostają w pamięci
+urządzenia; nie trafiają na serwer ani do logów. Anulowanie, ponowny wybór,
+opuszczenie ekranu i czyszczenie konta kończą worker, zwalniają podgląd
+i unieważniają spóźnione wyniki. Limit pojedynczego odczytu wynosi 120 s.
+APK nie pokazuje tej akcji i nie zawiera zasobów Tesseract; natywny selektor
+i ML Kit należą do OCR.3, a poprawianie i zapis do OCR.4–OCR.5.
 
 ## Przypomnienia
 

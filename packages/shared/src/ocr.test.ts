@@ -270,3 +270,184 @@ describe('shared OCR adapter contract', () => {
     expect(ocrDocumentSchema.safeParse({ ...document([]), image: { width: 0, height: 1200 } }).success).toBe(false);
   });
 });
+
+describe('date-anchored photo layout', () => {
+  const photo = (lines: OcrLine[]) => parseOcrEvents(document(lines), { groupByDates: true });
+
+  it.each(['12-14 marca 2024', '12–14 MARCA 2024', '12 do 14 marca 2024', '12-14.03.2024'])(
+    'keeps %s as an inclusive range rather than an invalid month or alternative dates',
+    (text) => {
+      const result = photo([line('Targi wyrobów', 'title'), line(text, 'date', 0.1, 0.15)]).proposals[0]!;
+      expect(result).toMatchObject({
+        startDate: '2024-03-12',
+        dateRange: { start: { day: 12, isoDate: '2024-03-12' }, end: { day: 14, isoDate: '2024-03-14' } },
+        durationMinutes: null,
+      });
+      expect(codes(result)).not.toContain('AMBIGUOUS_DATE');
+      expect(codes(result)).not.toContain('INVALID_DATE');
+    },
+  );
+
+  it('joins repeated fair dates and keeps daily opening hours separate from event duration', () => {
+    const result = photo([
+      line('BEER', 'brand', 0.45, 0.2, 0.2),
+      line('12-14 MARCA 2024', 'main-date', 0.4, 0.6, 0.25),
+      line('GODZINY OTWARCIA:', 'hours-label', 0.02, 0.7, 0.2),
+      line('12-14 marca 2024', 'repeated-date', 0.08, 0.76, 0.1),
+      line('10:00 - 17:00', 'hours', 0.1, 0.8, 0.1),
+    ]);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0]).toMatchObject({
+      startDate: '2024-03-12',
+      dateRange: { end: { isoDate: '2024-03-14' } },
+      openingHours: { startTime: '10:00', endTime: '17:00' },
+      startTime: null,
+      endTime: null,
+      durationMinutes: null,
+    });
+    expect(result.proposals[0]!.dates).toHaveLength(2);
+    expect(codes(result.proposals[0]!)).not.toContain('AMBIGUOUS_DATE');
+  });
+
+  it('does not turn a list of dates or a reverse range into a continuous event', () => {
+    for (const value of ['12 i 14 marca 2024', '12 lub 14 marca 2024', '14-12 marca 2024']) {
+      const result = photo([line('Koncert', 'title'), line(value, 'date', 0.1, 0.14)]).proposals[0]!;
+      expect(result.dateRange).toBeNull();
+      expect(result.startDate).toBeNull();
+      expect(codes(result)).toContain('AMBIGUOUS_DATE');
+    }
+  });
+
+  it('keeps missing years in a range and in a spaced date unconfirmed', () => {
+    const range = photo([line('Targi 12-14 marca', 'event')]).proposals[0]!;
+    expect(range.dateRange).toMatchObject({ start: { day: 12, year: null }, end: { day: 14, year: null } });
+    expect(range.startDate).toBeNull();
+    expect(codes(range)).toContain('MISSING_YEAR');
+    const partial = photo([line('Stand-up 2024', 'title'), line('14 06', 'date', 0.1, 0.2)]).proposals[0]!;
+    expect(partial.dates).toMatchObject([{ day: 14, month: 6, year: null }]);
+    expect(partial.startDate).toBeNull();
+  });
+
+  it('uses an explicit concert start while retaining a warning about programme times', () => {
+    const result = photo([
+      line('KONCERT', 'title'),
+      line('30 SIERPNIA', 'date', 0.1, 0.2),
+      line('TEREN ZIELONY PRZED CENTRUM', 'location', 0.1, 0.25),
+      line('START GODZ. 17:15', 'start', 0.1, 0.3),
+      line('17:15 Julia', 'first-act', 0.1, 0.7),
+      line('18:30 Oceana', 'second-act', 0.1, 0.75),
+      line('20:00 Justyna', 'third-act', 0.1, 0.8),
+    ]).proposals[0]!;
+    expect(result).toMatchObject({ startDate: null, startTime: '17:15', location: 'TEREN ZIELONY PRZED CENTRUM' });
+    expect(codes(result)).toContain('PROGRAM_TIMES');
+    expect(codes(result)).toContain('MISSING_YEAR');
+    expect(codes(result)).not.toContain('AMBIGUOUS_TIME');
+  });
+
+  it('does not remove the letter R from Polish words when cleaning labels', () => {
+    expect(photo([line('ŚRÓDMIEŚCIE', 'title'), line('12.05.2026', 'date', 0.1, 0.14)]).proposals[0]!.title).toBe(
+      'ŚRÓDMIEŚCIE',
+    );
+  });
+
+  it('joins differently sized title lines without adding distant website navigation', () => {
+    const result = photo([
+      { ...line('DLA WYSTAWCÓW KONTAKT', 'nav', 0.2, 0.02, 0.6), box: { x: 0.2, y: 0.02, width: 0.6, height: 0.04 } },
+      { ...line('BEER', 'brand', 0.45, 0.2, 0.2), box: { x: 0.45, y: 0.2, width: 0.2, height: 0.1 } },
+      { ...line('WARSAW', 'brand-2', 0.45, 0.32, 0.2), box: { x: 0.45, y: 0.32, width: 0.2, height: 0.055 } },
+      { ...line('EXPO', 'brand-3', 0.45, 0.39, 0.1), box: { x: 0.45, y: 0.39, width: 0.1, height: 0.055 } },
+      line('12-14 marca 2024', 'date', 0.4, 0.6, 0.25),
+    ]).proposals[0]!;
+    expect(result.title).toBe('BEER WARSAW EXPO');
+  });
+
+  it('uses the event title rather than a decorative glyph or a price', () => {
+    const result = photo([
+      { ...line('V', 'decoration', 0.75, 0, 0.05), confidence: 65 },
+      line('21.10.2026 R.', 'date', 0.15, 0.19, 0.7),
+      { ...line('DOGOTERAPIA', 'title', 0.15, 0.33, 0.73), confidence: 92 },
+      line('10 ZŁ', 'price', 0.37, 0.53, 0.3),
+    ]);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0]).toMatchObject({ title: 'DOGOTERAPIA', startDate: '2026-10-21', startTime: null });
+    expect(codes(result.proposals[0]!)).toEqual(['MISSING_TIME']);
+  });
+
+  it('connects a separated ticket title, date and address and excludes seat metadata', () => {
+    const result = photo([
+      line('AGENCJA ARTYSTYCZNA', 'agency', 0.1, 0.18, 0.15),
+      {
+        ...line('ARKA NOEGO - KONCERT KOLĘD', 'title', 0.08, 0.28, 0.52),
+        box: { x: 0.08, y: 0.28, width: 0.52, height: 0.05 },
+      },
+      line('DATA, GODZINA I MIEJSCE', 'label', 0.08, 0.51, 0.15),
+      line('10.01.2027, godz. 11:00', 'date', 0.08, 0.55, 0.25),
+      line('Katowice, Pałac Młodzieży, ul. Mikołowska 26', 'address', 0.08, 0.59, 0.47),
+      line('parter', 'seat', 0.08, 0.74, 0.08),
+      line('110,00 zł (w tym 8% VAT)', 'price', 0.7, 0.74, 0.25),
+    ]);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0]).toMatchObject({
+      title: 'ARKA NOEGO - KONCERT KOLĘD',
+      startDate: '2027-01-10',
+      startTime: '11:00',
+      location: 'Katowice, Pałac Młodzieży, ul. Mikołowska 26',
+      warnings: [],
+    });
+  });
+
+  it('separates eight staggered event cards and joins their multiline titles', () => {
+    const days = [2, 6, 7, 9, 16, 21, 23, 30];
+    const lines = [
+      { ...line('PAŹDZIERNIK', 'month', 0.3, 0.09, 0.35), box: { x: 0.3, y: 0.09, width: 0.35, height: 0.05 } },
+    ];
+    for (const [index, day] of days.entries()) {
+      const x = 0.02 + (index % 4) * 0.24;
+      const y = 0.2 + Math.floor(index / 4) * 0.4 + (index % 4) * 0.02;
+      lines.push(line(`${day}.10.2026 R.`, `date-${index}`, x + 0.03, y, 0.15));
+      lines.push(line(`WARSZTATY`, `title-${index}`, x + 0.02, y + 0.06, 0.18));
+      lines.push(line(`TEMATYCZNE ${index + 1}`, `continuation-${index}`, x, y + 0.1, 0.21));
+      lines.push(line('10 ZŁ', `price-${index}`, x + 0.07, y + 0.2, 0.07));
+    }
+    const result = photo(lines);
+    expect(result.proposals.map((item) => item.startDate)).toEqual(
+      days.map((day) => `2026-10-${String(day).padStart(2, '0')}`),
+    );
+    expect(result.proposals.map((item) => item.title)).toEqual(
+      days.map((_, index) => `WARSZTATY TEMATYCZNE ${index + 1}`),
+    );
+    expect(result.proposals.every((item) => item.startTime === null)).toBe(true);
+    expect(result).toEqual(photo([...lines].reverse()));
+  });
+
+  it('does not interpret a damaged word ending in O and a numeral as a time', () => {
+    const result = photo([
+      line('6.10.2026', 'date'),
+      line('SCK - KINO', 'title', 0.1, 0.14),
+      { ...line('"PUC|O 2”', 'subtitle', 0.1, 0.18), confidence: 75 },
+    ]);
+    expect(result.proposals[0]).toMatchObject({ title: 'SCK - KINO "PUC|O 2”', startTime: null });
+    expect(codes(result.proposals[0]!)).toEqual(['MISSING_TIME', 'LOW_CONFIDENCE']);
+  });
+
+  it('preserves nearby alternative dates and registration ambiguity', () => {
+    const result = photo([
+      line('Warsztaty', 'title'),
+      line('Zapisy do 10 maja 2026', 'registration', 0.1, 0.14),
+      line('Wydarzenie 15 maja 2026 o 18:00', 'date', 0.1, 0.18),
+    ]);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0]).toMatchObject({ startDate: null, startTime: null });
+    expect(codes(result.proposals[0]!)).toContain('REGISTRATION_DATE');
+    expect(codes(result.proposals[0]!)).toContain('AMBIGUOUS_DATE');
+  });
+
+  it('continues to respect explicit adapter boundaries', () => {
+    const result = photo([
+      { ...line('Koncert 12.05.2026', 'event'), blockId: 'event' },
+      { ...line('godz. 18:00', 'time', 0.1, 0.14), blockId: 'other' },
+    ]);
+    expect(result.proposals).toHaveLength(2);
+    expect(result.proposals[0]?.startTime).toBeNull();
+  });
+});

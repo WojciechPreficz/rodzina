@@ -33,10 +33,32 @@ i oczekiwane częściowe propozycje/ostrzeżenia; nie zawiera danych osobowych
 ani prawdziwych zdjęć. Testy obejmują miesiące, formaty liczbowe, lata
 przestępne, brak roku/godziny, błędy OCR, alternatywne daty, zapisy, bloki
 i kolumny oraz wspólny kontrakt adapterów. Po zmianie shared sprawdź również
-typy API i WWW. W OCR.1 nie ma UI, silnika ani importu, więc próby 390/1280 px,
-rzeczywistego rozpoznawania i fizycznego APK należą do OCR.2–OCR.6 i pozostają
-niewykonane. Pełny odbiór będzie wymagał plakatów kontrolnych, obu adapterów,
-częściowego zapisu i retry oraz prób opisanych w planie.
+typy API i WWW. OCR.2 sprawdzają testy `ocrWeb`, `PhotoEventPreview`
+i `http/security-headers`; headless `e2e/calendar-ocr.spec.ts` uruchamia
+rzeczywisty worker i polski model w produkcyjnym buildzie przy 390/1280 px.
+Plakat kontrolny powstaje syntetycznie w przeglądarce. Próby obejmują wynik,
+pusty obraz, planszę ośmiu kart, plakat z dekoracjami, bilet z oddzielonym
+tytułem i adresem, błędny format, uszkodzony i za duży plik, anulowanie i awarię
+zasobów. Build i release:smoke sprawdzają pakowanie i serwowanie zasobów.
+Regresje parsera obejmują wielowierszowe tytuły, ceny i metadane, niepewny OCR
+oraz brak fałszywej godziny z uszkodzonej nazwy. Testy adaptera sprawdzają
+skalowanie i rozdzielenie dekoracji bez rozbijania zwykłej interpunkcji.
+Rzeczywiste zdjęcia właściciela sprawdzamy lokalnie, bez dodawania ich do
+repozytorium. Ozdobne czcionki nadal mogą wymagać poprawienia rozpoznanego
+tekstu; ocena pewności i podgląd nie zastępują zatwierdzenia użytkownika.
+Próby obejmują też wielodniowy zakres z powtórzeniem w godzinach otwarcia,
+program koncertu i rok do potwierdzenia, a testy adaptera — dodatkowe przebiegi
+kontrastu i scalenie współrzędnych różnych skal. Oryginalny podgląd zachowuje
+kolory, nawet gdy silnik korzysta z wariantów kontrastu.
+
+Do ręcznego odbioru OCR.2 uruchom `npm run dev`, otwórz Kalendarz →
+„Dodaj ze zdjęcia” i wybierz plakat z datą. Sprawdź źródło, ostrzeżenia,
+brak roku/godziny, ponowny wybór, anulowanie, Wstecz oraz zmianę konta.
+Po zmianie zależności lub konfiguracji Vite zrestartuj serwer deweloperski.
+Próby ręczne 390/1280 px i regresja wspólnego frontendu w fizycznym APK
+pozostają do potwierdzenia. APK nie udostępnia jeszcze akcji OCR. Pełny odbiór
+OCR.3–OCR.6 wymaga obu adapterów, częściowego zapisu i retry; końcowe CI
+wymaga commita. Nie deklarujemy gwarancji uruchamiania WWW offline.
 
 Reguły cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
 modules/tasks/recurrence-migrations: końce miesięcy, lata przestępne, tygodnie

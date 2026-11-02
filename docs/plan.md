@@ -329,11 +329,17 @@ nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
   jeden i kilka terminów, kolumny, zapisy, brak roku/godziny i błędny OCR.
   Odbiór: testy parsera, walidacja dat i lat przestępnych, sprawdzenie
   użytkowników shared oraz końcowe CI. Bez silników OCR, UI i API importu.
-- **OCR.2 (#72): planowany.** Akcja „Dodaj ze zdjęcia”, przygotowanie obrazu,
+- **OCR.2 (#72): zweryfikowane lokalnie, oczekuje na CI.** Odbiór ręczny
+  i regresja fizycznego APK do potwierdzenia według DEVELOPMENT.md.
+  Akcja „Dodaj ze zdjęcia”, przygotowanie obrazu,
   Tesseract.js w workerze ładowanym na żądanie, lokalne wersjonowane zasoby
   i licencje, minimalna CSP dla WASM/workera. Podgląd zdjęcia i propozycji,
   postęp, błędy, anulowanie i ochrona przed spóźnionymi wynikami po zmianie
-  konta. Bez zapisu i ML Kit. Odbiór: rzeczywisty OCR produkcyjnego builda,
+  konta. Tryb rozproszonego tekstu, powiększanie małych obrazów, grupowanie
+  według dat, wielowierszowe tytuły i ostrzeżenia o niepewnym odczycie.
+  Jednoznaczne zakresy dni w podglądzie, osobne godziny otwarcia, jawny start
+  przy programie koncertu i dodatkowy lokalny odczyt kontrastu, gdy brak daty.
+  Bez zapisu i ML Kit. Odbiór: rzeczywisty OCR produkcyjnego builda,
   komponenty i headless 390/1280 px, build i release:smoke zasobów.
 - **OCR.3 (#73): planowany.** Natywny selektor zdjęć i ML Kit z modelem
   dołączonym do APK, wspólny format/parser/podgląd. Obsługa URI, orientacji,

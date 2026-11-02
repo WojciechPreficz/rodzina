@@ -18,6 +18,7 @@ export const ocrLineSchema = z
     box: ocrBoxSchema,
     // Adapter-local block identifiers are optional, never shared across OCR runs.
     blockId: z.string().min(1).max(200).optional(),
+    confidence: z.number().finite().min(0).max(100).optional(),
   })
   .strict();
 

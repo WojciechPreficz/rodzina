@@ -146,6 +146,41 @@ try {
   }
 
   const pageResponse = await fetch(`http://127.0.0.1:${port}/`);
+  const ocrManifestResponse = await fetch(`http://127.0.0.1:${port}/ocr/manifest.json`);
+  if (!ocrManifestResponse.ok || !ocrManifestResponse.headers.get('content-type')?.includes('application/json'))
+    fail('brak manifestu lokalnych zasobów OCR.');
+  const ocrManifest = await ocrManifestResponse.json();
+  if (!/^\/ocr\/[a-f0-9]{16}$/.test(ocrManifest.base) || !Array.isArray(ocrManifest.files))
+    fail('niepoprawny manifest OCR.');
+  for (const name of [
+    'worker.min.js',
+    'pol.traineddata.gz',
+    'tesseract-core-lstm.wasm.js',
+    'tesseract-core-simd-lstm.wasm.js',
+    'tesseract-core.wasm.js',
+    'tesseract-core-simd.wasm.js',
+    'notices.txt',
+    'worker-licenses.txt',
+    'tesseract-license.txt',
+    'core-license.txt',
+  ]) {
+    const archiveName = `public${ocrManifest.base}/${name}`;
+    if (!ocrManifest.files.includes(name) || !entries[archiveName]?.length) fail(`brak zasobu OCR: ${name}`);
+    const response = await fetch(`http://127.0.0.1:${port}${ocrManifest.base}/${name}`);
+    if (!response.ok || !Buffer.from(await response.arrayBuffer()).equals(Buffer.from(entries[archiveName])))
+      fail(`zasób OCR niedostępny lub zmieniony: ${name}`);
+    if (name.endsWith('.js') && !response.headers.get('content-type')?.includes('javascript'))
+      fail(`niepoprawny typ skryptu OCR: ${name}`);
+  }
+  if ((await fetch(`http://127.0.0.1:${port}/ocr/missing.js`)).status !== 404)
+    fail('brak zasobu OCR zwraca SPA zamiast 404.');
+  const csp = pageResponse.headers.get('content-security-policy') ?? '';
+  if (
+    !csp.includes("script-src 'self' 'wasm-unsafe-eval'") ||
+    !csp.includes("worker-src 'self'") ||
+    csp.includes("'unsafe-eval'")
+  )
+    fail('CSP nie zezwala na lokalny OCR lub dopuszcza szerokie unsafe-eval.');
   const page = await pageResponse.text();
   if (!pageResponse.ok || !page.includes('<div id="root"></div>')) {
     fail('serwer nie dostarczył index.html.');

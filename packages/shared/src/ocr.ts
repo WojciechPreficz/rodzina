@@ -11,6 +11,8 @@ export type OcrWarningCode =
   | 'INVALID_TIME'
   | 'AMBIGUOUS_TIME'
   | 'AMBIGUOUS_LAYOUT'
+  | 'LOW_CONFIDENCE'
+  | 'PROGRAM_TIMES'
   | 'MISSING_TITLE';
 
 export interface OcrWarning {
@@ -36,6 +38,8 @@ export interface OcrEventProposal {
   location: string | null;
   dates: OcrDateCandidate[];
   startDate: string | null;
+  dateRange: { start: OcrDateCandidate; end: OcrDateCandidate } | null;
+  openingHours: { startTime: string; endTime: string } | null;
   startTime: string | null;
   endTime: string | null;
   durationMinutes: number | null;
@@ -61,6 +65,9 @@ const messages: Record<OcrWarningCode, string> = {
   AMBIGUOUS_TIME: 'Godziny lub ich przedział są niejednoznaczne. Potwierdź początek i koniec.',
   AMBIGUOUS_LAYOUT: 'Nie można jednoznacznie połączyć fragmentów układu. Sprawdź sąsiednie bloki.',
   MISSING_TITLE: 'Nie rozpoznano tytułu. Uzupełnij go na podstawie źródła.',
+  LOW_CONFIDENCE: 'Niektóre fragmenty mają niską pewność odczytu. Porównaj je ze zdjęciem przed zatwierdzeniem.',
+  PROGRAM_TIMES:
+    'Plakat zawiera także godziny programu. Sprawdź je w tekście źródłowym; godzina początku pochodzi z oznaczenia „start”.',
 };
 
 function warning(code: OcrWarningCode, lines: OcrLine[]): OcrWarning {
@@ -101,6 +108,7 @@ interface LineData {
   dates: OcrDateCandidate[];
   times: TimeCandidate[];
   residue: string;
+  dateRanges: Array<{ start: OcrDateCandidate; end: OcrDateCandidate }>;
 }
 
 const overlaps = (a: Span, b: Span) => a.from < b.to && b.from < a.to;
@@ -119,6 +127,11 @@ function readTimes(text: string): TimeCandidate[] {
     'giu',
   );
   for (const match of text.matchAll(range)) {
+    if (
+      !/godz|[:.]/iu.test(match[0]) &&
+      new RegExp(`^\\s+(?:${monthPattern})(?!\\p{L})`, 'u').test(text.slice(match.index + match[0].length))
+    )
+      continue;
     // Bare "18-20" can be a range of days; do not turn it into a time.
     const explicit = /godz|od|do|:/i.test(match[0]);
     if (!explicit) {
@@ -140,7 +153,7 @@ function readTimes(text: string): TimeCandidate[] {
     });
   }
   const single =
-    /(?<![\p{L}\d.:/])(?:(?:godz(?:ina)?\.?|o)\s*(\d{1,2}(?:[:.]\d{2})?)|(\d{1,2}:\d{2}))(?![\p{L}\d:/]|\.\d)/giu;
+    /(?<![\p{L}\d.:/|])(?:(?:godz(?:ina)?\.?|o)\s*(\d{1,2}(?:[:.]\d{2})?)|(\d{1,2}:\d{2}))(?![\p{L}\d:/]|\.\d)/giu;
   for (const match of text.matchAll(single)) {
     const span = { from: match.index, to: match.index + match[0].length };
     if (found.some((item) => overlaps(item, span))) continue;
@@ -161,6 +174,7 @@ function readLine(line: OcrLine): LineData {
   const times = readTimes(text);
   const spans: Span[] = [...times];
   const dates: OcrDateCandidate[] = [];
+  const dateRanges: LineData['dateRanges'] = [];
   const add = (match: RegExpExecArray, days: string, month: number, rawYear: string | undefined) => {
     const span = { from: match.index, to: match.index + match[0].length };
     if (spans.some((item) => overlaps(item, span))) return;
@@ -170,6 +184,7 @@ function readLine(line: OcrLine): LineData {
     const lastRegistration = [...prefix.matchAll(/zapis\p{L}*|rejestrac\p{L}*|zgloszen\p{L}*/gu)].at(-1)?.index ?? -1;
     const lastEvent =
       [...prefix.matchAll(/wydarzenie|impreza|koncert|spotkanie|termin wydarzenia/gu)].at(-1)?.index ?? -1;
+    const first = dates.length;
     for (const [day] of days.matchAll(/\d{1,2}/g)) {
       const value = `${String(year ?? 2000).padStart(4, '0')}-${pad(month)}-${pad(Number(day))}`;
       // The leap year 2000 validates a partial February 29 without inventing its actual year.
@@ -185,30 +200,38 @@ function readLine(line: OcrLine): LineData {
         role: lastRegistration > lastEvent ? 'registration' : 'event',
       });
     }
+    if (/^\d{1,2}\s*(?:[–—-]|do)\s*\d{1,2}$/u.test(days) && dates.length === first + 2) {
+      const start = dates[first]!;
+      const end = dates[first + 1]!;
+      if (start.valid && end.valid && start.day <= end.day) dateRanges.push({ start, end });
+    }
   };
   for (const match of text.matchAll(/(?<![\p{L}\d])([0-9oIl]{4})-(\d{1,2})-(\d{1,2})(?![\p{L}\d])/giu))
     add(match, match[3]!, Number(match[2]), match[1]);
-  const dayList = String.raw`(?:\d{1,2}\s*(?:,|i|lub|oraz|[–—-])\s*)*\d{1,2}`;
+  const dayList = String.raw`(?:\d{1,2}\s*(?:,|i|lub|oraz|do|[–—-])\s*)*\d{1,2}`;
   const numeric = new RegExp(
     String.raw`(?<![\p{L}\d.:/])(${dayList})\s*([./-])\s*(\d{1,2})(?:\s*\2\s*([0-9oil]{2,4}))?(?![\p{L}\d:/]|\.\d)`,
     'gu',
   );
-  for (const match of text.matchAll(numeric)) add(match, match[1]!, Number(match[3]), match[4]);
   const named = new RegExp(
-    String.raw`(?<![\p{L}\d])(${dayList})\.?\s+(${monthPattern})(?!\p{L})\.?(?:\s+([0-9oil]{2,4})(?![\p{L}\d:]|\.\d))?`,
+    String.raw`(?<![\p{L}\d])(?:od\s+)?(${dayList})\.?\s+(${monthPattern})(?!\p{L})\.?(?:\s+([0-9oil]{2,4})(?![\p{L}\d:]|\.\d))?`,
     'gu',
   );
   for (const match of text.matchAll(named)) add(match, match[1]!, monthNumbers.get(match[2]!)!, match[3]);
+  // A named range such as "12-14 marca" is more specific than numeric "12-14".
+  for (const match of text.matchAll(numeric)) add(match, match[1]!, Number(match[3]), match[4]);
+  const spacedDate = /^(\d{1,2})\s+(0?[1-9]|1[0-2])$/u.exec(text.trim());
+  if (spacedDate) add(spacedDate, spacedDate[1]!, Number(spacedDate[2]), undefined);
 
   let residue = line.text;
   for (const span of spans.sort((a, b) => b.from - a.from))
     residue = residue.slice(0, span.from) + ' ' + residue.slice(span.to);
   residue = residue
-    .replace(/\b(?:r(?:oku)?|godz(?:ina)?|data|termin)\b\.?/giu, ' ')
+    .replace(/(?<!\p{L})(?:r(?:oku)?|godz(?:ina)?|data|termin)(?!\p{L})\.?/giu, ' ')
     .replace(/^[\s:;,–—-]+|[\s:;,–—-]+$/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return { line, dates, times, residue };
+  return { line, dates, times, residue, dateRanges };
 }
 
 interface Region {
@@ -250,7 +273,120 @@ function regions(lines: OcrLine[]): Region[] {
   return [{ lines, ambiguous: false }];
 }
 
-function proposal(region: Region): OcrEventProposal {
+/** Dates anchor event cards even when typography and whitespace split their text. */
+function photoRegions(lines: OcrLine[]): Region[] {
+  const anchors = lines.filter((line) => readLine(line).dates.length > 0);
+  if (!anchors.length) return regions(lines);
+  const rangeKey = (line: OcrLine) => {
+    const ranges = readLine(line).dateRanges;
+    return ranges.length === 1
+      ? `${ranges[0]!.start.day}:${ranges[0]!.end.day}:${ranges[0]!.start.month}:${ranges[0]!.start.year}`
+      : null;
+  };
+  if (
+    anchors.length > 1 &&
+    rangeKey(anchors[0]!) &&
+    anchors.every((line) => rangeKey(line) === rangeKey(anchors[0]!)) &&
+    lines.some((line) => /godziny\s+otwarcia/iu.test(line.text))
+  )
+    return [{ lines, ambiguous: false }];
+  const centerX = (line: OcrLine) => line.box.x + line.box.width / 2;
+  const centerY = (line: OcrLine) => line.box.y + line.box.height / 2;
+  const columns: OcrLine[][] = [];
+  const tolerance = Math.max(0.08, Math.min(0.15, median(anchors.map((line) => line.box.width)) * 0.6));
+  for (const anchor of [...anchors].sort((a, b) => centerX(a) - centerX(b) || centerY(a) - centerY(b))) {
+    const last = columns.at(-1);
+    if (!last || centerX(anchor) - median(last.map(centerX)) > tolerance) columns.push([anchor]);
+    else last.push(anchor);
+  }
+  const groups = columns.map((column) => {
+    const rows: Array<{ anchors: OcrLine[]; region: Region }> = [];
+    for (const anchor of [...column].sort((a, b) => centerY(a) - centerY(b))) {
+      const last = rows.at(-1);
+      // Nearby alternatives and registration deadlines remain one ambiguous proposal.
+      if (!last || centerY(anchor) - centerY(last.anchors.at(-1)!) > Math.max(0.14, anchor.box.height * 5))
+        rows.push({ anchors: [anchor], region: { lines: [], ambiguous: false } });
+      else last.anchors.push(anchor);
+    }
+    return { x: median(column.map(centerX)), rows };
+  });
+  for (const line of lines) {
+    const heading = fold(line.text)
+      .trim()
+      .replace(/\s+\d{4}(?:\s*r\.?)?$/u, '');
+    if (
+      anchors.length > 1 &&
+      monthNumbers.has(heading) &&
+      line.box.y < Math.min(...anchors.map((anchor) => anchor.box.y))
+    )
+      continue;
+    const own = groups.flatMap((column) => column.rows).find((row) => row.anchors.includes(line));
+    if (own) {
+      own.region.lines.push(line);
+      continue;
+    }
+    const column = [...groups].sort((a, b) => Math.abs(a.x - centerX(line)) - Math.abs(b.x - centerX(line)))[0]!;
+    if (columns.length > 1 && line.box.width > 0.5) continue;
+    const distance = (row: (typeof column.rows)[number]) => {
+      const delta = centerY(line) - median(row.anchors.map(centerY));
+      return Math.abs(delta) * (delta < 0 ? 2 : 1);
+    };
+    const row = [...column.rows].sort((a, b) => distance(a) - distance(b))[0]!;
+    const firstY = Math.min(...column.rows[0]!.anchors.map((anchor) => anchor.box.y));
+    // A global month heading is context, rather than an additional event card.
+    if (anchors.length > 1 && line.box.y + line.box.height < firstY - Math.max(0.12, line.box.height * 2)) continue;
+    row.region.lines.push(line);
+  }
+  return groups.flatMap((column) => column.rows.map((row) => row.region));
+}
+
+const isPhotoMetadata = (text: string) =>
+  /^(?:data\b|godzina\b|sektor\b|rz[ąa]d\b|cena\b|parter\b|balkon\b|widoczno[śs][ćc]\b|agencja\b|organizator\b|patronat\b|(?:miejsce|lokalizacja|adres)\s*[:|]?$)/iu.test(
+    text.trim(),
+  ) || /\d\s*(?:z[łl]|pln|eur|€)\b/iu.test(text);
+
+function photoTitle(candidates: LineData[]): { title: string | null; lines: OcrLine[] } {
+  const eligible = candidates.filter(
+    (item) =>
+      !item.dates.length &&
+      !item.times.length &&
+      !isPhotoMetadata(item.residue) &&
+      (item.residue.match(/\p{L}/gu)?.length ?? 0) >= 3 &&
+      (item.line.confidence ?? 100) >= 40,
+  );
+  const base = [...eligible].sort(
+    (a, b) => b.line.box.width * b.line.box.height ** 2 - a.line.box.width * a.line.box.height ** 2,
+  )[0];
+  if (!base)
+    return {
+      title:
+        candidates.find((item) => item.dates.length && item.residue && !isPhotoMetadata(item.residue))?.residue ?? null,
+      lines: [],
+    };
+  const comparable = eligible.filter(
+    (item) => item.line.box.height >= base.line.box.height * 0.35 && item.line.box.height <= base.line.box.height * 1.4,
+  );
+  const ordered = [...comparable].sort((a, b) => a.line.box.y - b.line.box.y || a.line.box.x - b.line.box.x);
+  const index = ordered.indexOf(base);
+  let start = index;
+  let end = index;
+  const adjacent = (a: LineData, b: LineData) =>
+    b.line.box.y - a.line.box.y - a.line.box.height <=
+    Math.max(0.02, Math.min(a.line.box.height, b.line.box.height) * 1.4);
+  while (start > 0 && adjacent(ordered[start - 1]!, ordered[start]!)) start--;
+  while (end + 1 < ordered.length && adjacent(ordered[end]!, ordered[end + 1]!)) end++;
+  const selected = ordered.slice(start, end + 1);
+  return {
+    title: selected
+      .map((item) => item.residue)
+      .join(' ')
+      .replace(/^(?:tytuł|wydarzenie)\s*:\s*/iu, '')
+      .trim(),
+    lines: selected.map((item) => item.line),
+  };
+}
+
+function proposal(region: Region, photo = false): OcrEventProposal {
   const source = [...region.lines].sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x || a.id.localeCompare(b.id));
   const data = source.map(readLine);
   for (const [index, item] of data.entries()) {
@@ -266,8 +402,32 @@ function proposal(region: Region): OcrEventProposal {
       });
     }
   }
-  const dates = data.flatMap((item) => item.dates);
-  const times = data.flatMap((item) => item.times);
+  const rawDates = data.flatMap((item) => item.dates);
+  const dates = photo
+    ? [
+        ...new Map(
+          rawDates.map((date) => [`${date.day}:${date.month}:${date.year}:${date.role}:${date.valid}`, date]),
+        ).values(),
+      ]
+    : rawDates;
+  const ranges = data.flatMap((item) => item.dateRanges);
+  const uniqueRanges = [
+    ...new Map(
+      ranges.map((range) => [`${range.start.day}:${range.end.day}:${range.start.month}:${range.start.year}`, range]),
+    ).values(),
+  ];
+  const dateRange =
+    photo && dates.length === 2 && uniqueRanges.length === 1 && dates.every((date) => date.role === 'event')
+      ? uniqueRanges[0]!
+      : null;
+  const rawTimes = data.flatMap((item) => item.times);
+  const times = photo
+    ? [...new Map(rawTimes.map((time) => [`${time.start}:${time.end}:${time.issue}`, time])).values()]
+    : rawTimes;
+  const explicitStarts = photo
+    ? data.filter((item) => /(?:^|\s)start\b/iu.test(item.line.text)).flatMap((item) => item.times)
+    : [];
+  const explicitStart = explicitStarts.length === 1 && !explicitStarts[0]!.issue ? explicitStarts[0]! : null;
   const warnings: OcrWarning[] = [];
   const warn = (code: OcrWarningCode, lines = source) => warnings.push(warning(code, lines));
   if (!dates.length) warn('MISSING_DATE');
@@ -277,18 +437,22 @@ function proposal(region: Region): OcrEventProposal {
       source.filter((line) => dates.some((date) => date.lineId === line.id && !date.valid)),
     );
   if (dates.some((date) => date.valid && date.year === null)) warn('MISSING_YEAR');
-  if (dates.length > 1) warn('AMBIGUOUS_DATE');
+  if (dates.length > 1 && !dateRange) warn('AMBIGUOUS_DATE');
   if (dates.some((date) => date.role === 'registration')) warn('REGISTRATION_DATE');
   if (!times.length) warn('MISSING_TIME');
   if (times.some((time) => time.issue === 'INVALID_TIME')) warn('INVALID_TIME');
-  if (times.length > 1 || times.some((time) => time.issue === 'AMBIGUOUS_TIME')) warn('AMBIGUOUS_TIME');
+  if ((times.length > 1 && !explicitStart) || times.some((time) => time.issue === 'AMBIGUOUS_TIME'))
+    warn('AMBIGUOUS_TIME');
+  if (times.length > 1 && explicitStart) warn('PROGRAM_TIMES');
   if (region.ambiguous) warn('AMBIGUOUS_LAYOUT');
 
   const locationLine =
     data.find((item) => /^(?:miejsce|lokalizacja|adres)\s*:/iu.test(item.line.text.trim())) ??
     data.find(
       (item) =>
-        /^(?:dom kultury|sala|szkoła|biblioteka|stadion|ul\.)(?:\s|$)/iu.test(item.residue) && !item.dates.length,
+        (/^(?:dom kultury|sala|szkoła|biblioteka|stadion|ul\.)(?:\s|$)/iu.test(item.residue) ||
+          (photo && /(?:^|\s)ul\.\s+\p{L}|^teren\s+zielony\b|^spodek$/iu.test(item.residue))) &&
+        !item.dates.length,
     );
   const locationIndex = locationLine ? data.indexOf(locationLine) : -1;
   const locationValue = locationLine?.residue.replace(/^(?:miejsce|lokalizacja|adres)(?:\s*:\s*|$)/iu, '').trim();
@@ -304,24 +468,49 @@ function proposal(region: Region): OcrEventProposal {
       !/^(?:zapis|rejestrac|zgłoszen)/iu.test(item.residue) &&
       /\p{L}/u.test(item.residue),
   );
-  const title =
-    (titles.find((item) => !item.dates.length && !item.times.length) ?? titles[0])?.residue
-      .replace(/^(?:tytuł|wydarzenie)\s*:\s*/iu, '')
-      .trim() || null;
+  const photoSelection = photo ? photoTitle(titles) : null;
+  const title = photoSelection
+    ? photoSelection.title
+    : (titles.find((item) => !item.dates.length && !item.times.length) ?? titles[0])?.residue
+        .replace(/^(?:tytuł|wydarzenie)\s*:\s*/iu, '')
+        .trim() || null;
   if (!title) warn('MISSING_TITLE');
-  const date = dates.length === 1 && dates[0]!.role === 'event' ? dates[0]!.isoDate : null;
+  if (photo) {
+    const relevant = new Set([
+      ...photoSelection!.lines,
+      ...data
+        .filter((item) => item.dates.length || item.times.length || item === locationLine)
+        .map((item) => item.line),
+    ]);
+    const uncertain = source.filter(
+      (line) => relevant.has(line) && line.confidence !== undefined && line.confidence < 80,
+    );
+    if (uncertain.length) warn('LOW_CONFIDENCE', uncertain);
+  }
+  const date = dateRange
+    ? dateRange.start.isoDate
+    : dates.length === 1 && dates[0]!.role === 'event'
+      ? dates[0]!.isoDate
+      : null;
   // A shared time cannot safely be attached to one of several dates in the same region.
-  const time = times.length === 1 && dates.length <= 1 && !times[0]!.issue ? times[0]! : null;
-  if (times.length && dates.length > 1 && !warnings.some((item) => item.code === 'AMBIGUOUS_TIME'))
+  const time =
+    explicitStart ?? (times.length === 1 && (dates.length <= 1 || dateRange) && !times[0]!.issue ? times[0]! : null);
+  const openingHours =
+    dateRange && time?.start && time.end && source.some((line) => /godziny\s+otwarcia/iu.test(line.text))
+      ? { startTime: time.start, endTime: time.end }
+      : null;
+  if (times.length && dates.length > 1 && !dateRange && !warnings.some((item) => item.code === 'AMBIGUOUS_TIME'))
     warn('AMBIGUOUS_TIME');
   return {
     title,
     location,
     dates,
     startDate: date,
-    startTime: time?.start ?? null,
-    endTime: time?.end ?? null,
-    durationMinutes: time?.duration ?? null,
+    dateRange,
+    openingHours,
+    startTime: openingHours ? null : (time?.start ?? null),
+    endTime: openingHours ? null : (time?.end ?? null),
+    durationMinutes: dateRange ? null : (time?.duration ?? null),
     source,
     warnings,
     requiresConfirmation: true,
@@ -329,7 +518,7 @@ function proposal(region: Region): OcrEventProposal {
 }
 
 /** Pure local parser: no clock, storage, network, OCR engine or event creation. */
-export function parseOcrEvents(input: OcrDocument): OcrParseResult {
+export function parseOcrEvents(input: OcrDocument, options: { groupByDates?: boolean } = {}): OcrParseResult {
   const document = ocrDocumentSchema.parse(input);
   const blocks = new Map<string | undefined, OcrLine[]>();
   for (const line of document.lines) {
@@ -339,8 +528,13 @@ export function parseOcrEvents(input: OcrDocument): OcrParseResult {
     blocks.set(line.blockId, block);
   }
   const proposals = [...blocks.values()]
-    .flatMap(regions)
-    .map(proposal)
-    .sort((a, b) => a.source[0]!.box.y - b.source[0]!.box.y || a.source[0]!.box.x - b.source[0]!.box.x);
+    .flatMap(options.groupByDates ? photoRegions : regions)
+    .map((region) => proposal(region, options.groupByDates))
+    .sort(
+      (a, b) =>
+        (options.groupByDates && a.startDate && b.startDate ? a.startDate.localeCompare(b.startDate) : 0) ||
+        a.source[0]!.box.y - b.source[0]!.box.y ||
+        a.source[0]!.box.x - b.source[0]!.box.x,
+    );
   return { proposals, warnings: proposals.length ? [] : [warning('MISSING_DATE', [])] };
 }

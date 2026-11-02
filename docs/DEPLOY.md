@@ -79,6 +79,15 @@ Próby lokalne z atrapą nie potwierdzają dostarczalności produkcyjnej.
 
 ## Paczka i migracje
 
+OCR.2 dołącza do `public/ocr/<hash>/` lokalny worker Tesseract.js, warianty
+silnika WASM, polski model i licencje. Wdróż cały katalog `public/` z paczki;
+nie korzystamy z CDN. `release:smoke` sprawdza manifest `/ocr/manifest.json`,
+obecność plików w ZIP, ich zgodność i dostępność przez HTTP oraz CSP.
+Własne nagłówki hostingu muszą dopuszczać `script-src 'self' 'wasm-unsafe-eval'`,
+`worker-src 'self'` i `img-src 'self' data: blob:`; bez szerokiego `unsafe-eval`.
+Brak nowych zmiennych środowiskowych, migracji i crona. Model ML Kit i APK
+pozostają osobnym krokiem; aktualizacja WWW nie aktualizuje APK.
+
 Migracja 0028 dodaje serie i wystąpienia zadań, a 0029 — niezależną historię
 wykonania/pominięcia i cofnięcia, zachowywaną po usunięciu widocznego zadania.
 Nie zmieniają danych zadań jednorazowych. C.2 udostępnia API konfiguracji
