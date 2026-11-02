@@ -228,3 +228,21 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.task-row-checklist {
+  list-style: none;
+  margin: 4px 0 0 44px;
+  padding: 0;
+}
+.task-row-checklist .mantine-Checkbox-body {
+  min-height: 44px;
+  align-items: center;
+}
+.task-row-checklist .mantine-Checkbox-labelWrapper {
+  min-width: 0;
+}
+.task-row-checklist .mantine-Checkbox-label {
+  padding-block: 10px;
+  overflow-wrap: anywhere;
+  font-size: var(--mantine-font-size-sm);
+}

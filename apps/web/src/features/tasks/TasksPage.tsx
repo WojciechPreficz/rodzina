@@ -182,7 +182,7 @@ function TaskListPage() {
             className="task-checkbox"
             aria-label={t.check(task.title)}
             checked={task.isDone}
-            disabled={data.update.isPending || data.clearDone.isPending}
+            disabled={data.update.isPending || data.clearDone.isPending || data.checklist.isPending}
             onChange={(event) => {
               const isDone = event.currentTarget.checked;
               if (!confirmTaskCompletion(task, isDone)) return;
@@ -225,6 +225,33 @@ function TaskListPage() {
           <MemberAvatar id={task.assigneeId} member={members.find((member) => member.id === task.assigneeId)} />
         )}
       </Group>
+      {!!task.checklist?.length && (
+        <Stack component="ul" className="task-row-checklist" gap={0} aria-label={`Podzadania: ${task.title}`}>
+          {task.checklist.map((item) => (
+            <li key={item.id}>
+              <Checkbox
+                label={item.title}
+                checked={item.isDone}
+                disabled={data.checklist.isPending || data.update.isPending || data.clearDone.isPending}
+                styles={{ label: { textDecoration: item.isDone ? 'line-through' : undefined } }}
+                onChange={(event) => {
+                  const isDone = event.currentTarget.checked;
+                  void run(() =>
+                    data.checklist.mutateAsync({
+                      id: task.id,
+                      change: {
+                        type: 'checklist-update',
+                        itemId: item.id,
+                        data: { isDone, doneVersion: item.doneVersion },
+                      },
+                    }),
+                  );
+                }}
+              />
+            </li>
+          ))}
+        </Stack>
+      )}
     </Paper>
   );
   return (

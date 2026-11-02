@@ -151,10 +151,11 @@ export function readReminderSchedule(
       const year = Number(new Intl.DateTimeFormat('en', { timeZone: tz, year: 'numeric' }).format(generatedAt));
       const birthdays = database.db.select().from(contacts).where(eq(contacts.familyId, familyId)).all();
       for (const contact of birthdays) {
-        if (!contact.birthday) continue;
+        const monthDay = contact.birthday?.slice(5) ?? contact.birthdayMonthDay;
+        if (!monthDay) continue;
         for (const occurrenceYear of [year, year + 1]) {
-          if (occurrenceYear < Number(contact.birthday.slice(0, 4))) continue;
-          let date = `${occurrenceYear}-${contact.birthday.slice(5)}`;
+          if (contact.birthday && occurrenceYear < Number(contact.birthday.slice(0, 4))) continue;
+          let date = `${occurrenceYear}-${monthDay}`;
           if (date.endsWith('-02-29') && new Date(`${date}T00:00:00Z`).getUTCMonth() !== 1)
             date = `${occurrenceYear}-02-28`;
           const fireAt = localDateTimeToUtc(date, '09:00', tz);

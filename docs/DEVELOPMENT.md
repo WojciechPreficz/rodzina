@@ -208,6 +208,10 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       otwiera zapisany podgląd. Zdalne odnowienie/usunięcie po sync anuluje
       lub zastępuje stary alarm. Wydarzenia: zmiana/anulowanie i podział serii
       nie pozostawiają duplikatów. Wymagane zgody powiadomień i alarmów.
+- [ ] Poprawki list: na WWW 390/1280 px i fizycznym APK odhaczyć i cofnąć
+      podzadanie bez otwierania formularza, także offline; rodzic pozostaje
+      bez zmian. Sprawdzić zapis i odczyt urodzin bez roku, numer urodzin ze
+      znanym rokiem, ikonę tortu i wspólną typografię danych kontaktu.
 - [ ] Urodziny kontaktu: na WWW 390/1280 px i fizycznym APK zapisać datę,
       zmienić ją i wyczyścić. Na dwóch kontach potwierdzić alarm w dniu
       urodzin o 09:00 Europe/Warsaw, także offline po zamknięciu APK

@@ -39,7 +39,11 @@ export function createContactService(database: DatabaseConnection) {
       return database.db.transaction(() => {
         find(familyId, id);
         if (data.groupId !== undefined) findGroup(familyId, data.groupId);
-        return repository.update(familyId, id, data)!;
+        return repository.update(familyId, id, {
+          ...data,
+          ...(data.birthday !== undefined && data.birthdayMonthDay === undefined ? { birthdayMonthDay: null } : {}),
+          ...(data.birthdayMonthDay ? { birthday: null } : {}),
+        })!;
       });
     },
     remove(familyId: string, id: string, role: FamilyRole) {

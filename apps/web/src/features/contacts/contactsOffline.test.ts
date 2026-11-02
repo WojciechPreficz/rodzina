@@ -28,6 +28,18 @@ describe('contacts IndexedDB snapshot', () => {
     await restarted.fetch(account, async () => data);
     expect(restarted.snapshot().saved?.data.contacts[0]?.birthday).toBeUndefined();
   });
+  it('keeps a yearless birthday after an offline restart', async () => {
+    const store = createContactsStore();
+    await store.activate(account);
+    await store.fetch(account, async () => ({
+      ...data,
+      contacts: data.contacts.map((contact) => ({ ...contact, birthday: null, birthdayMonthDay: '02-29' })),
+    }));
+    await closeDatabase();
+    const restarted = createContactsStore();
+    await restarted.activate(account);
+    expect(restarted.snapshot().saved?.data.contacts[0]).toMatchObject({ birthday: null, birthdayMonthDay: '02-29' });
+  });
   it('restores complete data and its original download time after offline process restart', async () => {
     const store = createContactsStore();
     await store.activate(account);

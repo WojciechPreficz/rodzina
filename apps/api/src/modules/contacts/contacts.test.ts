@@ -92,6 +92,26 @@ describe('contacts API', () => {
     await app?.close();
     database?.sqlite.close();
   });
+  it('stores yearless birthdays and switches between both representations with legacy patches', async () => {
+    const contact = await add({ birthdayMonthDay: '02-29' });
+    expect(contact).toMatchObject({ birthday: null, birthdayMonthDay: '02-29' });
+    expect((await request('PATCH', `/api/contacts/${contact.id}`, { phone: '123' })).json().contact).toMatchObject({
+      birthday: null,
+      birthdayMonthDay: '02-29',
+    });
+    expect(
+      (await request('PATCH', `/api/contacts/${contact.id}`, { birthday: '2000-02-29' })).json().contact,
+    ).toMatchObject({ birthday: '2000-02-29', birthdayMonthDay: null });
+    expect(
+      (await request('PATCH', `/api/contacts/${contact.id}`, { birthday: null, birthdayMonthDay: '10-20' })).json()
+        .contact,
+    ).toMatchObject({ birthday: null, birthdayMonthDay: '10-20' });
+    expect((await snapshot()).contacts.find((item) => item.id === contact.id)?.birthdayMonthDay).toBe('10-20');
+    expect((await request('PATCH', `/api/contacts/${contact.id}`, { birthday: null })).json().contact).toMatchObject({
+      birthday: null,
+      birthdayMonthDay: null,
+    });
+  });
   it('saves, preserves with legacy patches, changes and clears birthdays', async () => {
     const contact = await add({ birthday: '2000-02-29' });
     expect(contact.birthday).toBe('2000-02-29');

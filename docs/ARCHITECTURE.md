@@ -118,6 +118,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   retry zachowuje ID. Brak pojedynczego kroku nie usuwa rodzica z cache.
   Obowiązuje istniejący cykl życia konta, czyszczenie dostępu, alarmów i danych
   oraz ochrona przed spóźnionymi odpowiedziami.
+  Podzadania są widoczne pod rodzicem na liście zadań. Odhaczanie i cofanie
+  wykonania korzysta z tej samej trwałej kolejki offline co formularz checklisty;
+  nie zmienia wykonania rodzica. Błąd zapisu jest widoczny na liście.
   Formularz istniejącego zadania zawiera sekcję „Podzadania”: dodawanie Enterem
   lub przyciskiem, edycję, usuwanie z potwierdzeniem, odhaczanie i przyciski
   kolejności dostępne klawiaturą. Nowy rodzic wymaga najpierw zapisu.
@@ -388,7 +391,14 @@ w strefie rodziny. Nie ma konfiguracji przypomnienia. Dla 29 lutego w latach
 nieprzestępnych używamy 28 lutego. Alarmy wynikają z aktualnych kontaktów;
 zmiana daty lub usunięcie kontaktu usuwa poprzedni alarm po synchronizacji.
 Kliknięcie otwiera Kontakty. WWW służy do zapisu daty; alarm dostarcza Android.
-Data urodzin jest widoczna na liście kontaktów i w szczegółach, w formacie DD.MM.YYYY.
+Formularz rozdziela dzień i miesiąc (DD.MM) od opcjonalnego roku urodzenia.
+Pełna data pozostaje w `birthday` (YYYY-MM-DD); bez roku zapisujemy wyłącznie
+`birthdayMonthDay` (MM-DD), z pustym `birthday`, bez fikcyjnego roku. Pola te
+są wzajemnie wykluczające. Starsze żądanie zmieniające `birthday` zastępuje
+również datę bez roku; zapis pozostałych pól zachowuje obie reprezentacje.
+Data jest widoczna na liście kontaktów i w szczegółach przy ikonie tortu,
+w formacie DD.MM lub DD.MM.YYYY. Znany rok dodaje numer urodzin w bieżącym
+roku w strefie rodziny. Alarm działa także bez roku urodzenia.
 Nowy klient pobiera źródła `contact` przez `includeContacts=true`, więc starsze
 APK zachowują dotychczasowy harmonogram. Stare żądania zapisu bez `birthday`
 nie zmieniają daty, a stare snapshoty offline mogą nie zawierać tego pola.

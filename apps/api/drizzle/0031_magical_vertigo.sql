@@ -1,0 +1,1 @@
+ALTER TABLE `contacts` ADD `birthday_month_day` text;

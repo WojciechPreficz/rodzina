@@ -112,6 +112,17 @@ describe('reminder schedule API', () => {
     expect(response.statusCode, response.body).toBe(201);
     return response.json().contact.id as string;
   }
+  it('schedules yearless leap-day birthdays using the same annual policy', async () => {
+    database.db
+      .update(schema.sessions)
+      .set({ expiresAt: utc('2029-01-01') })
+      .run();
+    vi.mocked(Date.now).mockReturnValue(utc('2027-02-27', '12:00'));
+    createInitialContactGroups(database, familyId, admin.id, Date.now());
+    expect((await request('POST', '/api/contacts', { name: 'Anna', birthdayMonthDay: '02-29' })).statusCode).toBe(201);
+    expect(await birthdaySchedule()).toMatchObject([{ occurrenceDate: '2027-02-28' }]);
+  });
+
   it('automatically schedules annual birthdays for the whole family and updates or removes alarms', async () => {
     const id = await birthday('1990-10-20');
     const expected = {

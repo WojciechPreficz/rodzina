@@ -37,11 +37,20 @@ export function ContactForm({
   const [relationship, setRelationship] = useState(contact?.relationship ?? '');
   const [phone, setPhone] = useState(contact?.phone ?? '');
   const [address, setAddress] = useState(contact?.address ?? '');
-  const [birthday, setBirthday] = useState(contact?.birthday ?? '');
+  const [birthday, setBirthday] = useState(
+    (contact?.birthday?.slice(5) ?? contact?.birthdayMonthDay ?? '').split('-').reverse().join('.'),
+  );
+  const [birthYear, setBirthYear] = useState(contact?.birthday?.slice(0, 4) ?? '');
   const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (disabled || pending) return;
+    const parts = birthday.trim().match(/^(\d{1,2})\.(\d{1,2})\.?$/);
+    const monthDay = parts ? `${parts[2]!.padStart(2, '0')}-${parts[1]!.padStart(2, '0')}` : '';
+    if (!groupOnly && ((birthday && !parts) || (birthYear && (!birthday || !/^\d{4}$/.test(birthYear))))) {
+      setError('Podaj dzień i miesiąc w formacie DD.MM oraz opcjonalny czterocyfrowy rok.');
+      return;
+    }
     const result = groupOnly
       ? createContactGroupSchema.safeParse({ name })
       : createContactSchema.safeParse({
@@ -50,7 +59,8 @@ export function ContactForm({
           relationship,
           phone,
           address,
-          birthday: birthday || null,
+          birthday: monthDay && birthYear ? `${birthYear}-${monthDay}` : null,
+          birthdayMonthDay: monthDay && !birthYear ? monthDay : null,
         });
     if (!result.success) {
       setError('Sprawdź nazwę, datę urodzin i długość wpisanych danych.');
@@ -114,11 +124,21 @@ export function ContactForm({
                   onChange={(event) => setAddress(event.currentTarget.value)}
                 />
                 <TextInput
-                  label="Data urodzin"
-                  type="date"
+                  label="Dzień i miesiąc urodzin"
+                  placeholder="DD.MM"
+                  inputMode="decimal"
+                  maxLength={6}
                   description="Przypomnienie dla wszystkich domowników co roku w dniu urodzin o 09:00."
                   value={birthday}
                   onChange={(event) => setBirthday(event.currentTarget.value)}
+                />
+                <TextInput
+                  label="Rok urodzenia (opcjonalnie)"
+                  placeholder="RRRR"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={birthYear}
+                  onChange={(event) => setBirthYear(event.currentTarget.value)}
                 />
               </>
             )}

@@ -568,6 +568,20 @@ async function openOfflineChecklist(initial = checklistTask) {
 }
 
 describe('task checklist UI', () => {
+  it('checks and unchecks visible steps from the list offline without completing the parent', async () => {
+    setup(`/zadania/${list.id}`, [structuredClone(checklistTask)]);
+    const steps = within(await screen.findByRole('list', { name: `Podzadania: ${task.title}` }));
+    act(() => onlineManager.setOnline(false));
+    fireEvent.click(steps.getByRole('checkbox', { name: 'Okna' }));
+    await waitFor(() => expect(steps.getByRole('checkbox', { name: 'Okna' })).toBeChecked());
+    expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
+    expect(taskStore.project().items[list.id]![0]!.checklist![0]!.isDone).toBe(true);
+    await waitFor(() => expect(steps.getByRole('checkbox', { name: 'Okna' })).toBeEnabled());
+    fireEvent.click(steps.getByRole('checkbox', { name: 'Okna' }));
+    await waitFor(() => expect(steps.getByRole('checkbox', { name: 'Okna' })).not.toBeChecked());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('lets a child add, edit, reorder, check and remove offline without changing parent counts', async () => {
     const section = await openOfflineChecklist();
     const draft = section.getByRole('textbox', { name: 'Nowe podzadanie' });

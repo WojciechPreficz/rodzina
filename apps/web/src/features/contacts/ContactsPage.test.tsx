@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Contact, ContactGroup } from '@rodzina/shared';
 import { ContactsPage } from './ContactsPage.js';
-import { contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
+import { contactBirthdayText, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import { allowNavigation, installNativeNavigation } from '../../nativeNavigation.js';
 import { theme, cssVariablesResolver } from '../../theme.js';
 import { CONTACTS_SIGNAL, contactsStore } from './contactsOffline.js';
@@ -217,7 +217,14 @@ describe('contacts online', () => {
     expect(add).toHaveAttribute('data-block', 'true');
     fireEvent.click(add);
     const dialog = await screen.findByRole('dialog');
-    for (const label of ['Grupa', 'Opis relacji', 'Telefon', 'Adres', 'Data urodzin'])
+    for (const label of [
+      'Grupa',
+      'Opis relacji',
+      'Telefon',
+      'Adres',
+      'Dzień i miesiąc urodzin',
+      'Rok urodzenia (opcjonalnie)',
+    ])
       expect(within(dialog).getByLabelText(label)).toBeInTheDocument();
   });
   it('saves, displays, edits and clears birthdays without reminder settings', async () => {
@@ -225,21 +232,25 @@ describe('contacts online', () => {
     await loaded();
     fireEvent.click(screen.getByRole('button', { name: '＋ Dodaj kontakt' }));
     fireEvent.change(screen.getByLabelText(/Imię i nazwisko lub nazwa/), { target: { value: 'Anna' } });
-    fireEvent.change(screen.getByLabelText('Data urodzin'), { target: { value: '1990-10-20' } });
+    fireEvent.change(screen.getByLabelText('Dzień i miesiąc urodzin'), { target: { value: '20.10' } });
+    fireEvent.change(screen.getByLabelText('Rok urodzenia (opcjonalnie)'), { target: { value: '1990' } });
     expect(screen.getByText(/Przypomnienie dla wszystkich domowników/)).toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     const contactButton = await screen.findByRole('button', { name: 'Szczegóły kontaktu: Anna' });
     const row = within(contactButton.closest('article')!);
-    expect(row.getByText('Data urodzin: 20.10.1990')).toBeInTheDocument();
+    expect(row.getByText(/20\.10\.1990 · \d+\. urodziny w tym roku/)).toBeInTheDocument();
     fireEvent.click(contactButton);
-    expect(within(await screen.findByRole('dialog')).getByText('Data urodzin: 20.10.1990')).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole('dialog')).getByText(/20\.10\.1990 · \d+\. urodziny w tym roku/),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Edytuj' }));
-    expect(screen.getByLabelText('Data urodzin')).toHaveValue('1990-10-20');
-    fireEvent.change(screen.getByLabelText('Data urodzin'), { target: { value: '' } });
+    expect(screen.getByLabelText('Dzień i miesiąc urodzin')).toHaveValue('20.10');
+    fireEvent.change(screen.getByLabelText('Dzień i miesiąc urodzin'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Rok urodzenia (opcjonalnie)'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     await waitFor(() => expect(items.find((item) => item.name === 'Anna')?.birthday).toBeNull());
-    await waitFor(() => expect(row.queryByText(/Data urodzin:/)).not.toBeInTheDocument());
+    await waitFor(() => expect(row.queryByRole('img', { name: 'Urodziny' })).not.toBeInTheDocument());
   });
   it('sorts Polish names, filters every optional field and telephone separators, and preserves full counts', async () => {
     setup([
@@ -401,4 +412,25 @@ it('normalizes Polish text without mutating the source order', () => {
   const contacts = [base, { ...base, name: 'Anna' }];
   expect(sortContacts(contacts)[0]?.name).toBe('Anna');
   expect(contacts[0]?.name).toBe(base.name);
+});
+
+it('saves a birthday without a year and restores it in the editor', async () => {
+  setup();
+  const dialog = await addContact();
+  fireEvent.change(within(dialog).getByLabelText(/Imię i nazwisko/), { target: { value: 'Zofia' } });
+  fireEvent.change(within(dialog).getByLabelText('Dzień i miesiąc urodzin'), { target: { value: '29.02' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
+  const button = await screen.findByRole('button', { name: 'Szczegóły kontaktu: Zofia' });
+  expect(items.find((item) => item.name === 'Zofia')).toMatchObject({ birthday: null, birthdayMonthDay: '02-29' });
+  expect(within(button.closest('article')!).getByText('29.02')).toBeVisible();
+  fireEvent.click(button);
+  fireEvent.click(screen.getByRole('button', { name: 'Edytuj' }));
+  expect(screen.getByLabelText('Dzień i miesiąc urodzin')).toHaveValue('29.02');
+  expect(screen.getByLabelText('Rok urodzenia (opcjonalnie)')).toHaveValue('');
+});
+it('uses the family year to show the birthday ordinal, including before the birthday', () => {
+  expect(contactBirthdayText({ ...base, birthday: '1990-10-20' }, 'Europe/Warsaw', new Date('2026-01-01'))).toBe(
+    '20.10.1990 · 36. urodziny w tym roku',
+  );
+  expect(contactBirthdayText({ ...base, birthdayMonthDay: '02-29' })).toBe('29.02');
 });

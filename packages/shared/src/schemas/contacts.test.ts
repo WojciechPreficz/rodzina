@@ -41,3 +41,12 @@ describe('contact contracts', () => {
     expect(createContactGroupSchema.safeParse({ name: 'a'.repeat(60) }).success).toBe(true);
   });
 });
+
+it('accepts a month and day without inventing a birth year', () => {
+  expect(createContactSchema.parse({ name: 'Anna', birthdayMonthDay: '02-29' }).birthdayMonthDay).toBe('02-29');
+  for (const birthdayMonthDay of ['02-30', '13-01', '1-01', ''])
+    expect(createContactSchema.safeParse({ name: 'Anna', birthdayMonthDay }).success).toBe(false);
+  expect(
+    createContactSchema.safeParse({ name: 'Anna', birthday: '2000-02-29', birthdayMonthDay: '02-29' }).success,
+  ).toBe(false);
+});

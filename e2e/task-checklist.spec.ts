@@ -138,7 +138,15 @@ for (const native of [false, true]) {
     await form.getByRole('button', { name: 'Zapisz', exact: true }).click();
     await expect(form).toHaveCount(0);
     await expect(page.getByRole('article', { name: 'Porządki' }).getByText('Podzadania: 2 z 2')).toBeVisible();
-    await expect(page.getByRole('article').getByRole('checkbox')).not.toBeChecked();
+    await expect(page.getByRole('article').getByRole('checkbox', { name: 'Zrobione: Porządki' })).not.toBeChecked();
+    const listSteps = page.getByRole('list', { name: 'Podzadania: Porządki' });
+    await expect(listSteps.getByRole('checkbox', { name: 'Okna' })).toBeChecked();
+    await listSteps.getByRole('checkbox', { name: 'Okna' }).click();
+    await expect(page.getByRole('article', { name: 'Porządki' }).getByText('Podzadania: 1 z 2')).toBeVisible();
+    await listSteps.getByRole('checkbox', { name: 'Okna' }).click();
+    await expect(page.getByRole('article', { name: 'Porządki' }).getByText('Podzadania: 2 z 2')).toBeVisible();
+    await expect(page.getByText(/Zmiany oczekujące na wysłanie:/)).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('checklist-list.png'), fullPage: true, animations: 'disabled' });
     await page.goto('/kalendarz');
     await expect(page.getByRole('region', { name: 'Dziś do zrobienia' }).getByText('Podzadania: 2 z 2')).toBeVisible({
       timeout: 15000,

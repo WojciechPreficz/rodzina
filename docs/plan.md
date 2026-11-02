@@ -302,6 +302,15 @@ Poza zakresem: rotacja dyżurów, punkty, dowolne RRULE, wiele zaległych kopii,
 generowanie następców offline, dodatkowe kalendarze, iOS, PWA i Web Push.
 Domknięcie modułu wymaga C.4 i końcowego CI; deploy i APK są osobnymi operacjami.
 
+## Poprawki list zadań i kontaktów — 02.11.2026
+
+Jeden krok poprawek na polecenie właściciela: widoczne i odhaczane podzadania
+na liście zadań; dzień i miesiąc urodzin w jednym polu, opcjonalny rok osobno,
+numer urodzin w bieżącym roku, wspólna typografia danych kontaktu i ikona tortu.
+Przypomnienia działają także bez roku. Bez rozszerzenia konfiguracji alarmów.
+Status: zweryfikowane lokalnie, oczekuje na CI. Testy headless 390/1280 px
+obejmują WWW i transport Androida; odbiór ręczny i fizyczne APK do potwierdzenia.
+
 ## Pozostałe warunki i pomysły
 
 - Urodziny kontaktów — jeden krok rozszerzenia fazy 9: opcjonalna data urodzin,

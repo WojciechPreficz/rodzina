@@ -23,7 +23,7 @@ import { allowNavigation } from '../../nativeNavigation.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ContactForm } from './ContactForm.js';
-import { contactInitials, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
+import { contactBirthdayText, contactInitials, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import './contacts.css';
 import { CONTACTS_SIGNAL, contactsStore } from './contactsOffline.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
@@ -295,13 +295,16 @@ export function ContactsPage() {
                       </a>
                     )}
                     {contact.address && (
-                      <Text size="xs" c="dimmed" className="contact-address">
+                      <Text size="sm" c="dimmed" className="contact-address">
                         {contact.address}
                       </Text>
                     )}
-                    {contact.birthday && (
+                    {(contact.birthday || contact.birthdayMonthDay) && (
                       <Text size="sm" c="dimmed">
-                        Data urodzin: {contact.birthday.split('-').reverse().join('.')}
+                        <span role="img" aria-label="Urodziny">
+                          🎂
+                        </span>{' '}
+                        {contactBirthdayText(contact, family?.timezone)}
                       </Text>
                     )}
                   </div>
@@ -353,8 +356,13 @@ export function ContactsPage() {
             {currentContact.relationship && <Text>{currentContact.relationship}</Text>}
             {currentContact.phone && <a href={contactPhoneHref(currentContact.phone)}>{currentContact.phone}</a>}
             {currentContact.address && <Text className="contact-address">{currentContact.address}</Text>}
-            {currentContact.birthday && (
-              <Text>Data urodzin: {currentContact.birthday.split('-').reverse().join('.')}</Text>
+            {(currentContact.birthday || currentContact.birthdayMonthDay) && (
+              <Text>
+                <span role="img" aria-label="Urodziny">
+                  🎂
+                </span>{' '}
+                {contactBirthdayText(currentContact, family?.timezone)}
+              </Text>
             )}
             {canEdit && (
               <Group>

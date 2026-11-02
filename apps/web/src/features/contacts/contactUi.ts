@@ -27,3 +27,13 @@ export const contactInitials = (name: string) =>
     .join('')
     .toLocaleUpperCase('pl-PL');
 export const contactPhoneHref = (phone: string) => `tel:${phone.replace(/[^+\d*#]/g, '')}`;
+
+export function contactBirthdayText(contact: Contact, timezone = 'Europe/Warsaw', now = new Date()) {
+  const date = contact.birthday ?? contact.birthdayMonthDay;
+  if (!date) return '';
+  const formatted = date.split('-').reverse().join('.');
+  if (!contact.birthday) return formatted;
+  const year = Number(new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric' }).format(now));
+  const age = year - Number(contact.birthday.slice(0, 4));
+  return `${formatted} · ${age}. urodziny w tym roku`;
+}

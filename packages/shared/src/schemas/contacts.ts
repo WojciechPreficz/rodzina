@@ -14,6 +14,12 @@ const contactFields = z.object({
   address: optionalText(1000),
   phone: optionalText(50),
   birthday: calendarDateSchema.nullable().optional(),
+  birthdayMonthDay: z
+    .string()
+    .regex(/^\d{2}-\d{2}$/)
+    .refine((value) => calendarDateSchema.safeParse(`2000-${value}`).success, 'Nieprawidłowy dzień lub miesiąc.')
+    .nullable()
+    .optional(),
   relationship: optionalText(120),
 });
 const metadata = {
@@ -23,12 +29,18 @@ const metadata = {
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 };
+const consistentBirthday = (data: {
+  birthday?: string | null | undefined;
+  birthdayMonthDay?: string | null | undefined;
+}) => !(data.birthday && data.birthdayMonthDay);
 export const createContactSchema = contactFields
   .partial({ groupId: true, address: true, phone: true, relationship: true })
-  .strict();
+  .strict()
+  .refine(consistentBirthday, 'Podaj datę z rokiem albo dzień i miesiąc.');
 export const patchContactSchema = contactFields
   .partial()
   .strict()
+  .refine(consistentBirthday, 'Podaj datę z rokiem albo dzień i miesiąc.')
   .refine((data) => Object.keys(data).length > 0, 'Brak danych do zmiany.');
 export const createContactGroupSchema = z.object({ name: z.string().trim().min(1).max(60) }).strict();
 export const patchContactGroupSchema = createContactGroupSchema;

@@ -116,7 +116,10 @@
   min-height: 36px;
   padding-block: 7px;
   color: var(--app-accent);
-  font-size: 14px;
+  font-size: var(--mantine-font-size-sm);
+  line-height: var(--mantine-line-height-sm);
+  font-weight: 400;
+  font-family: inherit;
   overflow-wrap: anywhere;
 }
 .contact-address {
