@@ -61,14 +61,15 @@ for (const native of [false, true]) {
     if (native) await installNativeTransport(page);
     await page.goto(`/zadania/${listId}`);
     const article = page.getByRole('article', { name: 'Podlej kwiaty' });
-    await expect(article.getByRole('checkbox')).toBeEnabled();
+    const completion = article.getByRole('checkbox', { name: 'Zrobione: Podlej kwiaty', exact: true });
+    await expect(completion).toBeEnabled();
     offline = true;
     await page.evaluate(() => {
       localStorage.setItem('test:offline', 'yes');
       window.dispatchEvent(new Event('offline'));
     });
     const before = Date.now();
-    await article.getByRole('checkbox').click();
+    await completion.click();
     await expect(page.getByText('Kolejne zadanie po synchronizacji.', { exact: true })).toBeVisible();
     const after = Date.now();
     await page.screenshot({ path: info.outputPath(`recurring-pending-${native}.png`), fullPage: true });
@@ -85,7 +86,7 @@ for (const native of [false, true]) {
     });
     await expect(page.getByText('Kolejne zadanie po synchronizacji.', { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Zmiany oczekujące na wysłanie:/)).toHaveCount(0);
-    await expect(article.getByRole('checkbox')).not.toBeChecked();
+    await expect(completion).not.toBeChecked();
     const saved = await (await page.request.get(`/api/tasks/lists/${listId}/tasks?status=all`)).json();
     expect(saved.tasks).toHaveLength(2);
     const successor = saved.tasks.find((entry: { isDone: boolean }) => !entry.isDone);
