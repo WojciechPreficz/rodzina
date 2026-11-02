@@ -383,6 +383,31 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
   90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
 
+## Parser propozycji wydarzeń ze zdjęcia (OCR.1)
+
+Shared eksportuje `ocrDocumentSchema`, `OcrDocument` i `parseOcrEvents`.
+Adapter przekazuje wymiary obrazu po korekcie orientacji i zmniejszeniu oraz
+linie z unikalnym w obrębie wyniku `id`, tekstem i `box` (x, y, width, height
+w zakresie 0–1, początek w lewym górnym rogu tego obrazu). Opcjonalny `blockId`
+jest lokalnym identyfikatorem bloku silnika. Kontrakt nie zależy od silnika OCR.
+
+Parser jest lokalną, czystą funkcją bez zegara, sieci i zapisu. Respektuje bloki
+adaptera i rozdziela fragmenty przez odstępy poziome/pionowe; szeroki nagłówek
+nie łączy odległych kolumn. Tytuł i miejsce proponuje z pobliskich linii
+w tym samym obszarze. Wynik zawiera częściowe propozycje, pełne źródłowe linie
+z położeniem i polskie ostrzeżenia z kodami i identyfikatorami fragmentów.
+
+Daty numeryczne, ISO i polskie nazwy miesięcy są walidowane kalendarzowo.
+Brak roku zachowuje dzień/miesiąc i pustą datę ISO; nie wybieramy bieżącego
+ani najbliższego roku. Nie poprawiamy automatycznie błędów OCR. Kilka dat
+w obszarze pozostaje alternatywami z ostrzeżeniem, bez wybranej daty i godziny;
+termin zapisów jest oznaczony do potwierdzenia. Rozpoznane godziny i rosnące
+przedziały są lokalne; pojedyncza godzina nie otrzymuje domyślnego czasu
+trwania, a przedział przez północ wymaga decyzji. Brak godziny nie oznacza
+automatycznie wydarzenia całodniowego. Każda propozycja wymaga zatwierdzenia.
+Układ jest heurystyką: nieczytelne i rozdzielone fragmenty mogą wymagać ręcznego
+połączenia lub rozdzielenia. Silniki, interfejs i zapis należą do OCR.2–OCR.5.
+
 ## Przypomnienia
 
 Opcjonalna data urodzin kontaktu (`birthday`, YYYY-MM-DD) automatycznie dodaje

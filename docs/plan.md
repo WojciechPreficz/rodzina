@@ -6,7 +6,7 @@ aplikacji jest w [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Statusy
 
-Stan dokumentacji na 01.11.2026. Brak potwierdzenia CI lub prób ręcznych
+Stan dokumentacji na 02.11.2026. Brak potwierdzenia CI lub prób ręcznych
 nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 
 | Zakres                                                        | Stan                                                                            | Pozostałe warunki                                                 |
@@ -310,6 +310,67 @@ numer urodzin w bieżącym roku, wspólna typografia danych kontaktu i ikona tor
 Przypomnienia działają także bez roku. Bez rozszerzenia konfiguracji alarmów.
 Status: zweryfikowane lokalnie, oczekuje na CI. Testy headless 390/1280 px
 obejmują WWW i transport Androida; odbiór ręczny i fizyczne APK do potwierdzenia.
+
+## Wydarzenia ze zdjęcia — OCR.1–OCR.6 (#70)
+
+Kolejność: OCR.1 → OCR.2 → OCR.3 → OCR.4 → OCR.5 → OCR.6; osobny krok i commit.
+Zdjęcie z pliku lub galerii: JPEG, PNG, WebP do 20 MB, korekta orientacji
+i zmniejszenie dłuższego boku do 3200 px przed lokalnym OCR. WWW używa
+Tesseract.js z polskimi danymi, Android ML Kit z dołączonym modelem łacińskim.
+Wspólny parser i React pokazują wiele częściowych propozycji ze źródłem
+i ostrzeżeniami. Brak roku, godziny i niejasne daty wymagają decyzji użytkownika;
+nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
+
+- **OCR.1 (#71): zweryfikowane lokalnie, oczekuje na CI.** Format obrazu
+  po orientacji i linii ze znormalizowanym położeniem w shared, parser polskich
+  dat, godzin i jednoznacznych przedziałów. Podział według bloków i kolumn,
+  propozycje tytułu i miejsca z sąsiednich fragmentów, zachowane źródła
+  i jawne niejednoznaczności. Syntetyczne dane w test-fixtures/ocr obejmują
+  jeden i kilka terminów, kolumny, zapisy, brak roku/godziny i błędny OCR.
+  Odbiór: testy parsera, walidacja dat i lat przestępnych, sprawdzenie
+  użytkowników shared oraz końcowe CI. Bez silników OCR, UI i API importu.
+- **OCR.2 (#72): planowany.** Akcja „Dodaj ze zdjęcia”, przygotowanie obrazu,
+  Tesseract.js w workerze ładowanym na żądanie, lokalne wersjonowane zasoby
+  i licencje, minimalna CSP dla WASM/workera. Podgląd zdjęcia i propozycji,
+  postęp, błędy, anulowanie i ochrona przed spóźnionymi wynikami po zmianie
+  konta. Bez zapisu i ML Kit. Odbiór: rzeczywisty OCR produkcyjnego builda,
+  komponenty i headless 390/1280 px, build i release:smoke zasobów.
+- **OCR.3 (#73): planowany.** Natywny selektor zdjęć i ML Kit z modelem
+  dołączonym do APK, wspólny format/parser/podgląd. Obsługa URI, orientacji,
+  pamięci i ograniczonego podglądu bez pełnego base64 przez most JS.
+  Anulowanie, powrót i zmiana konta zwalniają zasoby i unieważniają wyniki.
+  Bez aparatu i zapisu. Odbiór: debug APK, JVM, Android Lint i fizyczny
+  telefon, także pierwszy odczyt offline, obrót i duży plik.
+- **OCR.4 (#74): planowany.** POST /api/events/import: 1–20 pozycji
+  { operationId, event }, wydarzenia jednorazowe, walidacja paczki przed
+  przetwarzaniem, walidacja wydarzeń osobno. Wyniki created/already_created/error,
+  osobna transakcja wydarzenia i rejestru sukcesu, odcisk danych, kontrola
+  dostępu przed replay. Rejestr do usunięcia konta/rodziny; usunięcie wydarzenia
+  nie pozwala odtworzyć go przez retry. Zachowane role, także dzieci, oraz
+  stary POST /api/events. Odbiór: częściowy sukces, retry i równoległość,
+  rollback, konflikty ID, izolacja, migracja, build i release:smoke.
+- **OCR.5 (#75): planowany.** Poprawianie, odrzucanie i ręczne dodawanie
+  propozycji istniejącym formularzem; potwierdzenie przed zaznaczeniem do paczki.
+  Zapis online do 20 wydarzeń i wynik każdej pozycji, odświeżenie kalendarza
+  i harmonogramu także przy częściowym sukcesie. Przed wysłaniem trwały zapis
+  ID i zatwierdzonych danych w magazynie konta; nieznany wynik zamraża dane,
+  po restarcie ręczne retry używa tej samej operacji. Błąd pamięci blokuje
+  wysłanie; zmiana konta czyści dane, spóźnione odpowiedzi są ignorowane.
+  Odbiór: komponenty i headless 390/1280 px, częściowy sukces, utrata odpowiedzi,
+  restart, retry, błąd pamięci i sieci, podwójne kliknięcie oraz zmiana konta.
+- **OCR.6 (#76): planowany.** Odbiór całego przepływu na kontrolnych zdjęciach
+  w WWW 390/1280 px i fizycznym APK, także offline OCR Androida, częściowy
+  sukces, restart/retry, konto, sieć, Wstecz, fokus, klawiatura i safe area.
+  Sprawdzenie CSP, lokalnych zasobów, modelu APK, prywatności i zgodności
+  starszego APK. Build, release:smoke, kontrole Androida i końcowe CI;
+  aktualizacja istniejącej dokumentacji oraz gotowość osobnych paczek WWW/APK.
+  Brakujące próby pozostają jawne. Publikacja wyłącznie na osobne polecenie.
+
+Zdjęcie i surowy OCR nie trafiają na serwer ani do logów; serwer otrzyma
+wyłącznie zatwierdzone wydarzenia. Bez automatycznego przypisywania osób
+i przypomnień. Poza zakresem: aparat, PDF, pismo odręczne, załączanie zdjęć,
+cykliczność, LLM, PWA, Web Push i nowa kolejka tworzenia wydarzeń offline.
+Kolejne kroki nie zmieniają obecnych uprawnień kalendarza.
 
 ## Pozostałe warunki i pomysły
 

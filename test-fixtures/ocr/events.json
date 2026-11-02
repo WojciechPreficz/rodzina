@@ -1,0 +1,455 @@
+[
+  {
+    "name": "single event",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "title",
+          "text": "Koncert rodzinny",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "date",
+          "text": "12 maja 2026, godz. 18:00–20:30",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "place",
+          "text": "Miejsce: Dom Kultury",
+          "box": {
+            "x": 0.1,
+            "y": 0.18,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Koncert rodzinny",
+        "location": "Dom Kultury",
+        "startDate": "2026-05-12",
+        "startTime": "18:00",
+        "endTime": "20:30",
+        "durationMinutes": 150,
+        "codes": [],
+        "source": ["title", "date", "place"]
+      }
+    ]
+  },
+  {
+    "name": "several events in blocks",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "a-title",
+          "text": "Piknik",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          },
+          "blockId": "a"
+        },
+        {
+          "id": "a-date",
+          "text": "01.06.2026 o 10:00",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          },
+          "blockId": "a"
+        },
+        {
+          "id": "b-title",
+          "text": "Kino plenerowe",
+          "box": {
+            "x": 0.1,
+            "y": 0.3,
+            "width": 0.36,
+            "height": 0.025
+          },
+          "blockId": "b"
+        },
+        {
+          "id": "b-date",
+          "text": "03/06/2026 godz. 19",
+          "box": {
+            "x": 0.1,
+            "y": 0.34,
+            "width": 0.36,
+            "height": 0.025
+          },
+          "blockId": "b"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Piknik",
+        "startDate": "2026-06-01",
+        "startTime": "10:00",
+        "codes": [],
+        "source": ["a-title", "a-date"]
+      },
+      {
+        "title": "Kino plenerowe",
+        "startDate": "2026-06-03",
+        "startTime": "19:00",
+        "codes": [],
+        "source": ["b-title", "b-date"]
+      }
+    ]
+  },
+  {
+    "name": "columns without adapter block IDs",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "left-title",
+          "text": "Teatr",
+          "box": {
+            "x": 0.06,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "right-title",
+          "text": "Turniej",
+          "box": {
+            "x": 0.57,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "left-date",
+          "text": "4 lipca 2026",
+          "box": {
+            "x": 0.06,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "right-date",
+          "text": "5 lipca 2026 o 16:00",
+          "box": {
+            "x": 0.57,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "left-place",
+          "text": "Miejsce: Sala A",
+          "box": {
+            "x": 0.06,
+            "y": 0.18,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Teatr",
+        "location": "Sala A",
+        "startDate": "2026-07-04",
+        "startTime": null,
+        "codes": ["MISSING_TIME"],
+        "source": ["left-title", "left-date", "left-place"]
+      },
+      {
+        "title": "Turniej",
+        "location": null,
+        "startDate": "2026-07-05",
+        "startTime": "16:00",
+        "codes": [],
+        "source": ["right-title", "right-date"]
+      }
+    ]
+  },
+  {
+    "name": "registration deadline next to event date",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "title",
+          "text": "Warsztaty ceramiczne",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "registration",
+          "text": "Zapisy do 10.05.2026",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "event",
+          "text": "Wydarzenie: 15.05.2026, godz. 17:00",
+          "box": {
+            "x": 0.1,
+            "y": 0.18,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Warsztaty ceramiczne",
+        "startDate": null,
+        "startTime": null,
+        "codes": ["AMBIGUOUS_DATE", "REGISTRATION_DATE", "AMBIGUOUS_TIME"],
+        "source": ["title", "registration", "event"]
+      }
+    ]
+  },
+  {
+    "name": "missing year",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "title",
+          "text": "Spotkanie sąsiedzkie",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "date",
+          "text": "29 lutego, godz. 18.00",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Spotkanie sąsiedzkie",
+        "startDate": null,
+        "startTime": "18:00",
+        "codes": ["MISSING_YEAR"],
+        "source": ["title", "date"]
+      }
+    ]
+  },
+  {
+    "name": "damaged OCR year",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "title",
+          "text": "Koncert chóru",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "date",
+          "text": "12.05.2O26, godz. 18:00",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Koncert chóru",
+        "startDate": null,
+        "startTime": "18:00",
+        "codes": ["INVALID_DATE"],
+        "source": ["title", "date"]
+      }
+    ]
+  },
+  {
+    "name": "date without time",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "title",
+          "text": "Dzień otwarty",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "date",
+          "text": "2026-09-12",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Dzień otwarty",
+        "startDate": "2026-09-12",
+        "startTime": null,
+        "codes": ["MISSING_TIME"],
+        "source": ["title", "date"]
+      }
+    ]
+  },
+  {
+    "name": "several dates in one announcement",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "title",
+          "text": "Zajęcia próbne",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "dates",
+          "text": "12.05.2026 lub 14.05.2026 o 18:00",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Zajęcia próbne",
+        "startDate": null,
+        "startTime": null,
+        "codes": ["AMBIGUOUS_DATE", "AMBIGUOUS_TIME"],
+        "source": ["title", "dates"]
+      }
+    ]
+  },
+  {
+    "name": "unreadable date",
+    "document": {
+      "image": {
+        "width": 1200,
+        "height": 1600
+      },
+      "lines": [
+        {
+          "id": "title",
+          "text": "Festyn szkolny",
+          "box": {
+            "x": 0.1,
+            "y": 0.1,
+            "width": 0.36,
+            "height": 0.025
+          }
+        },
+        {
+          "id": "date",
+          "text": "Data: ?? maja ????",
+          "box": {
+            "x": 0.1,
+            "y": 0.14,
+            "width": 0.36,
+            "height": 0.025
+          }
+        }
+      ]
+    },
+    "expected": [
+      {
+        "title": "Festyn szkolny",
+        "startDate": null,
+        "startTime": null,
+        "codes": ["MISSING_DATE", "MISSING_TIME"],
+        "source": ["title", "date"]
+      }
+    ]
+  }
+]

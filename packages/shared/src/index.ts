@@ -18,3 +18,5 @@ export * from './task-recurrence.js';
 export * from './schemas/auth.js';
 export * from './documents.js';
 export * from './schemas/documents.js';
+export * from './schemas/ocr.js';
+export * from './ocr.js';

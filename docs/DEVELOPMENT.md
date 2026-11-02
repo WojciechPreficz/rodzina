@@ -27,6 +27,17 @@ Testy nie używają lokalnej bazy rodziny. Dane migracji w test-fixtures/offline
 są współdzielone przez Vitest i Playwright; nie są dokumentacją.
 Raporty i zrzuty zapisujemy w ignorowanych katalogach coverage i test-results.
 
+Parser OCR.1 sprawdza `npm test -- packages/shared/src/ocr.test.ts`.
+Syntetyczny zestaw `test-fixtures/ocr/events.json` zawiera tekst, położenie
+i oczekiwane częściowe propozycje/ostrzeżenia; nie zawiera danych osobowych
+ani prawdziwych zdjęć. Testy obejmują miesiące, formaty liczbowe, lata
+przestępne, brak roku/godziny, błędy OCR, alternatywne daty, zapisy, bloki
+i kolumny oraz wspólny kontrakt adapterów. Po zmianie shared sprawdź również
+typy API i WWW. W OCR.1 nie ma UI, silnika ani importu, więc próby 390/1280 px,
+rzeczywistego rozpoznawania i fizycznego APK należą do OCR.2–OCR.6 i pozostają
+niewykonane. Pełny odbiór będzie wymagał plakatów kontrolnych, obu adapterów,
+częściowego zapisu i retry oraz prób opisanych w planie.
+
 Reguły cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
 modules/tasks/recurrence-migrations: końce miesięcy, lata przestępne, tygodnie
 ISO, DST, opóźniona synchronizacja, anomalie zegara, granica końca i unikalność
