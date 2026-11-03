@@ -454,7 +454,26 @@ urządzenia; nie trafiają na serwer ani do logów. Anulowanie, ponowny wybór,
 opuszczenie ekranu i czyszczenie konta kończą worker, zwalniają podgląd
 i unieważniają spóźnione wyniki. Limit pojedynczego odczytu wynosi 120 s.
 APK nie pokazuje tej akcji i nie zawiera zasobów Tesseract; natywny selektor
-i ML Kit należą do OCR.3, a poprawianie i zapis do OCR.4–OCR.5.
+i ML Kit należą do OCR.5, a poprawianie i zapis z interfejsu do OCR.4.
+
+`POST /api/events/import` (OCR.3) przyjmuje `{ items: [{ operationId, event }] }`
+z 1–20 pozycjami i unikalnymi UUID operacji. Niepoprawna struktura odrzuca całe
+żądanie (400); dane wydarzenia walidujemy osobno istniejącym schematem tworzenia,
+ograniczonym do `kind=single`. Odpowiedź 200 to `{ ok: true, results: [...] }`:
+każda pozycja ma `operationId`, `status` (`created`, `already_created`, `error`),
+a także `eventId` przy sukcesie lub `error: { code, message }` przy błędzie.
+Obowiązują dotychczasowe role kalendarza, również tworzenie przez dzieci.
+Nie przypisujemy automatycznie uczestników ani przypomnień.
+
+Każda pozycja ma osobną transakcję immediate obejmującą wydarzenie, jego relacje
+i sukces w `event_import_operations`. Klucz obejmuje rodzinę, użytkownika i UUID;
+odcisk SHA-256 dotyczy zwalidowanych danych po uzupełnieniu wartości domyślnych.
+Retry identycznych danych zwraca zapisany identyfikator, inne dane — błąd pozycji
+`OPERATION_CONFLICT`. Przed replay sprawdzamy sesję, dostęp do rodziny i aktualną
+przynależność uczestników. Rejestr nie wygasa; znika po usunięciu konta lub rodziny,
+ale pozostaje po usunięciu wydarzenia, więc retry nie odtwarza usuniętej treści.
+Zdjęcia i surowy OCR nie należą do kontraktu API. Dotychczasowy `POST /api/events`
+zachowuje kontrakt; interfejs importu i klientowa obsługa retry pozostają w OCR.4.
 
 ## Przypomnienia
 

@@ -1,9 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { createEventSchema, eventDataSchema, occurrencesQuerySchema } from './events.js';
+import {
+  createEventSchema,
+  eventDataSchema,
+  occurrencesQuerySchema,
+  importEventSchema,
+  importEventsSchema,
+  importEventsResponseSchema,
+} from './events.js';
 
 const single = { kind: 'single', title: 'Basen', startDate: '2026-10-11' };
 
 describe('event schemas', () => {
+  it('separates batch structure from individual event validation', () => {
+    const operationId = '11111111-1111-4111-8111-111111111111';
+    for (const event of [null, 1, [], {}, single]) {
+      expect(importEventsSchema.safeParse({ items: [{ operationId, event }] }).success).toBe(true);
+    }
+    expect(importEventsSchema.safeParse({ items: [{ operationId }] }).success).toBe(false);
+    expect(
+      importEventsSchema.safeParse({
+        items: [
+          { operationId, event: single },
+          { operationId, event: null },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(importEventSchema.parse(single)).toEqual(createEventSchema.parse(single));
+    expect(importEventSchema.safeParse({ ...single, kind: 'distant' }).success).toBe(false);
+    expect(importEventSchema.safeParse({ ...single, kind: 'recurring', rrule: 'FREQ=DAILY' }).success).toBe(false);
+    expect(
+      importEventsResponseSchema.safeParse({
+        ok: true,
+        results: [
+          { operationId, status: 'created', eventId: operationId },
+          { operationId, status: 'already_created', eventId: operationId },
+          { operationId, status: 'error', error: { code: 'VALIDATION_ERROR', message: 'Błędne dane.' } },
+        ],
+      }).success,
+    ).toBe(true);
+  });
   it('accepts all three kinds, timed and all-day events, and leap days', () => {
     for (const data of [
       single,

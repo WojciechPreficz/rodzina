@@ -210,6 +210,26 @@ export const events = sqliteTable(
   (table) => [index('events_family_date_idx').on(table.familyId, table.startDate)],
 );
 
+export const eventImportOperations = sqliteTable(
+  'event_import_operations',
+  {
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    id: text('id').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    // Intentionally no event FK: deletion must not allow a retry to recreate the event.
+    eventId: text('event_id').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.familyId, table.userId, table.id] }),
+    index('event_import_operations_user_idx').on(table.userId),
+  ],
+);
+
 export const eventParticipants = sqliteTable(
   'event_participants',
   {

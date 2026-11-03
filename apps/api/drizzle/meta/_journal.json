@@ -225,6 +225,13 @@
       "when": 1793615109269,
       "tag": "0031_magical_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793690181625,
+      "tag": "0032_clammy_wither",
+      "breakpoints": true
     }
   ]
 }

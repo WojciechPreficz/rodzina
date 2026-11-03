@@ -5,6 +5,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   createEventSchema,
+  importEventsSchema,
+  importEventsResponseSchema,
   patchEventSchema,
   eventScopeSchema,
   occurrencesQuerySchema,
@@ -20,6 +22,14 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
   const service = createEventService(database);
   const idSchema = z.object({ id: z.string().uuid() });
   app.register(async (routes) => {
+    routes.post('/api/events/import', async (request) => {
+      const user = requireUser(request);
+      const batch = parse(importEventsSchema, request.body);
+      return importEventsResponseSchema.parse({
+        ok: true,
+        results: service.importEvents(user.familyId, user.id, batch),
+      });
+    });
     routes.post('/api/events', async (request, reply) => {
       const data = parse(createEventSchema, request.body);
       const event = service.create(requireUser(request).familyId, requireUser(request).id, data);

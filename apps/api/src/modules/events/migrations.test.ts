@@ -59,13 +59,16 @@ it('upgrades the existing auth database without recreating tables or losing data
   }
 });
 
-it('adds reminders to an existing calendar without changing its events', () => {
+it.each([
+  { lastMigration: 10, feature: 'reminders' },
+  { lastMigration: 31, feature: 'import operations' },
+])('adds $feature to an existing calendar without changing its events', ({ lastMigration }) => {
   const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../drizzle');
   const oldMigrations = mkdtempSync(path.join(tmpdir(), 'rodzina-calendar-migrations-'));
   const database = createDatabase(loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' }));
   try {
     const journal = JSON.parse(readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'));
-    journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= 10);
+    journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= lastMigration);
     mkdirSync(path.join(oldMigrations, 'meta'));
     writeFileSync(path.join(oldMigrations, 'meta/_journal.json'), JSON.stringify(journal));
     for (const entry of journal.entries)
@@ -93,6 +96,7 @@ it('adds reminders to an existing calendar without changing its events', () => {
     const before = database.db.select().from(schema.events).all();
     migrate(database.db, { migrationsFolder });
     expect(database.db.select().from(schema.events).all()).toEqual(before);
+    expect(database.db.select().from(schema.eventImportOperations).all()).toEqual([]);
     database.db
       .insert(schema.reminders)
       .values({

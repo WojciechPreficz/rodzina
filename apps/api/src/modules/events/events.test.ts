@@ -106,6 +106,192 @@ describe('events API', () => {
     database?.sqlite.close();
   });
 
+  describe('photo event import', () => {
+    const item = (event: unknown = single) => ({ operationId: crypto.randomUUID(), event });
+    const importBatch = (items: unknown[], user = admin) => request('POST', '/api/events/import', { items }, user);
+
+    it.each(['admin', 'member', 'child'] as const)('imports for %s with the existing event rules', async (role) => {
+      const user = { admin, member, child }[role];
+      const items = [item({ ...single, participantIds: [child.id] }), item({ ...single, title: 'Drugie' })];
+      const response = await importBatch(items, user);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().results).toEqual(
+        items.map(({ operationId }) => ({ operationId, status: 'created', eventId: expect.any(String) })),
+      );
+      for (const result of response.json().results) {
+        expect((await request('GET', `/api/events/${result.eventId}`, undefined, user)).json().event).toMatchObject({
+          familyId,
+          createdBy: user.id,
+          kind: 'single',
+        });
+      }
+    });
+
+    it('returns independent validation errors and allows correcting failed operations', async () => {
+      const items = [
+        item(),
+        item(null),
+        item({ ...single, startDate: '2026-02-29' }),
+        item({ ...single, participantIds: [outsider.id] }),
+        item({ ...single, kind: 'recurring', rrule: 'FREQ=DAILY' }),
+        item({ ...single, kind: 'distant' }),
+        item({ ...single, reminders: [{ type: 'offset' }] }),
+        item({ ...single, title: 'Koniec' }),
+      ];
+      const response = await importBatch(items);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().results.map((result: { status: string }) => result.status)).toEqual([
+        'created',
+        'error',
+        'error',
+        'error',
+        'error',
+        'error',
+        'error',
+        'created',
+      ]);
+      for (const result of response.json().results.slice(1, -1)) {
+        expect(result.error).toMatchObject({ code: 'VALIDATION_ERROR', message: expect.any(String) });
+      }
+      expect(database.db.select().from(schema.events).all()).toHaveLength(2);
+      expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(2);
+      expect((await importBatch([{ ...items[1], event: single }])).json().results[0].status).toBe('created');
+    });
+
+    it('validates the entire envelope before any write', async () => {
+      const valid = item();
+      for (const payload of [
+        null,
+        [],
+        {},
+        { items: [] },
+        { items: Array.from({ length: 21 }, () => item()) },
+        { items: [valid, valid] },
+        { items: [valid, { operationId: 'bad', event: single }] },
+        { items: [valid, { operationId: crypto.randomUUID() }] },
+        { items: [valid, null] },
+        { items: [valid], rawOcr: 'text' },
+        { items: [{ ...valid, image: 'data' }] },
+      ]) {
+        const response = await request('POST', '/api/events/import', payload);
+        expect(response.statusCode, response.body).toBe(400);
+        expect(response.json().error.code).toBe('VALIDATION_ERROR');
+      }
+      expect(database.db.select().from(schema.events).all()).toHaveLength(0);
+      const response = await importBatch(Array.from({ length: 20 }, () => item()));
+      expect(response.json().results.every((result: { status: string }) => result.status === 'created')).toBe(true);
+      expect(database.db.select().from(schema.events).all()).toHaveLength(20);
+    });
+
+    it('replays lost responses and concurrent requests without duplicate events', async () => {
+      const items = [item(), item()];
+      const responses = await Promise.all(Array.from({ length: 5 }, () => importBatch(items)));
+      expect(responses.every((response) => response.statusCode === 200)).toBe(true);
+      for (let index = 0; index < items.length; index++) {
+        const results = responses.map((response) => response.json().results[index]);
+        expect(results.filter((result) => result.status === 'created')).toHaveLength(1);
+        expect(results.filter((result) => result.status === 'already_created')).toHaveLength(4);
+        expect(new Set(results.map((result) => result.eventId)).size).toBe(1);
+      }
+      expect(database.db.select().from(schema.events).all()).toHaveLength(2);
+      expect((await importBatch(items)).json().results.map((result: { status: string }) => result.status)).toEqual([
+        'already_created',
+        'already_created',
+      ]);
+    });
+
+    it('hashes normalized event data and rejects reuse with different data', async () => {
+      const original = item({ ...single, title: ' Basen ' });
+      const first = (await importBatch([original])).json().results[0];
+      const retry = {
+        ...original,
+        event: {
+          durationMinutes: 60,
+          startTime: '17:00',
+          startDate: single.startDate,
+          title: 'Basen',
+          kind: 'single',
+          description: null,
+          participantIds: [],
+        },
+      };
+      expect((await importBatch([retry])).json().results[0]).toEqual({ ...first, status: 'already_created' });
+      expect(
+        (await importBatch([{ ...original, event: { ...single, title: 'Inne' } }])).json().results[0],
+      ).toMatchObject({ operationId: original.operationId, status: 'error', error: { code: 'OPERATION_CONFLICT' } });
+      expect(database.db.select().from(schema.events).all()).toHaveLength(1);
+    });
+
+    it('retains success after event deletion and service restart', async () => {
+      const items = [item()];
+      const result = (await importBatch(items)).json().results[0];
+      expect((await request('DELETE', `/api/events/${result.eventId}`)).statusCode).toBe(200);
+      await app.close();
+      app = await buildApp(loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' }), database);
+      expect((await importBatch(items)).json().results[0]).toEqual({ ...result, status: 'already_created' });
+      expect(database.db.select().from(schema.events).all()).toHaveLength(0);
+      expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(1);
+    });
+
+    it('rolls back event, participants and reminders if saving the operation fails', async () => {
+      const failed = item({
+        ...single,
+        participantIds: [member.id],
+        reminders: [{ type: 'offset', offsetValue: 1, offsetUnit: 'day' }],
+      });
+      database.sqlite.exec(`CREATE TRIGGER fail_import BEFORE INSERT ON event_import_operations
+        WHEN NEW.id = '${failed.operationId}' BEGIN SELECT RAISE(ABORT, 'test failure'); END;`);
+      const response = await importBatch([failed, item()]);
+      expect(response.json().results[0]).toMatchObject({ status: 'error', error: { code: 'INTERNAL_ERROR' } });
+      expect(response.json().results[1].status).toBe('created');
+      expect(database.db.select().from(schema.events).all()).toHaveLength(1);
+      expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(1);
+      expect(database.db.select().from(schema.eventParticipants).all()).toHaveLength(0);
+      expect(database.db.select().from(schema.reminders).all()).toHaveLength(0);
+      database.sqlite.exec('DROP TRIGGER fail_import');
+      expect((await importBatch([failed])).json().results[0].status).toBe('created');
+      expect(database.db.select().from(schema.reminders).all()).toHaveLength(1);
+    });
+
+    it('isolates operations by account and family and checks current access before replay', async () => {
+      const items = [item()];
+      const first = (await importBatch(items)).json().results[0];
+      for (const user of [member, outsider]) {
+        const result = (await importBatch(items, user)).json().results[0];
+        expect(result.status).toBe('created');
+        expect(result.eventId).not.toBe(first.eventId);
+      }
+      const assigned = item({ ...single, participantIds: [child.id] });
+      await importBatch([assigned]);
+      database.db.delete(schema.users).where(eq(schema.users.id, child.id)).run();
+      expect((await importBatch([assigned])).json().results[0]).toMatchObject({
+        status: 'error',
+        error: { code: 'VALIDATION_ERROR' },
+      });
+      database.db.delete(schema.sessions).where(eq(schema.sessions.userId, admin.id)).run();
+      expect((await importBatch(items)).statusCode).toBe(401);
+    });
+
+    it('removes success records only when the account or family is deleted', async () => {
+      await importBatch([item()], child);
+      await importBatch([item()], outsider);
+      database.db.delete(schema.users).where(eq(schema.users.id, child.id)).run();
+      expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(1);
+      database.db.delete(schema.families).where(eq(schema.families.id, familyId)).run();
+      expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(1);
+      database.db
+        .delete(schema.families)
+        .where(
+          eq(
+            schema.families.id,
+            database.db.select().from(schema.users).where(eq(schema.users.id, outsider.id)).get()!.familyId,
+          ),
+        )
+        .run();
+      expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(0);
+    });
+  });
+
   it('creates, reads, partially updates and deletes a whole event with participants', async () => {
     const event = await create({ ...single, description: 'Opis', location: 'Szkoła', participantIds: [child.id] });
     expect(event).toMatchObject({ familyId, createdBy: admin.id, participants: [{ id: child.id, color: '#123456' }] });

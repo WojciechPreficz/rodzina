@@ -241,3 +241,38 @@ export const deleteEventResponseSchema = z.object({ ok: z.literal(true), deleted
 export type EventData = z.infer<typeof eventDataSchema>;
 export type EventPatch = z.infer<typeof patchEventSchema>;
 export type CalendarEvent = z.infer<typeof eventSchema>;
+
+export const importEventSchema = createEventSchema.refine((event) => event.kind === 'single', {
+  message: 'Import obsługuje tylko wydarzenia jednorazowe.',
+  path: ['kind'],
+});
+// Validate the envelope first; individual event errors must not reject the batch.
+export const importEventsSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({ operationId: z.string().uuid(), event: z.unknown() })
+          .strict()
+          .refine((item) => Object.hasOwn(item, 'event'), 'Podaj dane wydarzenia.'),
+      )
+      .min(1)
+      .max(20),
+  })
+  .strict()
+  .refine(
+    ({ items }) => new Set(items.map((item) => item.operationId)).size === items.length,
+    'Identyfikatory operacji nie mogą się powtarzać.',
+  );
+export const importEventResultSchema = z.discriminatedUnion('status', [
+  z.object({ operationId: z.string().uuid(), status: z.literal('created'), eventId: z.string().uuid() }),
+  z.object({ operationId: z.string().uuid(), status: z.literal('already_created'), eventId: z.string().uuid() }),
+  z.object({
+    operationId: z.string().uuid(),
+    status: z.literal('error'),
+    error: z.object({ code: z.string(), message: z.string() }),
+  }),
+]);
+export const importEventsResponseSchema = z.object({ ok: z.literal(true), results: z.array(importEventResultSchema) });
+export type ImportEvents = z.infer<typeof importEventsSchema>;
+export type ImportEventResult = z.infer<typeof importEventResultSchema>;

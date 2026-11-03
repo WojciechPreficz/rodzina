@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
 import { ApiError } from '../../http/errors.js';
 import {
   expandOccurrences,
@@ -8,7 +10,8 @@ import {
   type EventPatch,
   type EventScope,
 } from '@rodzina/shared';
-import { eventDataSchema } from '@rodzina/shared';
+import { eventDataSchema, importEventSchema, type ImportEvents, type ImportEventResult } from '@rodzina/shared';
+import { eventImportOperations, users } from '../../db/schema.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import { canEditEvent, type FamilyRole } from '../../permissions.js';
 import { createEventRepository } from './repository.js';
@@ -31,6 +34,63 @@ export function createEventService(database: DatabaseConnection) {
   function create(familyId: string, actorId: string, data: EventData) {
     checkParticipants(familyId, data.participantIds);
     return repository.create(familyId, actorId, data);
+  }
+  function importEvents(familyId: string, actorId: string, batch: ImportEvents): ImportEventResult[] {
+    return batch.items.map(({ operationId, event }): ImportEventResult => {
+      const parsed = importEventSchema.safeParse(event);
+      if (!parsed.success)
+        return {
+          operationId,
+          status: 'error',
+          error: { code: 'VALIDATION_ERROR', message: 'Dane wydarzenia jednorazowego są niepoprawne.' },
+        };
+      // Parsing fixes field order, trims strings and fills defaults before hashing.
+      const fingerprint = createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex');
+      try {
+        return database.db.transaction(
+          (tx): ImportEventResult => {
+            const actor = tx
+              .select({ id: users.id })
+              .from(users)
+              .where(and(eq(users.id, actorId), eq(users.familyId, familyId)))
+              .get();
+            if (!actor) throw new ApiError(403, 'FORBIDDEN', 'Brak dostępu do tej rodziny.');
+            checkParticipants(familyId, parsed.data.participantIds);
+            const previous = tx
+              .select()
+              .from(eventImportOperations)
+              .where(
+                and(
+                  eq(eventImportOperations.familyId, familyId),
+                  eq(eventImportOperations.userId, actorId),
+                  eq(eventImportOperations.id, operationId),
+                ),
+              )
+              .get();
+            if (previous) {
+              if (previous.fingerprint !== fingerprint)
+                throw new ApiError(409, 'OPERATION_CONFLICT', 'Ta operacja została już użyta z innymi danymi.');
+              return { operationId, status: 'already_created', eventId: previous.eventId };
+            }
+            const created = create(familyId, actorId, parsed.data);
+            tx.insert(eventImportOperations)
+              .values({ familyId, userId: actorId, id: operationId, fingerprint, eventId: created.id })
+              .run();
+            return { operationId, status: 'created', eventId: created.id };
+          },
+          { behavior: 'immediate' },
+        );
+      } catch (error) {
+        return {
+          operationId,
+          status: 'error',
+          error:
+            error instanceof ApiError
+              ? { code: error.code, message: error.message }
+              : { code: 'INTERNAL_ERROR', message: 'Nie udało się zapisać wydarzenia. Spróbuj ponownie.' },
+        };
+      }
+    });
   }
   function checkScope(event: CalendarEvent, query: EventScope) {
     if (query.scope === 'all') return;
@@ -131,5 +191,5 @@ export function createEventService(database: DatabaseConnection) {
     }).format(Date.now());
     return repository.upcomingDistant(familyId, today);
   }
-  return { get, create, update, remove, occurrences, upcomingDistant };
+  return { get, create, importEvents, update, remove, occurrences, upcomingDistant };
 }

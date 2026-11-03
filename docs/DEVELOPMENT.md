@@ -51,14 +51,23 @@ program koncertu i rok do potwierdzenia, a testy adaptera — dodatkowe przebieg
 kontrastu i scalenie współrzędnych różnych skal. Oryginalny podgląd zachowuje
 kolory, nawet gdy silnik korzysta z wariantów kontrastu.
 
+API OCR.3 sprawdza `npm test -- apps/api/src/modules/events packages/shared/src/schemas/events.test.ts`.
+Testy obejmują paczki 1–20 pozycji, częściowy sukces, role (także dzieci),
+uczestników, konflikty UUID, równoległe żądania i retry, rollback relacji
+oraz rejestru, usunięcie wydarzenia, izolację kont/rodzin i migrację istniejącego
+kalendarza. Po zmianie shared sprawdź typy API i WWW; migracja wymaga także
+builda i `release:smoke`. Ręczny pełny przepływ zapisu z podglądu będzie dostępny
+w OCR.4; sam endpoint nie zmienia UI ani natywnego APK.
+
 Do ręcznego odbioru OCR.2 uruchom `npm run dev`, otwórz Kalendarz →
 „Dodaj ze zdjęcia” i wybierz plakat z datą. Sprawdź źródło, ostrzeżenia,
 brak roku/godziny, ponowny wybór, anulowanie, Wstecz oraz zmianę konta.
 Po zmianie zależności lub konfiguracji Vite zrestartuj serwer deweloperski.
 Próby ręczne 390/1280 px i regresja wspólnego frontendu w fizycznym APK
 pozostają do potwierdzenia. APK nie udostępnia jeszcze akcji OCR. Pełny odbiór
-OCR.3–OCR.6 wymaga obu adapterów, częściowego zapisu i retry; końcowe CI
-wymaga commita. Nie deklarujemy gwarancji uruchamiania WWW offline.
+WWW w OCR.4 obejmuje częściowy zapis i retry przed integracją Androida
+w OCR.5. Końcowy odbiór OCR.6 wymaga obu adapterów; końcowe CI wymaga
+commita. Nie deklarujemy gwarancji uruchamiania WWW offline.
 
 Reguły cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
 modules/tasks/recurrence-migrations: końce miesięcy, lata przestępne, tygodnie

@@ -314,6 +314,11 @@ obejmują WWW i transport Androida; odbiór ręczny i fizyczne APK do potwierdze
 ## Wydarzenia ze zdjęcia — OCR.1–OCR.6 (#70)
 
 Kolejność: OCR.1 → OCR.2 → OCR.3 → OCR.4 → OCR.5 → OCR.6; osobny krok i commit.
+Numery kroków odpowiadają kolejności realizacji; numery zgłoszeń pozostają bez zmian. Najpierw pełna funkcjonalność i odbiór
+WWW w OCR.4, następnie integracja Androida w OCR.5. Zadania #71 i #72 są
+zamknięte w GitHub; nie oznacza to potwierdzenia brakujących prób opisanych
+poniżej. Następny krok po lokalnej weryfikacji OCR.3 (#74): OCR.4 (#75),
+bez zależności od ML Kit.
 Zdjęcie z pliku lub galerii: JPEG, PNG, WebP do 20 MB, korekta orientacji
 i zmniejszenie dłuższego boku do 3200 px przed lokalnym OCR. WWW używa
 Tesseract.js z polskimi danymi, Android ML Kit z dołączonym modelem łacińskim.
@@ -341,13 +346,7 @@ nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
   przy programie koncertu i dodatkowy lokalny odczyt kontrastu, gdy brak daty.
   Bez zapisu i ML Kit. Odbiór: rzeczywisty OCR produkcyjnego builda,
   komponenty i headless 390/1280 px, build i release:smoke zasobów.
-- **OCR.3 (#73): planowany.** Natywny selektor zdjęć i ML Kit z modelem
-  dołączonym do APK, wspólny format/parser/podgląd. Obsługa URI, orientacji,
-  pamięci i ograniczonego podglądu bez pełnego base64 przez most JS.
-  Anulowanie, powrót i zmiana konta zwalniają zasoby i unieważniają wyniki.
-  Bez aparatu i zapisu. Odbiór: debug APK, JVM, Android Lint i fizyczny
-  telefon, także pierwszy odczyt offline, obrót i duży plik.
-- **OCR.4 (#74): planowany.** POST /api/events/import: 1–20 pozycji
+- **OCR.3 (#74): zweryfikowany lokalnie, oczekuje na CI.** POST /api/events/import: 1–20 pozycji
   { operationId, event }, wydarzenia jednorazowe, walidacja paczki przed
   przetwarzaniem, walidacja wydarzeń osobno. Wyniki created/already_created/error,
   osobna transakcja wydarzenia i rejestru sukcesu, odcisk danych, kontrola
@@ -355,7 +354,7 @@ nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
   nie pozwala odtworzyć go przez retry. Zachowane role, także dzieci, oraz
   stary POST /api/events. Odbiór: częściowy sukces, retry i równoległość,
   rollback, konflikty ID, izolacja, migracja, build i release:smoke.
-- **OCR.5 (#75): planowany.** Poprawianie, odrzucanie i ręczne dodawanie
+- **OCR.4 (#75): planowany, po OCR.2 i OCR.3.** Poprawianie, odrzucanie i ręczne dodawanie
   propozycji istniejącym formularzem; potwierdzenie przed zaznaczeniem do paczki.
   Zapis online do 20 wydarzeń i wynik każdej pozycji, odświeżenie kalendarza
   i harmonogramu także przy częściowym sukcesie. Przed wysłaniem trwały zapis
@@ -364,7 +363,25 @@ nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
   wysłanie; zmiana konta czyści dane, spóźnione odpowiedzi są ignorowane.
   Odbiór: komponenty i headless 390/1280 px, częściowy sukces, utrata odpowiedzi,
   restart, retry, błąd pamięci i sieci, podwójne kliknięcie oraz zmiana konta.
-- **OCR.6 (#76): planowany.** Odbiór całego przepływu na kontrolnych zdjęciach
+  Przed rozpoczęciem Androida wymagany pełny przepływ WWW na kontrolnych
+  zdjęciach przy 390/1280 px: wybór, rzeczywisty OCR, poprawienie i zatwierdzenie,
+  zaznaczenie, zapis, wyniki i kalendarz; także fokus i klawiatura, prywatność,
+  produkcyjna CSP, lokalne zasoby, build, release:smoke i końcowe CI.
+  Wspólne komponenty zachowują zgodność z istniejącym APK; natywna integracja
+  nowej funkcji i jej odbiór pozostają w OCR.5/OCR.6. Publikacja osobno.
+- **OCR.5 (#73): planowany, po domknięciu WWW w OCR.4.** Natywny selektor
+  zdjęć i ML Kit z modelem dołączonym do APK, wspólny format i parser.
+  Podłączenie do gotowego podglądu, zatwierdzania i zapisu z OCR.2/OCR.4,
+  bez drugiej implementacji formularza i importu. Obsługa URI, orientacji,
+  pamięci i ograniczonego podglądu bez pełnego base64 przez most JS.
+  Anulowanie, powrót i zmiana konta zwalniają zasoby i unieważniają wyniki.
+  OCR offline, zapis online przez istniejące API, bez aparatu i rozszerzania
+  transportu. Odbiór: debug APK, JVM, Android Lint i fizyczny telefon,
+  pierwszy odczyt offline, obrót, duży plik oraz pełny przepływ do kalendarza,
+  częściowy sukces, utrata odpowiedzi, restart/retry i zmiana konta.
+  Sprawdzenie regresji WWW i wspólnych komponentów headless 390/1280 px.
+- **OCR.6 (#76): planowany, po OCR.5.** Końcowy odbiór obu platform i regresja
+  odebranego wcześniej WWW. Odbiór całego przepływu na kontrolnych zdjęciach
   w WWW 390/1280 px i fizycznym APK, także offline OCR Androida, częściowy
   sukces, restart/retry, konto, sieć, Wstecz, fokus, klawiatura i safe area.
   Sprawdzenie CSP, lokalnych zasobów, modelu APK, prywatności i zgodności
