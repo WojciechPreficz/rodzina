@@ -1,3 +1,4 @@
+import { readAccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { MantineProvider } from '@mantine/core';
 import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -27,7 +28,6 @@ import {
 } from '../../offlineData.js';
 import {
   enqueueShopping,
-  readShoppingSession,
   restoreShopping,
   SHOPPING_STORAGE_KEY,
   stopShoppingPersistence,
@@ -192,7 +192,7 @@ describe('family offline lifecycle through the Android transport', () => {
     fireEvent.click(screen.getByText('refresh'));
     await synced();
     expect((await readShoppingData())?.operations).toEqual(savedOperation);
-    expect((await readShoppingSession())?.user.id).toBe('admin');
+    expect((await readAccountSession())?.user.id).toBe('admin');
   });
 
   it.each(['add', 'edit-child', 'edit-adult'])(
@@ -265,6 +265,20 @@ describe('family offline lifecycle through the Android transport', () => {
     expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBe(saved);
   });
 
+  it('persists the confirmed session even if fetching members fails', async () => {
+    fail = 500;
+    failMembers = true;
+    mount();
+    expect(await screen.findByText('Błąd serwera')).toBeVisible();
+    expect((await readAccountSession())?.user.id).toBe('admin');
+    expect(readOfflineData()).toBeUndefined();
+    cleanup();
+    onlineManager.setOnline(false);
+    mount();
+    expect(await screen.findByText(/Brak danych rodziny zapisanych/)).toBeVisible();
+    expect(screen.queryByText('logged out')).not.toBeInTheDocument();
+  });
+
   it('clears data on offline logout', async () => {
     const { client } = mount();
     await synced();
@@ -275,6 +289,7 @@ describe('family offline lifecycle through the Android transport', () => {
     expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBeNull();
     await waitFor(() => expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined());
     await waitFor(() => expect(clearSession).toHaveBeenCalled());
+    expect(await readAccountSession()).toBeUndefined();
   });
 
   it('hides administrator actions for a child restored offline', async () => {
@@ -346,7 +361,7 @@ describe('family offline lifecycle through the Android transport', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' }));
       expect(await screen.findByText(/Nie udało się przenieść danych offline/)).toBeVisible();
       expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBe('{broken');
-    } else expect(screen.getByText(/Nie można odczytać danych rodziny/)).toBeVisible();
+    } else expect(screen.getByText(/Nie można odczytać sesji offline/)).toBeVisible();
   });
 
   it('isolates a changed account and ignores its predecessor’s delayed member response', async () => {

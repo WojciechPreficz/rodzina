@@ -1,9 +1,10 @@
+import type { AccountSession } from './session.js';
 import type { AuthUser, Family, AuthMeResponse, AuthOkResponse, Member } from '@rodzina/shared';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { focusManager, onlineManager, QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiRequestError } from './api.js';
 import { clearNativeSession, invalidateSessionRequests, isAndroid } from './platform.js';
-import type { OfflineSession, OfflineData } from './offlineData.js';
+import type { OfflineData } from './offlineData.js';
 import type { AuthState } from './sessionContext.js';
 import { reportTransportFailure } from './connectivity.js';
 import { SYNC_INTERVAL_MS } from './queryClient.js';
@@ -13,17 +14,17 @@ import {
   activateOfflineAccount,
   announceAccount,
   recoverPendingClear,
-  hasPendingClear,
 } from './offline/database.js';
 import { reportStorageIssue, storageError } from './offline/status.js';
 export type AccountServices = {
-  accountId: (session: OfflineSession) => string;
+  accountId: (session: AccountSession) => string;
   familyMembersKey: (familyId: string, userId: string) => readonly string[];
   hydrateOfflineData: () => Promise<OfflineData | undefined>;
   restoreOfflineData: (client: QueryClient, data: OfflineData) => void;
-  saveOfflineData: (session: OfflineSession, members?: AuthUser[], syncedAt?: number) => Promise<boolean>;
+  saveOfflineData: (session: AccountSession, members?: AuthUser[], syncedAt?: number) => Promise<boolean>;
   listMembers: (signal?: AbortSignal) => Promise<Member[]>;
-  readFallbackSession: () => Promise<OfflineSession | undefined>;
+  readSession: () => Promise<AccountSession | undefined>;
+  saveSession: (session: AccountSession) => Promise<boolean>;
   pendingLogoutKey: string;
   invalidateAlarms: () => void;
   migrationCompleted: () => void;
@@ -47,7 +48,8 @@ export function useAccountLifecycle(services: AccountServices) {
     restoreOfflineData,
     saveOfflineData,
     listMembers,
-    readFallbackSession,
+    readSession,
+    saveSession,
   } = services;
   const pendingLogout = useCallback(
     (value?: boolean) => pendingWebLogout(services.pendingLogoutKey, value),
@@ -59,7 +61,7 @@ export function useAccountLifecycle(services: AccountServices) {
   const queryClient = useContext(QueryClientContext);
   const generation = useRef(0);
   const refreshRevision = useRef(0);
-  const currentSession = useRef<OfflineSession | undefined>(undefined);
+  const currentSession = useRef<AccountSession | undefined>(undefined);
   const sessionRejected = useRef(false);
   const [familySyncedAt, setFamilySyncedAt] = useState<number>();
   const [familySyncError, setFamilySyncError] = useState<string>();
@@ -70,9 +72,9 @@ export function useAccountLifecycle(services: AccountServices) {
     const revision = ++refreshRevision.current;
     const current = () => requestGeneration === generation.current && revision === refreshRevision.current;
     if (!currentSession.current && !pendingLogout()) {
-      const saved = await hydrateOfflineData();
+      const cached = await readSession();
       if (!current()) return;
-      const cached = saved?.session ?? (hasPendingClear() ? undefined : await readFallbackSession());
+      const saved = cached ? await hydrateOfflineData() : undefined;
       if (!current()) return;
       if (cached) {
         await restoreAccountStores(cached, queryClient, current);
@@ -104,6 +106,8 @@ export function useAccountLifecycle(services: AccountServices) {
       currentSession.current = response;
       sessionRejected.current = false;
       await recoverPendingClear();
+      if (!current()) return;
+      await saveSession(response);
       if (!current()) return;
       await restoreAccountStores(response, queryClient, current);
       if (!current()) return;
@@ -166,7 +170,8 @@ export function useAccountLifecycle(services: AccountServices) {
     restoreOfflineData,
     saveOfflineData,
     listMembers,
-    readFallbackSession,
+    readSession,
+    saveSession,
     pendingLogout,
   ]);
 
@@ -303,6 +308,8 @@ export function useAccountLifecycle(services: AccountServices) {
       } catch (error) {
         reportStorageIssue(storageError(error));
       }
+      if (!current()) return;
+      await saveSession({ user: nextUser, family: nextFamily });
       if (!current()) return;
       await restoreAccountStores({ user: nextUser, family: nextFamily }, queryClient, current);
       if (current()) announceAccount(services.accountId({ user: nextUser, family: nextFamily }));

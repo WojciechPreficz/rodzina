@@ -1,3 +1,4 @@
+import type { AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -10,7 +11,7 @@ import { ApiRequestError, apiFetch } from '../../api.js';
 import { MealShoppingDialog } from './MealShoppingDialog.js';
 import { TodayMeal } from './TodayMeal.js';
 import { shiftMealDate } from './mealDates.js';
-import { restoreShopping, stopShoppingPersistence, type ShoppingSession } from '../shopping/shoppingOffline.js';
+import { restoreShopping, stopShoppingPersistence } from '../shopping/shoppingOffline.js';
 import { restoreMeals, stopMeals, saveMealWeek, mealRevision } from './mealOffline.js';
 
 const session = vi.hoisted(() => ({
@@ -90,8 +91,8 @@ beforeEach(async () => {
       };
     return { ok: true, added: 1, updated: 2, items: [], aliases: {} };
   });
-  await restoreShopping(client, session as unknown as ShoppingSession);
-  await restoreMeals(client, session as unknown as ShoppingSession);
+  await restoreShopping(client, session as unknown as AccountSession);
+  await restoreMeals(client, session as unknown as AccountSession);
 });
 afterEach(() => {
   cleanup();

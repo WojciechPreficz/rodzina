@@ -8,6 +8,54 @@ const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json
   entries: { key: string; value: unknown }[];
 };
 
+for (const native of [false, true]) {
+  test(`restores the migrated session without family or shopping cache through ${native ? 'Android transport' : 'WWW'}`, async ({
+    page,
+  }) => {
+    if (native) await installNativeTransport(page);
+    await page.addInitScript((entries) => {
+      if (!localStorage.getItem('test:seeded')) {
+        for (const entry of entries) localStorage.setItem(entry.key, JSON.stringify(entry.value));
+        localStorage.setItem('test:seeded', 'yes');
+      }
+      localStorage.setItem('test:offline', 'yes');
+    }, fixture.entries);
+    await page.route('**/api/**', (route) => route.abort('internetdisconnected'));
+    await page.goto('/wiecej/rodzina');
+    await page.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' }).click();
+    await expect(page.getByText('TEST-CODE', { exact: true })).toBeVisible();
+    await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('rodzina-offline', 3);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction('cache', 'readwrite');
+          const store = tx.objectStore('cache');
+          const request = store.openCursor();
+          request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) return;
+            if (['family', 'shopping'].includes(cursor.value.module)) cursor.delete();
+            cursor.continue();
+          };
+          tx.oncomplete = () => resolve();
+          tx.onerror = tx.onabort = () => reject(tx.error);
+        });
+      } finally {
+        db.close();
+      }
+    });
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Rodzina', exact: true })).toBeVisible();
+    await expect(page.getByText(/Brak danych rodziny zapisanych/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Zaloguj się', exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
 test('migrates all legacy modules only after confirmation and restores them after an offline restart', async ({
   page,
 }, info) => {

@@ -1,12 +1,7 @@
+import { readAccountSession, saveAccountSession, PENDING_LOGOUT_KEY } from './session.js';
 import { calendarStore } from './features/calendar/calendarOffline.js';
 import { taskStore } from './features/tasks/taskOffline.js';
-import {
-  clearShoppingStorage,
-  stopShoppingPersistence,
-  restoreShopping,
-  readShoppingSession,
-  PENDING_LOGOUT_KEY,
-} from './features/shopping/shoppingOffline.js';
+import { clearShoppingStorage, stopShoppingPersistence, restoreShopping } from './features/shopping/shoppingOffline.js';
 import { forgetOfflineData } from './offlineData.js';
 import { clearDatabase } from './offline/database.js';
 import { contactsStore } from './features/contacts/contactsOffline.js';
@@ -27,7 +22,8 @@ export const accountServices: AccountServices = {
   restoreOfflineData,
   saveOfflineData,
   listMembers,
-  readFallbackSession: readShoppingSession,
+  readSession: readAccountSession,
+  saveSession: saveAccountSession,
   pendingLogoutKey: PENDING_LOGOUT_KEY,
   invalidateAlarms: () => {
     if (isAndroid()) localScheduler.invalidate();

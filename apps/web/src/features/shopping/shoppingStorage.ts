@@ -1,3 +1,4 @@
+import type { AccountSession } from '../../session.js';
 import { z } from 'zod';
 import type { DehydratedState } from '@tanstack/react-query';
 import {
@@ -23,7 +24,7 @@ import {
 import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/registry.js';
 import { requireMigration } from '../../offline/status.js';
 import { freezeParticipants, resumeParticipants } from '../../offline/coordinator.js';
-import type { QueuedShoppingChange, ShoppingSession } from './shoppingOffline.js';
+import type { QueuedShoppingChange } from './shoppingOffline.js';
 import type { MealShoppingProjection } from './shoppingApi.js';
 import { readOperations, type Operation } from '../../offline/outbox.js';
 
@@ -86,7 +87,7 @@ export type StoredShoppingOperation = Omit<QueuedShoppingChange, 'change'> & {
 export type ShoppingData = {
   version: 1;
   account: string;
-  session: ShoppingSession;
+  session: AccountSession;
   queries: DehydratedState['queries'];
   operations: StoredShoppingOperation[];
   nextSequence: number;
@@ -312,7 +313,7 @@ export function notifyShopping() {
   }
   window.dispatchEvent(new Event(SHOPPING_SIGNAL));
 }
-export function emptyShopping(session: ShoppingSession): ShoppingData {
+export function emptyShopping(session: AccountSession): ShoppingData {
   return {
     version: 1,
     account: `${session.family.id}:${session.user.id}`,
@@ -355,11 +356,11 @@ function assertSource(state: ImportState, removed = false) {
   )
     error('Dane zakupów zmieniły się podczas importu. Zamknij starsze karty i ponów aktualizację.');
 }
-export function importShopping(source: Record<string, string>, fallback?: ShoppingSession): ShoppingData {
+export function importShopping(source: Record<string, string>, fallback?: AccountSession): ShoppingData {
   const snapshot = source[SHOPPING_STORAGE_KEY]
     ? snapshotSchema.parse(JSON.parse(source[SHOPPING_STORAGE_KEY]))
     : undefined;
-  const session = (snapshot?.session as ShoppingSession | undefined) ?? fallback;
+  const session = (snapshot?.session as AccountSession | undefined) ?? fallback;
   if (!session || session.user.familyId !== session.family.id)
     return error('Nie można potwierdzić konta dziennika zakupów.');
   const data = emptyShopping(session);
@@ -481,7 +482,7 @@ async function migrateShopping(confirmed: boolean) {
         async (tx) => requestValue<CacheEntry[]>(tx.objectStore('cache').getAll()),
         token,
       );
-      const fallback = (family.find((e) => e.module === 'family')?.payload as { session?: ShoppingSession } | undefined)
+      const fallback = (family.find((e) => e.module === 'family')?.payload as { session?: AccountSession } | undefined)
         ?.session;
       const data = importShopping(source, fallback);
       const active = await transact(

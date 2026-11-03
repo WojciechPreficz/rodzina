@@ -19,7 +19,7 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                                                       | Końcowe CI i fizyczne APK do potwierdzenia                        |
 | Redesign R.1–R.7                                              | Implementacja opisana w historii zmian                                          | R.8: odbiór całości i gotowość aktualizacji do potwierdzenia      |
 | Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                                                       | Końcowe CI, alarmy, restart i pomiary urządzenia do potwierdzenia |
-| Oddzielenie sesji od modułów                                  | Implementacja opisana 28.10.2026                                                | Końcowe CI i fizyczne APK do potwierdzenia                        |
+| Oddzielenie sesji od modułów                                  | Sesja offline wydzielona; zweryfikowane lokalnie, oczekuje na CI                | Końcowe CI i fizyczne APK do potwierdzenia                        |
 | Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
 | Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
 

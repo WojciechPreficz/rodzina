@@ -1,12 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { accountToken, isAccountCurrent } from './offline/database.js';
 import { reportStorageIssue, storageError } from './offline/status.js';
-import type { AuthUser, Family } from '@rodzina/shared';
+import type { AccountSession } from './session.js';
 type ClearReason = 'logout' | 'session-lost' | 'account-changed' | 'storage-changed';
 type ClearOptions = { removeStored: boolean; queryClient: QueryClient | undefined };
 type AccountStore = {
   activate?: (account: string) => void | Promise<void>;
-  restore?: (client: QueryClient, session: { user: AuthUser; family: Family }) => void | Promise<void>;
+  restore?: (client: QueryClient, session: AccountSession) => void | Promise<void>;
   stop?: (client: QueryClient | undefined) => void;
   name: string;
   // Invalidate in-memory store generations before invalidating the session and alarms.
@@ -60,7 +60,7 @@ export function clearAccountData(
 }
 
 export async function restoreAccountStores(
-  session: { user: AuthUser; family: Family },
+  session: AccountSession,
   client: QueryClient | undefined,
   current: () => boolean,
 ) {

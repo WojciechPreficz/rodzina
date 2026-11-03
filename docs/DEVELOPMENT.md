@@ -334,6 +334,13 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       Panel odrzuca tylko obejrzany łańcuch, po potwierdzeniu i trwałym zapisie;
       lista wymaga świeżego odczytu przed kolejnym zapisem.
       Blokada alarmów zadania utrzymuje się po restarcie, a ustępuje po uzgodnieniu.
+- [ ] Niezależna sesja offline: zaktualizować fizyczne APK z danymi zakupów,
+      obiadów i niewysłanymi zmianami zapisanymi przez poprzednią wersję,
+      bez czyszczenia pamięci. Bez sieci zakończyć proces i uruchomić ponownie:
+      konto, dane i kolejki mają pozostać dostępne. Powtórzyć restart offline
+      WWW po aktualizacji. Zmienić konto i sprawdzić, że poprzednia sesja,
+      dane oraz spóźnione odpowiedzi nie wracają; sprawdzić też wylogowanie
+      offline i 401 po odzyskaniu sieci. Próby właściciela pozostają niepotwierdzone.
 - [ ] Wylogowanie, utrata sesji i zmiana konta, również w drugiej karcie,
       usuwają właściwe dane i alarmy; spóźniona odpowiedź ich nie odtwarza
       ani nie usuwa danych nowego konta. Sprawdzić odtworzenie sesji w APK.

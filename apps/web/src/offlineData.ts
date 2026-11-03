@@ -1,3 +1,4 @@
+import type { AccountSession } from './session.js';
 import { z } from 'zod';
 import { registerAdapter } from './offline/registry.js';
 import {
@@ -12,7 +13,7 @@ import {
 import { reportStorageIssue, storageError } from './offline/status.js';
 export { useOfflineStorageIssue } from './offline/status.js';
 import type { QueryClient } from '@tanstack/react-query';
-import type { AuthUser, Family } from '@rodzina/shared';
+import type { AuthUser } from '@rodzina/shared';
 
 export const OFFLINE_DATA_KEY = 'rodzina:offline-data:v1';
 export const familyMembersKey = (familyId: string, userId: string) => ['family', familyId, userId, 'members'] as const;
@@ -38,10 +39,9 @@ export const offlineDataSchema = z
       data.session.user.familyId === data.session.family.id &&
       data.members?.every((member) => member.familyId === data.session.family.id) !== false,
   );
-export type OfflineSession = { user: AuthUser; family: Family };
 export const accountId = (session: { user: { id: string }; family: { id: string } }) =>
   `${session.family.id}:${session.user.id}`;
-export type OfflineData = { session: OfflineSession; members?: AuthUser[] | undefined; syncedAt?: number | undefined };
+export type OfflineData = { session: AccountSession; members?: AuthUser[] | undefined; syncedAt?: number | undefined };
 const toUser = (value: z.infer<typeof person>): AuthUser => ({ ...value, email: null, createdAt: 0, updatedAt: 0 });
 const minimalUser = (user: AuthUser) => person.parse(user);
 registerAdapter({
@@ -83,7 +83,7 @@ export async function hydrateOfflineData(): Promise<OfflineData | undefined> {
     if (isAccountCurrent(token)) reportStorageIssue(`Nie można odczytać danych rodziny. ${storageError(error)}`);
   }
 }
-export async function saveOfflineData(session: OfflineSession, members?: AuthUser[], syncedAt?: number) {
+export async function saveOfflineData(session: AccountSession, members?: AuthUser[], syncedAt?: number) {
   const token = accountToken();
   try {
     await ensureMigrated();

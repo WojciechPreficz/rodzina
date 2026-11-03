@@ -1,3 +1,4 @@
+import type { AccountSession } from '../../session.js';
 import { useSyncExternalStore } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import {
@@ -17,7 +18,7 @@ import { notifyOutboxChanged, watchOutbox } from '../../offline/signals.js';
 import { reportStorageIssue, storageError } from '../../offline/status.js';
 import { readShoppingTransaction, putShoppingTransaction } from '../shopping/shoppingStorage.js';
 import { applyShoppingChange, shoppingKey } from '../shopping/shoppingOptimistic.js';
-import { flushShoppingPersistence, type ShoppingSession } from '../shopping/shoppingOffline.js';
+import { flushShoppingPersistence } from '../shopping/shoppingOffline.js';
 import { readMeals, putMeals, emptyMeals, projectMeals, type MealCache, type MealOperation } from './mealStorage.js';
 import { mealWeekStart, shiftMealDate } from './mealDates.js';
 
@@ -25,7 +26,7 @@ export function mealAdapter(account: string, client?: QueryClient): SyncAdapter 
   return {
     module: 'meals',
     prepare: async (op, signal) => {
-      const session = await apiFetch<ShoppingSession>('/api/auth/me', { signal });
+      const session = await apiFetch<AccountSession>('/api/auth/me', { signal });
       if (`${session.family.id}:${session.user.id}` !== account)
         throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
       if (session.user.role === 'child')
@@ -115,7 +116,7 @@ export function mealAdapter(account: string, client?: QueryClient): SyncAdapter 
 type MealState = { account: string; cache: MealCache; operations: MealOperation[]; ready: boolean };
 const listeners = new Set<() => void>();
 let state: MealState = { account: '', cache: emptyMeals(''), operations: [], ready: false };
-let session: ShoppingSession | undefined;
+let session: AccountSession | undefined;
 let queryClient: QueryClient | undefined;
 let sync: ReturnType<typeof joinSync> | undefined;
 let unwatch: (() => void) | undefined;
@@ -163,7 +164,7 @@ export function stopMeals() {
   state = { account: '', cache: emptyMeals(''), operations: [], ready: false };
   emit();
 }
-export async function restoreMeals(_client: QueryClient, next: ShoppingSession) {
+export async function restoreMeals(_client: QueryClient, next: AccountSession) {
   const account = `${next.family.id}:${next.user.id}`;
   if (state.account === account && isAccountCurrent(token) && session) {
     session = next;

@@ -1,3 +1,4 @@
+import type { AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -11,7 +12,6 @@ import { allowNavigation } from '../../nativeNavigation.js';
 import { activateOfflineAccount, transact } from '../../offline/database.js';
 import { readOperations } from '../../offline/outbox.js';
 import { restoreMeals, stopMeals } from './mealOffline.js';
-import type { ShoppingSession } from '../shopping/shoppingOffline.js';
 
 const session = vi.hoisted(() => ({
   user: { id: 'user', role: 'admin' },
@@ -36,7 +36,7 @@ beforeEach(async () => {
   onlineManager.setOnline(true);
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   await activateOfflineAccount('family:user');
-  await restoreMeals(client, session as unknown as ShoppingSession);
+  await restoreMeals(client, session as unknown as AccountSession);
   vi.stubGlobal(
     'ResizeObserver',
     class {

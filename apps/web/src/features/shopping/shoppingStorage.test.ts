@@ -1,3 +1,4 @@
+import type { AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
@@ -11,7 +12,6 @@ import {
   updateShoppingData,
   emptyShopping,
 } from './shoppingStorage.js';
-import type { ShoppingSession } from './shoppingOffline.js';
 import '../../offlineData.js';
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
@@ -24,7 +24,7 @@ const original = () =>
       .filter((entry) => entry.key === SHOPPING_STORAGE_KEY || entry.key.startsWith(JOURNAL_PREFIX))
       .map((entry) => [entry.key, JSON.stringify(entry.value)]),
   );
-const session = (JSON.parse(original()[SHOPPING_STORAGE_KEY]!) as { session: ShoppingSession }).session;
+const session = (JSON.parse(original()[SHOPPING_STORAGE_KEY]!) as { session: AccountSession }).session;
 const journalKey = () => Object.keys(original()).find((key) => key.startsWith(JOURNAL_PREFIX))!;
 afterEach(() => vi.restoreAllMocks());
 function seed() {

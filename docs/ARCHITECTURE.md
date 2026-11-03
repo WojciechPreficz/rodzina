@@ -24,6 +24,20 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Preferencje urządzenia nie są danymi rodziny. Dane konta i spóźnione
   odpowiedzi podlegają cyklowi życia sesji; zmiana konta nie może przywrócić
   danych poprzedniej osoby.
+- Sesja offline (`AccountSession`: użytkownik i rodzina) ma niezależny moduł
+  `apps/web/src/session.ts`. Ostatnio potwierdzony stan zapisujemy w istniejącym
+  IndexedDB konta, w `metadata` pod kluczem `account-session:1`, bez e-maila; kod
+  dołączenia pozostaje dostępny offline jak dotychczas. Zapis następuje po
+  logowaniu i potwierdzeniu `/api/auth/me`,
+  niezależnie od pobrania domowników oraz stanu zakupów i obiadów.
+  Przy braku nowego rekordu aplikacja po istniejącej migracji magazynów kopiuje
+  sesję z cache `family`, a zapasowo z `shopping`. Zwraca ją dopiero po trwałym
+  zapisie; kolejne odczyty korzystają z metadanych. Stare pola sesji i format
+  zakupów w wersji 1 pozostają dla zgodności. Migracja sprawdza tożsamość konta;
+  zapis i odczyt korzystają z bariery oraz generacji IndexedDB. Wylogowanie,
+  zmiana konta i utrata sesji czyszczą również ten rekord, a spóźnione operacje
+  poprzedniego konta nie mogą go odtworzyć. Lokalna kopia nie zastępuje
+  sprawdzenia uprawnień przez API. Klucz `rodzina:pending-logout` zachowuje wartość.
 - Produkcja: cPanel vh.pl, Node 24, HTTPS i Phusion Passenger.
   Passenger może usypiać proces: bez stałego workera, WebSocketów,
   Dockera i Redisa. Jedynym cronem jest backup.

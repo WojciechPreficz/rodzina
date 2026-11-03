@@ -1,3 +1,4 @@
+import type { AccountSession } from '../../session.js';
 import type { QueryClient } from '@tanstack/react-query';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
@@ -14,7 +15,7 @@ import {
   type ShoppingData,
   type StoredShoppingOperation,
 } from './shoppingStorage.js';
-import type { QueuedShoppingChange, ShoppingSession } from './shoppingOffline.js';
+import type { QueuedShoppingChange } from './shoppingOffline.js';
 
 export function shoppingIntent(op: QueuedShoppingChange, reviewReason?: string): Intent {
   const change = op.change;
@@ -84,7 +85,7 @@ export function shoppingAdapter(account: ShoppingAccount): SyncAdapter {
   return {
     module: 'shopping',
     prepare: async (_operation, signal) => {
-      const session = await apiFetch<ShoppingSession>('/api/auth/me', { signal });
+      const session = await apiFetch<AccountSession>('/api/auth/me', { signal });
       if (`${session.family.id}:${session.user.id}` !== accountId)
         throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
     },

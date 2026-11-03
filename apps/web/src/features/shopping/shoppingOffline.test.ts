@@ -1,9 +1,10 @@
+import type { AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { onlineManager, QueryClient } from '@tanstack/react-query';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
-import { enqueueShopping, restoreShopping, stopShoppingPersistence, type ShoppingSession } from './shoppingOffline.js';
+import { enqueueShopping, restoreShopping, stopShoppingPersistence } from './shoppingOffline.js';
 import { readShoppingData, updateShoppingData, notifyShopping } from './shoppingStorage.js';
 import { readOperations } from '../../offline/outbox.js';
 import { shoppingKey } from './shoppingOptimistic.js';
@@ -12,7 +13,7 @@ import { clearDatabase, closeDatabase, transact } from '../../offline/database.j
 const session = {
   user: { id: 'user', familyId: 'family', displayName: 'Ania' },
   family: { id: 'family' },
-} as ShoppingSession;
+} as AccountSession;
 const account = { familyId: 'family', userId: 'user' };
 const key = shoppingKey(account);
 const list = {

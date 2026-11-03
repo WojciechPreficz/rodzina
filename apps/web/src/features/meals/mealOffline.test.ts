@@ -1,3 +1,4 @@
+import type { AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { QueryClient, onlineManager, dehydrate } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -8,7 +9,6 @@ import { appendOperation, readOperations } from '../../offline/outbox.js';
 import { startSync, type SyncAdapter } from '../../offline/sync.js';
 import { emptyShopping, putShoppingTransaction, readShoppingTransaction } from '../shopping/shoppingStorage.js';
 import { applyShoppingChange, shoppingKey } from '../shopping/shoppingOptimistic.js';
-import type { ShoppingSession } from '../shopping/shoppingOffline.js';
 import {
   mealAdapter,
   restoreMeals,
@@ -31,7 +31,7 @@ const familyId = '11111111-1111-4111-8111-111111111111';
 const userId = '22222222-2222-4222-8222-222222222222';
 const listId = '33333333-3333-4333-8333-333333333333';
 const account = `${familyId}:${userId}`;
-const session = { user: { id: userId, familyId, role: 'admin' }, family: { id: familyId } } as ShoppingSession;
+const session = { user: { id: userId, familyId, role: 'admin' }, family: { id: familyId } } as AccountSession;
 const week = '2026-10-26';
 const key = shoppingKey({ familyId, userId });
 let client: QueryClient;

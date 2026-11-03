@@ -1,5 +1,5 @@
+import type { AccountSession } from '../../session.js';
 import { dehydrate, type QueryClient } from '@tanstack/react-query';
-import type { AuthUser, Family } from '@rodzina/shared';
 import { activateOfflineAccount, accountToken, isAccountCurrent, ensureMigrated } from '../../offline/database.js';
 import { reportStorageIssue, storageError as describeStorageError } from '../../offline/status.js';
 import { type ShoppingChange } from './shoppingApi.js';
@@ -21,8 +21,6 @@ import { notifyOutboxChanged } from '../../offline/signals.js';
 import { shoppingAdapter, shoppingIntent, takeOverShopping } from './shoppingAdapter.js';
 import { readShoppingTransaction, putShoppingTransaction } from './shoppingStorage.js';
 export { SHOPPING_STORAGE_KEY } from './shoppingStorage.js';
-export const PENDING_LOGOUT_KEY = 'rodzina:pending-logout';
-export type ShoppingSession = { user: AuthUser; family: Family };
 export type QueuedShoppingChange = { change: ShoppingChange; operationId: string; submittedAt: number };
 type Runtime = {
   account: string;
@@ -36,21 +34,13 @@ type Runtime = {
 };
 const runtimes = new WeakMap<QueryClient, Runtime>();
 const restorations = new WeakMap<QueryClient, object>();
-const identity = (session: ShoppingSession) => `${session.family.id}:${session.user.id}`;
+const identity = (session: AccountSession) => `${session.family.id}:${session.user.id}`;
 const aborted = () => new DOMException('Session changed', 'AbortError');
 const current = (client: QueryClient, runtime: Runtime) =>
   runtime.active && runtimes.get(client) === runtime && isAccountCurrent(runtime.token);
 const matches = (key: readonly unknown[] | undefined, account: ShoppingAccount) =>
   shoppingKey(account).every((part, i) => key?.[i] === part);
 
-export async function readShoppingSession(): Promise<ShoppingSession | undefined> {
-  try {
-    await ensureMigrated();
-    return (await readShoppingData())?.session;
-  } catch (error) {
-    reportStorageIssue(`Nie można odczytać zakupów. ${describeStorageError(error)}`);
-  }
-}
 export function clearShoppingStorage(client?: QueryClient) {
   if (client) stopShoppingPersistence(client);
   localStorage.removeItem(SHOPPING_STORAGE_KEY);
@@ -66,7 +56,7 @@ export async function flushShoppingPersistence(client: QueryClient) {
   const runtime = runtimes.get(client);
   if (runtime && current(client, runtime)) await runtime.schedule(async () => {});
 }
-export async function restoreShopping(client: QueryClient, session: ShoppingSession) {
+export async function restoreShopping(client: QueryClient, session: AccountSession) {
   const accountId = identity(session);
   if (runtimes.get(client)?.account === accountId && current(client, runtimes.get(client)!)) return;
   stopShoppingPersistence(client);
