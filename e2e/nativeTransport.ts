@@ -4,6 +4,7 @@ export async function installNativeTransport(page: Page) {
   await page.addInitScript(() => {
     const methods = {
       RodzinaApi: ['request', 'clearSession'],
+      RodzinaOcr: ['pickAndRecognize', 'cancel'],
       Network: ['getStatus', 'addListener', 'removeListener'],
       App: ['getState', 'addListener', 'removeListener'],
       RodzinaAlarms: ['read', 'write', 'runtimeStatus'],

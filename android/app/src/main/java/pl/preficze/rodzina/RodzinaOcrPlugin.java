@@ -1,0 +1,240 @@
+package pl.preficze.rodzina;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.net.Uri;
+import android.util.Base64;
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia;
+import androidx.exifinterface.media.ExifInterface;
+import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+@CapacitorPlugin(name = "RodzinaOcr")
+public class RodzinaOcrPlugin extends Plugin {
+    private static final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private volatile Run active;
+    private volatile Run processing;
+    // A cancelled system picker must return before another picker can be launched.
+    private Run picker;
+
+    @Override
+    public void load() {
+        // Process death may interrupt cleanup. These files never belong to account storage.
+        File directory = new File(getContext().getCacheDir(), "photo-ocr");
+        File[] stale = directory.listFiles();
+        if (stale != null) for (File file : stale) if (file.isFile()) file.delete();
+    }
+
+    private static final class Run {
+        final String id;
+        final PluginCall call;
+        volatile boolean cancelled;
+        Run(String id, PluginCall call) { this.id = id; this.call = call; }
+        void check() { if (cancelled) throw new CancellationException(); }
+    }
+
+    @PluginMethod
+    public void pickAndRecognize(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            String id = call.getString("requestId");
+            if (id == null || id.length() > 100) { call.reject("Nieprawidłowy odczyt."); return; }
+            if (active != null || picker != null || processing != null) { call.reject("Zakończ poprzedni wybór zdjęcia i spróbuj ponownie."); return; }
+            Run run = new Run(id, call);
+            active = picker = run;
+            try {
+                Intent intent = new PickVisualMedia().createIntent(getContext(), new PickVisualMediaRequest.Builder()
+                    .setMediaType(PickVisualMedia.ImageOnly.INSTANCE).build());
+                startActivityForResult(call, intent, "picked");
+            } catch (Exception error) {
+                picker = null;
+                finish(run, null, "Nie można otworzyć selektora zdjęć.");
+            }
+        });
+    }
+
+    @ActivityCallback
+    private void picked(PluginCall call, ActivityResult result) {
+        Run run = picker;
+        picker = null;
+        if (run == null || run.cancelled || active != run) return;
+        Uri uri = result.getData() == null ? null : result.getData().getData();
+        if (result.getResultCode() != Activity.RESULT_OK || uri == null) {
+            finish(run, new JSObject().put("cancelled", true), null);
+            return;
+        }
+        processing = run;
+        worker.execute(() -> read(run, uri));
+    }
+
+    @PluginMethod
+    public void cancel(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            Run run = active;
+            if (run != null && run.id.equals(call.getString("requestId"))) {
+                run.cancelled = true;
+                active = null;
+                run.call.reject("Odczyt anulowany.");
+            }
+            call.resolve();
+        });
+    }
+
+    private void finish(Run run, JSObject result, String error) {
+        getActivity().runOnUiThread(() -> {
+            if (active != run || run.cancelled) return;
+            active = null;
+            if (error != null) run.call.reject(error);
+            else run.call.resolve(result);
+        });
+    }
+
+    private void read(Run run, Uri uri) {
+        File source = null;
+        Bitmap bitmap = null;
+        TextRecognizer recognizer = null;
+        boolean handedOff = false;
+        try {
+            run.check();
+            if (!"content".equals(uri.getScheme())) throw new IllegalArgumentException("Nie można odczytać zdjęcia.");
+            String mime = getContext().getContentResolver().getType(uri);
+            if (!OcrImagePolicy.supported(mime)) throw new IllegalArgumentException("Wybierz zdjęcie JPEG, PNG lub WebP.");
+            File directory = new File(getContext().getCacheDir(), "photo-ocr");
+            if (!directory.isDirectory() && !directory.mkdir()) throw new java.io.IOException();
+            source = File.createTempFile("source-", ".image", directory);
+            try (InputStream input = getContext().getContentResolver().openInputStream(uri);
+                 FileOutputStream output = new FileOutputStream(source)) {
+                if (input == null) throw new IllegalArgumentException("Nie można odczytać zdjęcia.");
+                byte[] buffer = new byte[16 * 1024];
+                int total = 0;
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    run.check();
+                    total += count;
+                    if (total > OcrImagePolicy.MAX_BYTES) throw new IllegalArgumentException("Zdjęcie przekracza limit 20 MB.");
+                    output.write(buffer, 0, count);
+                }
+                if (total == 0) throw new IllegalArgumentException("Plik jest pusty lub uszkodzony.");
+            }
+            run.check();
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(source.getPath(), bounds);
+            if (!OcrImagePolicy.supported(bounds.outMimeType)) throw new IllegalArgumentException("Plik jest uszkodzony lub nieobsługiwany.");
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = OcrImagePolicy.sampleSize(bounds.outWidth, bounds.outHeight);
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            bitmap = BitmapFactory.decodeFile(source.getPath(), options);
+            if (bitmap == null) throw new IllegalArgumentException("Nie można odczytać zdjęcia.");
+            ExifInterface exif = new ExifInterface(source);
+            Matrix matrix = new Matrix();
+            // ExifInterface defines rotation after horizontal mirroring (not before).
+            if (exif.isFlipped()) matrix.postScale(-1, 1);
+            matrix.postRotate(exif.getRotationDegrees());
+            int[] size = OcrImagePolicy.size(bitmap.getWidth(), bitmap.getHeight(), OcrImagePolicy.MAX_SIDE);
+            matrix.postScale(size[0] / (float) bitmap.getWidth(), size[1] / (float) bitmap.getHeight());
+            Bitmap oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            if (oriented != bitmap) bitmap.recycle();
+            bitmap = oriented;
+            run.check();
+            String preview = preview(bitmap);
+            recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            Bitmap owned = bitmap;
+            TextRecognizer ownedRecognizer = recognizer;
+            recognizer.process(InputImage.fromBitmap(bitmap, 0))
+                .addOnCompleteListener(worker, task -> {
+                    try {
+                        run.check();
+                        if (!task.isSuccessful()) throw new IllegalStateException();
+                        JSObject document = document(task.getResult(), owned.getWidth(), owned.getHeight());
+                        finish(run, new JSObject().put("document", document).put("preview", preview), null);
+                    } catch (CancellationException ignored) {
+                        // Cancellation already settled the call; never return a stale result.
+                    } catch (OutOfMemoryError error) {
+                        finish(run, null, "Za mało pamięci. Wybierz mniejsze zdjęcie.");
+                    } catch (Exception error) {
+                        finish(run, null, "Nie udało się odczytać tekstu ze zdjęcia.");
+                    } finally {
+                        ownedRecognizer.close();
+                        owned.recycle();
+                        processing = null;
+                    }
+                });
+            // ML Kit owns the bitmap until its completion callback, including after cancellation.
+            bitmap = null;
+            recognizer = null;
+            handedOff = true;
+        } catch (CancellationException ignored) {
+            // No image or raw OCR is logged.
+        } catch (OutOfMemoryError error) {
+            finish(run, null, "Za mało pamięci. Wybierz mniejsze zdjęcie.");
+        } catch (Exception error) {
+            finish(run, null, error instanceof IllegalArgumentException ? error.getMessage() : "Nie można odczytać zdjęcia. Spróbuj ponownie.");
+        } finally {
+            if (bitmap != null) bitmap.recycle();
+            if (recognizer != null) recognizer.close();
+            if (source != null && !source.delete()) source.deleteOnExit();
+            if (!handedOff) processing = null;
+        }
+    }
+
+    private static String preview(Bitmap bitmap) {
+        int[] size = OcrImagePolicy.size(bitmap.getWidth(), bitmap.getHeight(), 640);
+        Bitmap small = Bitmap.createScaledBitmap(bitmap, size[0], size[1], true);
+        try (ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            small.compress(Bitmap.CompressFormat.JPEG, 65, bytes);
+            if (bytes.size() > 256 * 1024) return null;
+            return "data:image/jpeg;base64," + Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP);
+        } catch (java.io.IOException error) {
+            return null;
+        } finally {
+            if (small != bitmap) small.recycle();
+        }
+    }
+
+    private static JSObject document(Text text, int width, int height) {
+        JSArray lines = new JSArray();
+        int id = 0;
+        for (Text.TextBlock block : text.getTextBlocks()) for (Text.Line line : block.getLines()) {
+            Rect box = line.getBoundingBox();
+            if (box == null || line.getText().trim().isEmpty()) continue;
+            double[] normalized = OcrImagePolicy.box(box.left, box.top, box.right, box.bottom, width, height);
+            if (normalized == null) continue;
+            if (++id > 10000 || line.getText().length() > 10000) throw new IllegalArgumentException();
+            lines.put(new JSObject().put("id", "line-" + id).put("text", line.getText().trim())
+                .put("box", new JSObject().put("x", normalized[0]).put("y", normalized[1]).put("width", normalized[2]).put("height", normalized[3])));
+        }
+        return new JSObject().put("image", new JSObject().put("width", width).put("height", height)).put("lines", lines);
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        Run run = active;
+        if (run != null) { run.cancelled = true; run.call.reject("Odczyt anulowany."); }
+        active = null;
+        picker = null;
+        // Do not shut down the executor: an in-flight ML Kit task still needs its cleanup callback.
+    }
+}

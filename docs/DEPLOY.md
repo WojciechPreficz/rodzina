@@ -85,8 +85,12 @@ nie korzystamy z CDN. `release:smoke` sprawdza manifest `/ocr/manifest.json`,
 obecność plików w ZIP, ich zgodność i dostępność przez HTTP oraz CSP.
 Własne nagłówki hostingu muszą dopuszczać `script-src 'self' 'wasm-unsafe-eval'`,
 `worker-src 'self'` i `img-src 'self' data: blob:`; bez szerokiego `unsafe-eval`.
-OCR.2 nie dodaje zmiennych środowiskowych, migracji ani crona. Model ML Kit i APK
-pozostają osobnym krokiem; aktualizacja WWW nie aktualizuje APK.
+OCR.2 nie dodaje zmiennych środowiskowych, migracji ani crona. OCR.5 dołącza
+model łaciński ML Kit do APK przez zależność `com.google.mlkit:text-recognition`,
+bez pobierania modelu na telefonie przed pierwszym odczytem. Build Androida
+wymaga pobrania zależności Maven; model nie trafia do ZIP serwera.
+OCR.5 również nie dodaje zmiennych ani crona. Aktualizacja WWW nie aktualizuje
+APK; podpisywanie i publikacja pozostają osobnymi czynnościami na polecenie.
 
 OCR.3 dodaje migrację 0032 (`event_import_operations`): trwały rejestr sukcesów
 importu przypisany do konta i rodziny, niezależny od czasu życia wydarzenia.

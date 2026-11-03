@@ -375,7 +375,9 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   jest utrwalana z operacją; retry nie powtarza zastąpienia.
   Wspólne komponenty zachowują zgodność z istniejącym APK; natywna integracja
   nowej funkcji i jej odbiór pozostają w OCR.5/OCR.6. Publikacja osobno.
-- **OCR.5 (#73): planowany, po domknięciu WWW w OCR.4.** Natywny selektor
+- **OCR.5 (#73): zweryfikowany lokalnie, oczekuje na CI.** Zależne #75 zamknięte, CI jego commita zakończone sukcesem.
+  Próby fizycznego telefonu wykona właściciel według DEVELOPMENT.md.
+  Natywny selektor
   zdjęć i ML Kit z modelem dołączonym do APK, wspólny format i parser.
   Podłączenie do gotowego podglądu, zatwierdzania i zapisu z OCR.2/OCR.4,
   bez drugiej implementacji formularza i importu. Obsługa URI, orientacji,

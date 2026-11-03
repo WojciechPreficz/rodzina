@@ -389,7 +389,7 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
   90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
 
-## Wydarzenia ze zdjęcia (OCR.1–OCR.4)
+## Wydarzenia ze zdjęcia (OCR.1–OCR.5)
 
 Shared eksportuje `ocrDocumentSchema`, `OcrDocument` i `parseOcrEvents`.
 Adapter przekazuje wymiary obrazu po korekcie orientacji i zmniejszeniu oraz
@@ -471,8 +471,31 @@ Brak gwarancji uruchamiania WWW offline. Zdjęcie i wynik pozostają w pamięci
 urządzenia; nie trafiają na serwer ani do logów. Anulowanie, ponowny wybór,
 opuszczenie ekranu i czyszczenie konta kończą worker, zwalniają podgląd
 i unieważniają spóźnione wyniki. Limit pojedynczego odczytu wynosi 120 s.
-APK nie pokazuje tej akcji i nie zawiera zasobów Tesseract; natywny selektor
-i ML Kit oraz odbiór nowej funkcji w APK należą do OCR.5/OCR.6.
+APK udostępnia tę samą akcję przez plugin `RodzinaOcr`. Systemowy selektor
+`PickVisualMedia` (z zastępczym `ACTION_OPEN_DOCUMENT`) udziela dostępu tylko
+do wybranego zdjęcia, bez uprawnień do całej galerii i bez aparatu. ML Kit
+`com.google.mlkit:text-recognition:16.0.1` zawiera model łaciński w APK;
+odczyt nie wymaga pobrania modelu ani sieci, także po instalacji.
+Adapter zwraca wspólny kontrakt linii z położeniem w obrazie po orientacji,
+bez narzucania bloków ML Kit wspólnemu parserowi.
+
+Źródło JPEG/PNG/WebP jest kopiowane strumieniowo z URI do prywatnego pliku
+tymczasowego z egzekwowanym limitem 20 MB. Granice obrazu są odczytywane
+przed dekodowaniem; próbkowanie ogranicza bitmapę do 12 mln pikseli,
+następnie EXIF (także odbicie) i skalowanie ograniczają dłuższy bok do 3200 px.
+Plik jest usuwany po przygotowaniu; pozostałości po przerwaniu procesu
+są usuwane przy załadowaniu pluginu. Nie należy do trwałej pamięci konta.
+Most JS otrzymuje tylko dokument OCR i opcjonalny podgląd JPEG do 640 px
+i 256 KiB, bez pełnego zdjęcia. Bitmapa i klient ML Kit są zwalniane po
+zakończeniu zadania, także anulowanego. Trwający odczyt blokuje uruchomienie
+drugiego; anulowany selektor musi najpierw wrócić do aplikacji.
+
+Identyfikator odczytu wiąże anulowanie z właściwą operacją. Zamknięcie ekranu,
+zmiana konta i limit 120 s unieważniają wynik i zlecają anulowanie natywne.
+Powrót z selektora kontynuuje istniejącą operację; nie uruchamia nowego odczytu.
+Podgląd, parser, poprawianie, zatwierdzanie, zapis online, wyniki i trwałe retry
+są wspólne z WWW. Transport API nie przesyła zdjęcia ani surowego OCR.
+Fizyczny odbiór pozostaje wymagany w OCR.5/OCR.6.
 
 `POST /api/events/import` (OCR.3) przyjmuje `{ items: [{ operationId, event }] }`
 z 1–20 pozycjami i unikalnymi UUID operacji. Niepoprawna struktura odrzuca całe

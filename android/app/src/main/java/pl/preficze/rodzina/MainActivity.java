@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RodzinaAlarmsPlugin.class);
         registerPlugin(RodzinaLinksPlugin.class);
         registerPlugin(RodzinaUpdatesPlugin.class);
+        registerPlugin(RodzinaOcrPlugin.class);
         super.onCreate(savedInstanceState);
         synchronized (AlarmStore.LOCK) {
             try {

@@ -389,10 +389,11 @@ test('blocks sending when durable storage fails and warns before discarding draf
   expect(confirmations).toBe(1);
 });
 
-test('keeps the existing Android calendar form compatible and hides the web OCR entry', async ({ page }) => {
+test('keeps the existing Android calendar form compatible', async ({ page }) => {
   await installNativeTransport(page);
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Dodaj ze zdjęcia', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Wróć do kalendarza', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Dodaj ze zdjęcia', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Dodaj wydarzenie', exact: true }).click();
   const form = page.getByRole('form', { name: 'Dodaj wydarzenie' });
   await form.getByLabel(/^Tytuł/).fill('Regresja wspólnego formularza APK');
@@ -403,4 +404,50 @@ test('keeps the existing Android calendar form compatible and hides the web OCR 
   await form.getByRole('button', { name: 'Zapisz', exact: true }).click();
   expect((await request).ok()).toBe(true);
   await expect(form).toHaveCount(0);
+});
+
+test('uses native OCR offline then the shared approval and online import in Android', async ({ page }, info) => {
+  await installNativeTransport(page);
+  await page.addInitScript(() => {
+    const bridge = (window as unknown as { Capacitor: { nativePromise: (...args: unknown[]) => Promise<unknown> } })
+      .Capacitor;
+    const original = bridge.nativePromise;
+    bridge.nativePromise = async (...args: unknown[]) => {
+      if (args[0] !== 'RodzinaOcr') return original(...args);
+      if (args[1] === 'cancel') return {};
+      if (localStorage.getItem('test:ocr-cancel') === 'yes') return { cancelled: true };
+      return {
+        document: {
+          image: { width: 1400, height: 900 },
+          lines: [
+            { id: '1', text: 'Koncert rodzinny', box: { x: 0.1, y: 0.1, width: 0.7, height: 0.05 } },
+            { id: '2', text: '12 listopada 2026 godz. 18:30', box: { x: 0.1, y: 0.2, width: 0.7, height: 0.05 } },
+          ],
+        },
+      };
+    };
+  });
+  await page.reload();
+  await page.evaluate(() => {
+    localStorage.setItem('test:offline', 'yes');
+    localStorage.setItem('test:ocr-cancel', 'yes');
+    dispatchEvent(new Event('offline'));
+  });
+  await page.getByRole('button', { name: 'Wybierz zdjęcie', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Wybór anulowany');
+  await page.evaluate(() => localStorage.removeItem('test:ocr-cancel'));
+  await page.getByRole('button', { name: 'Wybierz zdjęcie', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Koncert rodzinny', exact: true })).toBeVisible();
+  await expect(page.locator('input[type=file]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Zapisz wybrane (0/20)' })).toBeDisabled();
+  await page.evaluate(() => {
+    localStorage.removeItem('test:offline');
+    dispatchEvent(new Event('online'));
+  });
+  await approveAndSave(page);
+  await page.screenshot({ path: info.outputPath('native-photo-import.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Wróć do kalendarza', exact: true }).click();
+  await page.locator('.family-calendar').getByLabel('Wybierz datę').fill('2026-11-12');
+  await expect(page.getByText('Koncert po korekcie', { exact: true }).first()).toBeVisible();
 });

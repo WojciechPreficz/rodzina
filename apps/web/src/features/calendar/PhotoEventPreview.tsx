@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Group, Progress, Stack, Text, Title } from '@mantine/core';
 import { parseOcrEvents, type OcrParseResult, type Member } from '@rodzina/shared';
 import { PageHeader } from '../../components/PageHeader.js';
-import { getSessionGeneration } from '../../platform.js';
+import { getSessionGeneration, isAndroid } from '../../platform.js';
 import { registerAccountStore } from '../../accountStorage.js';
 import { prepareOcrImage } from './ocrImage.js';
 import { recognizeOcrImage } from './ocrWeb.js';
+import { recognizeNativePhoto } from './ocrNative.js';
 import { PhotoImportReview } from './PhotoImportReview.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 
@@ -58,7 +59,7 @@ export function PhotoEventPreview({
     setError(undefined);
     setProgress({ message: 'Odczyt anulowany. Możesz wybrać inne zdjęcie.', value: 0 });
   };
-  const select = async (file: File) => {
+  const select = async (file?: File) => {
     clear();
     setPreview(undefined);
     setResult(undefined);
@@ -71,6 +72,17 @@ export function PhotoEventPreview({
     const active = () =>
       current.current === run && generation === getSessionGeneration() && !run.controller.signal.aborted;
     try {
+      if (isAndroid()) {
+        setProgress({ message: 'Wybierz zdjęcie. Odczyt ML Kit działa także offline', value: 0 });
+        const native = await recognizeNativePhoto(run.controller.signal);
+        if (!active()) return;
+        if (native) {
+          setPreview(native.preview);
+          setResult(parseOcrEvents(native.document, { groupByDates: true }));
+        } else setProgress({ message: 'Wybór anulowany. Możesz wybrać inne zdjęcie.', value: 0 });
+        return;
+      }
+      if (!file) return;
       const image = await prepareOcrImage(file, run.controller.signal);
       if (!active()) return;
       run.url = URL.createObjectURL(image.blob);
@@ -102,22 +114,30 @@ export function PhotoEventPreview({
         wydarzeń. Zapis jest dostępny online.
       </Alert>
       <Stack gap="xs">
-        <Button variant="default" mih={44} onClick={() => input.current?.click()} style={{ alignSelf: 'flex-start' }}>
+        <Button
+          variant="default"
+          mih={44}
+          disabled={busy && isAndroid()}
+          onClick={() => (isAndroid() ? void select() : input.current?.click())}
+          style={{ alignSelf: 'flex-start' }}
+        >
           Wybierz zdjęcie
         </Button>
-        <input
-          ref={input}
-          id="event-photo"
-          aria-label="Wybierz zdjęcie"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = '';
-            if (file) void select(file);
-          }}
-          style={{ display: 'none' }}
-        />
+        {!isAndroid() && (
+          <input
+            ref={input}
+            id="event-photo"
+            aria-label="Wybierz zdjęcie"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = '';
+              if (file) void select(file);
+            }}
+            style={{ display: 'none' }}
+          />
+        )}
         <Text size="sm" c="dimmed">
           JPEG, PNG lub WebP, do 20 MB. Najlepiej użyć wyraźnego zdjęcia z prostym tekstem.
         </Text>

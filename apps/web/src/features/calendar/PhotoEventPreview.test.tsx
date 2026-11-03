@@ -8,14 +8,17 @@ import type { PhotoImportReview } from './PhotoImportReview.js';
 import { PhotoEventPreview } from './PhotoEventPreview.js';
 import { clearAccountData } from '../../accountStorage.js';
 
-const { prepare, recognize, generation } = vi.hoisted(() => ({
+const { prepare, recognize, native, android, generation } = vi.hoisted(() => ({
   prepare: vi.fn(),
   recognize: vi.fn(),
+  native: vi.fn(),
+  android: { value: false },
   generation: { value: 0 },
 }));
 vi.mock('./ocrImage.js', () => ({ prepareOcrImage: prepare }));
 vi.mock('./ocrWeb.js', () => ({ recognizeOcrImage: recognize }));
-vi.mock('../../platform.js', () => ({ getSessionGeneration: () => generation.value }));
+vi.mock('../../platform.js', () => ({ getSessionGeneration: () => generation.value, isAndroid: () => android.value }));
+vi.mock('./ocrNative.js', () => ({ recognizeNativePhoto: native }));
 vi.mock('./PhotoImportReview.js', () => ({
   PhotoImportReview: ({ result, renderSource }: ComponentProps<typeof PhotoImportReview>) =>
     result?.proposals.map((proposal, index) => <div key={index}>{renderSource(proposal, index)}</div>),
@@ -41,6 +44,7 @@ function show(key = 'account-a') {
 beforeEach(() => {
   vi.clearAllMocks();
   generation.value = 0;
+  android.value = false;
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
@@ -63,6 +67,47 @@ afterEach(() => {
 });
 
 describe('photo preview', () => {
+  it('uses the native result and shared parser without browser decoding', async () => {
+    android.value = true;
+    native.mockResolvedValue({ document, preview: 'data:image/jpeg;base64,YQ==' });
+    render(show());
+    fireEvent.click(screen.getByRole('button', { name: 'Wybierz zdjęcie' }));
+    expect(await screen.findByRole('heading', { name: 'Koncert rodzinny' })).toBeInTheDocument();
+    expect(screen.getByText(/Brakuje roku/)).toBeInTheDocument();
+    expect(screen.getByAltText('Podgląd wybranego zdjęcia')).toHaveAttribute('src', 'data:image/jpeg;base64,YQ==');
+    expect(prepare).not.toHaveBeenCalled();
+    expect(recognize).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Wybierz zdjęcie')).not.toBeInTheDocument();
+  });
+  it('handles native picker cancellation and allows another attempt after an error', async () => {
+    android.value = true;
+    native.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Nie można odczytać zdjęcia.'));
+    render(show());
+    fireEvent.click(screen.getByRole('button', { name: 'Wybierz zdjęcie' }));
+    expect(await screen.findByText(/Wybór anulowany/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Wybierz zdjęcie' }));
+    expect(await screen.findByText('Nie można odczytać zdjęcia.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Wybierz zdjęcie' })).toBeEnabled();
+  });
+  it('aborts native OCR and ignores its late response on account cleanup', async () => {
+    android.value = true;
+    let resolve!: (value: unknown) => void;
+    native.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    render(show());
+    fireEvent.click(screen.getByRole('button', { name: 'Wybierz zdjęcie' }));
+    const signal = native.mock.calls[0]![0] as AbortSignal;
+    await act(async () => {
+      await clearAccountData('account-changed');
+    });
+    expect(signal.aborted).toBe(true);
+    await act(async () => resolve({ document }));
+    expect(screen.queryByRole('heading', { name: 'Koncert rodzinny' })).not.toBeInTheDocument();
+  });
   it('shows a missing time only as a non-blocking warning', async () => {
     recognize.mockResolvedValue({
       image: document.image,

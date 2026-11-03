@@ -35,7 +35,6 @@ import { CalendarAgendaEvent } from './CalendarAgendaEvent.js';
 import { isHolidayRangeSupported, polishHolidaysInRange, type PolishHoliday } from './polishHolidays.js';
 import { holidayCalendars, holidaysToScheduleX, readHolidayLayers, saveHolidayLayers } from './holidayLayers.js';
 import { HolidayDetails } from './HolidayDetails.js';
-import { isAndroid } from '../../platform.js';
 import { PhotoEventPreview } from './PhotoEventPreview.js';
 
 const text = labels.calendarUi;
@@ -116,11 +115,9 @@ function CalendarView({
         description={Temporal.PlainDate.from(date).toLocaleString('pl-PL', { month: 'long', year: 'numeric' })}
         actions={
           <Group gap="xs" wrap="wrap">
-            {!isAndroid() && (
-              <Button className="calendar-photo-add" variant="default" mih={44} onClick={onPhoto}>
-                Dodaj ze zdjęcia
-              </Button>
-            )}
+            <Button className="calendar-photo-add" variant="default" mih={44} onClick={onPhoto}>
+              Dodaj ze zdjęcia
+            </Button>
             <Button
               className="calendar-add"
               aria-label={text.add}
@@ -233,7 +230,7 @@ export function CalendarPage() {
   const [selectedDate, setDate] = useState<string>();
   const date = selectedDate ?? todayInTimezone(family?.timezone ?? 'Europe/Warsaw');
   const creating = location.state?.calendarCreate === true;
-  const photo = location.state?.calendarPhoto === true && !isAndroid();
+  const photo = location.state?.calendarPhoto === true;
   const editing = creating || photo;
   const scrollPosition = useRef(0);
   const wasCreating = useRef(editing);

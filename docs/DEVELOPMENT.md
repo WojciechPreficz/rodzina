@@ -89,10 +89,28 @@ OCR nie przetrwają zamknięcia ekranu; wysłane operacje i odrzucenia przetrwaj
 Po zmianie zależności lub konfiguracji Vite zrestartuj serwer deweloperski.
 Ręczny odbiór właściciela na kontrolnych i rzeczywistych zdjęciach przy
 390/1280 px oraz regresja wspólnego frontendu w fizycznym APK pozostają do
-potwierdzenia. APK nie udostępnia jeszcze akcji OCR; natywny selektor i ML Kit
-należą do OCR.5, końcowy odbiór obu platform do OCR.6. Przejście do OCR.5
-wymaga domknięcia WWW i końcowego CI dla commita ze zmianami.
+potwierdzenia. Zależne #75 jest zamknięte, a CI jego commita przeszło;
+końcowy odbiór obu platform pozostaje w OCR.6.
 Nie deklarujemy gwarancji uruchamiania WWW offline.
+
+OCR.5: testy `ocrNative` sprawdzają kontrakt, limit podglądu, anulowanie
+i timeout; `PhotoEventPreview` także wybór/anulowanie/błąd Androida oraz
+spóźnioną odpowiedź po zmianie konta. `e2e/calendar-ocr.spec.ts` sprawdza
+przy 390/1280 px rzeczywisty OCR WWW oraz symulowany most ML Kit: odczyt
+offline, anulowanie, wspólne poprawianie/zatwierdzanie, zapis online i kalendarz.
+Symulacja mostu nie potwierdza działania natywnego OCR. JVM `OcrImagePolicyTest`
+sprawdza limity dekodowania, formaty, proporcje i rozmiar OCR/podglądu.
+Budowanie debug APK i `testDebugUnitTest lintDebug` opisano poniżej.
+
+Do odbioru właściciela na fizycznym telefonie (#73): po instalacji APK
+przed pierwszym OCR wyłącz sieć, wybierz lokalny plakat i sprawdź odczyt bez
+pobierania modelu. Sprawdź anulowanie selektora i odczytu, ponowny wybór,
+powrót z selektora, zdjęcie z EXIF (obrót i odbicie), duże zdjęcie, plik ponad
+20 MB i błędny format, Wstecz, opuszczenie ekranu oraz zmianę konta w trakcie
+odczytu. Włącz sieć, popraw i zatwierdź propozycje, zaznacz, zapisz oraz
+porównaj wyniki, kalendarz i harmonogram. Sprawdź częściowy sukces, utratę
+odpowiedzi, restart APK i ręczne retry bez duplikatów oraz czyszczenie konta.
+Te próby nie zostały wykonane przez agenta; test przeprowadzi właściciel.
 
 Duplikaty wydarzeń sprawdzają testy API `modules/events`, kontraktów
 `schemas/events`, komponentu `PhotoImportReview` i magazynu `photoImportStorage`.
