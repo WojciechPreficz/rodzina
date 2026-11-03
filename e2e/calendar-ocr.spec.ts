@@ -428,6 +428,8 @@ test('uses native OCR offline then the shared approval and online import in Andr
     };
   });
   await page.reload();
+  // Let the reloaded app restore its session before switching connectivity.
+  await expect(page.getByRole('button', { name: 'Wybierz zdjęcie', exact: true })).toBeVisible();
   await page.evaluate(() => {
     localStorage.setItem('test:offline', 'yes');
     localStorage.setItem('test:ocr-cancel', 'yes');
