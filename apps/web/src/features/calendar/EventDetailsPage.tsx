@@ -165,19 +165,21 @@ export function EventDetailsPage() {
           <EventSection title={text.eventDate} number="01">
             <Text>
               {dateLabel}
-              {occurrence.allDay ? ` · ${text.allDay}` : ''}
+              {occurrence.allDay ? ` · ${event.kind === 'single' ? text.noTime : text.allDay}` : ''}
             </Text>
-            {event.kind === 'single' && (
-              <Text>
-                {text.endDate}:{' '}
-                {new Intl.DateTimeFormat('pl-PL', {
-                  timeZone: family.timezone,
-                  dateStyle: 'long',
-                  ...(occurrence.allDay ? {} : { timeStyle: 'short' as const }),
-                }).format(occurrence.allDay ? occurrence.endUtc - 1 : occurrence.endUtc)}
-              </Text>
-            )}
-            {!occurrence.allDay && (
+            {event.kind === 'single' &&
+              ((occurrence.allDay && event.durationMinutes !== null && event.durationMinutes > 1440) ||
+                (!occurrence.allDay && occurrence.endUtc > occurrence.startUtc)) && (
+                <Text>
+                  {text.endDate}:{' '}
+                  {new Intl.DateTimeFormat('pl-PL', {
+                    timeZone: family.timezone,
+                    dateStyle: 'long',
+                    ...(occurrence.allDay ? {} : { timeStyle: 'short' as const }),
+                  }).format(occurrence.allDay ? occurrence.endUtc - 1 : occurrence.endUtc)}
+                </Text>
+              )}
+            {!occurrence.allDay && occurrence.endUtc > occurrence.startUtc && (
               <Text>
                 {text.duration}: {(occurrence.endUtc - occurrence.startUtc) / 60000}
               </Text>

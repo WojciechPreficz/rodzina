@@ -14,6 +14,9 @@ import {
   distantEventsResponseSchema,
   occurrencesResponseSchema,
   deleteEventResponseSchema,
+  calendarDateSchema,
+  eventDuplicateResolutionSchema,
+  eventDuplicatesResponseSchema,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { createEventService } from './service.js';
@@ -22,6 +25,20 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
   const service = createEventService(database);
   const idSchema = z.object({ id: z.string().uuid() });
   app.register(async (routes) => {
+    routes.get('/api/events/duplicates', async (request) => {
+      const user = requireUser(request);
+      const query = parse(
+        z.object({
+          title: z.string().trim().min(1).max(200),
+          startDate: calendarDateSchema,
+          kind: z.enum(['single', 'recurring', 'distant']).default('single'),
+        }),
+        request.query,
+      );
+      return eventDuplicatesResponseSchema.parse({
+        duplicates: service.duplicates(user.familyId, user.id, user.role, query.title, query.startDate, query.kind),
+      });
+    });
     routes.post('/api/events/import', async (request) => {
       const user = requireUser(request);
       const batch = parse(importEventsSchema, request.body);
@@ -32,7 +49,24 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
     });
     routes.post('/api/events', async (request, reply) => {
       const data = parse(createEventSchema, request.body);
-      const event = service.create(requireUser(request).familyId, requireUser(request).id, data);
+      const user = requireUser(request);
+      const query = parse(
+        z.object({
+          duplicateAction: z.enum(['check', 'add', 'replace']).optional(),
+          duplicateEventId: z.string().uuid().optional(),
+          duplicateVersion: z.string().optional(),
+        }),
+        request.query,
+      );
+      const resolution = query.duplicateAction
+        ? parse(eventDuplicateResolutionSchema, {
+            action: query.duplicateAction,
+            ...(query.duplicateAction === 'replace'
+              ? { eventId: query.duplicateEventId, version: query.duplicateVersion }
+              : {}),
+          })
+        : undefined;
+      const event = service.createResolved(user.familyId, user.id, user.role, data, resolution);
       return reply.code(201).send(eventResponseSchema.parse({ ok: true, event }));
     });
     routes.get('/api/events/upcoming-distant', async (request) =>

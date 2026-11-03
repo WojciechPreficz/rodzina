@@ -56,18 +56,54 @@ Testy obejmują paczki 1–20 pozycji, częściowy sukces, role (także dzieci),
 uczestników, konflikty UUID, równoległe żądania i retry, rollback relacji
 oraz rejestru, usunięcie wydarzenia, izolację kont/rodzin i migrację istniejącego
 kalendarza. Po zmianie shared sprawdź typy API i WWW; migracja wymaga także
-builda i `release:smoke`. Ręczny pełny przepływ zapisu z podglądu będzie dostępny
-w OCR.4; sam endpoint nie zmienia UI ani natywnego APK.
+builda i `release:smoke`. API jest podłączone do wspólnego interfejsu w OCR.4;
+natywna integracja Androida pozostaje w OCR.5.
 
-Do ręcznego odbioru OCR.2 uruchom `npm run dev`, otwórz Kalendarz →
-„Dodaj ze zdjęcia” i wybierz plakat z datą. Sprawdź źródło, ostrzeżenia,
-brak roku/godziny, ponowny wybór, anulowanie, Wstecz oraz zmianę konta.
+OCR.4 sprawdzają testy komponentów `PhotoImportReview` i `EventForm` oraz
+`photoImportStorage`: zatwierdzanie daty, opcjonalną godzinę i czas trwania oraz wpis bez godziny,
+zaznaczanie, częściowy sukces, zachowanie odrzuconych danych, restart/retry
+z tym samym UUID, błąd zapisu przed żądaniem, podwójne kliknięcie, utrata sieci,
+zmiana konta i spóźniona odpowiedź. Testy magazynu używają IndexedDB i obejmują
+transakcje, niezmienność danych, wiele kart oraz czyszczenie konta.
+Headless `e2e/calendar-ocr.spec.ts` przy 390/1280 px obejmuje rzeczywisty OCR,
+poprawienie formularzem lub zatwierdzenie bez edycji, osobny wybór, zapis
+przez API i wyniki; brak godziny pozostaje ostrzeżeniem, a rozpoznana godzina
+trafia do wydarzenia. Próby obejmują też
+częściowy sukces po utracie odpowiedzi, restart i ręczne retry bez duplikatu,
+błąd pamięci oraz ostrzeżenie nawigacji. Sprawdzane są lokalne zasoby,
+produkcyjna CSP, brak zewnętrznych żądań, zakres wysyłanych danych, fokus,
+klawiatura i szerokość ekranu. Regresja z transportem Androida sprawdza wspólny
+formularz i ukrytą akcję WWW; nie zastępuje fizycznego APK.
+Build i `release:smoke` sprawdzają paczkę WWW.
+
+Do ręcznego odbioru OCR.4 uruchom `npm run dev`, otwórz Kalendarz →
+„Dodaj ze zdjęcia” i wybierz plakat lub zrzut. Przy 390 i 1280 px sprawdź:
+pojedynczy termin, kilka terminów, kolumny, brak roku, datę zapisów obok
+wydarzenia i nieczytelny obraz. Porównaj zdjęcie i ostrzeżenia, popraw formularz
+(lub dodaj brakującą propozycję ręcznie), zatwierdź, zaznacz i zapisz. Sprawdź
+wyniki oraz wydarzenia w kalendarzu, fokus, klawiaturę, Wstecz, ponowny wybór
+i zmianę konta. Dla utraty odpowiedzi odśwież ekran i ręcznie ponów nieznane
+wyniki online; pozycje zapisane nie mogą się powielić. Po błędzie pamięci
+przed zapisem żądanie nie może zostać wysłane. Niezapisane szkice i źródło
+OCR nie przetrwają zamknięcia ekranu; wysłane operacje i odrzucenia przetrwają.
 Po zmianie zależności lub konfiguracji Vite zrestartuj serwer deweloperski.
-Próby ręczne 390/1280 px i regresja wspólnego frontendu w fizycznym APK
-pozostają do potwierdzenia. APK nie udostępnia jeszcze akcji OCR. Pełny odbiór
-WWW w OCR.4 obejmuje częściowy zapis i retry przed integracją Androida
-w OCR.5. Końcowy odbiór OCR.6 wymaga obu adapterów; końcowe CI wymaga
-commita. Nie deklarujemy gwarancji uruchamiania WWW offline.
+Ręczny odbiór właściciela na kontrolnych i rzeczywistych zdjęciach przy
+390/1280 px oraz regresja wspólnego frontendu w fizycznym APK pozostają do
+potwierdzenia. APK nie udostępnia jeszcze akcji OCR; natywny selektor i ML Kit
+należą do OCR.5, końcowy odbiór obu platform do OCR.6. Przejście do OCR.5
+wymaga domknięcia WWW i końcowego CI dla commita ze zmianami.
+Nie deklarujemy gwarancji uruchamiania WWW offline.
+
+Duplikaty wydarzeń sprawdzają testy API `modules/events`, kontraktów
+`schemas/events`, komponentu `PhotoImportReview` i magazynu `photoImportStorage`.
+Headless `e2e/event-duplicates.spec.ts` przy 390/1280 px obejmuje zwykły
+formularz WWW i transport Androida, anulowanie, zastąpienie i dodanie kolejnego,
+import z częściowymi wynikami oraz utratę odpowiedzi i restart po decyzji.
+API sprawdza datę i znormalizowany tytuł, izolację rodzin, uprawnienia dzieci,
+zmianę wersji, równoległe importy i rollback zastąpienia wraz z rejestrem.
+Ręcznie sprawdź dwukrotne dodanie tego samego tytułu w tej samej dacie,
+obie decyzje, kilka istniejących dopasowań i zmianę wpisu z drugiego urządzenia
+przy otwartym dialogu. Odbiór fizycznego APK i końcowe CI pozostają do potwierdzenia.
 
 Reguły cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
 modules/tasks/recurrence-migrations: końce miesięcy, lata przestępne, tygodnie

@@ -16,15 +16,21 @@ export function CalendarAgendaEvent({
     >
       <div className="calendar-agenda-time">
         <b>
-          {timed ? start.toLocaleString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : labels.calendarUi.allDay}
+          {timed
+            ? start.toLocaleString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+            : calendarEvent.kind === 'single'
+              ? labels.calendarUi.noTime
+              : labels.calendarUi.allDay}
         </b>
         <small>
           {timed
-            ? end.toLocaleString('pl-PL', {
-                hour: '2-digit',
-                minute: '2-digit',
-                ...(start.toPlainDate().equals(end.toPlainDate()) ? {} : { day: 'numeric', month: 'short' }),
-              })
+            ? start.equals(end)
+              ? null
+              : end.toLocaleString('pl-PL', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  ...(start.toPlainDate().equals(end.toPlainDate()) ? {} : { day: 'numeric', month: 'short' }),
+                })
             : start.toLocaleString('pl-PL', { day: 'numeric', month: 'short' })}
         </small>
       </div>

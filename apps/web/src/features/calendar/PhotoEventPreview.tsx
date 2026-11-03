@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Group, Progress, Stack, Text, Title } from '@mantine/core';
-import { parseOcrEvents, type OcrParseResult } from '@rodzina/shared';
+import { Alert, Button, Group, Progress, Stack, Text, Title } from '@mantine/core';
+import { parseOcrEvents, type OcrParseResult, type Member } from '@rodzina/shared';
 import { PageHeader } from '../../components/PageHeader.js';
 import { getSessionGeneration } from '../../platform.js';
 import { registerAccountStore } from '../../accountStorage.js';
 import { prepareOcrImage } from './ocrImage.js';
 import { recognizeOcrImage } from './ocrWeb.js';
+import { PhotoImportReview } from './PhotoImportReview.js';
+import { allowNavigation } from '../../nativeNavigation.js';
 
-export function PhotoEventPreview({ onClose }: { onClose: () => void }) {
+export function PhotoEventPreview({
+  onClose,
+  members,
+  timezone,
+  initialDate,
+}: {
+  onClose: () => void;
+  members: Member[];
+  timezone: string;
+  initialDate: string;
+}) {
   const [preview, setPreview] = useState<string>();
   const [result, setResult] = useState<OcrParseResult>();
   const [error, setError] = useState<string>();
@@ -75,13 +87,19 @@ export function PhotoEventPreview({ onClose }: { onClose: () => void }) {
   };
   return (
     <Stack gap="lg">
-      <Button variant="subtle" onClick={onClose} style={{ alignSelf: 'flex-start' }}>
+      <Button
+        variant="subtle"
+        onClick={() => {
+          if (allowNavigation()) onClose();
+        }}
+        style={{ alignSelf: 'flex-start' }}
+      >
         Wróć do kalendarza
       </Button>
       <PageHeader title="Dodaj ze zdjęcia" description="Odczytaj terminy z plakatu lub ogłoszenia." />
       <Alert>
-        Zdjęcie odczytujemy na tym urządzeniu i nie wysyłamy go na serwer. To podgląd propozycji — zapis do kalendarza
-        nie jest jeszcze dostępny.
+        Zdjęcie odczytujemy na tym urządzeniu i nie wysyłamy go na serwer. Zapisujemy wyłącznie zatwierdzone dane
+        wydarzeń. Zapis jest dostępny online.
       </Alert>
       <Stack gap="xs">
         <Button variant="default" mih={44} onClick={() => input.current?.click()} style={{ alignSelf: 'flex-start' }}>
@@ -144,55 +162,48 @@ export function PhotoEventPreview({ onClose }: { onClose: () => void }) {
               {warning.message}
             </Alert>
           ))}
-          {result.proposals.map((proposal, index) => (
-            <Card key={index} withBorder padding="md" style={{ overflowWrap: 'anywhere' }}>
-              <Stack gap="sm">
-                <Title order={3}>{proposal.title ?? `Propozycja ${index + 1} — brak tytułu`}</Title>
-                <Group gap="lg">
-                  <Text>
-                    Data:{' '}
-                    {proposal.dateRange
-                      ? `${proposal.dateRange.start.isoDate ?? `${proposal.dateRange.start.day}.${String(proposal.dateRange.start.month).padStart(2, '0')}`} – ${proposal.dateRange.end.isoDate ?? `${proposal.dateRange.end.day}.${String(proposal.dateRange.end.month).padStart(2, '0')}`} (włącznie)${proposal.dateRange.start.year === null ? ' — rok wymaga potwierdzenia' : ''}`
-                      : (proposal.startDate ??
-                        (proposal.dates.length === 1 && proposal.dates[0]!.valid && proposal.dates[0]!.year === null
-                          ? `${proposal.dates[0]!.day}.${String(proposal.dates[0]!.month).padStart(2, '0')} (rok wymaga potwierdzenia)`
-                          : 'wymaga potwierdzenia'))}
-                  </Text>
-                  <Text>
-                    {proposal.openingHours ? (
-                      `Godziny otwarcia: ${proposal.openingHours.startTime}–${proposal.openingHours.endTime}`
-                    ) : (
-                      <>
-                        Godzina:{' '}
-                        {proposal.startTime
-                          ? `${proposal.startTime}${proposal.endTime ? `–${proposal.endTime}` : ''}`
-                          : 'wymaga potwierdzenia'}
-                      </>
-                    )}
-                  </Text>
-                </Group>
-                {proposal.dates.length > 0 && (
-                  <Text size="sm">
-                    Rozpoznane daty: {[...new Set(proposal.dates.map((date) => date.text))].join(', ')}
-                  </Text>
-                )}
-                {proposal.location && <Text>Miejsce: {proposal.location}</Text>}
-                {proposal.warnings.map((warning, warningIndex) => (
-                  <Alert color="yellow" key={`${warning.code}-${warningIndex}`}>
-                    {warning.message}
-                  </Alert>
-                ))}
-                <Text fw={600} size="sm">
-                  Tekst źródłowy
-                </Text>
-                <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                  {proposal.source.map((line) => line.text).join('\n')}
-                </Text>
-              </Stack>
-            </Card>
-          ))}
         </Stack>
       )}
+      <PhotoImportReview
+        result={result}
+        members={members}
+        timezone={timezone}
+        initialDate={initialDate}
+        renderSource={(proposal, index) => (
+          <Stack gap="sm">
+            <Title order={3}>{proposal.title ?? `Propozycja ${index + 1} — brak tytułu`}</Title>
+            <Group gap="lg">
+              <Text>
+                Data:{' '}
+                {proposal.dateRange
+                  ? `${proposal.dateRange.start.isoDate ?? `${proposal.dateRange.start.day}.${String(proposal.dateRange.start.month).padStart(2, '0')}`} – ${proposal.dateRange.end.isoDate ?? `${proposal.dateRange.end.day}.${String(proposal.dateRange.end.month).padStart(2, '0')}`} (włącznie)${proposal.dateRange.start.year === null ? ' — rok wymaga potwierdzenia' : ''}`
+                  : (proposal.startDate ??
+                    (proposal.dates.length === 1 && proposal.dates[0]!.valid && proposal.dates[0]!.year === null
+                      ? `${proposal.dates[0]!.day}.${String(proposal.dates[0]!.month).padStart(2, '0')} (rok wymaga potwierdzenia)`
+                      : 'wymaga potwierdzenia'))}
+              </Text>
+              {(proposal.startTime || proposal.openingHours) && (
+                <Text>
+                  {proposal.openingHours ? (
+                    `Godziny otwarcia: ${proposal.openingHours.startTime}–${proposal.openingHours.endTime}`
+                  ) : (
+                    <>Godzina: {`${proposal.startTime}${proposal.endTime ? `–${proposal.endTime}` : ''}`}</>
+                  )}
+                </Text>
+              )}
+            </Group>
+            {proposal.dates.length > 0 && (
+              <Text size="sm">Rozpoznane daty: {[...new Set(proposal.dates.map((date) => date.text))].join(', ')}</Text>
+            )}
+            {proposal.location && <Text>Miejsce: {proposal.location}</Text>}
+            {proposal.warnings.map((warning, warningIndex) => (
+              <Alert color="yellow" key={`${warning.code}-${warningIndex}`}>
+                {warning.message}
+              </Alert>
+            ))}
+          </Stack>
+        )}
+      />
     </Stack>
   );
 }

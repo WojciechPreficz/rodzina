@@ -23,7 +23,7 @@ test('failed save and rejected kind change retain the dirty full form', async ({
   await expect(form.getByLabel(/^Tytuł/)).toHaveValue('Zachowaj wpisaną treść');
   await expect(form.getByLabel('Zakończenie', { exact: true })).toHaveCount(0);
   let attempted = false;
-  await page.route('**/api/events', async (route) => {
+  await page.route('**/api/events?*', async (route) => {
     if (route.request().method() === 'POST' && !attempted) {
       attempted = true;
       await route.fulfill({
@@ -83,7 +83,7 @@ for (const [kind, label] of [
     await form.getByLabel(/^Tytuł/).fill(`Rodzinne plany ${kind}`);
     await form.getByLabel('Opis', { exact: true }).fill('Opis prawdziwego wydarzenia');
     await form.getByRole('button', { name: 'Zosia', exact: true }).click();
-    if (kind === 'single') await form.getByRole('switch', { name: 'Całodniowe' }).check();
+    if (kind === 'single') await form.getByRole('switch', { name: 'Bez godziny' }).check();
     if (kind === 'distant') {
       await form.getByLabel('Dokładność terminu', { exact: true }).click();
       await page.getByRole('option', { name: 'Tylko miesiąc', exact: true }).click();

@@ -150,7 +150,7 @@ function validateEvent(event: z.infer<typeof eventFields>, ctx: z.RefinementCtx)
     });
   }
   if (
-    (event.startTime !== null && event.durationMinutes === null) ||
+    (event.kind !== 'single' && event.startTime !== null && event.durationMinutes === null) ||
     (event.startTime === null &&
       event.durationMinutes !== null &&
       (event.kind !== 'single' || event.durationMinutes % 1440 !== 0))
@@ -158,7 +158,8 @@ function validateEvent(event: z.infer<typeof eventFields>, ctx: z.RefinementCtx)
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['durationMinutes'],
-      message: 'Wydarzenie z godziną wymaga czasu trwania; całodniowe jednorazowe może trwać pełną liczbę dni.',
+      message:
+        'Wydarzenie cykliczne lub odległe z godziną wymaga czasu trwania; całodniowe jednorazowe może trwać pełną liczbę dni.',
     });
   }
 }
@@ -246,13 +247,36 @@ export const importEventSchema = createEventSchema.refine((event) => event.kind 
   message: 'Import obsługuje tylko wydarzenia jednorazowe.',
   path: ['kind'],
 });
+export const eventDuplicateResolutionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('check') }).strict(),
+  z.object({ action: z.literal('add') }).strict(),
+  z
+    .object({ action: z.literal('replace'), eventId: z.string().uuid(), version: z.string().regex(/^[a-f0-9]{64}$/) })
+    .strict(),
+]);
+export type EventDuplicateResolution = z.infer<typeof eventDuplicateResolutionSchema>;
+export const eventDuplicateSchema = z.object({
+  eventId: z.string().uuid(),
+  title: z.string(),
+  startDate: calendarDateSchema,
+  startTime: timeSchema.nullable(),
+  kind: z.enum(['single', 'recurring', 'distant']),
+  canReplace: z.boolean(),
+  version: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type EventDuplicate = z.infer<typeof eventDuplicateSchema>;
+export const eventDuplicatesResponseSchema = z.object({ duplicates: z.array(eventDuplicateSchema) });
 // Validate the envelope first; individual event errors must not reject the batch.
 export const importEventsSchema = z
   .object({
     items: z
       .array(
         z
-          .object({ operationId: z.string().uuid(), event: z.unknown() })
+          .object({
+            operationId: z.string().uuid(),
+            event: z.unknown(),
+            duplicateResolution: eventDuplicateResolutionSchema.optional(),
+          })
           .strict()
           .refine((item) => Object.hasOwn(item, 'event'), 'Podaj dane wydarzenia.'),
       )
@@ -270,7 +294,7 @@ export const importEventResultSchema = z.discriminatedUnion('status', [
   z.object({
     operationId: z.string().uuid(),
     status: z.literal('error'),
-    error: z.object({ code: z.string(), message: z.string() }),
+    error: z.object({ code: z.string(), message: z.string(), duplicates: z.array(eventDuplicateSchema).optional() }),
   }),
 ]);
 export const importEventsResponseSchema = z.object({ ok: z.literal(true), results: z.array(importEventResultSchema) });

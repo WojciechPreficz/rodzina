@@ -36,6 +36,7 @@ export function EventForm({
   timezone = 'Europe/Warsaw',
   onSave,
   onCancel,
+  approval,
 }: {
   event?: CalendarEvent;
   kind?: EventData['kind'];
@@ -47,6 +48,7 @@ export function EventForm({
   timezone?: string;
   onSave: (data: EventData) => Promise<void>;
   onCancel: () => void;
+  approval?: { initial: Partial<EventData>; label: string; endDate?: string };
 }) {
   const eventKind = event?.kind ?? kind;
   const offline = useOffline();
@@ -58,32 +60,45 @@ export function EventForm({
     ? wizardFromRrule(event.rrule, event.startDate)
     : defaultRecurrenceWizard(initialDate);
   const [wizard, setWizard] = useState(initialWizard);
-  const [title, setTitle] = useState(event?.title ?? '');
-  const [description, setDescription] = useState(event?.description ?? '');
-  const [location, setLocation] = useState(event?.location ?? '');
-  const [participants, setParticipants] = useState(event?.participants.map((p) => p.id) ?? []);
-  const [allDay, setAllDay] = useState(event ? event.startTime === null : false);
-  const [date, setDate] = useState(event?.startDate ?? initialDate);
-  const [time, setTime] = useState(event?.startTime ?? (eventKind === 'distant' ? '' : '09:00'));
-  const hasTime = !allDay && !monthly && (eventKind !== 'distant' || time !== '');
-  const [duration, setDuration] = useState<number | string>(event?.durationMinutes ?? 60);
-  const initialStart = Temporal.PlainDate.from(event?.startDate ?? initialDate);
-  const initialEnd = event?.startTime
+  const [title, setTitle] = useState(event?.title ?? approval?.initial.title ?? '');
+  const [description, setDescription] = useState(event?.description ?? approval?.initial.description ?? '');
+  const [location, setLocation] = useState(event?.location ?? approval?.initial.location ?? '');
+  const [participants, setParticipants] = useState(
+    event?.participants.map((p) => p.id) ?? approval?.initial.participantIds ?? [],
+  );
+  const [allDay, setAllDay] = useState(event ? event.startTime === null : approval?.initial.startTime === null);
+  const [date, setDate] = useState(event?.startDate ?? (approval ? (approval.initial.startDate ?? '') : initialDate));
+  const [time, setTime] = useState(
+    event?.startTime ?? (approval ? (approval.initial.startTime ?? '') : eventKind !== 'recurring' ? '' : '09:00'),
+  );
+  const hasTime = !allDay && !monthly && (eventKind === 'recurring' || time !== '');
+  const [duration, setDuration] = useState<number | string>(
+    event?.durationMinutes ?? approval?.initial.durationMinutes ?? (eventKind === 'single' ? '' : 60),
+  );
+  const initialValues = event ?? approval?.initial;
+  const initialStartDate = initialValues?.startDate || initialDate;
+  const initialStart = Temporal.PlainDate.from(initialStartDate);
+  const initialEnd = initialValues?.startTime
     ? Temporal.Instant.fromEpochMilliseconds(
-        localDateTimeToUtc(event.startDate, event.startTime, timezone) + (event.durationMinutes ?? 60) * 60000,
+        localDateTimeToUtc(initialStartDate, initialValues.startTime, timezone) +
+          (initialValues.durationMinutes ?? (eventKind === 'single' ? 0 : 60)) * 60000,
       ).toZonedDateTimeISO(timezone)
     : null;
   const initialEndDate = initialEnd
     ? initialEnd.toPlainDate()
-    : initialStart.add({ days: Math.max(0, (event?.durationMinutes ?? 1440) / 1440 - 1) });
-  const [multiDay, setMultiDay] = useState(eventKind === 'single' && !initialEndDate.equals(initialStart));
-  const [endDate, setEndDate] = useState(initialEndDate.toString());
+    : initialStart.add({ days: Math.max(0, (initialValues?.durationMinutes ?? 1440) / 1440 - 1) });
+  const [multiDay, setMultiDay] = useState(
+    eventKind === 'single' && (approval?.endDate !== undefined || !initialEndDate.equals(initialStart)),
+  );
+  const [endDate, setEndDate] = useState(approval?.endDate ?? initialEndDate.toString());
   const [endTime, setEndTime] = useState(initialEnd?.toPlainTime().toString().slice(0, 5) ?? '10:00');
   const [error, setError] = useState<string | null>(null);
   const [reminders, setReminders] = useState<ReminderItem[]>(() =>
-    (event?.reminders ?? []).map((reminder) => ({ ...reminderInput(reminder), nextFireAt: reminder.nextFireAt })),
+    event
+      ? event.reminders.map((reminder) => ({ ...reminderInput(reminder), nextFireAt: reminder.nextFireAt }))
+      : (approval?.initial.reminders ?? []),
   );
-  const [remindersChanged, setRemindersChanged] = useState(false);
+  const [remindersChanged, setRemindersChanged] = useState(!!approval?.initial.reminders);
   const [errors, setErrors] = useState<{
     title?: string | undefined;
     date?: string | undefined;
@@ -94,13 +109,13 @@ export function EventForm({
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (blocked || isOffline()) return;
-    let selectedDuration: number | null = hasTime ? Number(duration) : null;
+    let selectedDuration: number | null = hasTime && duration !== '' ? Number(duration) : null;
     let endError: string | undefined;
     if (multiDay) {
       try {
         if (!calendarDateSchema.safeParse(endDate).success || !calendarDateSchema.safeParse(date).success)
           throw new RangeError();
-        selectedDuration = allDay
+        selectedDuration = !hasTime
           ? (Temporal.PlainDate.from(date).until(Temporal.PlainDate.from(endDate)).days + 1) * 1440
           : (localDateTimeToUtc(endDate, endTime, timezone) - localDateTimeToUtc(date, time, timezone)) / 60000;
         if (endDate < date || selectedDuration < 1 || selectedDuration > 525600) throw new RangeError();
@@ -115,6 +130,7 @@ export function EventForm({
         hasTime &&
         (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time) ||
           (!multiDay &&
+            !(eventKind === 'single' && duration === '') &&
             (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 1 || duration > 525600)))
           ? text.timeInvalid
           : undefined,
@@ -253,7 +269,7 @@ export function EventForm({
               )}
               <Group>
                 <Switch
-                  label={text.allDay}
+                  label={eventKind === 'single' ? text.noTime : text.allDay}
                   checked={allDay || monthly}
                   disabled={monthly}
                   onChange={(e) => setAllDay(e.currentTarget.checked)}
@@ -264,7 +280,7 @@ export function EventForm({
                     checked={multiDay}
                     onChange={(e) => {
                       setMultiDay(e.currentTarget.checked);
-                      if (!e.currentTarget.checked) setDuration(60);
+                      if (!e.currentTarget.checked) setDuration('');
                       if (e.currentTarget.checked && endDate <= date && calendarDateSchema.safeParse(date).success)
                         setEndDate(Temporal.PlainDate.from(date).add({ days: 1 }).toString());
                     }}
@@ -279,21 +295,26 @@ export function EventForm({
                 onChange={(e) => setDate(monthly ? `${e.currentTarget.value}-01` : e.currentTarget.value)}
                 error={errors.date}
               />
+              {eventKind === 'single' && !allDay && (
+                <Text size="sm" c="dimmed">
+                  Godzina i czas trwania mogą pozostać puste. Wydarzenie bez godziny jest przypisane do dnia i nie
+                  oznacza zajęcia całego dnia.
+                </Text>
+              )}
               {!allDay && !monthly && (
                 <Group grow align="start">
                   <TextInput
                     type="time"
-                    label={eventKind === 'distant' ? text.optionalTime : text.time}
-                    required={eventKind !== 'distant'}
+                    label={eventKind !== 'recurring' ? text.optionalTime : text.time}
+                    required={eventKind === 'recurring'}
                     value={time}
                     onChange={(e) => setTime(e.currentTarget.value)}
                     error={errors.time}
                   />
                   {hasTime && !multiDay && (
                     <NumberInput
-                      label={text.duration}
-                      styles={{ label: { whiteSpace: 'nowrap' } }}
-                      required
+                      label={eventKind === 'single' ? text.optionalDuration : text.duration}
+                      required={eventKind !== 'single'}
                       min={1}
                       max={525600}
                       allowDecimal={false}
@@ -317,7 +338,7 @@ export function EventForm({
                     onChange={(e) => setEndDate(e.currentTarget.value)}
                     error={errors.endDate}
                   />
-                  {!allDay && (
+                  {hasTime && (
                     <TextInput
                       type="time"
                       label={text.endTime}
@@ -427,7 +448,7 @@ export function EventForm({
             {labels.cancel}
           </Button>
           <Button type="submit" loading={pending} disabled={blocked}>
-            {labels.save}
+            {approval?.label ?? labels.save}
           </Button>
         </Group>
       </Stack>

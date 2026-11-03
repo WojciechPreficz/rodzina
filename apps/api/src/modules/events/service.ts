@@ -9,12 +9,26 @@ import {
   type EventData,
   type EventPatch,
   type EventScope,
+  type EventDuplicate,
+  type EventDuplicateResolution,
 } from '@rodzina/shared';
 import { eventDataSchema, importEventSchema, type ImportEvents, type ImportEventResult } from '@rodzina/shared';
 import { eventImportOperations, users } from '../../db/schema.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import { canEditEvent, type FamilyRole } from '../../permissions.js';
 import { createEventRepository } from './repository.js';
+
+class DuplicateEventError extends ApiError {
+  constructor(
+    public duplicates: EventDuplicate[],
+    message = 'W tym dniu jest już wydarzenie o takim tytule. Wybierz zastąpienie lub dodanie kolejnego.',
+  ) {
+    super(409, 'DUPLICATE_EVENT', message);
+  }
+}
+const normalizeTitle = (title: string) =>
+  title.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('pl-PL');
+const eventVersion = (event: CalendarEvent) => createHash('sha256').update(JSON.stringify(event)).digest('hex');
 
 export function createEventService(database: DatabaseConnection) {
   const repository = createEventRepository(database);
@@ -35,8 +49,93 @@ export function createEventService(database: DatabaseConnection) {
     checkParticipants(familyId, data.participantIds);
     return repository.create(familyId, actorId, data);
   }
+  function duplicates(
+    familyId: string,
+    actorId: string,
+    role: FamilyRole,
+    title: string,
+    startDate: string,
+    kind: EventData['kind'],
+  ) {
+    const tz = repository.timezone(familyId);
+    return repository.list(familyId).flatMap((event): EventDuplicate[] => {
+      const occurrence = expandOccurrences(event, event.exceptions, startDate, startDate, tz).find((item) => {
+        const localDate = new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(item.startUtc);
+        const actualTitle =
+          event.exceptions.find((exception) => exception.originalDate === item.occurrenceDate)?.overrideTitle ??
+          event.title;
+        return localDate === startDate && normalizeTitle(actualTitle) === normalizeTitle(title);
+      });
+      if (!occurrence) return [];
+      return [
+        {
+          eventId: event.id,
+          title: event.title,
+          startDate,
+          startTime: occurrence.allDay
+            ? null
+            : new Intl.DateTimeFormat('en-GB', {
+                timeZone: tz,
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23',
+              }).format(occurrence.startUtc),
+          kind: event.kind,
+          version: eventVersion(event),
+          canReplace:
+            kind !== 'recurring' && event.kind !== 'recurring' && canEditEvent(role, actorId, event.createdBy),
+        },
+      ];
+    });
+  }
+  function saveResolved(
+    familyId: string,
+    actorId: string,
+    role: FamilyRole,
+    data: EventData,
+    resolution?: EventDuplicateResolution,
+  ) {
+    if (!resolution || resolution.action === 'add') return create(familyId, actorId, data);
+    const matches = duplicates(familyId, actorId, role, data.title, data.startDate, data.kind);
+    if (resolution.action === 'check') {
+      if (matches.length) throw new DuplicateEventError(matches);
+      return create(familyId, actorId, data);
+    }
+    const match = matches.find((item) => item.eventId === resolution.eventId);
+    if (!match || match.version !== resolution.version)
+      throw new DuplicateEventError(
+        matches,
+        'Istniejące wydarzenie zmieniło się lub zostało usunięte. Wybierz ponownie.',
+      );
+    const existing = get(familyId, match.eventId);
+    checkEdit(existing, actorId, role);
+    if (!match.canReplace)
+      throw new ApiError(
+        409,
+        'INVALID_REPLACEMENT',
+        'Serię cykliczną zmień w kalendarzu albo dodaj kolejne wydarzenie.',
+      );
+    checkParticipants(familyId, data.participantIds);
+    return repository.update(familyId, existing.id, data, actorId);
+  }
+  function createResolved(
+    familyId: string,
+    actorId: string,
+    role: FamilyRole,
+    data: EventData,
+    resolution?: EventDuplicateResolution,
+  ) {
+    return database.db.transaction(() => saveResolved(familyId, actorId, role, data, resolution), {
+      behavior: 'immediate',
+    });
+  }
   function importEvents(familyId: string, actorId: string, batch: ImportEvents): ImportEventResult[] {
-    return batch.items.map(({ operationId, event }): ImportEventResult => {
+    return batch.items.map(({ operationId, event, duplicateResolution }): ImportEventResult => {
       const parsed = importEventSchema.safeParse(event);
       if (!parsed.success)
         return {
@@ -45,12 +144,14 @@ export function createEventService(database: DatabaseConnection) {
           error: { code: 'VALIDATION_ERROR', message: 'Dane wydarzenia jednorazowego są niepoprawne.' },
         };
       // Parsing fixes field order, trims strings and fills defaults before hashing.
-      const fingerprint = createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex');
+      const fingerprint = createHash('sha256')
+        .update(JSON.stringify(duplicateResolution ? [parsed.data, duplicateResolution] : parsed.data))
+        .digest('hex');
       try {
         return database.db.transaction(
           (tx): ImportEventResult => {
             const actor = tx
-              .select({ id: users.id })
+              .select({ id: users.id, role: users.role })
               .from(users)
               .where(and(eq(users.id, actorId), eq(users.familyId, familyId)))
               .get();
@@ -70,9 +171,13 @@ export function createEventService(database: DatabaseConnection) {
             if (previous) {
               if (previous.fingerprint !== fingerprint)
                 throw new ApiError(409, 'OPERATION_CONFLICT', 'Ta operacja została już użyta z innymi danymi.');
+              if (duplicateResolution?.action === 'replace') {
+                const existing = repository.find(familyId, duplicateResolution.eventId);
+                if (existing) checkEdit(existing, actorId, actor.role);
+              }
               return { operationId, status: 'already_created', eventId: previous.eventId };
             }
-            const created = create(familyId, actorId, parsed.data);
+            const created = saveResolved(familyId, actorId, actor.role, parsed.data, duplicateResolution);
             tx.insert(eventImportOperations)
               .values({ familyId, userId: actorId, id: operationId, fingerprint, eventId: created.id })
               .run();
@@ -86,7 +191,11 @@ export function createEventService(database: DatabaseConnection) {
           status: 'error',
           error:
             error instanceof ApiError
-              ? { code: error.code, message: error.message }
+              ? {
+                  code: error.code,
+                  message: error.message,
+                  ...(error instanceof DuplicateEventError ? { duplicates: error.duplicates } : {}),
+                }
               : { code: 'INTERNAL_ERROR', message: 'Nie udało się zapisać wydarzenia. Spróbuj ponownie.' },
         };
       }
@@ -191,5 +300,5 @@ export function createEventService(database: DatabaseConnection) {
     }).format(Date.now());
     return repository.upcomingDistant(familyId, today);
   }
-  return { get, create, importEvents, update, remove, occurrences, upcomingDistant };
+  return { get, create, createResolved, duplicates, importEvents, update, remove, occurrences, upcomingDistant };
 }

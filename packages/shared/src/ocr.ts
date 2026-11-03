@@ -60,7 +60,7 @@ const messages: Record<OcrWarningCode, string> = {
   INVALID_DATE: 'Data jest niepoprawna lub nieczytelna. Sprawdź tekst źródłowy.',
   AMBIGUOUS_DATE: 'Rozpoznano kilka dat. Wybierz datę wydarzenia lub rozdziel propozycję.',
   REGISTRATION_DATE: 'Fragment zawiera termin zapisów. Potwierdź, która data dotyczy wydarzenia.',
-  MISSING_TIME: 'Nie rozpoznano godziny. Uzupełnij ją albo wybierz wydarzenie całodniowe.',
+  MISSING_TIME: 'Nie rozpoznano godziny',
   INVALID_TIME: 'Godzina jest niepoprawna. Sprawdź tekst źródłowy.',
   AMBIGUOUS_TIME: 'Godziny lub ich przedział są niejednoznaczne. Potwierdź początek i koniec.',
   AMBIGUOUS_LAYOUT: 'Nie można jednoznacznie połączyć fragmentów układu. Sprawdź sąsiednie bloki.',

@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import type { OcrDocument } from '@rodzina/shared';
+import type { ComponentProps } from 'react';
+import type { PhotoImportReview } from './PhotoImportReview.js';
 import { PhotoEventPreview } from './PhotoEventPreview.js';
 import { clearAccountData } from '../../accountStorage.js';
 
@@ -14,6 +16,10 @@ const { prepare, recognize, generation } = vi.hoisted(() => ({
 vi.mock('./ocrImage.js', () => ({ prepareOcrImage: prepare }));
 vi.mock('./ocrWeb.js', () => ({ recognizeOcrImage: recognize }));
 vi.mock('../../platform.js', () => ({ getSessionGeneration: () => generation.value }));
+vi.mock('./PhotoImportReview.js', () => ({
+  PhotoImportReview: ({ result, renderSource }: ComponentProps<typeof PhotoImportReview>) =>
+    result?.proposals.map((proposal, index) => <div key={index}>{renderSource(proposal, index)}</div>),
+}));
 
 const document: OcrDocument = {
   image: { width: 1000, height: 1000 },
@@ -27,7 +33,7 @@ const select = () => fireEvent.change(screen.getByLabelText('Wybierz zdjęcie'),
 function show(key = 'account-a') {
   return (
     <MantineProvider env="test">
-      <PhotoEventPreview key={key} onClose={vi.fn()} />
+      <PhotoEventPreview key={key} members={[]} timezone="Europe/Warsaw" initialDate="2026-11-03" onClose={vi.fn()} />
     </MantineProvider>
   );
 }
@@ -57,6 +63,21 @@ afterEach(() => {
 });
 
 describe('photo preview', () => {
+  it('shows a missing time only as a non-blocking warning', async () => {
+    recognize.mockResolvedValue({
+      image: document.image,
+      lines: [
+        { id: '1', text: 'Dogoterapia', box: { x: 0.1, y: 0.1, width: 0.7, height: 0.05 } },
+        { id: '2', text: '21.10.2026', box: { x: 0.1, y: 0.2, width: 0.7, height: 0.05 } },
+      ],
+    });
+    render(show());
+    select();
+    expect(await screen.findByText('Nie rozpoznano godziny', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('Godzina: wymaga potwierdzenia')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Uzupełnij ją albo wybierz/)).not.toBeInTheDocument();
+    expect(screen.getByText('Data: 2026-10-21')).toBeInTheDocument();
+  });
   it('shows the inclusive date range and opening hours without a misleading single-day duration', async () => {
     recognize.mockResolvedValue({
       image: document.image,
@@ -79,7 +100,7 @@ describe('photo preview', () => {
     expect(await screen.findByRole('heading', { name: 'Koncert rodzinny' })).toBeInTheDocument();
     expect(screen.getByText(/Brakuje roku/)).toBeInTheDocument();
     expect(screen.getByText('Data: 12.11 (rok wymaga potwierdzenia)')).toBeInTheDocument();
-    expect(screen.getByText('Tekst źródłowy')).toBeInTheDocument();
+    expect(screen.queryByText('Tekst źródłowy')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Zapisz' })).not.toBeInTheDocument();
   });
 

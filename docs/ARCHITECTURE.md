@@ -34,7 +34,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 ## Dane, czas i uprawnienia
 
 - Identyfikatory: crypto.randomUUID() jako text. Momenty: integer ms UTC.
-  Daty: YYYY-MM-DD; godziny: HH:mm albo null dla całodniowych.
+  Daty: YYYY-MM-DD; godziny: HH:mm albo null. Dla wydarzenia jednorazowego
+  null oznacza wpis przypisany do dnia bez istotnej godziny, opisany w UI
+  jako „Bez godziny”, bez sugerowania zajęcia całego dnia. Godzina i czas
+  trwania są opcjonalne; podana godzina bez długości ma durationMinutes=null
+  i jednakowy początek/koniec wystąpienia. UI nie pokazuje wtedy końca ani
+  zerowego czasu trwania. Techniczne allDay w wystąpieniach oznacza układ
+  kalendarza według daty. Dla serii i odległych terminów zasady pozostają bez zmian.
   Strefa rodziny: Europe/Warsaw. Konwersje czasu są w shared/src/time.ts.
 - familyId pochodzi wyłącznie z sesji, nigdy z parametrów klienta.
   Repozytoria przyjmują go jako pierwszy argument. Role: admin, member, child.
@@ -383,7 +389,7 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
   90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
 
-## Wydarzenia ze zdjęcia (OCR.1–OCR.2)
+## Wydarzenia ze zdjęcia (OCR.1–OCR.4)
 
 Shared eksportuje `ocrDocumentSchema`, `OcrDocument` i `parseOcrEvents`.
 Adapter przekazuje wymiary obrazu po korekcie orientacji i zmniejszeniu oraz
@@ -418,8 +424,20 @@ Tesseract.js 6 działa w lokalnym workerze uruchamianym dopiero po wyborze
 zdjęcia. Tryb rozproszonego tekstu rozpoznaje osobne fragmenty plakatów;
 adapter rozdziela słowa o odległych położeniach lub różnych liniach bazowych.
 Zwraca linie z położeniem i oceną pewności dla wspólnego parsera. Podgląd
-zawiera zdjęcie, częściowe propozycje, tekst źródłowy i ostrzeżenia; bez zapisu
-wydarzeń. Brak roku lub godziny nie otrzymuje domyślnej wartości.
+zawiera zdjęcie, częściowe propozycje i ostrzeżenia, bez sekcji tekstu źródłowego. Brak roku
+lub godziny nie otrzymuje domyślnej wartości. Istniejący formularz wydarzenia
+w trybie zatwierdzania pozwala poprawić propozycję lub dodać brakującą ręcznie.
+Brak daty/roku wymaga uzupełnienia. Godzina i czas trwania są opcjonalne;
+pusta godzina oznacza wpis „Bez godziny” w wybranym dniu. Zatwierdzenie w formularzu nie zaznacza pozycji i nie zapisuje wydarzenia.
+Jednoznaczną propozycję z poprawnym tytułem i datą można zatwierdzić
+przyciskiem na karcie, bez otwierania formularza. Przycisk „Zatwierdź propozycję”
+od razu zaznacza wydarzenie do zapisu; checkbox pozwala je ponownie odznaczyć.
+Brak godziny pokazuje tylko
+żółte ostrzeżenie „Nie rozpoznano godziny” i nie blokuje zatwierdzenia;
+rozpoznana godzina pozostaje w zatwierdzonych danych. Niejasne daty, brak roku
+lub niejednoznaczny odczyt godziny nadal wymagają poprawienia formularzem.
+Użytkownik zapisuje online do 20 zaznaczonych, zatwierdzonych pozycji.
+Osoby i przypomnienia pozostają puste do ich jawnego wyboru w formularzu.
 
 WWW używa `parseOcrEvents(document, { groupByDates: true })`: daty wyznaczają
 kolumny i karty, a sąsiadujące alternatywne daty pozostają niejednoznaczne.
@@ -454,7 +472,7 @@ urządzenia; nie trafiają na serwer ani do logów. Anulowanie, ponowny wybór,
 opuszczenie ekranu i czyszczenie konta kończą worker, zwalniają podgląd
 i unieważniają spóźnione wyniki. Limit pojedynczego odczytu wynosi 120 s.
 APK nie pokazuje tej akcji i nie zawiera zasobów Tesseract; natywny selektor
-i ML Kit należą do OCR.5, a poprawianie i zapis z interfejsu do OCR.4.
+i ML Kit oraz odbiór nowej funkcji w APK należą do OCR.5/OCR.6.
 
 `POST /api/events/import` (OCR.3) przyjmuje `{ items: [{ operationId, event }] }`
 z 1–20 pozycjami i unikalnymi UUID operacji. Niepoprawna struktura odrzuca całe
@@ -473,7 +491,61 @@ Retry identycznych danych zwraca zapisany identyfikator, inne dane — błąd po
 przynależność uczestników. Rejestr nie wygasa; znika po usunięciu konta lub rodziny,
 ale pozostaje po usunięciu wydarzenia, więc retry nie odtwarza usuniętej treści.
 Zdjęcia i surowy OCR nie należą do kontraktu API. Dotychczasowy `POST /api/events`
-zachowuje kontrakt; interfejs importu i klientowa obsługa retry pozostają w OCR.4.
+zachowuje kontrakt.
+
+Przed żądaniem OCR.4 zapisuje UUID operacji i kopię zatwierdzonych danych
+w metadanych istniejącego IndexedDB konta (`calendar-photo-import:1`). Zapis
+jest transakcyjny i korzysta z istniejącej bariery zmiany konta; jego błąd
+blokuje żądanie. Nie jest to outbox ani automatyczna kolejka offline.
+Nieznany wynik blokuje edycję i odrzucenie pozycji. Po ponownym otwarciu ekranu
+ręczne ponowienie online wysyła te same UUID i dane, bez nowej daty operacji.
+Wynik każdej pozycji jest utrwalany: sukces pozostaje widoczny do opuszczenia ekranu, a odrzucenie
+zachowuje dane do poprawy także po restarcie. Kolejna wysyłka definitywnie
+odrzuconej pozycji dostaje nowy UUID; poprawienie wymaga ponownego zatwierdzenia
+i zaznaczenia. Utrata zapisu wyniku pozostawia wcześniejszy stan nieznany.
+Sukces, także częściowy, unieważnia dane kalendarza i odświeża istniejący
+harmonogram. Ponowne otwarcie importu usuwa lokalne wyniki sukcesów i odtwarza
+wyłącznie operacje o nieznanym wyniku oraz odrzucone pozycje wymagające poprawy.
+Po w pełni udanym imporcie nowy formularz jest pusty. Ukrycie sukcesu usuwa
+tylko lokalny wynik, nie wydarzenie.
+
+Niezapisane propozycje są chronione istniejącym ostrzeżeniem nawigacji.
+Zdjęcie i źródło OCR pozostają wyłącznie w pamięci ekranu; wybór kolejnego
+zdjęcia od razu usuwa poprzednie propozycje, także zatwierdzone, ale jeszcze
+niewysłane, i zastępuje je wynikiem nowego odczytu. Zachowane pozostają wysłane
+operacje o nieznanym wyniku i odrzucone pozycje wymagające poprawy. Trwałe dane obejmują tylko
+zatwierdzone operacje i ich wyniki. Wylogowanie, utrata sesji i zmiana konta
+stosują wspólne czyszczenie IndexedDB. Generacja sesji i ekranu chroni przed
+spóźnionym odczytem lub odpowiedzią poprzedniego konta.
+
+Dodawanie z formularza i ze zdjęcia porównuje datę rozpoczęcia oraz tytuł
+z wydarzeniami rodziny. Tytuły porównujemy po normalizacji Unicode,
+usunięciu nadmiarowych spacji i zmianie liter na małe; godzina nie rozstrzyga
+o duplikacie. Dopasowanie obejmuje również wystąpienia serii, ale zastąpienie
+serii wymaga jej edycji w kalendarzu. Dialog pokazuje pasujące wpisy i pozwala
+zastąpić wybrany albo dodać kolejne wydarzenie. Anulowanie zachowuje dane
+formularza; nie zmienia kalendarza. Dziecko może zastąpić wyłącznie własny wpis.
+
+`GET /api/events/duplicates?title=&startDate=&kind=` zwraca pasujące wpisy,
+możliwość zastąpienia i odcisk ich aktualnej treści. Nowy formularz wysyła
+`POST /api/events?duplicateAction=check|add|replace`; zastąpienie wymaga
+`duplicateEventId` i `duplicateVersion`. Sprawdzenie oraz zapis odbywają się
+w jednej transakcji. Zastąpienie zachowuje ID i autora istniejącego wpisu,
+aktualizuje jego dane i harmonogram według zasad zwykłej edycji. Zmiana lub
+usunięcie wpisu po pokazaniu dialogu wymaga ponownej decyzji. Stary POST
+bez opcji zachowuje zgodność z wcześniejszym APK.
+
+Pozycja importu może zawierać `duplicateResolution`: `{ action: 'check' }`,
+`{ action: 'add' }` lub `{ action: 'replace', eventId, version }`. Nowy klient
+zaczyna od `check`. Duplikat daje błąd pozycji `DUPLICATE_EVENT` z listą
+pasujących wpisów, bez rejestru sukcesu ani zmiany wydarzenia. Pozostałe
+pozycje paczki mogą zostać zapisane. Dialog wysyła wybór jako nową operację;
+UUID, dane i decyzja są trwale zapisywane razem. Odcisk operacji obejmuje
+również decyzję. Retry zastąpienia zwraca wynik z rejestru bez ponownej edycji,
+także po późniejszej zmianie wydarzenia. Kontrola rodziny, uczestników
+i prawa do zastąpienia obowiązuje również przed replay. Rejestr sukcesu
+jest atomowy ze zmianą, więc błąd jego zapisu cofa również zastąpienie.
+Stare operacje importu bez decyzji zachowują wcześniejszą semantykę.
 
 ## Przypomnienia
 

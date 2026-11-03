@@ -1,11 +1,15 @@
 import { Button, Select, Stack, Text } from '@mantine/core';
-import { useState } from 'react';
-import type { EventData, Member } from '@rodzina/shared';
+import { useEffect, useRef, useState } from 'react';
+import type { EventData, Member, EventDuplicate, EventDuplicateResolution } from '@rodzina/shared';
 import { PageHeader } from '../../components/PageHeader.js';
 import { labels } from '../../i18n/pl.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { EventForm } from './EventForm.js';
 import { useCalendarMutations, useCalendarReadOnly } from './calendarQueries.js';
+import { ApiRequestError } from '../../api.js';
+import { getSessionGeneration } from '../../platform.js';
+import { findEventDuplicates } from './calendarApi.js';
+import { EventDuplicateDialog } from './EventDuplicateDialog.js';
 
 const text = labels.calendarUi;
 const modes = ['single', 'recurring', 'distant'] as const;
@@ -24,6 +28,41 @@ export function CreateEventView({
   const [kind, setKind] = useState<EventData['kind']>('single');
   const readOnly = useCalendarReadOnly();
   const { create } = useCalendarMutations();
+  const [duplicate, setDuplicate] = useState<{ data: EventData; candidates: EventDuplicate[] }>();
+  const choice = useRef<((resolution: EventDuplicateResolution | null) => void) | undefined>(undefined);
+  useEffect(() => {
+    const pendingChoice = choice;
+    return () => {
+      pendingChoice.current?.(null);
+    };
+  }, []);
+  async function save(data: EventData) {
+    const generation = getSessionGeneration();
+    let resolution: EventDuplicateResolution = { action: 'check' };
+    while (generation === getSessionGeneration()) {
+      try {
+        await create.mutateAsync({ data, duplicateResolution: resolution });
+        if (generation === getSessionGeneration()) onClose();
+        return;
+      } catch (error) {
+        if (!(error instanceof ApiRequestError) || error.code !== 'DUPLICATE_EVENT') throw error;
+        const candidates = await findEventDuplicates(data);
+        if (generation !== getSessionGeneration()) return;
+        const selected = await new Promise<EventDuplicateResolution | null>((resolve) => {
+          choice.current = resolve;
+          setDuplicate({ data, candidates });
+        });
+        if (!selected) throw new Error('Zapis anulowany. Dane formularza zostały zachowane.');
+        resolution = selected;
+      }
+    }
+  }
+  const decide = (resolution: EventDuplicateResolution | null) => {
+    const resolve = choice.current;
+    choice.current = undefined;
+    setDuplicate(undefined);
+    resolve?.(resolution);
+  };
   const changeKind = (value: string | null) => {
     if (modes.includes(value as EventData['kind']) && value !== kind && allowNavigation())
       setKind(value as EventData['kind']);
@@ -76,13 +115,21 @@ export function CreateEventView({
         members={members}
         initialDate={initialDate}
         timezone={timezone}
-        pending={create.isPending}
+        pending={create.isPending || !!duplicate}
         readOnly={readOnly}
         onCancel={cancel}
         onSave={async (data) => {
-          await create.mutateAsync(data);
-          onClose();
+          await save(data);
         }}
+      />
+      <EventDuplicateDialog
+        opened={!!duplicate}
+        title={duplicate?.data.title ?? ''}
+        date={duplicate?.data.startDate ?? ''}
+        duplicates={duplicate?.candidates ?? []}
+        pending={create.isPending}
+        onClose={() => decide(null)}
+        onResolve={decide}
       />
     </Stack>
   );

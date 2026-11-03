@@ -280,6 +280,9 @@ export function CalendarPage() {
         members.data &&
         (photo ? (
           <PhotoEventPreview
+            members={members.data}
+            timezone={family.timezone}
+            initialDate={date}
             key={`${family.id}:${user?.id}`}
             onClose={() => {
               void navigate(-1);

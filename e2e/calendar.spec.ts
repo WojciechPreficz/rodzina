@@ -61,7 +61,7 @@ test('filters events by clicking member buttons', async ({ page, baseURL }, test
   expect(allDay.ok()).toBe(true);
   await page.goto('/kalendarz');
   if (testInfo.project.name === 'phone') {
-    const time = page.locator('.calendar-agenda-time').filter({ hasText: 'Całodniowe' });
+    const time = page.locator('.calendar-agenda-time').filter({ hasText: 'Bez godziny' });
     await expect(time).toBeVisible();
     await expect
       .poll(() =>

@@ -19,6 +19,17 @@ const single = { kind: 'single', title: 'Basen', startDate: '2026-10-13', startT
 const deletionPasswordHash = await hashPassword('password123');
 
 describe('events API', () => {
+  it.each([null, '18:30'])('stores a single event with optional time %s and no duration', async (startTime) => {
+    const event = await create({ ...single, startTime, durationMinutes: null });
+    expect(event).toMatchObject({ startTime, durationMinutes: null });
+    const response = await request('GET', '/api/occurrences?from=2026-10-13&to=2026-10-13');
+    const occurrence = response.json().occurrences.find((item: { eventId: string }) => item.eventId === event.id);
+    expect(occurrence).toBeDefined();
+    if (startTime) expect(occurrence.endUtc).toBe(occurrence.startUtc);
+    const patched = await request('PATCH', `/api/events/${event.id}`, { title: 'Zmieniony tytuł' });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().event).toMatchObject({ startTime, durationMinutes: null });
+  });
   it.each([null, '09:00'])(
     'keeps multi-day single events in later date ranges with startTime=%s',
     async (startTime) => {
@@ -104,6 +115,122 @@ describe('events API', () => {
     vi.restoreAllMocks();
     await app?.close();
     database?.sqlite.close();
+  });
+
+  describe('duplicate event decisions', () => {
+    const candidates = (title = single.title, startDate = single.startDate, user = admin) =>
+      request('GET', `/api/events/duplicates?${new URLSearchParams({ title, startDate })}`, undefined, user);
+    it('matches normalized title and date in the current family and requires an explicit decision', async () => {
+      const existing = await create();
+      const matches = (await candidates('  BASEN  ')).json().duplicates;
+      expect(matches).toHaveLength(1);
+      expect(matches[0]).toMatchObject({ eventId: existing.id, canReplace: true });
+      expect((await candidates(single.title, '2026-10-14')).json().duplicates).toEqual([]);
+      expect((await candidates('Inne wydarzenie')).json().duplicates).toEqual([]);
+      expect((await candidates(single.title, single.startDate, outsider)).json().duplicates).toEqual([]);
+      expect(
+        (await request('POST', '/api/events?duplicateAction=check', { ...single, title: 'BASEN' })).statusCode,
+      ).toBe(409);
+      expect((await request('POST', '/api/events?duplicateAction=add', single)).statusCode).toBe(201);
+      expect((await candidates()).json().duplicates).toHaveLength(2);
+    });
+    it('replaces the chosen event in place and rejects a stale decision', async () => {
+      const existing = await create();
+      const match = (await candidates()).json().duplicates[0];
+      const url = `/api/events?${new URLSearchParams({ duplicateAction: 'replace', duplicateEventId: existing.id, duplicateVersion: match.version })}`;
+      const replacement = await request('POST', url, { ...single, startTime: '19:00', description: 'Nowe dane' });
+      expect(replacement.statusCode).toBe(201);
+      expect(replacement.json().event).toMatchObject({
+        id: existing.id,
+        createdBy: admin.id,
+        startTime: '19:00',
+        description: 'Nowe dane',
+      });
+      expect((await request('POST', url, { ...single, description: 'Nieaktualne' })).statusCode).toBe(409);
+      expect((await candidates()).json().duplicates).toHaveLength(1);
+      expect((await request('GET', `/api/events/${existing.id}`)).json().event.description).toBe('Nowe dane');
+    });
+    it('persists the import replacement decision and retries without repeating an update', async () => {
+      const existing = await create();
+      const first = { operationId: crypto.randomUUID(), event: single, duplicateResolution: { action: 'check' } };
+      const conflict = (await request('POST', '/api/events/import', { items: [first] })).json().results[0];
+      expect(conflict).toMatchObject({ status: 'error', error: { code: 'DUPLICATE_EVENT' } });
+      const chosen = conflict.error.duplicates[0];
+      const operation = {
+        operationId: crypto.randomUUID(),
+        event: { ...single, description: 'Z importu' },
+        duplicateResolution: { action: 'replace', eventId: chosen.eventId, version: chosen.version },
+      };
+      const imported = await request('POST', '/api/events/import', { items: [operation] });
+      expect(imported.json().results[0]).toMatchObject({ status: 'created', eventId: existing.id });
+      await request('PATCH', `/api/events/${existing.id}`, { description: 'Późniejsza zmiana' });
+      expect((await request('POST', '/api/events/import', { items: [operation] })).json().results[0]).toMatchObject({
+        status: 'already_created',
+        eventId: existing.id,
+      });
+      expect((await request('GET', `/api/events/${existing.id}`)).json().event.description).toBe('Późniejsza zmiana');
+      const changed = { ...operation, duplicateResolution: { action: 'add' } };
+      expect((await request('POST', '/api/events/import', { items: [changed] })).json().results[0]).toMatchObject({
+        status: 'error',
+        error: { code: 'OPERATION_CONFLICT' },
+      });
+    });
+    it('keeps replacement permissions and family isolation, including recurring matches', async () => {
+      const existing = await create();
+      const childMatch = (await candidates(single.title, single.startDate, child)).json().duplicates[0];
+      expect(childMatch.canReplace).toBe(false);
+      const replace = { action: 'replace', eventId: existing.id, version: childMatch.version };
+      const denied = await request(
+        'POST',
+        '/api/events/import',
+        { items: [{ operationId: crypto.randomUUID(), event: single, duplicateResolution: replace }] },
+        child,
+      );
+      expect(denied.json().results[0]).toMatchObject({ status: 'error', error: { code: 'FORBIDDEN' } });
+      const foreign = await request(
+        'POST',
+        '/api/events/import',
+        { items: [{ operationId: crypto.randomUUID(), event: single, duplicateResolution: replace }] },
+        outsider,
+      );
+      expect(foreign.json().results[0]).toMatchObject({
+        status: 'error',
+        error: { code: 'DUPLICATE_EVENT', duplicates: [] },
+      });
+      await create({ ...single, title: 'Codzienny basen', kind: 'recurring', rrule: 'FREQ=DAILY;COUNT=3' });
+      const series = (await candidates('Codzienny basen', '2026-10-14')).json().duplicates;
+      expect(series).toHaveLength(1);
+      expect(series[0].canReplace).toBe(false);
+    });
+    it('checks atomically when two imports race', async () => {
+      const submit = () =>
+        request('POST', '/api/events/import', {
+          items: [{ operationId: crypto.randomUUID(), event: single, duplicateResolution: { action: 'check' } }],
+        });
+      const responses = await Promise.all([submit(), submit()]);
+      expect(responses.map((response) => response.json().results[0].status).sort()).toEqual(['created', 'error']);
+      expect((await candidates()).json().duplicates).toHaveLength(1);
+    });
+    it('rolls back a replacement when its success record cannot be committed', async () => {
+      const original = await create({ ...single, participantIds: [member.id], description: 'Zachowaj' });
+      const match = (await candidates()).json().duplicates[0];
+      const operationId = crypto.randomUUID();
+      database.sqlite.exec(
+        `CREATE TRIGGER fail_replace BEFORE INSERT ON event_import_operations WHEN NEW.id = '${operationId}' BEGIN SELECT RAISE(ABORT, 'test failure'); END;`,
+      );
+      const response = await request('POST', '/api/events/import', {
+        items: [
+          {
+            operationId,
+            event: { ...single, description: 'Nie zapisuj' },
+            duplicateResolution: { action: 'replace', eventId: original.id, version: match.version },
+          },
+        ],
+      });
+      expect(response.json().results[0]).toMatchObject({ status: 'error', error: { code: 'INTERNAL_ERROR' } });
+      expect((await request('GET', `/api/events/${original.id}`)).json().event).toEqual(original);
+      expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(0);
+    });
   });
 
   describe('photo event import', () => {

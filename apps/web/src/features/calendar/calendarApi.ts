@@ -1,6 +1,7 @@
 import type { CalendarEvent, EventData, EventPatch, EventScope, occurrencesResponseSchema } from '@rodzina/shared';
 import type { z } from 'zod';
 import { apiFetch } from '../../api.js';
+import { eventDuplicatesResponseSchema, type EventDuplicateResolution } from '@rodzina/shared';
 
 export type CalendarOccurrence = z.infer<typeof occurrencesResponseSchema>['occurrences'][number];
 export type CalendarRange = { from: string; to: string };
@@ -22,9 +23,29 @@ export async function getEvent(id: string): Promise<CalendarEvent> {
   return (await apiFetch<{ event: CalendarEvent }>(`/api/events/${encodeURIComponent(id)}`)).event;
 }
 
-export async function createEvent(data: EventData): Promise<CalendarEvent> {
-  return (await apiFetch<{ event: CalendarEvent }>('/api/events', { method: 'POST', body: JSON.stringify(data) }))
-    .event;
+export async function findEventDuplicates(data: EventData) {
+  return eventDuplicatesResponseSchema.parse(
+    await apiFetch(
+      `/api/events/duplicates?${new URLSearchParams({ title: data.title, startDate: data.startDate, kind: data.kind })}`,
+    ),
+  ).duplicates;
+}
+
+export async function createEvent({
+  data,
+  duplicateResolution = { action: 'check' },
+}: {
+  data: EventData;
+  duplicateResolution?: EventDuplicateResolution;
+}): Promise<CalendarEvent> {
+  const query = new URLSearchParams({ duplicateAction: duplicateResolution.action });
+  if (duplicateResolution.action === 'replace') {
+    query.set('duplicateEventId', duplicateResolution.eventId);
+    query.set('duplicateVersion', duplicateResolution.version);
+  }
+  return (
+    await apiFetch<{ event: CalendarEvent }>(`/api/events?${query}`, { method: 'POST', body: JSON.stringify(data) })
+  ).event;
 }
 
 export async function listDistantEvents(): Promise<CalendarEvent[]> {

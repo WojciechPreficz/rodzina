@@ -317,14 +317,17 @@ Kolejność: OCR.1 → OCR.2 → OCR.3 → OCR.4 → OCR.5 → OCR.6; osobny kro
 Numery kroków odpowiadają kolejności realizacji; numery zgłoszeń pozostają bez zmian. Najpierw pełna funkcjonalność i odbiór
 WWW w OCR.4, następnie integracja Androida w OCR.5. Zadania #71 i #72 są
 zamknięte w GitHub; nie oznacza to potwierdzenia brakujących prób opisanych
-poniżej. Następny krok po lokalnej weryfikacji OCR.3 (#74): OCR.4 (#75),
-bez zależności od ML Kit.
+poniżej. OCR.4 (#75) zaimplementowany lokalnie; odbiór właściciela i końcowe CI
+pozostają do potwierdzenia. OCR.5 wymaga domknięcia odbioru WWW, bez zależności
+OCR.4 od ML Kit.
 Zdjęcie z pliku lub galerii: JPEG, PNG, WebP do 20 MB, korekta orientacji
 i zmniejszenie dłuższego boku do 3200 px przed lokalnym OCR. WWW używa
 Tesseract.js z polskimi danymi, Android ML Kit z dołączonym modelem łacińskim.
 Wspólny parser i React pokazują wiele częściowych propozycji ze źródłem
-i ostrzeżeniami. Brak roku, godziny i niejasne daty wymagają decyzji użytkownika;
-nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
+i ostrzeżeniami. Brak roku i niejasne daty wymagają decyzji użytkownika;
+nie wybieramy najbliższego roku. W wydarzeniach jednorazowych godzina
+i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
+(„Bez godziny”), bez sugerowania zajęcia całego dnia.
 
 - **OCR.1 (#71): zweryfikowane lokalnie, oczekuje na CI.** Format obrazu
   po orientacji i linii ze znormalizowanym położeniem w shared, parser polskich
@@ -354,7 +357,7 @@ nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
   nie pozwala odtworzyć go przez retry. Zachowane role, także dzieci, oraz
   stary POST /api/events. Odbiór: częściowy sukces, retry i równoległość,
   rollback, konflikty ID, izolacja, migracja, build i release:smoke.
-- **OCR.4 (#75): planowany, po OCR.2 i OCR.3.** Poprawianie, odrzucanie i ręczne dodawanie
+- **OCR.4 (#75): zweryfikowany lokalnie, oczekuje na CI; ręczny odbiór właściciela do potwierdzenia.** Poprawianie, odrzucanie i ręczne dodawanie
   propozycji istniejącym formularzem; potwierdzenie przed zaznaczeniem do paczki.
   Zapis online do 20 wydarzeń i wynik każdej pozycji, odświeżenie kalendarza
   i harmonogramu także przy częściowym sukcesie. Przed wysłaniem trwały zapis
@@ -367,6 +370,9 @@ nie wybieramy najbliższego roku ani automatycznie wydarzenia całodniowego.
   zdjęciach przy 390/1280 px: wybór, rzeczywisty OCR, poprawienie i zatwierdzenie,
   zaznaczenie, zapis, wyniki i kalendarz; także fokus i klawiatura, prywatność,
   produkcyjna CSP, lokalne zasoby, build, release:smoke i końcowe CI.
+  Dodawanie z formularza i import porównują datę oraz tytuł; duplikat wymaga
+  decyzji o zastąpieniu wybranego wpisu lub dodaniu kolejnego. Decyzja importu
+  jest utrwalana z operacją; retry nie powtarza zastąpienia.
   Wspólne komponenty zachowują zgodność z istniejącym APK; natywna integracja
   nowej funkcji i jej odbiór pozostają w OCR.5/OCR.6. Publikacja osobno.
 - **OCR.5 (#73): planowany, po domknięciu WWW w OCR.4.** Natywny selektor

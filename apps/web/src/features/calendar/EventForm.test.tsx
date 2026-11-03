@@ -27,6 +27,27 @@ afterEach(() => {
 });
 
 describe('EventForm', () => {
+  it.each(['', '18:30'])('saves an optional single-event time "%s" without a duration', async (time) => {
+    const save = vi.fn(async () => {});
+    render(
+      <MantineProvider env="test">
+        <EventForm members={[]} initialDate="2026-11-12" pending={false} onSave={save} onCancel={() => {}} />
+      </MantineProvider>,
+    );
+    fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Zajęcia w przedszkolu' } });
+    const clock = screen.getByLabelText('Godzina (opcjonalnie)');
+    expect(clock).not.toBeRequired();
+    fireEvent.change(clock, { target: { value: time } });
+    if (time) {
+      const duration = screen.getByLabelText('Czas trwania (min, opcjonalnie)');
+      expect(duration).not.toBeRequired();
+      expect(duration).toHaveValue('');
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(expect.objectContaining({ startTime: time || null, durationMinutes: null })),
+    );
+  });
   it.each([false, true])('saves an explicit end date for all-day=%s', async (allDay) => {
     const save = vi.fn(async () => {});
     render(
@@ -35,11 +56,12 @@ describe('EventForm', () => {
       </MantineProvider>,
     );
     fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Wyjazd' } });
+    fireEvent.change(screen.getByLabelText('Godzina (opcjonalnie)'), { target: { value: '09:00' } });
     expect(screen.queryByLabelText('Data zakończenia')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('switch', { name: 'Wielodniowe' }));
     fireEvent.change(screen.getByLabelText(/^Data zakończenia/), { target: { value: '2026-10-26' } });
     if (allDay) {
-      fireEvent.click(screen.getByRole('switch', { name: 'Całodniowe' }));
+      fireEvent.click(screen.getByRole('switch', { name: 'Bez godziny' }));
       expect(screen.queryByLabelText('Godzina zakończenia')).not.toBeInTheDocument();
     } else {
       fireEvent.change(screen.getByLabelText(/^Godzina zakończenia/), { target: { value: '12:00' } });
@@ -63,6 +85,7 @@ describe('EventForm', () => {
       </MantineProvider>,
     );
     fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Wyjazd' } });
+    fireEvent.change(screen.getByLabelText('Godzina (opcjonalnie)'), { target: { value: '09:00' } });
     fireEvent.click(screen.getByRole('switch', { name: 'Wielodniowe' }));
     fireEvent.change(screen.getByLabelText(/^Data zakończenia/), { target: { value: '2026-10-24' } });
     fireEvent.change(screen.getByLabelText(/^Godzina zakończenia/), { target: { value: '08:00' } });
@@ -71,7 +94,7 @@ describe('EventForm', () => {
     expect(screen.getByText(/Koniec musi być późniejszy/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('switch', { name: 'Wielodniowe' }));
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ durationMinutes: 60 })));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ durationMinutes: null })));
   });
   it('uses the family timezone for an absolute shared reminder', async () => {
     const save = vi.fn(async () => {});
@@ -192,7 +215,7 @@ describe('EventForm', () => {
       ),
     );
   });
-  it('creates a timed single event without sending reminder changes', async () => {
+  it('creates a dated single event without sending reminder changes', async () => {
     const save = vi.fn(async () => {});
     render(
       <MantineProvider env="test">
@@ -208,8 +231,8 @@ describe('EventForm', () => {
         location: null,
         participantIds: [],
         startDate: '2026-10-12',
-        startTime: '09:00',
-        durationMinutes: 60,
+        startTime: null,
+        durationMinutes: null,
         kind: 'single',
         datePrecision: 'day',
         rrule: null,
@@ -257,7 +280,7 @@ describe('EventForm', () => {
       </MantineProvider>,
     );
     fireEvent.change(screen.getByLabelText(/^Tytuł/), { target: { value: 'Wycieczka' } });
-    fireEvent.click(screen.getByRole('switch', { name: 'Całodniowe' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Bez godziny' }));
     expect(screen.queryByLabelText(/^Godzina/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
     await waitFor(() =>

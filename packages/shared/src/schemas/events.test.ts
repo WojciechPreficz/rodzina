@@ -6,11 +6,25 @@ import {
   importEventSchema,
   importEventsSchema,
   importEventsResponseSchema,
+  eventDuplicateResolutionSchema,
 } from './events.js';
 
 const single = { kind: 'single', title: 'Basen', startDate: '2026-10-11' };
 
 describe('event schemas', () => {
+  it('requires an identified version for replacement and validates the import decision', () => {
+    const eventId = '11111111-1111-4111-8111-111111111111';
+    expect(eventDuplicateResolutionSchema.safeParse({ action: 'replace', eventId }).success).toBe(false);
+    expect(
+      eventDuplicateResolutionSchema.safeParse({ action: 'replace', eventId, version: 'a'.repeat(64) }).success,
+    ).toBe(true);
+    expect(
+      importEventsSchema.safeParse({
+        items: [{ operationId: eventId, event: single, duplicateResolution: { action: 'add' } }],
+      }).success,
+    ).toBe(true);
+    expect(eventDuplicateResolutionSchema.safeParse({ action: 'add', eventId }).success).toBe(false);
+  });
   it('separates batch structure from individual event validation', () => {
     const operationId = '11111111-1111-4111-8111-111111111111';
     for (const event of [null, 1, [], {}, single]) {
@@ -44,6 +58,7 @@ describe('event schemas', () => {
       single,
       { ...single, startDate: '2028-02-29' },
       { ...single, startTime: '17:00', durationMinutes: 60 },
+      { ...single, startTime: '17:00' },
       { ...single, durationMinutes: 4320 },
       { ...single, kind: 'recurring', rrule: 'FREQ=WEEKLY;BYDAY=TU,TH;COUNT=8' },
       { ...single, kind: 'distant' },
@@ -66,7 +81,8 @@ describe('event schemas', () => {
     { startDate: '2026-04-31' },
     { startDate: '2026-2-01' },
     { startTime: '24:00', durationMinutes: 60 },
-    { startTime: '17:00' },
+    { kind: 'recurring', rrule: 'FREQ=DAILY', startTime: '17:00' },
+    { kind: 'distant', startTime: '17:00' },
     { durationMinutes: 60 },
     { durationMinutes: 1441 },
     { kind: 'recurring', rrule: 'FREQ=DAILY', durationMinutes: 2880 },
