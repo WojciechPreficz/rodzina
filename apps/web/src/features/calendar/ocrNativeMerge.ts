@@ -40,6 +40,14 @@ export function mergeNativeOcrPasses(first: OcrDocument, second: OcrDocument): O
       lines.push(candidate);
       continue;
     }
+    const withoutStroke = (text: string) => text.toLocaleLowerCase('pl-PL').replace(/[|i]/gu, '');
+    if (oldDates === newDates && withoutStroke(old.text) === withoutStroke(candidate.text)) {
+      if (old.text.includes('|') && !candidate.text.includes('|') && (candidate.confidence ?? 0) >= 50) {
+        lines[index] = candidate;
+        continue;
+      }
+      if (!old.text.includes('|') && candidate.text.includes('|') && (old.confidence ?? 0) >= 50) continue;
+    }
     const moreCertain = (candidate.confidence ?? 0) > (old.confidence ?? 0);
     if ((!oldDates && newDates) || (oldDates === newDates && moreCertain)) lines[index] = candidate;
   }

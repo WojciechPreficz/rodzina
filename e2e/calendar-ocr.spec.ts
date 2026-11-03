@@ -96,6 +96,30 @@ test.beforeEach(async ({ page, baseURL }, info) => {
   await page.getByRole('button', { name: 'Dodaj ze zdjęcia', exact: true }).click();
 });
 
+test('reads all seven November photo cards with their dates and complete titles', async ({ page }, info) => {
+  test.setTimeout(120_000);
+  await page.getByLabel('Wybierz zdjęcie', { exact: true }).setInputFiles('test-fixtures/ocr/november-2026.jpg');
+  await expect(page.getByRole('status')).toContainText('Odczyt zakończony', { timeout: 110_000 });
+  const cards = page.locator('.mantine-Card-root');
+  await expect(cards).toHaveCount(7);
+  const titles = [
+    /SESJA ZDJĘCIOWA ŚWIĄTECZNA/iu,
+    /SZKOŁA DO HYMNU/iu,
+    /SCK - KINO [„"]?KACPER I EMMA NA SAFARI/iu,
+    /FILHARMONIA [„"]?MUZYCZNYCH KADRÓW BEZ LIKU/iu,
+    /^DOGOTERAPIA$/iu,
+    /^EDUKACYJNA WIZYTA STRAŻY MIEJSKIEJ$/iu,
+    /AUDYCJA MUZYCZNA [„"]?PATRIOTYCZNIE[”"] [„"]?ANDRZEJKI/iu,
+  ];
+  await expect(cards.getByRole('heading')).toHaveText(titles);
+  for (const [index, day] of [5, 9, 10, 13, 18, 23, 27].entries()) {
+    await expect(cards.nth(index)).toContainText(`Data: 2026-11-${String(day).padStart(2, '0')}`);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('november-photo.png'), fullPage: true });
+  await approveRecognizedAndSave(page, null);
+});
+
 test('recognizes a real poster using local production WASM and Polish model', async ({ page, baseURL }, info) => {
   test.setTimeout(120_000);
   const external: string[] = [];

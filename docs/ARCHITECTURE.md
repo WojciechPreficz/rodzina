@@ -438,6 +438,16 @@ Tesseract.js 6 działa w lokalnym workerze uruchamianym dopiero po wyborze
 zdjęcia. Tryb rozproszonego tekstu rozpoznaje osobne fragmenty plakatów;
 adapter rozdziela słowa o odległych położeniach lub różnych liniach bazowych.
 Zwraca linie z położeniem i oceną pewności dla wspólnego parsera. Podgląd
+poprzedzają dwa dodatkowe lokalne odczyty: skala szarości oraz obraz progowany
+w skali 75%. Rozpoznanie jednej daty nie pomija pozostałych przebiegów.
+Daty i niepewne napisy (najwyżej 32 wiersze) są ponownie odczytywane osobno,
+z marginesem i powiększeniem do 2×, najwyżej 3200 px, w trybie pojedynczego
+wiersza. Położenie fragmentu pozostaje przypisane do zdjęcia źródłowego.
+Scalanie preferuje rozpoznaną datę nad uszkodzonym tekstem, a sprzeczne daty
+zachowuje do decyzji użytkownika. Przy alternatywach różniących się wyłącznie
+kreską `|` i literą `I` wybiera istniejący odczyt litery z wystarczającą pewnością,
+bez dopisywania słów. Parser odrzuca ceny również bez spacji („15ZŁ”)
+i nie tworzy pustych propozycji z samych ozdób. Podgląd
 zawiera zdjęcie, częściowe propozycje i ostrzeżenia, bez sekcji tekstu źródłowego. Brak roku
 lub godziny nie otrzymuje domyślnej wartości. Istniejący formularz wydarzenia
 w trybie zatwierdzania pozwala poprawić propozycję lub dodać brakującą ręcznie.
@@ -497,6 +507,12 @@ współrzędnych, aby pojedynczy wiersz silnika nie łączył sąsiednich kartek
 Adapter przekazuje także dostępną pewność odczytu ML Kit (przeliczoną na 0–100).
 Po obrazie oryginalnym wykonuje drugi lokalny odczyt w skali szarości
 z poprawionym kontrastem i powiększeniem najwyżej 2×, do 3200 px.
+Następnie ponawia odczyt najwyżej 32 fragmentów oryginału: wierszy z rokiem
+oraz niepewnych napisów. Każdy fragment ma margines, powiększenie do 2×
+(najwyżej 3200 px) i współrzędne przeliczone na zdjęcie źródłowe.
+Anulowanie obejmuje także te odczyty; bitmapy fragmentów są zwalniane kolejno.
+Opcjonalny `refinedDocument` jest scalany ze wspólnym dokumentem; wcześniejsze
+APK bez tego pola zachowują dotychczasowe działanie.
 Zgodne geometrycznie fragmenty są uzgadniane według pewności silnika;
 sprzeczne odczyty dat pozostają alternatywami do ręcznego rozstrzygnięcia.
 Nie korygujemy słów słownikiem ani nie odgadujemy dat. Błąd dodatkowego

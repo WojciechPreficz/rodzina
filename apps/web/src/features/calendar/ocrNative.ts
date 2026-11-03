@@ -3,9 +3,13 @@ import { ocrDocumentSchema } from '@rodzina/shared';
 import { mergeNativeOcrPasses } from './ocrNativeMerge.js';
 
 const nativeOcr = registerPlugin<{
-  pickAndRecognize(options: {
-    requestId: string;
-  }): Promise<{ cancelled?: boolean; document?: unknown; alternateDocument?: unknown; preview?: string }>;
+  pickAndRecognize(options: { requestId: string }): Promise<{
+    cancelled?: boolean;
+    document?: unknown;
+    alternateDocument?: unknown;
+    refinedDocument?: unknown;
+    preview?: string;
+  }>;
   cancel(options: { requestId: string }): Promise<void>;
 }>('RodzinaOcr');
 
@@ -29,9 +33,11 @@ export async function recognizeNativePhoto(signal: AbortSignal) {
     signal.throwIfAborted();
     if (result.cancelled) return;
     const first = ocrDocumentSchema.parse(result.document);
-    const document = result.alternateDocument
+    let document = result.alternateDocument
       ? mergeNativeOcrPasses(first, ocrDocumentSchema.parse(result.alternateDocument))
       : first;
+    if (result.refinedDocument)
+      document = mergeNativeOcrPasses(document, ocrDocumentSchema.parse(result.refinedDocument));
     const preview = result.preview;
     if (preview && (preview.length > 350_000 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(preview)))
       throw new Error('Nieprawidłowy podgląd zdjęcia.');

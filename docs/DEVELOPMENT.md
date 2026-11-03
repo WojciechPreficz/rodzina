@@ -119,7 +119,14 @@ Właściciel zgłosił błędy odczytu listopadowego plakatu: przypisanie 9.11
 pierwszej kartce zamiast 5.11, brak „Szkoły do hymnu” i przekręcone litery.
 Po poprawce wymagany ponowny fizyczny odczyt tego zdjęcia, także offline,
 porównanie wszystkich siedmiu terminów i tytułów oraz anulowanie obu przebiegów.
-Regresje geometrii są syntetyczne; agent nie potwierdził wyniku ML Kit na telefonie.
+Regresje geometrii są syntetyczne; rzeczywiste zdjęcie
+`test-fixtures/ocr/november-2026.jpg` sprawdza test headless „seven November”
+w `e2e/calendar-ocr.spec.ts` przy 390/1280 px: siedem pełnych tytułów i dat,
+w tym sesję 5.11 i „Szkołę do hymnu” 9.11, oraz zatwierdzenie i zapis.
+Agent nie potwierdził wyniku ML Kit na telefonie. Po ponownym odczycie
+pojedynczych wierszy wymagany jest odbiór nowego APK: pierwsza kartka ma mieć
+datę 5.11.2026, a wszystkie siedem tytułów ma odpowiadać zdjęciu, także offline.
+Sprawdź anulowanie podczas odczytu fragmentów i ponowny wybór zdjęcia.
 Pozostałe próby telefonu nadal wymagają potwierdzenia właściciela.
 
 Duplikaty wydarzeń sprawdzają testy API `modules/events`, kontraktów

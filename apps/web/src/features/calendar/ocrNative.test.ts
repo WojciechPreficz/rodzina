@@ -25,6 +25,16 @@ it('validates the shared document and bounded preview', async () => {
   pick.mockResolvedValueOnce({ document: { ...document, lines: [{ text: 'invalid' }] } });
   await expect(recognizeNativePhoto(new AbortController().signal)).rejects.toThrow();
 });
+
+it('recovers a date from the optional isolated-line pass without borrowing another card date', async () => {
+  const source = { id: '1', text: 'S.11.2026 R.', confidence: 95, box: { x: 0.1, y: 0.1, width: 0.5, height: 0.05 } };
+  pick.mockResolvedValueOnce({
+    document: { ...document, lines: [source] },
+    refinedDocument: { ...document, lines: [{ ...source, text: '5.11.2026 R.', confidence: 80 }] },
+  });
+  const result = await recognizeNativePhoto(new AbortController().signal);
+  expect(result?.document.lines.map(({ text }) => text)).toEqual(['5.11.2026 R.']);
+});
 it('settles immediately on abort and cancels only its own operation', async () => {
   let resolve!: (value: unknown) => void;
   pick.mockImplementation(

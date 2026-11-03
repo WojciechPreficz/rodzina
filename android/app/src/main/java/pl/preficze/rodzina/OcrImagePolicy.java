@@ -32,6 +32,12 @@ final class OcrImagePolicy {
         return left - previousRight > height * 3 || Math.abs(centerY - previousCenterY) > height * 0.8;
     }
 
+    static boolean refineLine(String text, float confidence) {
+        return text.matches(".*[0-9]{4}.*")
+            || ((confidence <= 0 || confidence < 0.8f || text.contains("|"))
+                && text.codePoints().filter(Character::isLetter).count() >= 3);
+    }
+
     static double[] box(int left, int top, int right, int bottom, int width, int height) {
         double x = Math.max(0, Math.min(1, left / (double) width));
         double y = Math.max(0, Math.min(1, top / (double) height));

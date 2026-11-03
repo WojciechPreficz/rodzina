@@ -335,7 +335,7 @@ function photoRegions(lines: OcrLine[]): Region[] {
     const row = [...column.rows].sort((a, b) => distance(a) - distance(b))[0]!;
     const firstY = Math.min(...column.rows[0]!.anchors.map((anchor) => anchor.box.y));
     // A global month heading is context, rather than an additional event card.
-    if (anchors.length > 1 && line.box.y + line.box.height < firstY - Math.max(0.12, line.box.height * 2)) continue;
+    if (anchors.length > 1 && line.box.y + line.box.height < firstY - 0.08) continue;
     const horizontalGap = Math.min(
       ...row.anchors.map((anchor) =>
         Math.max(0, anchor.box.x - line.box.x - line.box.width, line.box.x - anchor.box.x - anchor.box.width),
@@ -354,7 +354,7 @@ function photoRegions(lines: OcrLine[]): Region[] {
 const isPhotoMetadata = (text: string) =>
   /^(?:data\b|godzina\b|sektor\b|rz[ąa]d\b|cena\b|parter\b|balkon\b|widoczno[śs][ćc]\b|agencja\b|organizator\b|patronat\b|(?:miejsce|lokalizacja|adres)\s*[:|]?$)/iu.test(
     text.trim(),
-  ) || /\d\s*(?:z[łl]|pln|eur|€)\b/iu.test(text);
+  ) || /\d\s*(?:z[łl]|pln|eur|€)(?!\p{L})/iu.test(text);
 
 function photoTitle(candidates: LineData[]): { title: string | null; lines: OcrLine[] } {
   const eligible = candidates.filter(
@@ -362,10 +362,11 @@ function photoTitle(candidates: LineData[]): { title: string | null; lines: OcrL
       !item.dates.length &&
       !item.times.length &&
       !isPhotoMetadata(item.residue) &&
-      (item.residue.match(/\p{L}/gu)?.length ?? 0) >= 3 &&
+      /\p{L}{3}/u.test(item.residue) &&
       (item.line.confidence ?? 100) >= 40,
   );
-  const base = [...eligible].sort(
+  const certain = eligible.filter((item) => (item.line.confidence ?? 100) >= 80);
+  const base = [...(certain.length ? certain : eligible)].sort(
     (a, b) => b.line.box.width * b.line.box.height ** 2 - a.line.box.width * a.line.box.height ** 2,
   )[0];
   if (!base)
@@ -543,6 +544,7 @@ export function parseOcrEvents(input: OcrDocument, options: { groupByDates?: boo
   const proposals = [...blocks.values()]
     .flatMap(options.groupByDates ? photoRegions : regions)
     .map((region) => proposal(region, options.groupByDates))
+    .filter((item) => !options.groupByDates || item.title || item.dates.length || item.startTime)
     .sort(
       (a, b) =>
         (options.groupByDates && a.startDate && b.startDate ? a.startDate.localeCompare(b.startDate) : 0) ||

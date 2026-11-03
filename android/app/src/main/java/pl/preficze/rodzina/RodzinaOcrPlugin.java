@@ -205,19 +205,30 @@ public class RodzinaOcrPlugin extends Plugin {
                         Bitmap owned = enhanced;
                         JSObject primary = first;
                         recognizer.process(InputImage.fromBitmap(enhanced, 0)).addOnCompleteListener(worker, second -> {
+                            boolean refining = false;
                             try {
                                 run.check();
                                 JSObject result = new JSObject().put("document", primary).put("preview", preview);
                                 if (second.isSuccessful()) result.put("alternateDocument", document(second.getResult(), owned.getWidth(), owned.getHeight()));
-                                finish(run, result, null);
+                                List<Rect> fragments = new ArrayList<>();
+                                for (Text.TextBlock block : task.getResult().getTextBlocks()) for (Text.Line line : block.getLines()) {
+                                    if (fragments.size() >= 32) break;
+                                    if (line.getBoundingBox() != null && OcrImagePolicy.refineLine(line.getText(), line.getConfidence()))
+                                        fragments.add(new Rect(line.getBoundingBox()));
+                                }
+                                refine(run, original, recognizer, result, fragments, 0, new JSArray());
+                                refining = true;
                             } catch (CancellationException ignored) {
                                 // Cancellation must not publish either pass.
                             } catch (Exception | OutOfMemoryError error) {
                                 finish(run, new JSObject().put("document", primary).put("preview", preview), null);
                             } finally {
                                 owned.recycle();
-                                recognizer.close();
-                                processing = null;
+                                if (!refining) {
+                                    original.recycle();
+                                    recognizer.close();
+                                    processing = null;
+                                }
                             }
                         });
                         handedOff = true;
@@ -228,14 +239,75 @@ public class RodzinaOcrPlugin extends Plugin {
                         if (first != null) finish(run, new JSObject().put("document", first).put("preview", preview), null);
                         else finish(run, null, "Nie udało się odczytać tekstu ze zdjęcia.");
                     } finally {
-                        original.recycle();
                         if (!handedOff) {
+                            original.recycle();
                             if (enhanced != null) enhanced.recycle();
                             recognizer.close();
                             processing = null;
                         }
                     }
                 });
+    }
+
+    private void refine(Run run, Bitmap original, TextRecognizer recognizer, JSObject result,
+                        List<Rect> fragments, int index, JSArray lines) {
+        Bitmap crop = null;
+        boolean handedOff = false;
+        try {
+            run.check();
+            if (index >= fragments.size()) {
+                result.put("refinedDocument", new JSObject()
+                    .put("image", new JSObject().put("width", original.getWidth()).put("height", original.getHeight()))
+                    .put("lines", lines));
+                finish(run, result, null);
+                return;
+            }
+            Rect box = fragments.get(index);
+            box.inset(-8, -8);
+            box.intersect(0, 0, original.getWidth(), original.getHeight());
+            int[] size = OcrImagePolicy.contrastSize(box.width(), box.height());
+            crop = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+            new Canvas(crop).drawBitmap(original, box, new Rect(0, 0, size[0], size[1]), new Paint(Paint.FILTER_BITMAP_FLAG));
+            Bitmap owned = crop;
+            recognizer.process(InputImage.fromBitmap(crop, 0)).addOnCompleteListener(worker, task -> {
+                try {
+                    run.check();
+                    if (task.isSuccessful()) {
+                        org.json.JSONArray recovered = document(task.getResult(), owned.getWidth(), owned.getHeight()).getJSONArray("lines");
+                        for (int i = 0; i < recovered.length(); i++) {
+                            org.json.JSONObject item = recovered.getJSONObject(i);
+                            org.json.JSONObject local = item.getJSONObject("box");
+                            item.put("id", "refined-" + lines.length());
+                            item.put("box", new JSObject()
+                                .put("x", (box.left + local.getDouble("x") * box.width()) / original.getWidth())
+                                .put("y", (box.top + local.getDouble("y") * box.height()) / original.getHeight())
+                                .put("width", local.getDouble("width") * box.width() / original.getWidth())
+                                .put("height", local.getDouble("height") * box.height() / original.getHeight()));
+                            lines.put(item);
+                        }
+                    }
+                } catch (CancellationException ignored) {
+                    // The next iteration releases the retained original without publishing it.
+                } catch (Exception ignored) {
+                    // An optional fragment must not discard completed whole-image reads.
+                } finally {
+                    owned.recycle();
+                    refine(run, original, recognizer, result, fragments, index + 1, lines);
+                }
+            });
+            handedOff = true;
+        } catch (CancellationException ignored) {
+            // Cancellation invalidates every pending fragment.
+        } catch (Exception | OutOfMemoryError ignored) {
+            finish(run, result, null);
+        } finally {
+            if (!handedOff) {
+                if (crop != null) crop.recycle();
+                original.recycle();
+                recognizer.close();
+                processing = null;
+            }
+        }
     }
 
     private static Bitmap contrast(Bitmap original) {

@@ -11,6 +11,33 @@ afterEach(() => {
 });
 
 describe('OCR image preparation and adapter', () => {
+  it('keeps conflicting dates visible and favors a complete date over damaged OCR', () => {
+    const reading = (text: string, confidence: number) => ({
+      image: { width: 2000, height: 1415 },
+      lines: [{ id: 'date', text, confidence, box: { x: 0.1, y: 0.1, width: 0.2, height: 0.03 } }],
+    });
+    const recovered = mergeOcrPasses([reading('q4.11.2026 R.', 95), reading('9.11.2026 R.', 61)]);
+    expect(parseOcrEvents(recovered, { groupByDates: true }).proposals[0]?.startDate).toBe('2026-11-09');
+    const conflict = mergeOcrPasses([reading('5.11.2026 R.', 75), reading('9.11.2026 R.', 95)]);
+    expect(parseOcrEvents(conflict, { groupByDates: true }).proposals[0]).toMatchObject({ startDate: null });
+    expect(conflict.lines).toHaveLength(2);
+  });
+
+  it('selects an alternate recognized letter instead of a stroke without rewriting the source', () => {
+    const reading = (text: string, confidence: number) => ({
+      image: { width: 1000, height: 1000 },
+      lines: [{ id: 'title', text, confidence, box: { x: 0.1, y: 0.1, width: 0.3, height: 0.03 } }],
+    });
+    for (const pair of [
+      ['KACPER | EMMA', 'KACPER I EMMA'],
+      ['SCK - K|NO', 'SCK - Kino'],
+    ]) {
+      const broken = reading(pair[0]!, 96);
+      const complete = reading(pair[1]!, 61);
+      expect(mergeOcrPasses([broken, complete]).lines[0]?.text).toBe(pair[1]);
+      expect(mergeOcrPasses([complete, broken]).lines[0]?.text).toBe(pair[1]);
+    }
+  });
   it('merges corresponding fragments across scales without duplicating dates', () => {
     const first = {
       image: { width: 2000, height: 1000 },

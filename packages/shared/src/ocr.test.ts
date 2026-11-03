@@ -304,7 +304,12 @@ describe('date-anchored photo layout', () => {
   ];
 
   it('keeps all seven staggered November cards including the anthem as a title', () => {
-    const result = photo(november());
+    const ornament = {
+      ...line('NNVV', 'ornament', 0.82, 0.1, 0.17),
+      box: { x: 0.82, y: 0.1, width: 0.17, height: 0.075 },
+      confidence: 85,
+    };
+    const result = photo([...november(), ornament]);
     expect(result.proposals).toHaveLength(7);
     expect(result.proposals.map(({ startDate }) => startDate)).toEqual(
       [5, 9, 10, 13, 18, 23, 27].map((day) => `2026-11-${String(day).padStart(2, '0')}`),
@@ -312,7 +317,7 @@ describe('date-anchored photo layout', () => {
     expect(result.proposals[0]!.title).toBe('SESJA ZDJĘCIOWA ŚWIĄTECZNA');
     expect(result.proposals[1]).toMatchObject({ title: 'SZKOŁA DO HYMNU', location: null });
     expect(result.proposals[6]!.title).toBe('AUDYCJA MUZYCZNA "PATRIOTYCZNIE" "ANDRZEJKI"');
-    expect(result).toEqual(photo([...november()].reverse()));
+    expect(result).toEqual(photo([...november(), ornament].reverse()));
   });
 
   it('does not attach an isolated Christmas photo card to November 9 when its date is unread', () => {
@@ -424,6 +429,17 @@ describe('date-anchored photo layout', () => {
     expect(result.proposals).toHaveLength(1);
     expect(result.proposals[0]).toMatchObject({ title: 'DOGOTERAPIA', startDate: '2026-10-21', startTime: null });
     expect(codes(result.proposals[0]!)).toEqual(['MISSING_TIME']);
+  });
+
+  it('excludes a price joined to a decorative letter and suppresses isolated graphics', () => {
+    const result = photo([
+      line('13.11.2026', 'date', 0.7, 0.25, 0.2),
+      line('FILHARMONIA', 'title', 0.7, 0.3, 0.2),
+      { ...line('15ZŁ [A', 'price', 0.7, 0.4, 0.2), box: { x: 0.7, y: 0.4, width: 0.2, height: 0.08 } },
+      line('=>', 'graphic', 0.05, 0.8, 0.02),
+    ]);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0]).toMatchObject({ title: 'FILHARMONIA', startDate: '2026-11-13' });
   });
 
   it('connects a separated ticket title, date and address and excludes seat metadata', () => {

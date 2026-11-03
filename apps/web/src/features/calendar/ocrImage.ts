@@ -1,3 +1,5 @@
+import type { OcrLine } from '@rodzina/shared';
+
 export const maxOcrBytes = 20 * 1024 * 1024;
 
 export function validateOcrFile(file: File) {
@@ -58,8 +60,7 @@ export async function prepareOcrVariants(image: { blob: Blob; width: number; hei
   try {
     for (const [scale, channel] of [
       [1, 'luma'],
-      [0.5, 'luma'],
-      [1, 'red'],
+      [0.75, 'binary'],
     ] as const) {
       signal.throwIfAborted();
       canvas.width = Math.max(1, Math.round(image.width * scale));
@@ -75,13 +76,13 @@ export async function prepareOcrVariants(image: { blob: Blob; width: number; hei
         }
         for (let column = 0; column < canvas.width; column++) {
           const index = (row * canvas.width + column) * 4;
-          const value =
-            channel === 'red'
-              ? pixels.data[index]!
-              : Math.round(
-                  pixels.data[index]! * 0.299 + pixels.data[index + 1]! * 0.587 + pixels.data[index + 2]! * 0.114,
-                );
-          pixels.data[index] = pixels.data[index + 1] = pixels.data[index + 2] = value;
+          const value = Math.round(
+            pixels.data[index]! * 0.299 + pixels.data[index + 1]! * 0.587 + pixels.data[index + 2]! * 0.114,
+          );
+          pixels.data[index] =
+            pixels.data[index + 1] =
+            pixels.data[index + 2] =
+              channel === 'binary' ? (value < 120 ? 0 : 255) : value;
         }
       }
       context.putImageData(pixels, 0, 0);
@@ -95,6 +96,40 @@ export async function prepareOcrVariants(image: { blob: Blob; width: number; hei
       variants.push({ blob, width: canvas.width, height: canvas.height });
     }
     return variants;
+  } finally {
+    bitmap.close();
+    canvas.width = canvas.height = 0;
+  }
+}
+
+/** Isolate an uncertain line from nearby illustrations, retaining its source geometry. */
+export async function prepareOcrLineImage(
+  image: { blob: Blob; width: number; height: number },
+  line: OcrLine,
+  signal: AbortSignal,
+) {
+  const bitmap = await createImageBitmap(image.blob);
+  const canvas = document.createElement('canvas');
+  try {
+    signal.throwIfAborted();
+    const x = Math.max(0, Math.floor(line.box.x * image.width) - 8);
+    const y = Math.max(0, Math.floor(line.box.y * image.height) - 8);
+    const width = Math.min(image.width - x, Math.ceil(line.box.width * image.width) + 16);
+    const height = Math.min(image.height - y, Math.ceil(line.box.height * image.height) + 16);
+    const scale = Math.min(2, 3200 / Math.max(width, height));
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Nie udało się przygotować fragmentu zdjęcia.');
+    context.drawImage(bitmap, x, y, width, height, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (value) => (value ? resolve(value) : reject(new Error('Nie udało się przygotować fragmentu.'))),
+        'image/png',
+      ),
+    );
+    signal.throwIfAborted();
+    return { blob, width: canvas.width, height: canvas.height };
   } finally {
     bitmap.close();
     canvas.width = canvas.height = 0;

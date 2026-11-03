@@ -1,5 +1,5 @@
 import { ocrDocumentSchema, parseOcrEvents, type OcrDocument, type OcrLine } from '@rodzina/shared';
-import { prepareOcrVariants } from './ocrImage.js';
+import { prepareOcrLineImage, prepareOcrVariants } from './ocrImage.js';
 import type { Line, Page, Word } from 'tesseract.js';
 
 declare const __OCR_ASSET_BASE__: string;
@@ -74,6 +74,12 @@ export function mergeOcrPasses(documents: OcrDocument[]): OcrDocument {
     );
   };
   const foldText = (text: string) => text.toLocaleLowerCase('pl-PL').replace(/[^\p{L}\d]/gu, '');
+  const withoutStroke = (text: string) => text.toLocaleLowerCase('pl-PL').replace(/[|i]/gu, '');
+  const dates = (line: OcrLine) =>
+    parseOcrEvents({ image: documents[0]!.image, lines: [line] })
+      .proposals.flatMap((proposal) => proposal.dates)
+      .map((date) => `${date.day}:${date.month}:${date.year}:${date.valid}`)
+      .join('|');
   for (const document of documents)
     for (const line of document.lines) {
       const index = lines.findIndex((old) => comparable(old, line));
@@ -82,11 +88,32 @@ export function mergeOcrPasses(documents: OcrDocument[]): OcrDocument {
         continue;
       }
       const old = lines[index]!;
+      const oldDates = dates(old);
+      const newDates = dates(line);
+      if (oldDates && newDates && oldDates !== newDates) {
+        if (!lines.some((other) => comparable(other, line) && dates(other) === newDates)) lines.push(line);
+        continue;
+      }
+      if (oldDates && !newDates) continue;
       const fuller =
         foldText(line.text).includes(foldText(old.text)) &&
         foldText(line.text).length > foldText(old.text).length &&
         (line.confidence ?? 0) >= 50;
-      if (fuller || (line.confidence ?? 0) > (old.confidence ?? 0)) lines[index] = line;
+      const resolvedGlyph =
+        old.text.includes('|') &&
+        !line.text.includes('|') &&
+        withoutStroke(old.text) === withoutStroke(line.text) &&
+        (line.confidence ?? 0) >= 50;
+      const losesGlyph =
+        line.text.includes('|') &&
+        !old.text.includes('|') &&
+        withoutStroke(old.text) === withoutStroke(line.text) &&
+        (old.confidence ?? 0) >= 50;
+      if (
+        !losesGlyph &&
+        ((!oldDates && newDates) || fuller || resolvedGlyph || (line.confidence ?? 0) > (old.confidence ?? 0))
+      )
+        lines[index] = line;
     }
   return ocrDocumentSchema.parse({
     image: documents[0]!.image,
@@ -168,8 +195,6 @@ export async function recognizeOcrImage(
       return tesseractDocument(page, { width: input.width, height: input.height });
     };
     const original = await recognize(image);
-    if (parseOcrEvents(original).proposals.some((proposal) => proposal.dates.some((date) => date.valid)))
-      return original;
     onProgress('Poprawianie kontrastu i odczyt kolorowego plakatu', 0);
     const variants = await prepareOcrVariants(image, signal);
     const passes = [original];
@@ -178,7 +203,24 @@ export async function recognizeOcrImage(
       passes.push(await recognize(variant));
     }
     signal.throwIfAborted();
-    return mergeOcrPasses(passes);
+    let merged = mergeOcrPasses(passes);
+    const uncertain = merged.lines
+      .filter(
+        (line) =>
+          (/\d{4}/u.test(line.text) || (line.confidence ?? 100) < 80) &&
+          ((line.text.match(/\p{L}/gu)?.length ?? 0) >= 3 || /\d{4}/u.test(line.text)),
+      )
+      .slice(0, 32);
+    await job('setParameters', { params: { tessedit_pageseg_mode: '7' } });
+    for (const line of uncertain) {
+      onProgress('Sprawdzanie niepewnych dat i napisów', 0);
+      const crop = await prepareOcrLineImage(image, line, signal);
+      const result = await recognize(crop);
+      // One isolated source line has one box in the full image, regardless of crop scale.
+      if (result.lines.length !== 1) continue;
+      merged = mergeOcrPasses([merged, { image: merged.image, lines: [{ ...result.lines[0]!, box: line.box }] }]);
+    }
+    return merged;
   } finally {
     clearTimeout(timeout);
     signal.removeEventListener('abort', stop);

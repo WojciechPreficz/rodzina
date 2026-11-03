@@ -40,4 +40,12 @@ public class OcrImagePolicyTest {
         assertFalse(OcrImagePolicy.supported(null));
         assertEquals(20971520, OcrImagePolicy.MAX_BYTES);
     }
+    @Test public void refinesDatesAndUncertainWordsWithoutRetryingDecorations() {
+        assertTrue(OcrImagePolicy.refineLine("S.11.2026 R.", 0.95f));
+        assertTrue(OcrImagePolicy.refineLine("5.11.2026 R.", 0.95f));
+        assertTrue(OcrImagePolicy.refineLine("ANDRZE-KI", 0.3f));
+        assertTrue(OcrImagePolicy.refineLine("KACPER | EMMA", 0.96f));
+        assertFalse(OcrImagePolicy.refineLine("DOGOTERAPIA", 0.95f));
+        assertFalse(OcrImagePolicy.refineLine("=>", 0.2f));
+    }
 }

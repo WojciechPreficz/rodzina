@@ -25,3 +25,9 @@ it('adds newly recovered lines and keeps a recognized date if enhancement loses 
   expect(mergeNativeOcrPasses(first, second).lines[0]!.text).toBe('5.11.2026 R.');
   expect(mergeNativeOcrPasses(first, document('SZKOŁA DO HYMNU', 94, 0.3)).lines).toHaveLength(2);
 });
+it('prefers a recognized letter from an alternate pass over a decorative stroke', () => {
+  const original = document('KACPER | EMMA', 96);
+  const alternate = document('KACPER I EMMA', 90);
+  expect(mergeNativeOcrPasses(original, alternate).lines[0]?.text).toBe('KACPER I EMMA');
+  expect(mergeNativeOcrPasses(alternate, original).lines[0]?.text).toBe('KACPER I EMMA');
+});

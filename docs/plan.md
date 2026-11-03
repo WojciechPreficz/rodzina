@@ -391,7 +391,11 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   pierwszy odczyt offline, obrót, duży plik oraz pełny przepływ do kalendarza,
   częściowy sukces, utrata odpowiedzi, restart/retry i zmiana konta.
   Sprawdzenie regresji WWW i wspólnych komponentów headless 390/1280 px.
-- **OCR.6 (#76): planowany, po OCR.5.** Końcowy odbiór obu platform i regresja
+- **OCR.6 (#76): poprawki odczytu zweryfikowane lokalnie, oczekuje na CI;
+  końcowy odbiór fizycznego APK pozostaje do potwierdzenia.** Ponowny odczyt
+  niepewnych wierszy WWW/Androida, dodatkowe przebiegi WWW także po znalezieniu
+  daty oraz regresja rzeczywistego listopadowego zdjęcia: siedem tytułów i dat.
+  Końcowy odbiór obu platform i regresja
   odebranego wcześniej WWW. Odbiór całego przepływu na kontrolnych zdjęciach
   w WWW 390/1280 px i fizycznym APK, także offline OCR Androida, częściowy
   sukces, restart/retry, konto, sieć, Wstecz, fokus, klawiatura i safe area.
