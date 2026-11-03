@@ -478,6 +478,18 @@ do wybranego zdjęcia, bez uprawnień do całej galerii i bez aparatu. ML Kit
 odczyt nie wymaga pobrania modelu ani sieci, także po instalacji.
 Adapter zwraca wspólny kontrakt linii z położeniem w obrazie po orientacji,
 bez narzucania bloków ML Kit wspólnemu parserowi.
+Odległe słowa i różne linie bazowe są rozdzielane przed normalizacją
+współrzędnych, aby pojedynczy wiersz silnika nie łączył sąsiednich kartek.
+Adapter przekazuje także dostępną pewność odczytu ML Kit (przeliczoną na 0–100).
+Po obrazie oryginalnym wykonuje drugi lokalny odczyt w skali szarości
+z poprawionym kontrastem i powiększeniem najwyżej 2×, do 3200 px.
+Zgodne geometrycznie fragmenty są uzgadniane według pewności silnika;
+sprzeczne odczyty dat pozostają alternatywami do ręcznego rozstrzygnięcia.
+Nie korygujemy słów słownikiem ani nie odgadujemy dat. Błąd dodatkowego
+przebiegu zachowuje wynik pierwszego; anulowanie unieważnia oba wyniki.
+Tekst kartki bez odczytanej daty, oddzielony poziomo od sąsiedniego terminu,
+pozostaje osobną propozycją z brakującą datą. „Szkoła do hymnu” jest tytułem;
+rozpoznanie szkoły jako miejsca wymaga etykiety adresu lub określenia placówki.
 
 Źródło JPEG/PNG/WebP jest kopiowane strumieniowo z URI do prywatnego pliku
 tymczasowego z egzekwowanym limitem 20 MB. Granice obrazu są odczytywane
@@ -485,7 +497,7 @@ przed dekodowaniem; próbkowanie ogranicza bitmapę do 12 mln pikseli,
 następnie EXIF (także odbicie) i skalowanie ograniczają dłuższy bok do 3200 px.
 Plik jest usuwany po przygotowaniu; pozostałości po przerwaniu procesu
 są usuwane przy załadowaniu pluginu. Nie należy do trwałej pamięci konta.
-Most JS otrzymuje tylko dokument OCR i opcjonalny podgląd JPEG do 640 px
+Most JS otrzymuje tylko dokumenty OCR i opcjonalny podgląd JPEG do 640 px
 i 256 KiB, bez pełnego zdjęcia. Bitmapa i klient ML Kit są zwalniane po
 zakończeniu zadania, także anulowanego. Trwający odczyt blokuje uruchomienie
 drugiego; anulowany selektor musi najpierw wrócić do aplikacji.

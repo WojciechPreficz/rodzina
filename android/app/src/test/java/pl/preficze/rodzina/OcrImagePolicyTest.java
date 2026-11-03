@@ -24,6 +24,14 @@ public class OcrImagePolicyTest {
         assertNull(OcrImagePolicy.box(200, 0, 250, 50, 100, 200));
         assertNull(OcrImagePolicy.box(10, 40, 10, 60, 100, 200));
     }
+    @Test public void contrastResizingStaysBoundedAndSplitsDistantWords() {
+        assertArrayEquals(new int[] {3200, 2264}, OcrImagePolicy.contrastSize(2000, 1415));
+        assertArrayEquals(new int[] {200, 400}, OcrImagePolicy.contrastSize(100, 200));
+        assertArrayEquals(new int[] {2400, 3200}, OcrImagePolicy.contrastSize(2400, 3200));
+        assertTrue(OcrImagePolicy.separateWords(300, 400, 620, 410, 40));
+        assertTrue(OcrImagePolicy.separateWords(300, 400, 310, 450, 40));
+        assertFalse(OcrImagePolicy.separateWords(300, 400, 310, 405, 40));
+    }
     @Test public void onlyAcceptsSupportedFormats() {
         assertTrue(OcrImagePolicy.supported("image/jpeg"));
         assertTrue(OcrImagePolicy.supported("image/png"));

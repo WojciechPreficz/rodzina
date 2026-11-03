@@ -377,6 +377,9 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   nowej funkcji i jej odbiór pozostają w OCR.5/OCR.6. Publikacja osobno.
 - **OCR.5 (#73): zweryfikowany lokalnie, oczekuje na CI.** Zależne #75 zamknięte, CI jego commita zakończone sukcesem.
   Próby fizycznego telefonu wykona właściciel według DEVELOPMENT.md.
+  Po zgłoszeniu błędów plakatu: regresje siedmiu kartek, ochrona przed datą
+  sąsiedniej kartki, tytuły zaczynające się od „Szkoła”, rozdzielanie fragmentów
+  ML Kit, pewność i drugi odczyt kontrastu; ponowny odbiór telefonu wymagany.
   Natywny selektor
   zdjęć i ML Kit z modelem dołączonym do APK, wspólny format i parser.
   Podłączenie do gotowego podglądu, zatwierdzania i zapisu z OCR.2/OCR.4,

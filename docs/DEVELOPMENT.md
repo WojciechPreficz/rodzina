@@ -99,7 +99,12 @@ spóźnioną odpowiedź po zmianie konta. `e2e/calendar-ocr.spec.ts` sprawdza
 przy 390/1280 px rzeczywisty OCR WWW oraz symulowany most ML Kit: odczyt
 offline, anulowanie, wspólne poprawianie/zatwierdzanie, zapis online i kalendarz.
 Symulacja mostu nie potwierdza działania natywnego OCR. JVM `OcrImagePolicyTest`
-sprawdza limity dekodowania, formaty, proporcje i rozmiar OCR/podglądu.
+sprawdza limity dekodowania, formaty, proporcje, rozmiar OCR/podglądu
+i kontrastu oraz rozdzielanie odległych słów. `ocrNativeMerge` sprawdza wybór
+czytelniejszego tytułu, odzyskanie pominiętych linii i zachowanie konfliktu dat.
+Regresja parsera obejmuje syntetyczny układ siedmiu listopadowych kartek:
+osobne „Sesja zdjęciowa świąteczna” (5.11), „Szkoła do hymnu” (9.11),
+wielowierszową audycję i brak odczytanej pierwszej daty bez pożyczania 9.11.
 Budowanie debug APK i `testDebugUnitTest lintDebug` opisano poniżej.
 
 Do odbioru właściciela na fizycznym telefonie (#73): po instalacji APK
@@ -110,7 +115,12 @@ powrót z selektora, zdjęcie z EXIF (obrót i odbicie), duże zdjęcie, plik po
 odczytu. Włącz sieć, popraw i zatwierdź propozycje, zaznacz, zapisz oraz
 porównaj wyniki, kalendarz i harmonogram. Sprawdź częściowy sukces, utratę
 odpowiedzi, restart APK i ręczne retry bez duplikatów oraz czyszczenie konta.
-Te próby nie zostały wykonane przez agenta; test przeprowadzi właściciel.
+Właściciel zgłosił błędy odczytu listopadowego plakatu: przypisanie 9.11
+pierwszej kartce zamiast 5.11, brak „Szkoły do hymnu” i przekręcone litery.
+Po poprawce wymagany ponowny fizyczny odczyt tego zdjęcia, także offline,
+porównanie wszystkich siedmiu terminów i tytułów oraz anulowanie obu przebiegów.
+Regresje geometrii są syntetyczne; agent nie potwierdził wyniku ML Kit na telefonie.
+Pozostałe próby telefonu nadal wymagają potwierdzenia właściciela.
 
 Duplikaty wydarzeń sprawdzają testy API `modules/events`, kontraktów
 `schemas/events`, komponentu `PhotoImportReview` i magazynu `photoImportStorage`.

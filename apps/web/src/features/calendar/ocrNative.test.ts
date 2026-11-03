@@ -41,6 +41,20 @@ it('settles immediately on abort and cancels only its own operation', async () =
   expect(cancel).toHaveBeenCalledWith(pick.mock.calls[0]![0]);
   resolve({ document });
 });
+it('merges the optional native contrast pass before returning the shared document', async () => {
+  const source = {
+    id: '1',
+    text: 'AUDYCA MUZYCZNA',
+    confidence: 60,
+    box: { x: 0.1, y: 0.1, width: 0.5, height: 0.05 },
+  };
+  pick.mockResolvedValueOnce({
+    document: { ...document, lines: [source] },
+    alternateDocument: { ...document, lines: [{ ...source, text: 'AUDYCJA MUZYCZNA', confidence: 95 }] },
+  });
+  const result = await recognizeNativePhoto(new AbortController().signal);
+  expect(result?.document.lines.map(({ text }) => text)).toEqual(['AUDYCJA MUZYCZNA']);
+});
 it('handles cancelled picker and bounds stalled provider time', async () => {
   pick.mockResolvedValueOnce({ cancelled: true });
   expect(await recognizeNativePhoto(new AbortController().signal)).toBeUndefined();

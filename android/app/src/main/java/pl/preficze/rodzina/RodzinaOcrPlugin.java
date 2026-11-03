@@ -4,7 +4,12 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.util.Base64;
@@ -31,6 +36,9 @@ import java.io.InputStream;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 @CapacitorPlugin(name = "RodzinaOcr")
 public class RodzinaOcrPlugin extends Plugin {
@@ -161,28 +169,8 @@ public class RodzinaOcrPlugin extends Plugin {
             run.check();
             String preview = preview(bitmap);
             recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            Bitmap owned = bitmap;
-            TextRecognizer ownedRecognizer = recognizer;
-            recognizer.process(InputImage.fromBitmap(bitmap, 0))
-                .addOnCompleteListener(worker, task -> {
-                    try {
-                        run.check();
-                        if (!task.isSuccessful()) throw new IllegalStateException();
-                        JSObject document = document(task.getResult(), owned.getWidth(), owned.getHeight());
-                        finish(run, new JSObject().put("document", document).put("preview", preview), null);
-                    } catch (CancellationException ignored) {
-                        // Cancellation already settled the call; never return a stale result.
-                    } catch (OutOfMemoryError error) {
-                        finish(run, null, "Za mało pamięci. Wybierz mniejsze zdjęcie.");
-                    } catch (Exception error) {
-                        finish(run, null, "Nie udało się odczytać tekstu ze zdjęcia.");
-                    } finally {
-                        ownedRecognizer.close();
-                        owned.recycle();
-                        processing = null;
-                    }
-                });
-            // ML Kit owns the bitmap until its completion callback, including after cancellation.
+            recognize(run, bitmap, recognizer, preview);
+            // Each asynchronous pass retains its input until the completion callback.
             bitmap = null;
             recognizer = null;
             handedOff = true;
@@ -197,6 +185,78 @@ public class RodzinaOcrPlugin extends Plugin {
             if (recognizer != null) recognizer.close();
             if (source != null && !source.delete()) source.deleteOnExit();
             if (!handedOff) processing = null;
+        }
+    }
+
+    private void recognize(Run run, Bitmap original, TextRecognizer recognizer, String preview) {
+        recognizer.process(InputImage.fromBitmap(original, 0))
+                .addOnCompleteListener(worker, task -> {
+                    Bitmap enhanced = null;
+                    JSObject first = null;
+                    boolean handedOff = false;
+                    try {
+                        run.check();
+                        if (!task.isSuccessful()) throw new IllegalStateException();
+                        int width = original.getWidth();
+                        int height = original.getHeight();
+                        first = document(task.getResult(), width, height);
+                        enhanced = contrast(original);
+                        run.check();
+                        Bitmap owned = enhanced;
+                        JSObject primary = first;
+                        recognizer.process(InputImage.fromBitmap(enhanced, 0)).addOnCompleteListener(worker, second -> {
+                            try {
+                                run.check();
+                                JSObject result = new JSObject().put("document", primary).put("preview", preview);
+                                if (second.isSuccessful()) result.put("alternateDocument", document(second.getResult(), owned.getWidth(), owned.getHeight()));
+                                finish(run, result, null);
+                            } catch (CancellationException ignored) {
+                                // Cancellation must not publish either pass.
+                            } catch (Exception | OutOfMemoryError error) {
+                                finish(run, new JSObject().put("document", primary).put("preview", preview), null);
+                            } finally {
+                                owned.recycle();
+                                recognizer.close();
+                                processing = null;
+                            }
+                        });
+                        handedOff = true;
+                    } catch (CancellationException ignored) {
+                        // Cancellation already settled the call; never return a stale result.
+                    } catch (Exception | OutOfMemoryError error) {
+                        // The optional enhancement must not discard a completed original read.
+                        if (first != null) finish(run, new JSObject().put("document", first).put("preview", preview), null);
+                        else finish(run, null, "Nie udało się odczytać tekstu ze zdjęcia.");
+                    } finally {
+                        original.recycle();
+                        if (!handedOff) {
+                            if (enhanced != null) enhanced.recycle();
+                            recognizer.close();
+                            processing = null;
+                        }
+                    }
+                });
+    }
+
+    private static Bitmap contrast(Bitmap original) {
+        int[] size = OcrImagePolicy.contrastSize(original.getWidth(), original.getHeight());
+        Bitmap result = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+        try {
+            Canvas canvas = new Canvas(result);
+            canvas.drawColor(Color.WHITE);
+            ColorMatrix gray = new ColorMatrix();
+            gray.setSaturation(0);
+            ColorMatrix gain = new ColorMatrix(new float[] {
+                1.6f, 0, 0, 0, -60, 0, 1.6f, 0, 0, -60, 0, 0, 1.6f, 0, -60, 0, 0, 0, 1, 0
+            });
+            gain.postConcat(gray);
+            Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+            paint.setColorFilter(new ColorMatrixColorFilter(gain));
+            canvas.drawBitmap(original, null, new Rect(0, 0, size[0], size[1]), paint);
+            return result;
+        } catch (Exception | OutOfMemoryError error) {
+            result.recycle();
+            throw error;
         }
     }
 
@@ -218,13 +278,40 @@ public class RodzinaOcrPlugin extends Plugin {
         JSArray lines = new JSArray();
         int id = 0;
         for (Text.TextBlock block : text.getTextBlocks()) for (Text.Line line : block.getLines()) {
-            Rect box = line.getBoundingBox();
-            if (box == null || line.getText().trim().isEmpty()) continue;
-            double[] normalized = OcrImagePolicy.box(box.left, box.top, box.right, box.bottom, width, height);
-            if (normalized == null) continue;
-            if (++id > 10000 || line.getText().length() > 10000) throw new IllegalArgumentException();
-            lines.put(new JSObject().put("id", "line-" + id).put("text", line.getText().trim())
-                .put("box", new JSObject().put("x", normalized[0]).put("y", normalized[1]).put("width", normalized[2]).put("height", normalized[3])));
+            List<List<Text.Element>> fragments = new ArrayList<>();
+            List<Text.Element> elements = new ArrayList<>(line.getElements());
+            elements.removeIf(element -> element.getBoundingBox() == null);
+            elements.sort(Comparator.comparingInt(element -> element.getBoundingBox().left));
+            Text.Element previous = null;
+            for (Text.Element element : elements) {
+                Rect box = element.getBoundingBox();
+                Rect old = previous == null ? null : previous.getBoundingBox();
+                if (old == null || OcrImagePolicy.separateWords(old.right, old.centerY(), box.left, box.centerY(), Math.min(old.height(), box.height()))) fragments.add(new ArrayList<>());
+                fragments.get(fragments.size() - 1).add(element);
+                previous = element;
+            }
+            if (fragments.isEmpty()) fragments.add(new ArrayList<>());
+            for (List<Text.Element> fragment : fragments) {
+                Rect box = fragments.size() == 1 ? line.getBoundingBox() : null;
+                String value = line.getText();
+                if (fragments.size() > 1) {
+                    StringBuilder joined = new StringBuilder();
+                    for (Text.Element element : fragment) {
+                        if (box == null) box = new Rect(element.getBoundingBox()); else box.union(element.getBoundingBox());
+                        if (joined.length() > 0) joined.append(' ');
+                        joined.append(element.getText());
+                    }
+                    value = joined.toString();
+                }
+                if (box == null || value.trim().isEmpty()) continue;
+                double[] normalized = OcrImagePolicy.box(box.left, box.top, box.right, box.bottom, width, height);
+                if (normalized == null) continue;
+                if (++id > 10000 || value.length() > 10000) throw new IllegalArgumentException();
+                JSObject item = new JSObject().put("id", "line-" + id).put("text", value.trim())
+                    .put("box", new JSObject().put("x", normalized[0]).put("y", normalized[1]).put("width", normalized[2]).put("height", normalized[3]));
+                if (Float.isFinite(line.getConfidence()) && line.getConfidence() > 0) item.put("confidence", Math.min(100, line.getConfidence() * 100));
+                lines.put(item);
+            }
         }
         return new JSObject().put("image", new JSObject().put("width", width).put("height", height)).put("lines", lines);
     }

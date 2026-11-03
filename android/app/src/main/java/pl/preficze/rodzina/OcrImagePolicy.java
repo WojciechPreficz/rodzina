@@ -23,6 +23,15 @@ final class OcrImagePolicy {
         return "image/jpeg".equals(mime) || "image/png".equals(mime) || "image/webp".equals(mime);
     }
 
+    static int[] contrastSize(int width, int height) {
+        double scale = Math.min(2, MAX_SIDE / (double) Math.max(width, height));
+        return new int[] {Math.max(1, (int) Math.round(width * scale)), Math.max(1, (int) Math.round(height * scale))};
+    }
+
+    static boolean separateWords(int previousRight, int previousCenterY, int left, int centerY, int height) {
+        return left - previousRight > height * 3 || Math.abs(centerY - previousCenterY) > height * 0.8;
+    }
+
     static double[] box(int left, int top, int right, int bottom, int width, int height) {
         double x = Math.max(0, Math.min(1, left / (double) width));
         double y = Math.max(0, Math.min(1, top / (double) height));

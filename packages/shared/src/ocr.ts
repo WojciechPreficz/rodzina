@@ -310,6 +310,7 @@ function photoRegions(lines: OcrLine[]): Region[] {
     }
     return { x: median(column.map(centerX)), rows };
   });
+  const unanchored: OcrLine[] = [];
   for (const line of lines) {
     const heading = fold(line.text)
       .trim()
@@ -335,9 +336,19 @@ function photoRegions(lines: OcrLine[]): Region[] {
     const firstY = Math.min(...column.rows[0]!.anchors.map((anchor) => anchor.box.y));
     // A global month heading is context, rather than an additional event card.
     if (anchors.length > 1 && line.box.y + line.box.height < firstY - Math.max(0.12, line.box.height * 2)) continue;
+    const horizontalGap = Math.min(
+      ...row.anchors.map((anchor) =>
+        Math.max(0, anchor.box.x - line.box.x - line.box.width, line.box.x - anchor.box.x - anchor.box.width),
+      ),
+    );
+    // An unread date must not make an isolated card borrow its neighbour's date.
+    if (columns.length > 1 && horizontalGap > Math.max(0.04, line.box.height * 2)) {
+      unanchored.push(line);
+      continue;
+    }
     row.region.lines.push(line);
   }
-  return groups.flatMap((column) => column.rows.map((row) => row.region));
+  return [...groups.flatMap((column) => column.rows.map((row) => row.region)), ...regions(unanchored)];
 }
 
 const isPhotoMetadata = (text: string) =>
@@ -450,7 +461,9 @@ function proposal(region: Region, photo = false): OcrEventProposal {
     data.find((item) => /^(?:miejsce|lokalizacja|adres)\s*:/iu.test(item.line.text.trim())) ??
     data.find(
       (item) =>
-        (/^(?:dom kultury|sala|szkoła|biblioteka|stadion|ul\.)(?:\s|$)/iu.test(item.residue) ||
+        (/^(?:dom kultury|sala|biblioteka|stadion|ul\.)(?:\s|$)/iu.test(item.residue) ||
+          (!photo && /^szkoła(?:\s|$)/iu.test(item.residue)) ||
+          /^szkoła\s+(?:podstawowa|średnia|muzyczna|nr\b|im\.)/iu.test(item.residue) ||
           (photo && /(?:^|\s)ul\.\s+\p{L}|^teren\s+zielony\b|^spodek$/iu.test(item.residue))) &&
         !item.dates.length,
     );

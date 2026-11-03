@@ -420,7 +420,14 @@ test('uses native OCR offline then the shared approval and online import in Andr
         document: {
           image: { width: 1400, height: 900 },
           lines: [
-            { id: '1', text: 'Koncert rodzinny', box: { x: 0.1, y: 0.1, width: 0.7, height: 0.05 } },
+            { id: '1', text: 'Koncert rodzlnny', confidence: 60, box: { x: 0.1, y: 0.1, width: 0.7, height: 0.05 } },
+            { id: '2', text: '12 listopada 2026 godz. 18:30', box: { x: 0.1, y: 0.2, width: 0.7, height: 0.05 } },
+          ],
+        },
+        alternateDocument: {
+          image: { width: 2800, height: 1800 },
+          lines: [
+            { id: '1', text: 'Koncert rodzinny', confidence: 95, box: { x: 0.1, y: 0.1, width: 0.7, height: 0.05 } },
             { id: '2', text: '12 listopada 2026 godz. 18:30', box: { x: 0.1, y: 0.2, width: 0.7, height: 0.05 } },
           ],
         },

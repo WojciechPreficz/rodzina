@@ -274,6 +274,59 @@ describe('shared OCR adapter contract', () => {
 describe('date-anchored photo layout', () => {
   const photo = (lines: OcrLine[]) => parseOcrEvents(document(lines), { groupByDates: true });
 
+  const november = (firstDate = '5.11.2026 R.') => [
+    line('LISTOPAD', 'month', 0.38, 0.04, 0.21),
+    line(firstDate, 'date-5', 0.055, 0.27, 0.15),
+    line('SESJA ZDJĘCIOWA', 'photo-title', 0.035, 0.345, 0.19),
+    line('ŚWIĄTECZNA', 'photo-subtitle', 0.065, 0.375, 0.13),
+    line('9.11.2026 R.', 'date-9', 0.315, 0.305, 0.15),
+    line('SZKOŁA DO', 'anthem-title', 0.33, 0.46, 0.15),
+    line('HYMNU', 'anthem-subtitle', 0.36, 0.495, 0.09),
+    line('10.11.2026 R.', 'date-10', 0.54, 0.3, 0.17),
+    line('SCK - KINO', 'cinema-title', 0.56, 0.345, 0.12),
+    line('KACPER I EMMA', 'cinema-subtitle', 0.535, 0.375, 0.17),
+    line('NA SAFARI', 'cinema-last', 0.56, 0.41, 0.13),
+    line('13.11.2026 R.', 'date-13', 0.77, 0.27, 0.17),
+    line('FILHARMONIA', 'music-title', 0.76, 0.315, 0.17),
+    line('MUZYCZNYCH', 'music-subtitle', 0.76, 0.35, 0.17),
+    line('KADRÓW BEZ LIKU', 'music-last', 0.76, 0.385, 0.17),
+    line('18.11.2026 R.', 'date-18', 0.235, 0.685, 0.17),
+    line('DOGOTERAPIA', 'dog-title', 0.21, 0.79, 0.18),
+    line('23.11.2026 R.', 'date-23', 0.49, 0.65, 0.18),
+    line('EDUKACYJNA', 'visit-title', 0.505, 0.71, 0.16),
+    line('WIZYTA STRAŻY', 'visit-subtitle', 0.49, 0.745, 0.19),
+    line('MIEJSKIEJ', 'visit-last', 0.53, 0.78, 0.12),
+    line('27.11.2026 R.', 'date-27', 0.75, 0.645, 0.18),
+    line('AUDYCJA', 'audition-title', 0.78, 0.695, 0.1),
+    line('MUZYCZNA', 'audition-subtitle', 0.765, 0.73, 0.13),
+    line('"PATRIOTYCZNIE"', 'audition-theme', 0.735, 0.765, 0.19),
+    line('"ANDRZEJKI"', 'audition-last', 0.76, 0.8, 0.145),
+  ];
+
+  it('keeps all seven staggered November cards including the anthem as a title', () => {
+    const result = photo(november());
+    expect(result.proposals).toHaveLength(7);
+    expect(result.proposals.map(({ startDate }) => startDate)).toEqual(
+      [5, 9, 10, 13, 18, 23, 27].map((day) => `2026-11-${String(day).padStart(2, '0')}`),
+    );
+    expect(result.proposals[0]!.title).toBe('SESJA ZDJĘCIOWA ŚWIĄTECZNA');
+    expect(result.proposals[1]).toMatchObject({ title: 'SZKOŁA DO HYMNU', location: null });
+    expect(result.proposals[6]!.title).toBe('AUDYCJA MUZYCZNA "PATRIOTYCZNIE" "ANDRZEJKI"');
+    expect(result).toEqual(photo([...november()].reverse()));
+  });
+
+  it('does not attach an isolated Christmas photo card to November 9 when its date is unread', () => {
+    const result = photo(november().filter(({ id }) => id !== 'date-5'));
+    const first = result.proposals.find(({ title }) => title === 'SESJA ZDJĘCIOWA ŚWIĄTECZNA');
+    expect(first).toMatchObject({ startDate: null });
+    expect(codes(first!)).toContain('MISSING_DATE');
+    expect(result.proposals.find(({ startDate }) => startDate === '2026-11-09')?.title).toBe('SZKOŁA DO HYMNU');
+    const damaged = photo(november('S.11.2026 R.')).proposals.find(
+      ({ title }) => title === 'SESJA ZDJĘCIOWA ŚWIĄTECZNA',
+    );
+    expect(damaged).toMatchObject({ startDate: null });
+  });
+
   it.each(['12-14 marca 2024', '12–14 MARCA 2024', '12 do 14 marca 2024', '12-14.03.2024'])(
     'keeps %s as an inclusive range rather than an invalid month or alternative dates',
     (text) => {
