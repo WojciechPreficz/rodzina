@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -15,6 +15,7 @@ import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
+import { OPERATION_RETENTION_MS } from '../../http/idempotency.js';
 
 describe('meals API', () => {
   let database: ReturnType<typeof createDatabase>;
@@ -113,6 +114,34 @@ describe('meals API', () => {
   function offline(change: unknown, operationId = randomUUID(), user = admin) {
     return request('POST', `/api/meals/offline?operationId=${operationId}&actorId=${user.id}`, change, user);
   }
+  it('replays a retained offline response written with the legacy fingerprint', async () => {
+    const operationId = randomUUID();
+    const url = `/api/meals/offline?operationId=${operationId}&actorId=${admin.id}`;
+    const change = {
+      type: 'write',
+      weekStart: start,
+      writes: [{ date: start, id: randomUUID(), expectedId: null, data: meal }],
+    };
+    const response = JSON.stringify(await week());
+    database.db
+      .insert(schema.shoppingOperations)
+      .values({
+        userId: admin.id,
+        id: operationId,
+        fingerprint: createHash('sha256')
+          .update(JSON.stringify([familyId, url, change]))
+          .digest('hex'),
+        response,
+        status: 200,
+        createdAt: Date.now() - OPERATION_RETENTION_MS + 60_000,
+      })
+      .run();
+
+    const replay = await offline(change, operationId);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.body).toBe(response);
+    expect((await week()).days[0]!.meals).toEqual([]);
+  });
   it('preserves offline identities and atomically replays writes and removals without resurrecting deleted meals', async () => {
     const id = randomUUID();
     const operationId = randomUUID();

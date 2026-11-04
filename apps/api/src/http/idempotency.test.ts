@@ -10,7 +10,7 @@ import { createDatabase } from '../db/client.js';
 import { loadConfig } from '../config.js';
 import * as schema from '../db/schema.js';
 import { registerApiErrorHandler } from './errors.js';
-import { OPERATION_RETENTION_MS, registerIdempotentMutations } from './idempotency.js';
+import { OPERATION_RETENTION_MS, registerIdempotency } from './idempotency.js';
 import { OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../drizzle');
@@ -39,10 +39,13 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
       request.user = { id: userId, familyId } as NonNullable<typeof request.user>;
     });
     registerApiErrorHandler(app);
-    registerIdempotentMutations(app, database, {
-      table,
-      fingerprintParts: (request) => [request.method, request.url, request.body],
-      ...(table === 'task_operations' ? { resolveScope: () => listId } : {}),
+    const registerProfiles = registerIdempotency(app, database);
+    registerProfiles(app, {
+      test: {
+        table,
+        fingerprintParts: (request) => [request.method, request.url, request.body],
+        ...(table === 'task_operations' ? { resolveScope: () => listId } : {}),
+      },
     });
   });
   afterEach(async () => {
@@ -59,7 +62,7 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
         delete request.familyId;
       });
       const handler = vi.fn(() => ({ ok: true }));
-      app.post('/mutation', handler);
+      app.post('/mutation', { config: { idempotency: 'test' } }, handler);
       const url = withOperation ? `/mutation?operationId=${crypto.randomUUID()}` : '/mutation';
       const response = await app.inject({ method: 'POST', url });
       expect(response.statusCode).toBe(401);
@@ -77,7 +80,7 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
         if (kind === 'thenable') return { then: (resolve: (value: object) => void) => resolve({ ok: true }) };
         return kind === 'rejected' ? Promise.reject(new Error('Async failure')) : Promise.resolve({ ok: true });
       };
-      app.post('/mutation', kind === 'async' ? async () => mutate() : mutate);
+      app.post('/mutation', { config: { idempotency: 'test' } }, kind === 'async' ? async () => mutate() : mutate);
       const response = await app.inject({ method: 'POST', url: `/mutation?operationId=${crypto.randomUUID()}` });
       expect(response.statusCode).toBe(500);
       expect(response.json()).toEqual({
@@ -98,7 +101,7 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
       reply.code(201);
       return { result: handler.mock.calls.length };
     });
-    app.post('/mutation', handler);
+    app.post('/mutation', { config: { idempotency: 'test' } }, handler);
     const old = crypto.randomUUID();
     const retained = crypto.randomUUID();
     const send = (id: string) => app.inject({ method: 'POST', url: `/mutation?operationId=${id}` });
@@ -121,6 +124,49 @@ describe.each(['shopping_operations', 'task_operations'] as const)('%s wrapper',
     expect(database.sqlite.prepare(`SELECT created_at FROM ${table} WHERE id = ?`).get(retained)).toEqual({
       created_at: now - OPERATION_RETENTION_MS,
     });
+  });
+});
+
+describe('idempotency profile registration', () => {
+  let database: ReturnType<typeof createDatabase>;
+  let app: FastifyInstance;
+  const profile = { table: 'shopping_operations', fingerprintParts: () => [] } as const;
+
+  beforeEach(() => {
+    database = createDatabase(loadConfig({ NODE_ENV: 'test', RODZINA_DATABASE_PATH: ':memory:' }));
+    app = Fastify();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    database.sqlite.close();
+  });
+
+  it('rejects unknown profiles during startup', async () => {
+    registerIdempotency(app, database);
+    app.register(async (routes) => {
+      routes.post('/mutation', { config: { idempotency: 'missing' } }, () => ({ ok: true }));
+    });
+    await expect(app.ready()).rejects.toThrow('Unknown idempotency profile "missing" for POST /mutation');
+  });
+
+  it('rejects unused profiles during startup', async () => {
+    registerIdempotency(app, database)(app, { unused: profile });
+    await expect(app.ready()).rejects.toThrow('Unused idempotency profiles: unused');
+  });
+
+  it('rejects duplicate profile names during registration', () => {
+    const registerProfiles = registerIdempotency(app, database);
+    registerProfiles(app, { test: profile })('POST', '/mutation', 'test', () => ({ ok: true }));
+    expect(() => registerProfiles(app, { test: profile })).toThrow('Duplicate idempotency profile "test"');
+  });
+
+  it('rejects wrapping a handler twice during registration', () => {
+    const mutation = registerIdempotency(app, database)(app, { test: profile });
+    registerIdempotency(app, database)(app, { test: profile });
+    expect(() => mutation('POST', '/mutation', 'test', () => ({ ok: true }))).toThrow(
+      'Idempotency already applied to POST /mutation',
+    );
   });
 });
 

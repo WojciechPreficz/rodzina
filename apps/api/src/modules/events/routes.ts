@@ -39,7 +39,7 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
         duplicates: service.duplicates(user.familyId, user.id, user.role, query.title, query.startDate, query.kind),
       });
     });
-    routes.post('/api/events/import', async (request) => {
+    routes.post('/api/events/import', { config: { idempotency: false } }, async (request) => {
       const user = requireUser(request);
       const batch = parse(importEventsSchema, request.body);
       return importEventsResponseSchema.parse({
@@ -47,7 +47,7 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
         results: service.importEvents(user.familyId, user.id, batch),
       });
     });
-    routes.post('/api/events', async (request, reply) => {
+    routes.post('/api/events', { config: { idempotency: false } }, async (request, reply) => {
       const data = parse(createEventSchema, request.body);
       const user = requireUser(request);
       const query = parse(
@@ -76,7 +76,7 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
       const { id } = parse(idSchema, request.params);
       return eventResponseSchema.parse({ ok: true, event: service.get(requireUser(request).familyId, id) });
     });
-    routes.patch('/api/events/:id', async (request) => {
+    routes.patch('/api/events/:id', { config: { idempotency: false } }, async (request) => {
       const { id } = parse(idSchema, request.params);
       const query = parse(eventScopeSchema, request.query);
       const data = parse(patchEventSchema, request.body);
@@ -92,7 +92,7 @@ export function registerEventRoutes(app: FastifyInstance, database: DatabaseConn
         ),
       });
     });
-    routes.delete('/api/events/:id', async (request) => {
+    routes.delete('/api/events/:id', { config: { idempotency: false } }, async (request) => {
       const { id } = parse(idSchema, request.params);
       const query = parse(eventScopeSchema, request.query);
       service.remove(requireUser(request).familyId, id, requireUser(request).id, requireUser(request).role, query);

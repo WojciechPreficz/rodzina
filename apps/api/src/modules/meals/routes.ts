@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   copyMealWeekSchema,
@@ -18,12 +18,20 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { parse } from '../../http/validation.js';
 import { requireUser } from '../../http/session-auth.js';
 import { createMealService } from './service.js';
-import { registerIdempotentMutations } from '../../http/idempotency.js';
+import type { RegisterIdempotencyProfiles } from '../../http/idempotency.js';
 
-export function registerMealRoutes(app: FastifyInstance, database: DatabaseConnection) {
+export function registerMealRoutes(
+  app: FastifyInstance,
+  database: DatabaseConnection,
+  registerProfiles: RegisterIdempotencyProfiles,
+) {
   const service = createMealService(database);
-  app.register(async (routes) => {
-    registerIdempotentMutations(routes, database, {
+  const checkExportAccess = (request: FastifyRequest) => {
+    const user = requireUser(request);
+    service.requireExportAccess(user.familyId, user.role, parse(mealsToShoppingListSchema, request.body).listId);
+  };
+  const mutation = registerProfiles(app, {
+    'meal-offline': {
       table: 'shopping_operations',
       querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid() }).strict(),
       validate: (request) => {
@@ -32,32 +40,24 @@ export function registerMealRoutes(app: FastifyInstance, database: DatabaseConne
       },
       recheckAccess: (request) => service.requireAdult(requireUser(request).role),
       fingerprintParts: (request) => [requireUser(request).familyId, request.url, request.body],
-    });
-    routes.post('/api/meals/offline', (request) => {
-      const user = requireUser(request);
-      return service.offline(user.familyId, user.id, user.role, parse(mealOfflineChangeSchema, request.body));
-    });
-  });
-  app.register(async (routes) => {
-    registerIdempotentMutations(routes, database, {
+    },
+    'meal-export': {
       table: 'shopping_operations',
       querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid().optional() }).strict(),
-      validate: (request) => {
-        const user = requireUser(request);
-        service.requireExportAccess(user.familyId, user.role, parse(mealsToShoppingListSchema, request.body).listId);
-      },
-      recheckAccess: (request) => {
-        const user = requireUser(request);
-        service.requireExportAccess(user.familyId, user.role, parse(mealsToShoppingListSchema, request.body).listId);
-      },
+      validate: checkExportAccess,
+      recheckAccess: checkExportAccess,
       fingerprintParts: (request) => [requireUser(request).familyId, request.method, request.url, request.body],
-    });
-    routes.post('/api/meals/to-shopping-list', (request) => {
-      const user = requireUser(request);
-      return mealsToShoppingListResponseSchema.parse({
-        ok: true,
-        ...service.toShoppingList(user.familyId, user.id, user.role, parse(mealsToShoppingListSchema, request.body)),
-      });
+    },
+  });
+  mutation('POST', '/api/meals/offline', 'meal-offline', (request) => {
+    const user = requireUser(request);
+    return service.offline(user.familyId, user.id, user.role, parse(mealOfflineChangeSchema, request.body));
+  });
+  mutation('POST', '/api/meals/to-shopping-list', 'meal-export', (request) => {
+    const user = requireUser(request);
+    return mealsToShoppingListResponseSchema.parse({
+      ok: true,
+      ...service.toShoppingList(user.familyId, user.id, user.role, parse(mealsToShoppingListSchema, request.body)),
     });
   });
   app.get('/api/meals', (request) => {
@@ -70,18 +70,18 @@ export function registerMealRoutes(app: FastifyInstance, database: DatabaseConne
     const { q } = parse(mealSuggestionsQuerySchema, request.query);
     return mealSuggestionsResponseSchema.parse({ ok: true, suggestions: service.suggestions(user.familyId, q) });
   });
-  app.put('/api/meals/:date/:slot', (request) => {
+  app.put('/api/meals/:date/:slot', { config: { idempotency: false } }, (request) => {
     const user = requireUser(request);
     const { date } = parse(mealParamsSchema, request.params);
     const data = parse(putMealSchema, request.body);
     return mealResponseSchema.parse({ ok: true, meal: service.put(user.familyId, user.id, user.role, date, data) });
   });
-  app.delete('/api/meals/:date/:slot', (request) => {
+  app.delete('/api/meals/:date/:slot', { config: { idempotency: false } }, (request) => {
     const user = requireUser(request);
     service.remove(user.familyId, user.role, parse(mealParamsSchema, request.params).date);
     return { ok: true, deleted: true };
   });
-  app.post('/api/meals/copy-week', (request) => {
+  app.post('/api/meals/copy-week', { config: { idempotency: false } }, (request) => {
     const user = requireUser(request);
     const data = parse(copyMealWeekSchema, request.body);
     return copyMealWeekResponseSchema.parse({

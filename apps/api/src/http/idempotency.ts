@@ -1,6 +1,6 @@
 import { parse } from './validation.js';
 import { createHash } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest, RouteOptions } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseConnection } from '../db/client.js';
 import { ApiError } from './errors.js';
@@ -14,9 +14,14 @@ const querySchema = z
   })
   .strict();
 
-type Options = {
+declare module 'fastify' {
+  interface FastifyContextConfig {
+    idempotency?: string | false;
+  }
+}
+
+type Profile = {
   table: 'shopping_operations' | 'task_operations';
-  matches?: (route: RouteOptions) => boolean;
   querySchema?: z.ZodType<{ operationId?: string | undefined; actorId?: string | undefined }>;
   validate?: (request: FastifyRequest) => void;
   fingerprintParts: (request: FastifyRequest) => unknown[];
@@ -24,10 +29,28 @@ type Options = {
   recheckAccess?: (request: FastifyRequest, scope: string) => void;
 };
 
-export function registerIdempotentMutations(app: FastifyInstance, database: DatabaseConnection, options: Options) {
+type MutationMethod = 'POST' | 'PATCH' | 'DELETE';
+type SyncResponse = (object & { then?: never }) | string | number | boolean | null | undefined;
+type SyncHandler = (this: FastifyInstance, request: FastifyRequest, reply: FastifyReply) => SyncResponse;
+const wrappedHandlers = new WeakSet<RouteOptions['handler']>();
+
+export type RegisterIdempotencyProfiles = ReturnType<typeof registerIdempotency>;
+
+export function registerIdempotency(app: FastifyInstance, database: DatabaseConnection) {
+  const profiles = new Map<string, Profile>();
+  const unusedProfiles = new Set<string>();
+
   app.addHook('onRoute', (route) => {
-    if (!['POST', 'PATCH', 'DELETE'].includes(String(route.method)) || options.matches?.(route) === false) return;
+    const name = route.config?.idempotency;
+    if (name === undefined || name === false) return;
+    const options = profiles.get(name);
+    if (!options) throw new Error(`Unknown idempotency profile "${name}" for ${route.method} ${route.url}`);
+    if (![route.method].flat().every((method) => ['POST', 'PATCH', 'DELETE'].includes(method))) {
+      throw new Error(`Idempotency profile "${name}" cannot be used for ${route.method} ${route.url}`);
+    }
     const handler = route.handler;
+    if (wrappedHandlers.has(handler)) throw new Error(`Idempotency already applied to ${route.method} ${route.url}`);
+    unusedProfiles.delete(name);
     route.handler = function (request, reply) {
       const user = requireUser(request);
       const { operationId, actorId } = parse(options.querySchema ?? querySchema, request.query);
@@ -81,5 +104,21 @@ export function registerIdempotentMutations(app: FastifyInstance, database: Data
         })
         .immediate();
     };
+    wrappedHandlers.add(route.handler);
   });
+
+  app.addHook('onReady', async () => {
+    if (unusedProfiles.size) throw new Error(`Unused idempotency profiles: ${[...unusedProfiles].join(', ')}`);
+  });
+
+  return function registerProfiles<Name extends string>(routes: FastifyInstance, definitions: Record<Name, Profile>) {
+    for (const name in definitions) {
+      if (profiles.has(name)) throw new Error(`Duplicate idempotency profile "${name}"`);
+      profiles.set(name, definitions[name]);
+      unusedProfiles.add(name);
+    }
+    return (method: MutationMethod, url: string, idempotency: Name, handler: SyncHandler) => {
+      routes.route({ method, url, config: { idempotency }, handler });
+    };
+  };
 }

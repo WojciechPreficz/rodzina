@@ -3,15 +3,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildApp } from './app.js';
 import { hashToken, randomToken } from './auth.js';
-import { loadConfig } from './config.js';
-import { createDatabase } from './db/client.js';
 import * as schema from './db/schema.js';
-
-const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../drizzle');
+import { createTestApp } from './test-helpers.js';
 
 function getSessionHeader(response: { headers?: Record<string, string | string[] | number | undefined> }): string {
   const setCookie = response.headers?.['set-cookie'];
@@ -28,24 +23,9 @@ function getSessionHeader(response: { headers?: Record<string, string | string[]
   return '';
 }
 
-async function createTestApp(overrides?: Record<string, string>) {
-  const config = loadConfig({
-    NODE_ENV: 'test',
-    RODZINA_DATABASE_PATH: ':memory:',
-    RODZINA_PUBLIC_URL: 'http://localhost:3000',
-    RODZINA_ALLOW_REGISTRATION: 'true',
-    ...overrides,
-  });
-  const database = createDatabase(config);
-  migrate(database.db, { migrationsFolder });
-  const app = await buildApp(config, database);
-
-  return { app, database, config };
-}
-
 describe('auth API', () => {
-  let app: Awaited<ReturnType<typeof buildApp>> | undefined;
-  let database: ReturnType<typeof createDatabase> | undefined;
+  let app: Awaited<ReturnType<typeof createTestApp>>['app'] | undefined;
+  let database: Awaited<ReturnType<typeof createTestApp>>['database'] | undefined;
 
   afterEach(async () => {
     await app?.close();

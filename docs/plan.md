@@ -32,6 +32,8 @@ Odbiór ręczny, fizyczne APK, alarmy i zgodność starszego APK do potwierdzeni
 Usuwanie kont domowników i całej rodziny: zweryfikowane lokalnie, oczekuje na CI.
 Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
 
+Jawna deklaracja idempotencji mutacji API — zweryfikowane lokalnie, oczekuje na CI.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

@@ -24,7 +24,7 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
         documents: service.list(requireUser(request).familyId),
       }),
     );
-    routes.post('/api/documents', (request, reply) => {
+    routes.post('/api/documents', { config: { idempotency: false } }, (request, reply) => {
       const data = parse(createDocumentSchema, request.body);
       const document = service.create(
         requireUser(request).familyId,
@@ -35,7 +35,7 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
       reply.code(201);
       return documentResponseSchema.parse({ ok: true, document });
     });
-    routes.patch('/api/documents/:id', (request) => {
+    routes.patch('/api/documents/:id', { config: { idempotency: false } }, (request) => {
       const { id } = parse(idSchema, request.params);
       const data = parse(patchDocumentSchema, request.body);
       return documentResponseSchema.parse({
@@ -49,7 +49,7 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
         ),
       });
     });
-    routes.post('/api/documents/:id/renew', (request) => {
+    routes.post('/api/documents/:id/renew', { config: { idempotency: false } }, (request) => {
       const { id } = parse(idSchema, request.params);
       const data = parse(renewDocumentSchema, request.body);
       return documentResponseSchema.parse({
@@ -63,7 +63,7 @@ export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseC
         ),
       });
     });
-    routes.delete('/api/documents/:id', (request) => {
+    routes.delete('/api/documents/:id', { config: { idempotency: false } }, (request) => {
       const { id } = parse(idSchema, request.params);
       service.remove(requireUser(request).familyId, id, requireUser(request).role);
       return documentDeletedResponseSchema.parse({ ok: true, deleted: true });

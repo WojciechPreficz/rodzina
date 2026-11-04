@@ -7,6 +7,7 @@ import fastifyStatic from '@fastify/static';
 import type { AppConfig } from './config.js';
 import type { DatabaseConnection } from './db/client.js';
 import { registerApiErrorHandler, sendError } from './http/errors.js';
+import { registerIdempotency } from './http/idempotency.js';
 import { registerSecurityHeaders } from './http/security-headers.js';
 import { registerSessionAuth } from './http/session-auth.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
@@ -45,6 +46,7 @@ export async function buildApp(
 
   registerApiErrorHandler(app);
   registerSecurityHeaders(app, config);
+  const registerProfiles = registerIdempotency(app, database);
 
   await app.register(fastifyCookie);
 
@@ -65,11 +67,11 @@ export async function buildApp(
   });
 
   registerEventRoutes(app, database);
-  registerShoppingRoutes(app, database);
-  registerTaskListRoutes(app, database);
+  registerShoppingRoutes(app, database, registerProfiles);
+  registerTaskListRoutes(app, database, registerProfiles);
   registerDocumentRoutes(app, database);
   registerContactRoutes(app, database);
-  registerMealRoutes(app, database);
+  registerMealRoutes(app, database, registerProfiles);
   registerAndroidDownloads(app, config);
   app.get('/.well-known/assetlinks.json', async (_request, reply) => {
     reply.header('Cache-Control', 'public, max-age=300');

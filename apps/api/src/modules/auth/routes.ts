@@ -38,7 +38,7 @@ export function registerAuthRoutes(
   app.get('/api/auth/password-recovery', { config: { auth: 'public' } }, async () =>
     passwordRecoveryAvailabilitySchema.parse({ enabled: config.RODZINA_PASSWORD_RESET_EMAIL_ENABLED }),
   );
-  app.post('/api/auth/forgot-password', { config: { auth: 'public' } }, async (request, reply) => {
+  app.post('/api/auth/forgot-password', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
     try {
       const email = parse(forgotPasswordInputSchema, request.body, 'Podaj poprawny adres e-mail.').email;
       return reply.code(202).send(authOkResponseSchema.parse(await recoverPassword(email, request.ip)));
@@ -47,7 +47,7 @@ export function registerAuthRoutes(
       throw error;
     }
   });
-  app.post('/api/auth/register-family', { config: { auth: 'public' } }, async (request, reply) => {
+  app.post('/api/auth/register-family', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
     return reply
       .code(201)
       .send(
@@ -59,7 +59,7 @@ export function registerAuthRoutes(
         ),
       );
   });
-  app.post('/api/auth/login', { config: { auth: 'public' } }, async (request, reply) => {
+  app.post('/api/auth/login', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
     return loginResponseSchema.parse(
       await service.login(
         parse(loginSchema, request.body, 'Dane logowania są niepoprawne.'),
@@ -75,7 +75,7 @@ export function registerAuthRoutes(
       ),
     );
   });
-  app.post('/api/auth/login-child', { config: { auth: 'public' } }, async (request, reply) => {
+  app.post('/api/auth/login-child', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
     return loginChildResponseSchema.parse(
       await service.loginChild(
         parse(loginChildSchema, request.body, 'Dane logowania dziecka są niepoprawne.'),
@@ -84,7 +84,7 @@ export function registerAuthRoutes(
       ),
     );
   });
-  app.post('/api/auth/logout', async (request, reply) => {
+  app.post('/api/auth/logout', { config: { idempotency: false } }, async (request, reply) => {
     const result = authOkResponseSchema.parse(await service.logout(request.cookies?.sid));
     reply.clearCookie('sid', { path: '/' });
     return result;
@@ -92,7 +92,7 @@ export function registerAuthRoutes(
   app.get('/api/auth/me', async (request) => {
     return authMeResponseSchema.parse(await service.me(requireUser(request)));
   });
-  app.post('/api/auth/reset-password', { config: { auth: 'public' } }, async (request, reply) => {
+  app.post('/api/auth/reset-password', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
     const result = passwordResetResponseSchema.parse(
       await service.resetPassword(
         parse(resetPasswordSchema, request.body, 'Dane resetu hasła są niepoprawne.'),

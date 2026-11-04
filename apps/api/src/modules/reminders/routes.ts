@@ -49,14 +49,14 @@ export function registerReminderRoutes(app: FastifyInstance, database: DatabaseC
         reminders: service.listMine(requireUser(request).familyId, requireUser(request).id, source),
       });
     });
-    routes.post('/api/reminders/mine', async (request) => {
+    routes.post('/api/reminders/mine', { config: { idempotency: false } }, async (request) => {
       const data = parse(createMyReminderSchema, request.body);
       return reminderResponseSchema.parse({
         ok: true,
         reminder: service.createMine(requireUser(request).familyId, requireUser(request).id, data),
       });
     });
-    routes.delete('/api/reminders/mine/:id', async (request) => {
+    routes.delete('/api/reminders/mine/:id', { config: { idempotency: false } }, async (request) => {
       const { id } = parse(z.object({ id: z.string().uuid() }).strict(), request.params);
       service.removeMine(requireUser(request).familyId, requireUser(request).id, id);
       return deleteReminderResponseSchema.parse({ ok: true, deleted: true });

@@ -35,7 +35,7 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
   app.get('/api/members', async (request) =>
     membersResponseSchema.parse(await service.listMembers(requireUser(request))),
   );
-  app.post('/api/members/child', async (request, reply) =>
+  app.post('/api/members/child', { config: { idempotency: false } }, async (request, reply) =>
     reply
       .code(201)
       .send(
@@ -47,7 +47,7 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
         ),
       ),
   );
-  app.post('/api/invitations', async (request) =>
+  app.post('/api/invitations', { config: { idempotency: false } }, async (request) =>
     createInvitationResponseSchema.parse(
       await service.createInvitation(
         requireUser(request),
@@ -60,20 +60,23 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       await service.getInvitation(parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.').token),
     ),
   );
-  app.post('/api/invitations/:token/accept', { config: { auth: 'public' } }, async (request, reply) =>
-    reply
-      .code(201)
-      .send(
-        acceptInvitationResponseSchema.parse(
-          await service.acceptInvitation(
-            parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.').token,
-            parse(acceptInvitationSchema, request.body, 'Dane akceptacji zaproszenia są niepoprawne.'),
-            (id) => createSession(reply, request, id),
+  app.post(
+    '/api/invitations/:token/accept',
+    { config: { auth: 'public', idempotency: false } },
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send(
+          acceptInvitationResponseSchema.parse(
+            await service.acceptInvitation(
+              parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.').token,
+              parse(acceptInvitationSchema, request.body, 'Dane akceptacji zaproszenia są niepoprawne.'),
+              (id) => createSession(reply, request, id),
+            ),
           ),
         ),
-      ),
   );
-  app.post('/api/members/:id/password-reset-link', async (request) =>
+  app.post('/api/members/:id/password-reset-link', { config: { idempotency: false } }, async (request) =>
     passwordResetLinkResponseSchema.parse(
       await service.createPasswordResetLink(
         requireUser(request),
@@ -81,7 +84,7 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       ),
     ),
   );
-  app.patch('/api/members/:id', async (request) =>
+  app.patch('/api/members/:id', { config: { idempotency: false } }, async (request) =>
     memberResponseSchema.parse(
       await service.updateMember(
         requireUser(request),
@@ -91,7 +94,7 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
     ),
   );
   for (const url of ['/api/members/:id', '/api/family']) {
-    app.delete(url, async (request, reply) => {
+    app.delete(url, { config: { idempotency: false } }, async (request, reply) => {
       reply.header('Cache-Control', 'no-store');
       try {
         const actor = requireUser(request);
@@ -108,7 +111,7 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       }
     });
   }
-  app.patch('/api/family', async (request) =>
+  app.patch('/api/family', { config: { idempotency: false } }, async (request) =>
     familyResponseSchema.parse(
       await service.updateFamily(
         requireUser(request),
@@ -116,7 +119,7 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       ),
     ),
   );
-  app.post('/api/family/join-code/rotate', async (request) =>
+  app.post('/api/family/join-code/rotate', { config: { idempotency: false } }, async (request) =>
     rotateJoinCodeResponseSchema.parse(await service.rotateJoinCode(requireUser(request))),
   );
 }

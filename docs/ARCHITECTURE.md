@@ -414,6 +414,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 - Operacje zakupów, zadań i obiadów zachowują identyfikatory przy ponowieniu.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
   90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
+  Mutacje API jawnie wybierają profil idempotencji zdefiniowany w module lub
+  ustawiają `config.idempotency: false`. Rejestracja trasy z profilem wymaga
+  synchronicznego handlera. Nieznany lub nieużywany profil przerywa start API.
 
 ## Wydarzenia ze zdjęcia (OCR.1–OCR.5)
 
