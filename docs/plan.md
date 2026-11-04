@@ -34,6 +34,8 @@ Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
 
 Jawna deklaracja idempotencji mutacji API — zweryfikowane lokalnie, oczekuje na CI.
 
+Publiczne API zakupów dla eksportu obiadów i reguła granic importów — zweryfikowane lokalnie, oczekuje na CI.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

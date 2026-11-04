@@ -5,7 +5,6 @@ import {
   mealOfflineChangeSchema,
   mealWeekResponseSchema,
   mealsToShoppingListResponseSchema,
-  normalizeShoppingName,
   type MealOfflineChange,
   type PutMeal,
   type Meal,
@@ -16,9 +15,14 @@ import { appendOperation, readOperations, recountOutboxBudgets } from '../../off
 import { joinSync, type SyncAdapter } from '../../offline/sync.js';
 import { notifyOutboxChanged, watchOutbox } from '../../offline/signals.js';
 import { reportStorageIssue, storageError } from '../../offline/status.js';
-import { readShoppingTransaction, putShoppingTransaction } from '../shopping/shoppingStorage.js';
-import { applyShoppingChange, shoppingKey } from '../shopping/shoppingOptimistic.js';
-import { flushShoppingPersistence } from '../shopping/shoppingOffline.js';
+import {
+  flushShoppingForMealExport,
+  prepareMealExportSync,
+  resolveMealExportTargets,
+  projectQueuedMealExport,
+  reconcileMealExport,
+  revokeMealExportList,
+} from '../shopping/index.js';
 import { readMeals, putMeals, emptyMeals, projectMeals, type MealCache, type MealOperation } from './mealStorage.js';
 import { mealWeekStart, shiftMealDate } from './mealDates.js';
 
@@ -29,12 +33,8 @@ export function mealAdapter(account: string, client?: QueryClient): SyncAdapter 
     prepare: async (op, _signal, { session }) => {
       if (session?.user.role === 'child')
         throw new ApiRequestError('Zapis jest dostępny tylko dla dorosłych.', 403, 'FORBIDDEN');
-      if (client && mealOfflineChangeSchema.parse(op.payload).type === 'export') {
-        await client.cancelQueries({
-          queryKey: shoppingKey({ familyId: account.split(':')[0]!, userId: account.split(':')[1]! }),
-        });
-        await flushShoppingPersistence(client);
-      }
+      if (client && mealOfflineChangeSchema.parse(op.payload).type === 'export')
+        await prepareMealExportSync(client, account);
     },
     send: async (op, signal) => {
       const change = mealOfflineChangeSchema.parse(op.payload);
@@ -65,48 +65,14 @@ export function mealAdapter(account: string, client?: QueryClient): SyncAdapter 
             ...(change.data.snapshot ?? []).map((meal) => meal.mealId),
           ]),
         ];
-        const shopping = await readShoppingTransaction(tx, account);
-        if (!shopping) throw new Error('Brak zapisanej listy zakupów.');
-        const key = [
-          ...shoppingKey({ familyId: account.split(':')[0]!, userId: account.split(':')[1]! }),
-          'items',
-          change.data.listId,
-        ];
-        const range = shopping.queries.find((q) => JSON.stringify(q.queryKey) === JSON.stringify(key));
-        if (!range) throw new Error('Brak zapisanej zawartości listy zakupów.');
-        range.state = { ...range.state, data: result.items, dataUpdatedAt: Date.now() };
-        // Later local checkbox/quantity edits may refer to an item merged into a different server ID.
-        for (const later of await readOperations(tx, account)) {
-          if (later.sequence <= op.sequence || later.module !== 'shopping') continue;
-          const payload = later.payload as { id?: string };
-          const id = payload.id && result.aliases?.[payload.id];
-          if (id && id !== payload.id) tx.objectStore('outbox').put({ ...later, payload: { ...payload, id } });
-        }
-        await putShoppingTransaction(tx, shopping, true);
+        await reconcileMealExport(tx, account, change.data.listId, op.sequence, result.items, result.aliases);
       }
       await putMeals(tx, cache);
     },
     invalidateAccess: async (tx, op, error) => {
       const change = mealOfflineChangeSchema.parse(op.payload);
       if (error.status !== 404 || change.type !== 'export') return;
-      const shopping = await readShoppingTransaction(tx, account);
-      if (shopping) {
-        shopping.revokedLists = [...new Set([...(shopping.revokedLists ?? []), change.data.listId])];
-        shopping.queries = shopping.queries
-          .filter((q) => q.queryKey[4] !== change.data.listId)
-          .map((q) =>
-            q.queryKey[3] === 'lists'
-              ? {
-                  ...q,
-                  state: {
-                    ...q.state,
-                    data: (q.state.data as { id: string }[]).filter((list) => list.id !== change.data.listId),
-                  },
-                }
-              : q,
-          );
-        await putShoppingTransaction(tx, shopping, true);
-      }
+      await revokeMealExportList(tx, account, change.data.listId);
     },
   };
 }
@@ -265,11 +231,7 @@ export async function queueMealChange(
           .map((op) => op.operationId),
       });
       await putMeals(tx, saved.cache);
-      if (change.type === 'export') {
-        const shopping = await readShoppingTransaction(tx, account);
-        if (!shopping) throw new Error('Najpierw pobierz listę zakupów.');
-        await putShoppingTransaction(tx, shopping, true);
-      }
+      if (change.type === 'export') await projectQueuedMealExport(tx, account);
       return { ...change, operationId };
     },
     captured,
@@ -315,7 +277,7 @@ export function queueMealCopy(weekStart: string, overwrite: boolean) {
 }
 export async function queueMealExport(weekStart: string, listId: string, mealIds: string[], confirmRepeat: boolean) {
   const captured = token;
-  if (queryClient) await flushShoppingPersistence(queryClient);
+  if (queryClient) await flushShoppingForMealExport(queryClient);
   if (captured !== token || !isAccountCurrent(captured)) throw new DOMException('Session changed', 'AbortError');
   return queueMealChange(async (cache, operations, tx) => {
     const week = cache.weeks[weekStart];
@@ -332,38 +294,12 @@ export async function queueMealExport(weekStart: string, listId: string, mealIds
       );
     if (repeated && !confirmRepeat)
       throw new ApiRequestError('Potwierdź ponowne dodanie ilości.', 409, 'MEAL_EXPORT_CONFIRMATION_REQUIRED');
-    const shopping = await readShoppingTransaction(tx, cache.account);
-    if (!shopping) throw new Error('Najpierw pobierz listę zakupów.');
-    const projected = new Map(shopping.queries.map((q) => [JSON.stringify(q.queryKey), q.state.data]));
-    const account = { familyId: cache.account.split(':')[0]!, userId: cache.account.split(':')[1]! };
-    const client = {
-      setQueryData: (key: readonly unknown[], update: (old: unknown) => unknown) => {
-        const value = update(projected.get(JSON.stringify(key)));
-        projected.set(JSON.stringify(key), value);
-        return value;
-      },
-    } as Pick<QueryClient, 'setQueryData'>;
-    for (const op of shopping.operations.filter((op) => !op.review))
-      applyShoppingChange(client, account, op.change, op.submittedAt);
-    const lists = projected.get(JSON.stringify([...shoppingKey(account), 'lists'])) as { id: string }[] | undefined;
-    const items = (projected.get(JSON.stringify([...shoppingKey(account), 'items', listId])) ??
-      (shopping.operations.some((op) => op.change.type === 'createList' && op.change.id === listId && !op.review)
-        ? []
-        : undefined)) as { id: string; name: string; isChecked: boolean }[] | undefined;
-    if (!lists?.some((list) => list.id === listId) || !items)
-      throw new Error('Najpierw pobierz zawartość docelowej listy zakupów.');
-    const targets = new Map<string, { name: string; id: string }>();
-    for (const meal of meals)
-      for (const ingredient of meal.ingredients) {
-        const key = normalizeShoppingName(ingredient.name);
-        if (!targets.has(key))
-          targets.set(key, {
-            name: ingredient.name,
-            id:
-              items.find((item) => !item.isChecked && normalizeShoppingName(item.name) === key)?.id ??
-              crypto.randomUUID(),
-          });
-      }
+    const targets = await resolveMealExportTargets(
+      tx,
+      cache.account,
+      listId,
+      meals.flatMap((meal) => meal.ingredients),
+    );
     return {
       type: 'export',
       data: {
@@ -372,7 +308,7 @@ export async function queueMealExport(weekStart: string, listId: string, mealIds
         mealIds,
         confirmRepeat,
         snapshot: meals.map((meal) => ({ mealId: meal.id, date: meal.date, ingredients: meal.ingredients })),
-        targets: [...targets.values()],
+        targets,
       },
     };
   });

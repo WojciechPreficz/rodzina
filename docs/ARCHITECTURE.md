@@ -336,8 +336,19 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   i identyfikatory późniejszych zmian, zachowując ich treść. Eksport czeka
   na utworzenie lokalnej listy oraz wcześniejsze zmiany obiadów i zakupów.
   Docelowa lista i jej zawartość muszą być wcześniej zapisane; nowa lokalna
-  lista ma znaną pustą bazę. Odczyty zakupów zachowują dotychczasowego właściciela
-  odświeżania i są wstrzymywane na czas synchronizacji obiadów.
+  lista ma znaną pustą bazę. Zakupy wstrzymują automatyczne odświeżanie na
+  podstawie statusu synchronizacji obiadów i wznawiają je po jej zakończeniu.
+  Obiady przekazują transakcję do publicznego API zakupów
+  (`features/shopping/index.ts`). Zakupy wyznaczają `targets` z lokalnej
+  projekcji, zabezpieczają jej bazę po dopisaniu eksportu do kolejki i rozliczają
+  wynik serwera wraz z mapowaniem identyfikatorów. Publiczne API udostępnia
+  listy do dialogu, pozwala poczekać na zapis pamięci zakupów i anuluje trwające
+  odczyty przed wysłaniem eksportu. Obiady odpowiadają za `snapshot`
+  i zależności w kolejce.
+  Reguła ESLint `architecture/public-feature-imports` wymaga, aby importy
+  spoza danego modułu `features/<moduł>` przechodziły przez jego publiczny
+  `index.ts`. Istniejące wyjątki są zapisane w `eslint.config.mjs` jako
+  konkretne pary pliku importującego i pliku docelowego.
   Karta „Dziś na obiad” na górze kalendarza pokazuje nazwę i notatkę obiadu
   według strefy rodziny, niezależnie od oglądanej daty kalendarza. Współdzieli
   odczyt tygodnia z zakładką Obiady; zapis, usunięcie lub kopiowanie odświeża

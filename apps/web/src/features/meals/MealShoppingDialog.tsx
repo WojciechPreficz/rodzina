@@ -5,7 +5,7 @@ import { type Meal } from '@rodzina/shared';
 import { ApiRequestError } from '../../api.js';
 import { useOffline } from '../../connectivity.js';
 import { useMe } from '../../sessionContext.js';
-import { useShopping } from '../shopping/shoppingQueries.js';
+import { useShopping } from '../shopping/index.js';
 import { queueMealExport, useMealState, confirmMealExport } from './mealOffline.js';
 import { mealDateLabel } from './mealDates.js';
 import { addNativeBackHandler } from '../../nativeNavigation.js';
