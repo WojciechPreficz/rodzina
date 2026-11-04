@@ -73,7 +73,7 @@ export function PhotoEventPreview({
       current.current === run && generation === getSessionGeneration() && !run.controller.signal.aborted;
     try {
       if (isAndroid()) {
-        setProgress({ message: 'Wybierz zdjęcie. Odczyt ML Kit działa także offline', value: 0 });
+        setProgress({ message: 'Wybierz zdjęcie. Odczyt działa także offline', value: 0 });
         const native = await recognizeNativePhoto(run.controller.signal);
         if (!active()) return;
         if (native) {

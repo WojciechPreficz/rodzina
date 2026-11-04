@@ -9,25 +9,25 @@ export function mergeNativeOcrPasses(first: OcrDocument, second: OcrDocument): O
       .map((date) => `${date.day}:${date.month}:${date.year}:${date.valid}`)
       .sort()
       .join('|');
+  const comparable = (old: OcrLine, candidate: OcrLine) => {
+    const width = Math.max(
+      0,
+      Math.min(old.box.x + old.box.width, candidate.box.x + candidate.box.width) - Math.max(old.box.x, candidate.box.x),
+    );
+    const height = Math.max(
+      0,
+      Math.min(old.box.y + old.box.height, candidate.box.y + candidate.box.height) -
+        Math.max(old.box.y, candidate.box.y),
+    );
+    const area = width * height;
+    return (
+      area / Math.min(old.box.width * old.box.height, candidate.box.width * candidate.box.height) > 0.65 &&
+      area / Math.max(old.box.width * old.box.height, candidate.box.width * candidate.box.height) > 0.35 &&
+      height / Math.min(old.box.height, candidate.box.height) > 0.65
+    );
+  };
   for (const candidate of second.lines) {
-    const index = lines.findIndex((old) => {
-      const width = Math.max(
-        0,
-        Math.min(old.box.x + old.box.width, candidate.box.x + candidate.box.width) -
-          Math.max(old.box.x, candidate.box.x),
-      );
-      const height = Math.max(
-        0,
-        Math.min(old.box.y + old.box.height, candidate.box.y + candidate.box.height) -
-          Math.max(old.box.y, candidate.box.y),
-      );
-      const area = width * height;
-      return (
-        area / Math.min(old.box.width * old.box.height, candidate.box.width * candidate.box.height) > 0.65 &&
-        area / Math.max(old.box.width * old.box.height, candidate.box.width * candidate.box.height) > 0.35 &&
-        height / Math.min(old.box.height, candidate.box.height) > 0.65
-      );
-    });
+    const index = lines.findIndex((old) => comparable(old, candidate));
     if (index < 0) {
       lines.push(candidate);
       continue;
@@ -37,7 +37,7 @@ export function mergeNativeOcrPasses(first: OcrDocument, second: OcrDocument): O
     const newDates = dates(candidate);
     if (oldDates && newDates && oldDates !== newDates) {
       // Both readings remain visible and the shared parser requires a date decision.
-      lines.push(candidate);
+      if (!lines.some((line) => comparable(line, candidate) && dates(line) === newDates)) lines.push(candidate);
       continue;
     }
     const withoutStroke = (text: string) => text.toLocaleLowerCase('pl-PL').replace(/[|i]/gu, '');

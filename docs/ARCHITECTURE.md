@@ -497,22 +497,21 @@ opuszczenie ekranu i czyszczenie konta kończą worker, zwalniają podgląd
 i unieważniają spóźnione wyniki. Limit pojedynczego odczytu wynosi 120 s.
 APK udostępnia tę samą akcję przez plugin `RodzinaOcr`. Systemowy selektor
 `PickVisualMedia` (z zastępczym `ACTION_OPEN_DOCUMENT`) udziela dostępu tylko
-do wybranego zdjęcia, bez uprawnień do całej galerii i bez aparatu. ML Kit
-`com.google.mlkit:text-recognition:16.0.1` zawiera model łaciński w APK;
-odczyt nie wymaga pobrania modelu ani sieci, także po instalacji.
-Adapter zwraca wspólny kontrakt linii z położeniem w obrazie po orientacji,
-bez narzucania bloków ML Kit wspólnemu parserowi.
-Odległe słowa i różne linie bazowe są rozdzielane przed normalizacją
-współrzędnych, aby pojedynczy wiersz silnika nie łączył sąsiednich kartek.
-Adapter przekazuje także dostępną pewność odczytu ML Kit (przeliczoną na 0–100).
-Po obrazie oryginalnym wykonuje drugi lokalny odczyt w skali szarości
-z poprawionym kontrastem i powiększeniem najwyżej 2×, do 3200 px.
-Następnie ponawia odczyt najwyżej 32 fragmentów oryginału: wierszy z rokiem
-oraz niepewnych napisów. Każdy fragment ma margines, powiększenie do 2×
-(najwyżej 3200 px) i współrzędne przeliczone na zdjęcie źródłowe.
-Anulowanie obejmuje także te odczyty; bitmapy fragmentów są zwalniane kolejno.
-Opcjonalny `refinedDocument` jest scalany ze wspólnym dokumentem; wcześniejsze
-APK bez tego pola zachowują dotychczasowe działanie.
+do wybranego zdjęcia, bez uprawnień do całej galerii i bez aparatu.
+Tesseract4Android 4.9.0 używa Tesseracta w trybie LSTM i tego samego polskiego
+modelu `4.0.0_best_int` co WWW. APK zawiera model, który jest kopiowany do
+prywatnej pamięci podręcznej przy pierwszym odczycie. Sieć jest zbędna także
+bezpośrednio po instalacji.
+
+Silnik odczytuje rozproszony tekst na oryginale, w skali szarości i po
+progowaniu obrazu w skali 75%. Adapter rozdziela odległe słowa oraz słowa
+na różnych liniach bazowych. Przekazuje tekst, znormalizowane położenie
+fragmentu i pewność odczytu (0–100). Następnie ponawia odczyt najwyżej
+32 fragmentów oryginału w trybie pojedynczego wiersza. Kandydatami są
+wiersze z rokiem i niepewne napisy. Fragment ma margines i jest powiększany
+do 2×, najwyżej do 3200 px. Odczyt zachowuje położenie źródłowego wiersza.
+Anulowanie obejmuje także warianty i fragmenty. Most scala dostępne dokumenty
+`alternateDocument`, `binaryDocument` i `refinedDocument` z odczytem oryginału.
 Zgodne geometrycznie fragmenty są uzgadniane według pewności silnika;
 sprzeczne odczyty dat pozostają alternatywami do ręcznego rozstrzygnięcia.
 Nie korygujemy słów słownikiem ani nie odgadujemy dat. Błąd dodatkowego
@@ -524,11 +523,11 @@ rozpoznanie szkoły jako miejsca wymaga etykiety adresu lub określenia placówk
 Źródło JPEG/PNG/WebP jest kopiowane strumieniowo z URI do prywatnego pliku
 tymczasowego z egzekwowanym limitem 20 MB. Granice obrazu są odczytywane
 przed dekodowaniem; próbkowanie ogranicza bitmapę do 12 mln pikseli,
-następnie EXIF (także odbicie) i skalowanie ograniczają dłuższy bok do 3200 px.
+następnie stosowana jest orientacja EXIF (także odbicie) i skalowanie jak w WWW.
 Plik jest usuwany po przygotowaniu; pozostałości po przerwaniu procesu
 są usuwane przy załadowaniu pluginu. Nie należy do trwałej pamięci konta.
 Most JS otrzymuje tylko dokumenty OCR i opcjonalny podgląd JPEG do 640 px
-i 256 KiB, bez pełnego zdjęcia. Bitmapa i klient ML Kit są zwalniane po
+i 256 KiB, bez pełnego zdjęcia. Bitmapy i instancja Tesseracta są zwalniane po
 zakończeniu zadania, także anulowanego. Trwający odczyt blokuje uruchomienie
 drugiego; anulowany selektor musi najpierw wrócić do aplikacji.
 

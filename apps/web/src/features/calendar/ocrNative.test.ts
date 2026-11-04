@@ -65,6 +65,18 @@ it('merges the optional native contrast pass before returning the shared documen
   const result = await recognizeNativePhoto(new AbortController().signal);
   expect(result?.document.lines.map(({ text }) => text)).toEqual(['AUDYCJA MUZYCZNA']);
 });
+it('merges the thresholded pass without duplicating an existing conflicting date', async () => {
+  const original = { id: '1', text: '5.11.2026 R.', box: { x: 0.1, y: 0.1, width: 0.5, height: 0.05 } };
+  const conflict = { ...original, text: '9.11.2026 R.' };
+  const recovered = { ...original, id: '2', text: 'Szkoła do hymnu', box: { ...original.box, y: 0.4 } };
+  pick.mockResolvedValueOnce({
+    document: { ...document, lines: [original] },
+    alternateDocument: { ...document, lines: [conflict] },
+    binaryDocument: { ...document, lines: [conflict, recovered] },
+  });
+  const result = await recognizeNativePhoto(new AbortController().signal);
+  expect(result?.document.lines.map(({ text }) => text)).toEqual([original.text, conflict.text, recovered.text]);
+});
 it('handles cancelled picker and bounds stalled provider time', async () => {
   pick.mockResolvedValueOnce({ cancelled: true });
   expect(await recognizeNativePhoto(new AbortController().signal)).toBeUndefined();

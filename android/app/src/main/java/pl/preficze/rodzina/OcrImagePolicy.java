@@ -23,6 +23,13 @@ final class OcrImagePolicy {
         return "image/jpeg".equals(mime) || "image/png".equals(mime) || "image/webp".equals(mime);
     }
 
+    static int[] recognitionSize(int width, int height) {
+        int longest = Math.max(width, height);
+        if (longest >= 2000) return size(width, height, MAX_SIDE);
+        double scale = Math.min(3, 2000.0 / longest);
+        return new int[] {Math.max(1, (int) Math.round(width * scale)), Math.max(1, (int) Math.round(height * scale))};
+    }
+
     static int[] contrastSize(int width, int height) {
         double scale = Math.min(2, MAX_SIDE / (double) Math.max(width, height));
         return new int[] {Math.max(1, (int) Math.round(width * scale)), Math.max(1, (int) Math.round(height * scale))};
@@ -34,7 +41,7 @@ final class OcrImagePolicy {
 
     static boolean refineLine(String text, float confidence) {
         return text.matches(".*[0-9]{4}.*")
-            || ((confidence <= 0 || confidence < 0.8f || text.contains("|"))
+            || ((confidence < 80 || text.contains("|"))
                 && text.codePoints().filter(Character::isLetter).count() >= 3);
     }
 

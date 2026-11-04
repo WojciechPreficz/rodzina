@@ -7,6 +7,7 @@ const nativeOcr = registerPlugin<{
     cancelled?: boolean;
     document?: unknown;
     alternateDocument?: unknown;
+    binaryDocument?: unknown;
     refinedDocument?: unknown;
     preview?: string;
   }>;
@@ -32,12 +33,10 @@ export async function recognizeNativePhoto(signal: AbortSignal) {
     const result = await Promise.race([nativeOcr.pickAndRecognize({ requestId }), aborted]);
     signal.throwIfAborted();
     if (result.cancelled) return;
-    const first = ocrDocumentSchema.parse(result.document);
-    let document = result.alternateDocument
-      ? mergeNativeOcrPasses(first, ocrDocumentSchema.parse(result.alternateDocument))
-      : first;
-    if (result.refinedDocument)
-      document = mergeNativeOcrPasses(document, ocrDocumentSchema.parse(result.refinedDocument));
+    let document = ocrDocumentSchema.parse(result.document);
+    for (const pass of [result.alternateDocument, result.binaryDocument, result.refinedDocument]) {
+      if (pass) document = mergeNativeOcrPasses(document, ocrDocumentSchema.parse(pass));
+    }
     const preview = result.preview;
     if (preview && (preview.length > 350_000 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(preview)))
       throw new Error('Nieprawidłowy podgląd zdjęcia.');

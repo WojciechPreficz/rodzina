@@ -322,7 +322,7 @@ pozostają do potwierdzenia. OCR.5 wymaga domknięcia odbioru WWW, bez zależno�
 OCR.4 od ML Kit.
 Zdjęcie z pliku lub galerii: JPEG, PNG, WebP do 20 MB, korekta orientacji
 i zmniejszenie dłuższego boku do 3200 px przed lokalnym OCR. WWW używa
-Tesseract.js z polskimi danymi, Android ML Kit z dołączonym modelem łacińskim.
+Tesseract.js, a Android Tesseract4Android z tym samym polskim modelem w APK.
 Wspólny parser i React pokazują wiele częściowych propozycji ze źródłem
 i ostrzeżeniami. Brak roku i niejasne daty wymagają decyzji użytkownika;
 nie wybieramy najbliższego roku. W wydarzeniach jednorazowych godzina
@@ -380,8 +380,7 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   Po zgłoszeniu błędów plakatu: regresje siedmiu kartek, ochrona przed datą
   sąsiedniej kartki, tytuły zaczynające się od „Szkoła”, rozdzielanie fragmentów
   ML Kit, pewność i drugi odczyt kontrastu; ponowny odbiór telefonu wymagany.
-  Natywny selektor
-  zdjęć i ML Kit z modelem dołączonym do APK, wspólny format i parser.
+  Natywny selektor zdjęć, model dołączony do APK, wspólny format i parser.
   Podłączenie do gotowego podglądu, zatwierdzania i zapisu z OCR.2/OCR.4,
   bez drugiej implementacji formularza i importu. Obsługa URI, orientacji,
   pamięci i ograniczonego podglądu bez pełnego base64 przez most JS.
@@ -391,8 +390,8 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   pierwszy odczyt offline, obrót, duży plik oraz pełny przepływ do kalendarza,
   częściowy sukces, utrata odpowiedzi, restart/retry i zmiana konta.
   Sprawdzenie regresji WWW i wspólnych komponentów headless 390/1280 px.
-- **OCR.6 (#76): poprawki odczytu zweryfikowane lokalnie, oczekuje na CI;
-  końcowy odbiór fizycznego APK pozostaje do potwierdzenia.** Ponowny odczyt
+- **OCR.6 (#76): podmiana natywnego silnika na Tesseract4Android,
+  zweryfikowana lokalnie, oczekuje na CI i odbiór fizycznego APK.** Ponowny odczyt
   niepewnych wierszy WWW/Androida, dodatkowe przebiegi WWW także po znalezieniu
   daty oraz regresja rzeczywistego listopadowego zdjęcia: siedem tytułów i dat.
   Końcowy odbiór obu platform i regresja

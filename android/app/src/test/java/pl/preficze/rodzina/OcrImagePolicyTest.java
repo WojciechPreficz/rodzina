@@ -18,6 +18,13 @@ public class OcrImagePolicyTest {
         assertArrayEquals(new int[] {1, 3200}, OcrImagePolicy.size(1, 100000, 3200));
     }
     @Test(expected = IllegalArgumentException.class) public void rejectsBrokenBounds() { OcrImagePolicy.sampleSize(-1, 500); }
+
+    @Test public void sizesImagesForRecognitionLikeTheWebWorker() {
+        assertArrayEquals(new int[] {300, 600}, OcrImagePolicy.recognitionSize(100, 200));
+        assertArrayEquals(new int[] {2000, 1500}, OcrImagePolicy.recognitionSize(1200, 900));
+        assertArrayEquals(new int[] {2800, 2100}, OcrImagePolicy.recognitionSize(2800, 2100));
+        assertArrayEquals(new int[] {2400, 3200}, OcrImagePolicy.recognitionSize(6000, 8000));
+    }
     @Test public void normalizesLinesAgainstOrientedImageAndClipsEdges() {
         assertArrayEquals(new double[] {0.1, 0.2, 0.5, 0.1}, OcrImagePolicy.box(10, 40, 60, 60, 100, 200), 0.000001);
         assertArrayEquals(new double[] {0, 0, 1, 1}, OcrImagePolicy.box(-10, -20, 110, 220, 100, 200), 0.000001);
@@ -41,11 +48,11 @@ public class OcrImagePolicyTest {
         assertEquals(20971520, OcrImagePolicy.MAX_BYTES);
     }
     @Test public void refinesDatesAndUncertainWordsWithoutRetryingDecorations() {
-        assertTrue(OcrImagePolicy.refineLine("S.11.2026 R.", 0.95f));
-        assertTrue(OcrImagePolicy.refineLine("5.11.2026 R.", 0.95f));
-        assertTrue(OcrImagePolicy.refineLine("ANDRZE-KI", 0.3f));
-        assertTrue(OcrImagePolicy.refineLine("KACPER | EMMA", 0.96f));
-        assertFalse(OcrImagePolicy.refineLine("DOGOTERAPIA", 0.95f));
-        assertFalse(OcrImagePolicy.refineLine("=>", 0.2f));
+        assertTrue(OcrImagePolicy.refineLine("S.11.2026 R.", 95));
+        assertTrue(OcrImagePolicy.refineLine("5.11.2026 R.", 95));
+        assertTrue(OcrImagePolicy.refineLine("ANDRZE-KI", 79));
+        assertTrue(OcrImagePolicy.refineLine("KACPER | EMMA", 96));
+        assertFalse(OcrImagePolicy.refineLine("DOGOTERAPIA", 80));
+        assertFalse(OcrImagePolicy.refineLine("=>", 20));
     }
 }
