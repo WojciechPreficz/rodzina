@@ -77,6 +77,12 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   outboxa odświeżają tę projekcję po zatwierdzeniu transakcji. Reguły zapisu
   i kolejkowania należą do modułu. Wspólny nadawca używa `SyncAdapter` danego konta
   do przygotowania, wysłania i rozliczenia operacji oraz obsługi utraty dostępu.
+  Zadania korzystają z tego trybu. Przed odczytem magazyn może przenieść starszy
+  dziennik IndexedDB do outboxa i utrwalić zmiany wymagające sprawdzenia.
+  Zadania dołączają do nadawcy po potwierdzeniu sesji i odświeżeniu dostępu do
+  list. Zachowują wersję 1 i migrację z klucza `rodzina:tasks:v1` oraz kluczy
+  dziennika. Odpowiedzi odświeżania i zapisy sprawdzają zakres aktywnego konta,
+  niezależnie od przeładowania widoku po sygnale outboxa.
 
 ## Dane, czas i uprawnienia
 

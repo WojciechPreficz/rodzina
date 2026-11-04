@@ -19,7 +19,7 @@ type CacheAdapter<Snapshot> = Omit<OfflineAdapter, 'parseCache' | 'capabilities'
   parseCache: (value: unknown) => Snapshot;
 };
 
-export type OfflineModule<Snapshot extends AccountSnapshot, Change, View> = {
+export type OfflineModule<Snapshot extends AccountSnapshot, Change, View, Context = undefined> = {
   cache: CacheAdapter<Snapshot>;
   readError: (detail: string) => string;
 } & (
@@ -30,10 +30,12 @@ export type OfflineModule<Snapshot extends AccountSnapshot, Change, View> = {
     }
   | {
       mode: 'read-write';
+      prepareRead?: (tx: IDBTransaction, account: string) => Promise<void>;
       // Read in the same transaction as the snapshot, in projection order.
       readChanges: (tx: IDBTransaction, account: string, snapshot: Snapshot | undefined) => Promise<readonly Change[]>;
       project: (snapshot: Snapshot | undefined, changes: readonly Change[]) => View;
-      sync: (account: string) => Omit<SyncAdapter, 'module'>;
+      sync: (account: string, context?: Context) => Omit<SyncAdapter, 'module'>;
+      deferSync?: boolean;
     }
 );
 
@@ -46,13 +48,13 @@ type ExternalStore<State> = {
 
 export const cacheSignal = (module: CacheModule) => `offline-${module}-changed:1`;
 
-export function registerOfflineModule<Snapshot extends AccountSnapshot, Change, View>(
-  definition: OfflineModule<Snapshot, Change, View>,
+export function registerOfflineModule<Snapshot extends AccountSnapshot, Change, View, Context = undefined>(
+  definition: OfflineModule<Snapshot, Change, View, Context>,
 ) {
   registerAdapter({ ...definition.cache, capabilities: definition.mode });
   return {
-    createStore: () => createOfflineStore(definition),
-    registerStore: (store: ExternalStore<State<Snapshot, View>> & { clear: () => void }) =>
+    createStore: (context?: Context) => createOfflineStore(definition, context),
+    registerStore: (store: { activate: (account: string) => Promise<void>; clear: () => void }) =>
       registerAccountStore({
         name: definition.cache.module,
         phase: 'before-invalidation',
@@ -63,8 +65,9 @@ export function registerOfflineModule<Snapshot extends AccountSnapshot, Change, 
   };
 }
 
-function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
-  definition: OfflineModule<Snapshot, Change, View>,
+function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Context>(
+  definition: OfflineModule<Snapshot, Change, View, Context>,
+  context?: Context,
 ) {
   const { module, parseCache, schemaVersion } = definition.cache;
   const signal = cacheSignal(module);
@@ -74,29 +77,81 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
   let token = accountToken();
   let ready = Promise.resolve();
   let updates = Promise.resolve();
-  let stopSync: (() => void) | undefined;
+  let sender: ReturnType<typeof joinSync> | undefined;
+  let stopWatching: (() => void) | undefined;
   const listeners = new Set<() => void>();
   const current = (captured: number) => captured === revision && !!state.account && isAccountCurrent(token);
+
+  // Reloads supersede reads, but only account changes invalidate module transactions.
+  function createScope(account: string, token: number) {
+    const captured = {
+      account,
+      token,
+      current: () => !!account && scope === captured && isAccountCurrent(token),
+    };
+    return captured;
+  }
+  let scope = createScope('', token);
 
   function emit(next: State<Snapshot, View>) {
     state = next;
     listeners.forEach((listener) => listener());
   }
 
-  function reload() {
+  async function whenReady() {
+    let pending: Promise<void>;
+    do {
+      pending = ready;
+      await pending;
+    } while (pending !== ready);
+  }
+
+  function startSender() {
+    if (definition.mode !== 'read-write' || !scope.current()) return;
+    if (!sender?.isActive()) {
+      sender?.stop();
+      const changed = () => load();
+      sender = joinSync(
+        state.account,
+        {
+          ...(context === undefined ? definition.sync(state.account) : definition.sync(state.account, context)),
+          module,
+        },
+        changed,
+      );
+    }
+    return sender;
+  }
+
+  function stop() {
+    stopWatching?.();
+    stopWatching = undefined;
+    sender?.stop();
+    sender = undefined;
+  }
+
+  function load(prepare = false) {
     const account = state.account;
     if (!account || !isAccountCurrent(token)) return ready;
+    const activeScope = scope;
     const captured = ++revision;
-    const current = () => captured === revision && isAccountCurrent(token);
+    const current = () => captured === revision && activeScope.current();
     ready = (async () => {
       try {
-        await ensureMigrated();
-        if (!current()) return;
-        await activateOfflineAccount(account);
-        if (!current()) return;
+        const prepareRead = definition.mode === 'read-write' && prepare ? definition.prepareRead : undefined;
+        if (!stopWatching) {
+          await ensureMigrated();
+          if (!current()) return;
+          await activateOfflineAccount(account);
+          if (!current()) return;
+        }
         const next = await transact(
-          'readonly',
+          prepareRead ? 'readwrite' : 'readonly',
           async (tx) => {
+            if (prepareRead) {
+              if (!activeScope.current()) throw new DOMException('Session changed', 'AbortError');
+              await prepareRead(tx, account);
+            }
             const record = await readAccountCache(tx, module, account);
             const saved = record && parseCache(record.payload);
             if (record && (record.schemaVersion !== schemaVersion || saved?.account !== account))
@@ -107,16 +162,19 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
             }
             return saved ? { account, saved, view: definition.project(saved) } : { account };
           },
-          token,
+          activeScope.token,
         );
         if (!current()) return;
-        if (definition.mode === 'read-write' && !stopSync) {
-          const sender = joinSync(account, { ...definition.sync(account), module }, reload);
-          const unwatch = watchOutbox(account, () => void reload());
-          stopSync = () => {
+        if (definition.mode === 'read-write' && !stopWatching) {
+          const unwatch = watchOutbox(account, () => void load());
+          window.addEventListener('storage', onStorage);
+          window.addEventListener('offline-context-invalidated', stop);
+          stopWatching = () => {
             unwatch();
-            sender.stop();
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener('offline-context-invalidated', stop);
           };
+          if (!definition.deferSync) startSender();
         }
         emit(next);
       } catch (cause) {
@@ -127,7 +185,7 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
   }
 
   function onStorage(event: StorageEvent) {
-    if (event.key === signal || event.key === null) void reload();
+    if (event.key === signal || event.key === null) void load(true);
   }
 
   async function persistSnapshot(
@@ -158,33 +216,52 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
 
   return {
     snapshot: () => state,
+    accountScope: () => scope,
+    whenReady,
+    notify: () => emit({ ...state }),
+    publishCommitted(captured: typeof scope, saved: Snapshot, changes: readonly Change[]) {
+      if (
+        definition.mode !== 'read-write' ||
+        captured !== scope ||
+        !captured.current() ||
+        saved.account !== scope.account
+      )
+        throw new DOMException('Session changed', 'AbortError');
+      revision++;
+      emit({ account: saved.account, saved, view: definition.project(saved, changes) });
+    },
     token: () => revision,
     current,
     subscribe(listener: () => void) {
-      if (!listeners.size) window.addEventListener('storage', onStorage);
+      if (definition.mode === 'read-only' && !listeners.size) window.addEventListener('storage', onStorage);
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
-        if (!listeners.size) window.removeEventListener('storage', onStorage);
+        if (definition.mode === 'read-only' && !listeners.size) window.removeEventListener('storage', onStorage);
       };
     },
     activate(account: string) {
-      if (state.account === account && isAccountCurrent(token)) return ready;
-      stopSync?.();
-      stopSync = undefined;
+      if (state.account === account && isAccountCurrent(token)) return whenReady();
+      stop();
       revision++;
       token = accountToken();
+      scope = createScope(account, token);
       emit({ account });
-      return reload();
+      void load(true);
+      return whenReady();
     },
     clear() {
       revision++;
-      stopSync?.();
-      stopSync = undefined;
+      stop();
+      scope = createScope('', token);
       ready = Promise.resolve();
       emit({ account: '' });
     },
-    reload,
+    reload() {
+      void load(true);
+      return whenReady();
+    },
+    synchronize: () => startSender()?.synchronize(),
     // Merge independently fetched parts in order. Existing caches can keep their signaling protocol.
     updateSnapshot(captured: number, update: (account: string, saved: Snapshot | undefined) => Snapshot) {
       if (definition.mode !== 'read-only') throw new Error('Use the module transaction to refresh a writable cache');

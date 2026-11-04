@@ -6,7 +6,6 @@ import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
-import { TASK_SIGNAL } from './taskStorage.js';
 import { useOfflineSyncStatus } from '../../offline/status.js';
 import { offlineTaskPatch, taskOfflineText, taskOperationBlocksAlarm, taskStore } from './taskOffline.js';
 import { pendingTaskSuccessor } from './taskRecurrenceOffline.js';
@@ -18,7 +17,7 @@ export function useTaskData() {
   const account = user && family ? `${family.id}:${user.id}` : '';
   return {
     ...(state.account === account
-      ? taskStore.project()
+      ? state
       : {
           items: {} as Record<string, Task[]>,
           lists: undefined,
@@ -51,18 +50,11 @@ export function TaskPrefetch() {
     const stopFocus = focusManager.subscribe((focused) => {
       if (focused) sync();
     });
-    const storage = (event: StorageEvent) => {
-      if (event.key === TASK_SIGNAL) {
-        void taskStore.reload();
-      }
-    };
-    window.addEventListener('storage', storage);
     const interval = window.setInterval(sync, SYNC_INTERVAL_MS);
     return () => {
       disposed = true;
       stopOnline();
       stopFocus();
-      window.removeEventListener('storage', storage);
       window.clearInterval(interval);
     };
   }, [account, familyConfirmed]);
@@ -136,7 +128,7 @@ export function useTasks(listId?: string) {
   };
   const submit = async (id: string, change: Parameters<typeof taskStore.enqueue>[2]) => {
     await submitChanges([{ id, change }]);
-    return taskStore.project().items[listId!]?.find((task) => task.id === id);
+    return taskStore.getSnapshot().items[listId!]?.find((task) => task.id === id);
   };
   const create = useMutation({
     networkMode: 'always',
@@ -148,7 +140,7 @@ export function useTasks(listId?: string) {
   const update = useMutation({
     networkMode: 'always',
     mutationFn: async ({ id, data: input }: { id: string; data: PatchTask }) => {
-      const original = taskStore.project().items[listId!]?.find((task) => task.id === id);
+      const original = taskStore.getSnapshot().items[listId!]?.find((task) => task.id === id);
       const changed = Object.fromEntries(
         Object.entries(input).filter(
           ([field, value]) => JSON.stringify(original?.[field as keyof Task]) !== JSON.stringify(value),
@@ -168,7 +160,7 @@ export function useTasks(listId?: string) {
   const clearDone = useMutation({
     networkMode: 'always',
     mutationFn: async () => {
-      const completed = taskStore.project().items[listId!]?.filter((task) => task.isDone) ?? [];
+      const completed = taskStore.getSnapshot().items[listId!]?.filter((task) => task.isDone) ?? [];
       await submitChanges(completed.map((task) => ({ id: task.id, change: { type: 'remove' } })));
     },
   });

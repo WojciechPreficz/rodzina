@@ -118,7 +118,7 @@ async function fixture(initial: Task = task) {
   };
 }
 const projected = (store: ReturnType<typeof createTaskOfflineStore>, id = taskId) =>
-  store.project().items[listId]!.find((entry) => entry.id === id)!;
+  store.getSnapshot().items[listId]!.find((entry) => entry.id === id)!;
 async function retry() {
   await transact('readwrite', async (tx) => {
     for (const op of await readOperations(tx, account)) tx.objectStore('outbox').put({ ...op, nextAttemptAt: 0 });
@@ -313,7 +313,7 @@ it.each(['title', 'order'] as const)(
     });
     await f.store.synchronize();
     expect(f.store.getSnapshot().pending).toHaveLength(1);
-    expect(f.store.project().pending[0]).toMatchObject({ status: 'needs-review', reason: 'conflict' });
+    expect(f.store.getSnapshot().pending[0]).toMatchObject({ status: 'needs-review', reason: 'conflict' });
     expect(projected(f.store).checklist![1]!.isDone).toBe(true);
     await expect(
       f.store.enqueue(
@@ -324,7 +324,7 @@ it.each(['title', 'order'] as const)(
           : { type: 'checklist-order', data: { itemIds: [first, second], orderVersion: 1 } },
       ),
     ).rejects.toThrow('Najpierw sprawdź');
-    await f.store.discardReview(f.store.project().pending.map((op) => op.id));
+    await f.store.discardReview(f.store.getSnapshot().pending.map((op) => op.id));
     await f.store.synchronize();
     expect(projected(f.store).checklist![0]!.title).toBe('Zmiana na serwerze');
   },
@@ -343,14 +343,14 @@ it('does not resurrect a deleted parent and preserves the parent when only an it
   });
   await f.store.synchronize();
   expect(projected(f.store)).toBeDefined();
-  expect(f.store.project().pending[0]!.status).toBe('needs-review');
-  await f.store.discardReview(f.store.project().pending.map((op) => op.id));
+  expect(f.store.getSnapshot().pending[0]!.status).toBe('needs-review');
+  await f.store.discardReview(f.store.getSnapshot().pending.map((op) => op.id));
   await f.store.synchronize();
   await f.store.enqueue(listId, taskId, { type: 'checklist-create', data: { id: second, title: 'Podłoga' } });
   f.setTasks([]);
   await f.store.synchronize();
-  expect(f.store.project().items[listId]).toEqual([]);
-  expect(f.store.project().pending[0]!.status).toBe('needs-review');
+  expect(f.store.getSnapshot().items[listId]).toEqual([]);
+  expect(f.store.getSnapshot().pending[0]!.status).toBe('needs-review');
   expect(
     f.request.mock.calls.filter(([path, init]) => init?.method === 'POST' && !path.includes('/checklist')),
   ).toEqual([]);
@@ -368,11 +368,11 @@ it('keeps expired item changes and their dependents for review across clock corr
     data.operations[0]!.submittedAt = Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1;
   });
   await f.store.reload();
-  expect(f.store.project().pending.map((op) => op.reason)).toEqual(['expired', 'dependency']);
+  expect(f.store.getSnapshot().pending.map((op) => op.reason)).toEqual(['expired', 'dependency']);
   const clock = vi.spyOn(Date, 'now').mockReturnValue(1);
   try {
     await f.store.reload();
-    expect(f.store.project().pending.map((op) => op.reason)).toEqual(['expired', 'dependency']);
+    expect(f.store.getSnapshot().pending.map((op) => op.reason)).toEqual(['expired', 'dependency']);
   } finally {
     clock.mockRestore();
   }
@@ -385,7 +385,7 @@ it('removes revoked content and its checklist operations before replay', async (
   await f.store.enqueue(listId, taskId, { type: 'checklist-create', data: { id: first, title: 'Okna' } });
   f.revoke();
   await f.store.synchronize();
-  expect(f.store.project().items).toEqual({});
+  expect(f.store.getSnapshot().items).toEqual({});
   expect((await readTaskData(account)).operations).toEqual([]);
   expect(f.request.mock.calls.filter(([, init]) => init?.method)).toEqual([]);
 });
@@ -407,12 +407,12 @@ it('ignores a late checklist response after logout and switching accounts', asyn
   });
   const syncing = f.store.synchronize();
   await started;
-  f.store.clear(false);
+  f.store.clear();
   await clearDatabase();
   await f.store.activate('another:account');
   release();
   await syncing;
-  expect(f.store.project()).toMatchObject({ account: 'another:account', items: {}, pending: [] });
+  expect(f.store.getSnapshot()).toMatchObject({ account: 'another:account', items: {}, pending: [] });
   expect((await readTaskData('another:account')).operations).toEqual([]);
   expect((await readTaskData('another:account')).snapshot.items).toEqual({});
 });
@@ -512,7 +512,7 @@ it('allows another field to synchronize when a title edit conflicts', async () =
     return f.reply([item(first, { title: 'Inne urządzenie', version: 1, isDone: true, doneVersion: 1 })], 0);
   });
   await f.store.synchronize();
-  expect(f.store.project().pending).toHaveLength(1);
+  expect(f.store.getSnapshot().pending).toHaveLength(1);
   expect(checklistProgress(projected(f.store))).toEqual({ done: 1, total: 1 });
   expect(projected(f.store).checklist![0]!.title).toBe('Inne urządzenie');
 });
@@ -537,7 +537,7 @@ it('keeps pending projection over a full snapshot while preserving unrelated ser
   await f.store.synchronize();
   expect(projected(f.store)).toMatchObject({ notes: 'Z drugiego urządzenia' });
   expect(projected(f.store).checklist!.map((entry) => entry.title)).toEqual(['Moja zmiana', 'Podłoga']);
-  expect(f.store.project().pending).toHaveLength(1);
+  expect(f.store.getSnapshot().pending).toHaveLength(1);
 });
 
 it('does not increment projected versions twice when a snapshot includes an unacknowledged completion', async () => {

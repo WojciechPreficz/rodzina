@@ -7,9 +7,17 @@ import {
   taskOrderingKeys,
   TASK_STORAGE_KEY,
 } from './taskSchemas.js';
-import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/registry.js';
+import { chargedBytes, type CacheEntry } from '../../offline/registry.js';
+import { cacheSignal } from '../../offline/moduleStore.js';
 import { registerRecordMigration } from '../../offline/recordMigration.js';
-import { accountToken, assertContext, transact, requestValue, CLEAR_PENDING_KEY } from '../../offline/database.js';
+import {
+  accountToken,
+  assertContext,
+  readAccountCache,
+  transact,
+  requestValue,
+  CLEAR_PENDING_KEY,
+} from '../../offline/database.js';
 import { appendOperation, readOperations, type Operation } from '../../offline/outbox.js';
 import { notifyOutboxChanged } from '../../offline/signals.js';
 const dataSchema = z.object({
@@ -21,7 +29,7 @@ const dataSchema = z.object({
   rejection: z.string().optional(),
 });
 export type TaskData = z.infer<typeof dataSchema>;
-export const TASK_SIGNAL = 'offline-tasks-changed:1';
+const TASK_SIGNAL = cacheSignal('tasks');
 function parse(value: unknown): TaskData {
   const data = dataSchema.parse(value);
   const [family, user] = data.account.split(':');
@@ -83,17 +91,16 @@ function put(tx: IDBTransaction, value: unknown, outbox = false) {
   });
   tx.objectStore('metadata').put({ accountId: record.accountId, key: 'budget:tasks', value: record.chargedBytes });
 }
-registerAdapter({
+export const taskCache = {
   module: 'tasks',
   schemaVersion: 1,
-  capabilities: 'read-write',
   separateMigration: true,
   legacyKey: TASK_STORAGE_KEY,
   budget: 6 * 1048576,
   parseCache: parse,
-  trim: (value) => value,
-  describe: (value) => ({ syncedAt: parse(value).snapshot.syncedAt ?? null, coverage: 'partial' }),
-});
+  trim: (value: unknown) => value,
+  describe: (value: unknown) => ({ syncedAt: parse(value).snapshot.syncedAt ?? null, coverage: 'partial' as const }),
+} as const;
 export function importTasks(source: Record<string, string>, active?: string): TaskData {
   const snapshot = source[TASK_STORAGE_KEY] ? snapshotSchema.parse(JSON.parse(source[TASK_STORAGE_KEY]!)) : undefined;
   const accounts = Object.keys(source)
@@ -136,28 +143,49 @@ export function taskOperation(operation: Operation) {
     reason: operation.status === 'needs-review' ? operation.reviewReason : undefined,
   });
 }
-export async function readTaskTransaction(tx: IDBTransaction, account: string) {
-  const active = await assertContext(tx);
-  if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
-  const record = await requestValue<CacheEntry | undefined>(
-    tx.objectStore('cache').get([account, 'tasks', 'snapshot']),
-  );
+async function readTaskBase(tx: IDBTransaction, account: string): Promise<TaskData> {
+  const record = await readAccountCache(tx, 'tasks', account);
   if (record && record.schemaVersion !== 1) throw new Error('Nieobsługiwana wersja pamięci zadań.');
-  const data: TaskData = record
+  const data = record
     ? parse(record.payload)
     : {
-        version: 1,
+        version: 1 as const,
         account,
         snapshot: { account, items: {} },
         operations: [],
         discards: {},
       };
+  if (data.account !== account) throw new DOMException('Session changed', 'AbortError');
+  return data;
+}
+async function usesOutbox(tx: IDBTransaction, account: string) {
   const engine = await requestValue<{ value: string } | undefined>(
     tx.objectStore('metadata').get([account, 'engine:tasks']),
   );
-  if (engine?.value === 'outbox')
-    data.operations = (await readOperations(tx, account)).filter((op) => op.module === 'tasks').map(taskOperation);
-  return data;
+  return engine?.value === 'outbox';
+}
+export async function readTaskChanges(tx: IDBTransaction, account: string, saved: TaskData | undefined) {
+  if (!(await usesOutbox(tx, account)))
+    return (saved?.operations ?? []).map((operation) => ({ operation, error: undefined }));
+  return (await readOperations(tx, account))
+    .filter((op) => op.module === 'tasks')
+    .map((op) => ({ operation: taskOperation(op), error: op.lastError }));
+}
+export async function readTaskTransaction(tx: IDBTransaction, account: string) {
+  const base = await readTaskBase(tx, account);
+  const changes = await readTaskChanges(tx, account, base);
+  return { ...base, operations: changes.map(({ operation }) => operation) };
+}
+export async function prepareTaskRead(tx: IDBTransaction, account: string) {
+  const data = await readTaskTransaction(tx, account);
+  const operations = classify(data.operations);
+  if (
+    operations.some(
+      (op, index) => op.status !== data.operations[index]?.status || op.reason !== data.operations[index]?.reason,
+    ) ||
+    (operations.length && !(await usesOutbox(tx, account)))
+  )
+    await putTaskTransaction(tx, { ...data, operations });
 }
 export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
   const data = parse(input);
@@ -222,8 +250,8 @@ export async function putTaskBaseTransaction(tx: IDBTransaction, data: TaskData)
   put(tx, { ...data, operations: [] }, true);
   tx.objectStore('metadata').put({ accountId: data.account, key: 'budget:tasks', value: baseBytes + queueBytes });
 }
-export async function readTaskData(account: string) {
-  return transact('readonly', (tx) => readTaskTransaction(tx, account));
+export async function readTaskData(account: string, token = accountToken()) {
+  return transact('readonly', (tx) => readTaskTransaction(tx, account), token);
 }
 export async function updateTaskData(account: string, update: (data: TaskData) => void, token = accountToken()) {
   if (localStorage.getItem(CLEAR_PENDING_KEY)) throw new Error('Usuwanie danych konta nie zostało zakończone.');
@@ -246,14 +274,18 @@ export async function updateTaskData(account: string, update: (data: TaskData) =
   }
   return result;
 }
-export async function clearTaskData(account: string) {
-  await transact('readwrite', async (tx) => {
-    const active = await assertContext(tx);
-    if (active.accountId !== account) return;
-    tx.objectStore('cache').delete([account, 'tasks', 'snapshot']);
-    tx.objectStore('metadata').delete([account, 'budget:tasks']);
-    tx.objectStore('metadata').delete([account, 'engine:tasks']);
-    for (const op of await readOperations(tx, account))
-      if (op.module === 'tasks') tx.objectStore('outbox').delete([account, op.operationId]);
-  });
+export async function clearTaskData(account: string, token: number) {
+  await transact(
+    'readwrite',
+    async (tx) => {
+      const active = await assertContext(tx);
+      if (active.accountId !== account) return;
+      tx.objectStore('cache').delete([account, 'tasks', 'snapshot']);
+      tx.objectStore('metadata').delete([account, 'budget:tasks']);
+      tx.objectStore('metadata').delete([account, 'engine:tasks']);
+      for (const op of await readOperations(tx, account))
+        if (op.module === 'tasks') tx.objectStore('outbox').delete([account, op.operationId]);
+    },
+    token,
+  );
 }

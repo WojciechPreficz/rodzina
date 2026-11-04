@@ -164,14 +164,14 @@ it('durably captures occurrence identity and actual UTC time, restores after res
   const restored = createTaskOfflineStore(f.request);
   await restored.activate(account);
   expect(restored.getSnapshot().pending).toEqual([op]);
-  expect(restored.project().items[listId]).toHaveLength(1);
-  expect(pendingTaskSuccessor(restored.project().items[listId]!, restored.getSnapshot().pending)).toBe(true);
+  expect(restored.getSnapshot().items[listId]).toHaveLength(1);
+  expect(pendingTaskSuccessor(restored.getSnapshot().items[listId]!, restored.getSnapshot().pending)).toBe(true);
   expect(restored.blockedTasks(account)).toEqual([taskId]);
   vi.spyOn(Date, 'now').mockReturnValue(before + 3 * 86400000);
   onlineManager.setOnline(true);
   await restored.synchronize();
   expect(restored.getSnapshot().pending).toEqual([]);
-  expect(restored.project().items[listId]).toHaveLength(2);
+  expect(restored.getSnapshot().items[listId]).toHaveLength(2);
   expect(f.tasks()[0]!.doneAt).toEqual(op.change.type === 'update' && op.change.data.closedAt);
   expect(restored.blockedTasks(account)).toEqual([]);
 });
@@ -180,10 +180,10 @@ it('reopens locally before sending and replays deterministic close/undo versions
   const f = await fixture();
   await f.store.enqueue(listId, taskId, { type: 'update', data: { isDone: true } });
   await f.store.enqueue(listId, taskId, { type: 'update', data: { isDone: false } });
-  expect(f.store.project().items[listId]).toMatchObject([
+  expect(f.store.getSnapshot().items[listId]).toMatchObject([
     { isDone: false, doneAt: null, recurrence: { state: 'active', version: 2, seriesVersion: 2 } },
   ]);
-  expect(pendingTaskSuccessor(f.store.project().items[listId]!, f.store.getSnapshot().pending)).toBe(false);
+  expect(pendingTaskSuccessor(f.store.getSnapshot().items[listId]!, f.store.getSnapshot().pending)).toBe(false);
   expect(f.store.getSnapshot().pending[1]!.change).toMatchObject({
     data: { expectedSeriesVersion: 1, expectedOccurrenceVersion: 1 },
   });
@@ -224,7 +224,7 @@ it.each(['response', 'snapshot'] as const)(
     await f.store.synchronize();
     expect(f.store.getSnapshot().pending).toEqual([]);
     expect(f.receipts.size).toBe(1);
-    expect(f.store.project().items[listId]).toHaveLength(2);
+    expect(f.store.getSnapshot().items[listId]).toHaveLength(2);
     const writes = f.transport.mock.calls.filter(([, init]) => init?.method);
     expect(writes).toHaveLength(2);
     expect(writes[0]![0]).toEqual(writes[1]![0]);
@@ -257,7 +257,7 @@ it('never acknowledges completion or changes projection when the durable enqueue
   });
   await expect(f.store.enqueue(listId, taskId, { type: 'update', data: { isDone: true } })).rejects.toThrow('Quota');
   fail.mockRestore();
-  expect(f.store.project().items[listId]![0]!.isDone).toBe(false);
+  expect(f.store.getSnapshot().items[listId]![0]!.isDone).toBe(false);
   expect((await readTaskData(account))!.operations).toEqual([]);
 });
 
@@ -285,7 +285,7 @@ it('merges two tabs on one occurrence and respects revoked access before replay'
   onlineManager.setOnline(true);
   await f.store.synchronize();
   expect(f.receipts.size).toBe(0);
-  expect(f.store.project().items).toEqual({});
+  expect(f.store.getSnapshot().items).toEqual({});
   expect((await readTaskData(account))!.operations).toEqual([]);
 });
 
@@ -339,7 +339,7 @@ it('keeps offline skipping unavailable while ordinary content edits remain accep
   const f = await fixture();
   await expect(f.store.enqueue(listId, taskId, { type: 'remove' })).rejects.toThrow('wymaga internetu');
   await f.store.enqueue(listId, taskId, { type: 'update', data: { title: 'Nowa treść' } });
-  expect(f.store.project().items[listId]![0]!.title).toBe('Nowa treść');
+  expect(f.store.getSnapshot().items[listId]![0]!.title).toBe('Nowa treść');
 });
 
 it('rolls back the successor snapshot when outbox acknowledgement fails, then safely retries', async () => {

@@ -2,7 +2,8 @@ import '../../offline/testSetup.js';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { readTaskData, updateTaskData } from './taskStorage.js';
 import { transact, clearDatabase, closeDatabase } from '../../offline/database.js';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/react-query';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type Task, type TaskList } from '@rodzina/shared';
 import { readOperations } from '../../offline/outbox.js';
 import { ApiRequestError } from '../../api.js';
@@ -13,6 +14,7 @@ const user = '10000000-0000-4000-8000-000000000002';
 const listId = '10000000-0000-4000-8000-000000000003';
 const taskId = '10000000-0000-4000-8000-000000000004';
 const account = `${family}:${user}`;
+afterEach(() => onlineManager.setOnline(true));
 const list: TaskList = {
   id: listId,
   familyId: family,
@@ -95,6 +97,7 @@ async function expireFirst() {
 it('restores downloaded data and pending create/edit projection after an offline restart', async () => {
   const f = await fixture();
   await f.store.synchronize();
+  onlineManager.setOnline(false);
   const id = crypto.randomUUID();
   await f.store.enqueue(listId, id, { type: 'create', data: { title: 'Paczka' } });
   await f.store.enqueue(listId, id, { type: 'update', data: { notes: 'Jutro', isDone: true } });
@@ -104,9 +107,10 @@ it('restores downloaded data and pending create/edit projection after an offline
   const restored = createTaskOfflineStore(f.request as <T>(path: string, init?: RequestInit) => Promise<T>);
   await restored.activate(account);
   expect(restored.getSnapshot().pending).toEqual(original?.operations);
-  expect(restored.project().items[listId]).toContainEqual(
+  expect(restored.getSnapshot().items[listId]).toContainEqual(
     expect.objectContaining({ id, title: 'Paczka', notes: 'Jutro', isDone: true }),
   );
+  onlineManager.setOnline(true);
   await restored.synchronize();
   expect(restored.getSnapshot().pending).toEqual([]);
   expect(f.tasks().filter((task) => task.id === id)).toHaveLength(1);
@@ -116,6 +120,7 @@ it('restores downloaded data and pending create/edit projection after an offline
 it('persists review and dependent status, keeps alarm suppression after restart and clock correction', async () => {
   const f = await fixture();
   await f.store.synchronize();
+  onlineManager.setOnline(false);
   await f.store.enqueue(listId, taskId, { type: 'update', data: { dueDate: '2027-01-01' } });
   await f.store.enqueue(listId, taskId, { type: 'remove' });
   await expireFirst();
@@ -128,7 +133,7 @@ it('persists review and dependent status, keeps alarm suppression after restart 
     const restored = createTaskOfflineStore();
     await restored.activate(account);
     expect(restored.getSnapshot().pending).toEqual(original);
-    expect(restored.project().items[listId]).toEqual([task]);
+    expect(restored.getSnapshot().items[listId]).toEqual([task]);
     await expect(restored.enqueue(listId, taskId, { type: 'remove' })).rejects.toThrow('Najpierw sprawdź');
     expect(restored.blockedTasks('other:user')).toEqual([]);
   } finally {
@@ -214,7 +219,7 @@ it.each([429, 500])('retains ordered work on HTTP %s', async (status) => {
   f.setReject(new ApiRequestError('Później', status));
   await f.store.synchronize();
   expect(f.store.getSnapshot().pending).toHaveLength(2);
-  expect(f.store.project().items[listId]?.[0]).toMatchObject({ title: 'Nowy', notes: 'Notatka' });
+  expect(f.store.getSnapshot().items[listId]?.[0]).toMatchObject({ title: 'Nowy', notes: 'Notatka' });
 });
 
 it('purges revoked private content and work before sending mutations, including after restart', async () => {
@@ -225,11 +230,11 @@ it('purges revoked private content and work before sending mutations, including 
   f.request.mockClear();
   await f.store.synchronize();
   expect(f.request.mock.calls.some(([, init]) => !!init?.method)).toBe(false);
-  expect(f.store.project().items).toEqual({});
+  expect(f.store.getSnapshot().items).toEqual({});
   const restored = createTaskOfflineStore();
   await restored.activate(account);
   expect(restored.getSnapshot().pending).toEqual([]);
-  expect(restored.project().items).toEqual({});
+  expect(restored.getSnapshot().items).toEqual({});
 });
 
 it('purges review work when access is revoked during list refresh', async () => {
@@ -246,7 +251,7 @@ it('purges review work when access is revoked during list refresh', async () => 
   const restored = createTaskOfflineStore();
   await restored.activate(account);
   expect(restored.getSnapshot().pending).toEqual([]);
-  expect(restored.project().items).toEqual({});
+  expect(restored.getSnapshot().items).toEqual({});
 });
 
 it('keeps revoked content out of memory when the purge cannot be persisted', async () => {
@@ -258,8 +263,8 @@ it('keeps revoked content out of memory when the purge cannot be persisted', asy
   });
   try {
     await f.store.synchronize();
-    expect(f.store.project().items).toEqual({});
-    expect(f.store.project().lists).toEqual([]);
+    expect(f.store.getSnapshot().items).toEqual({});
+    expect(f.store.getSnapshot().lists).toEqual([]);
     expect(f.store.getSnapshot().error).toContain('Nie można zapisać');
   } finally {
     failure.mockRestore();
@@ -281,7 +286,7 @@ it('retains a rejected object chain for review without recreating it and sends i
   });
   await f.store.synchronize();
   expect(f.store.getSnapshot().pending.map((op) => op.reason)).toEqual(['rejected', 'dependency']);
-  expect(f.store.project().items[listId]?.some((task) => task.id === independent)).toBe(true);
+  expect(f.store.getSnapshot().items[listId]?.some((task) => task.id === independent)).toBe(true);
   expect(f.request.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
 });
 
@@ -298,7 +303,7 @@ it('never acknowledges a failed durable edit and leaves its confirmed base intac
     failure.mockRestore();
   }
   expect(await readTaskData(account)).toEqual(before);
-  expect(f.store.project().items[listId]?.[0]?.isDone).toBe(false);
+  expect(f.store.getSnapshot().items[listId]?.[0]?.isDone).toBe(false);
 });
 
 it('merges concurrent tab writes in transactions without losing either operation', async () => {
@@ -312,7 +317,7 @@ it('merges concurrent tab writes in transactions without losing either operation
   ]);
   await f.store.reload();
   expect(f.store.getSnapshot().pending).toHaveLength(2);
-  expect(f.store.project().items[listId]?.[0]).toMatchObject({ title: 'Tytuł', notes: 'Notatka' });
+  expect(f.store.getSnapshot().items[listId]?.[0]).toMatchObject({ title: 'Tytuł', notes: 'Notatka' });
 });
 
 it.each(['auth', 'refresh', 'mutation'] as const)(
@@ -336,7 +341,7 @@ it.each(['auth', 'refresh', 'mutation'] as const)(
     });
     const pending = f.store.synchronize();
     await vi.waitFor(() => expect(finish).toBeDefined());
-    f.store.clear(false);
+    f.store.clear();
     await clearDatabase();
     await f.store.activate('another:account');
     finish(
@@ -379,7 +384,7 @@ it('retains conflict dependencies and alarm blocks after restart while independe
   await restored.activate(account);
   expect(restored.getSnapshot().pending.map((op) => op.reason)).toEqual(['conflict', 'dependency']);
   expect(restored.blockedTasks(account)).toEqual([taskId, taskId]);
-  expect(restored.project().items[listId]?.find((entry) => entry.id === taskId)?.dueDate).toBe(task.dueDate);
+  expect(restored.getSnapshot().items[listId]?.find((entry) => entry.id === taskId)?.dueDate).toBe(task.dueDate);
 });
 
 it.each([
@@ -400,7 +405,7 @@ it.each([
     return original(path, init);
   });
   await f.store.synchronize();
-  expect(f.store.project().items).toEqual({});
+  expect(f.store.getSnapshot().items).toEqual({});
   expect(f.store.getSnapshot().pending).toEqual([]);
   expect(JSON.stringify(await readTaskData(account))).not.toContain('Prywatna treść');
   expect(await transact('readonly', (tx) => readOperations(tx, account))).toEqual([]);
@@ -423,7 +428,7 @@ it.each(['partial', 'failure'] as const)('preserves the complete cache on a %s s
   });
   await f.store.synchronize();
   expect((await readTaskData(account))!.snapshot).toEqual(before);
-  expect(f.store.project().items[listId]).toEqual([task]);
+  expect(f.store.getSnapshot().items[listId]).toEqual([task]);
   expect(f.store.getSnapshot().error).toBeTruthy();
 });
 it.each([1, 10, 30])('uses two shared in-flight reads for %i lists with a slow API', async (count) => {
@@ -439,5 +444,5 @@ it.each([1, 10, 30])('uses two shared in-flight reads for %i lists with a slow A
   });
   await Promise.all([f.store.synchronize(), f.store.synchronize(), f.store.synchronize()]);
   expect(f.request.mock.calls.map(([path]) => path)).toEqual(['/api/auth/me', '/api/tasks/snapshot']);
-  expect(f.store.project().lists).toHaveLength(count);
+  expect(f.store.getSnapshot().lists).toHaveLength(count);
 });

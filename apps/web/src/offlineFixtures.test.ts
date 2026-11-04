@@ -1,4 +1,4 @@
-import { importTasks } from './features/tasks/taskStorage.js';
+import { importTasks, readTaskData } from './features/tasks/taskStorage.js';
 import { classify } from './features/tasks/taskSchemas.js';
 import { parseContactsSnapshot } from './features/contacts/contactsOffline.js';
 import './offline/testSetup.js';
@@ -214,8 +214,10 @@ describe('O.1 legacy storage fixtures', () => {
     await tasks.activate(fixture.accountId);
     expect(tasks.getSnapshot().error).toBeUndefined();
     expect(taskListSchema.parse(tasks.getSnapshot().lists?.[0]).id).toBe(id('taskList'));
-    expect(taskSchema.parse(tasks.getSnapshot().items[id('taskList')]?.[0]).isDone).toBe(false);
-    expect(tasks.project().items[id('taskList')]?.[0]?.isDone).toBe(true);
+    expect(taskSchema.parse((await readTaskData(fixture.accountId)).snapshot.items[id('taskList')]?.[0]).isDone).toBe(
+      false,
+    );
+    expect(tasks.getSnapshot().items[id('taskList')]?.[0]?.isDone).toBe(true);
     expect(tasks.getSnapshot().pending.map((op) => op.id)).toEqual(fixture.expected.pendingTaskIds);
     expect(tasks.blockedTasks(fixture.accountId)).toEqual(fixture.expected.blockedTaskIds);
     await expect(tasks.enqueue(id('taskList'), id('task'), { type: 'update', data: { title: 'New' } })).rejects.toThrow(

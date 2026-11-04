@@ -138,7 +138,7 @@ function setup(
   return fetchMock;
 }
 beforeEach(async () => {
-  taskStore.clear(false);
+  taskStore.clear();
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
   reportTransportFailure(false);
@@ -166,7 +166,7 @@ beforeEach(async () => {
 afterEach(async () => {
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
   cleanup();
-  taskStore.clear(false);
+  taskStore.clear();
   client?.clear();
   onlineManager.setOnline(true);
   reportTransportFailure(false);
@@ -575,7 +575,7 @@ describe('task checklist UI', () => {
     fireEvent.click(steps.getByRole('checkbox', { name: 'Okna' }));
     await waitFor(() => expect(steps.getByRole('checkbox', { name: 'Okna' })).toBeChecked());
     expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
-    expect(taskStore.project().items[list.id]![0]!.checklist![0]!.isDone).toBe(true);
+    expect(taskStore.getSnapshot().items[list.id]![0]!.checklist![0]!.isDone).toBe(true);
     await waitFor(() => expect(steps.getByRole('checkbox', { name: 'Okna' })).toBeEnabled());
     fireEvent.click(steps.getByRole('checkbox', { name: 'Okna' }));
     await waitFor(() => expect(steps.getByRole('checkbox', { name: 'Okna' })).not.toBeChecked());
@@ -596,7 +596,7 @@ describe('task checklist UI', () => {
     await waitFor(() => expect(section.getByRole('button', { name: 'Przenieś wyżej: Lustra' })).toBeEnabled());
     fireEvent.click(section.getByRole('button', { name: 'Przenieś wyżej: Lustra' }));
     await waitFor(() =>
-      expect(taskStore.project().items[list.id]![0]!.checklist?.map((item) => item.title)).toEqual([
+      expect(taskStore.getSnapshot().items[list.id]![0]!.checklist?.map((item) => item.title)).toEqual([
         'Okna',
         'Lustra',
         'Podłoga',
@@ -606,7 +606,7 @@ describe('task checklist UI', () => {
     fireEvent.click(section.getByRole('checkbox', { name: 'Lustra' }));
     await section.findByText('Podzadania: 1 z 3');
     expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
-    expect(taskStore.project().lists?.find((item) => item.id === list.id)?.openTaskCount).toBe(1);
+    expect(taskStore.getSnapshot().lists?.find((item) => item.id === list.id)?.openTaskCount).toBe(1);
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     await waitFor(() => expect(section.getByRole('button', { name: 'Usuń podzadanie: Lustra' })).toBeEnabled());
     fireEvent.click(section.getByRole('button', { name: 'Usuń podzadanie: Lustra' }));
@@ -628,7 +628,7 @@ describe('task checklist UI', () => {
     await screen.findByRole('button', { name: 'Oznacz zadanie jako niewykonane' });
     fireEvent.click(screen.getByRole('button', { name: 'Oznacz zadanie jako niewykonane' }));
     await screen.findByRole('button', { name: 'Ukończ zadanie' });
-    expect(taskStore.project().items[list.id]![0]!.checklist).toEqual(checklistTask.checklist);
+    expect(taskStore.getSnapshot().items[list.id]![0]!.checklist).toEqual(checklistTask.checklist);
   });
 
   it('keeps the parent open after the last step and completes it only on explicit action', async () => {
@@ -637,7 +637,7 @@ describe('task checklist UI', () => {
     const section = await openOfflineChecklist(initial);
     fireEvent.click(section.getByRole('checkbox', { name: 'Podłoga' }));
     await section.findByText('Podzadania: 2 z 2');
-    expect(taskStore.project().items[list.id]![0]!.isDone).toBe(false);
+    expect(taskStore.getSnapshot().items[list.id]![0]!.isDone).toBe(false);
     const confirm = vi.spyOn(window, 'confirm');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Ukończ zadanie' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Ukończ zadanie' }));

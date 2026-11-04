@@ -1,17 +1,17 @@
 import { taskSnapshotResponseSchema, type TaskSnapshotResponse, type Task, type PatchTask } from '@rodzina/shared';
-import { readTaskData, readTaskTransaction, updateTaskData, clearTaskData } from './taskStorage.js';
 import {
-  ensureMigrated,
-  activateOfflineAccount,
-  accountToken,
-  isAccountCurrent,
-  transact,
-} from '../../offline/database.js';
-import { readOperations } from '../../offline/outbox.js';
+  clearTaskData,
+  prepareTaskRead,
+  readTaskChanges,
+  readTaskData,
+  taskCache,
+  updateTaskData,
+  type TaskData,
+} from './taskStorage.js';
+import { registerOfflineModule } from '../../offline/moduleStore.js';
 import { apiFetch, ApiRequestError } from '../../api.js';
 import { isOffline } from '../../connectivity.js';
-import { joinSync } from '../../offline/sync.js';
-import { taskAdapter, revokedTaskText } from './taskAdapter.js';
+import { taskAdapter, revokedTaskText, type TaskTransport } from './taskAdapter.js';
 import { classify, operationSchema, type TaskOperation, type Snapshot } from './taskSchemas.js';
 import { projectChecklist, unknownChecklistText } from './taskChecklistOffline.js';
 import { projectTaskOccurrence } from './taskRecurrenceOffline.js';
@@ -41,382 +41,381 @@ export function taskOperationBlocksAlarm(op: TaskOperation) {
         op.change.data.dueTime !== undefined))
   );
 }
-export type TaskOfflineState = Snapshot & { pending: TaskOperation[]; error?: string | undefined; syncing: boolean };
-type Transport = <T>(path: string, init?: RequestInit) => Promise<T>;
+type TaskView = Snapshot & { pending: TaskOperation[]; error?: string | undefined };
 const errorText = (error: unknown) => (error instanceof Error ? error.message : 'Nie udało się zsynchronizować zadań.');
-const storageError = () =>
-  new Error(
-    'Nie można zapisać zadań na urządzeniu. Zwolnij miejsce lub włącz pamięć przeglądarki. Zmiana nie została przyjęta.',
-  );
+const tasksChanged = () => window.dispatchEvent(new Event('rodzina:tasks-changed'));
+const emptyView = (account: string): TaskView => ({ account, items: {}, pending: [] });
 
-// The journal is authoritative. Transactions merge concurrent writes and keep
-// confirmed server data separate from the projection of pending operations.
-export function createTaskOfflineStore(transport: Transport = apiFetch) {
-  let state: TaskOfflineState = { account: '', items: {}, pending: [], syncing: false };
-  let revision = 0;
-  let sessionToken = accountToken();
-  let running: Promise<void> | undefined;
-  let sender: ReturnType<typeof joinSync> | undefined;
-  const hiddenLists = new Set<string>();
-  const listeners = new Set<() => void>();
-  const emit = (next: TaskOfflineState) => {
-    state = {
-      ...next,
-      lists: next.lists?.filter((list) => !hiddenLists.has(list.id)),
-      items: Object.fromEntries(Object.entries(next.items).filter(([id]) => !hiddenLists.has(id))),
-      pending: next.pending.filter((op) => !hiddenLists.has(op.listId)),
-    };
-    listeners.forEach((listener) => listener());
-  };
-  let ready: Promise<void> = Promise.resolve();
-  const discards = async () =>
-    Object.entries((await readTaskData(state.account))?.discards ?? {}).map(([key, value]) => ({ key, ...value }));
-  const persist = async (next: Snapshot) => {
-    await updateTaskData(next.account, (data) => {
-      data.snapshot = next;
-    });
-  };
-  const current = (captured: number) => {
-    if (captured !== revision || !isAccountCurrent(sessionToken))
-      throw new DOMException('Session changed', 'AbortError');
-  };
-  function activate(account: string) {
-    if (state.account === account && isAccountCurrent(sessionToken)) return ready;
-    const captured = ++revision;
-    hiddenLists.clear();
-    sessionToken = accountToken();
-    const token = accountToken();
-    sender?.stop();
-    sender = undefined;
-    running = undefined;
-    emit({ account, items: {}, pending: [], syncing: false });
-    ready = (async () => {
-      try {
-        await ensureMigrated();
-        current(captured);
-        if (!isAccountCurrent(token)) throw new DOMException('Session changed', 'AbortError');
-        await activateOfflineAccount(account);
-        const data = await updateTaskData(account, (value) => {
-          value.operations = classify(value.operations);
+function projectTasks(source: Snapshot, operations: TaskOperation[]): TaskView {
+  const items = Object.fromEntries(Object.entries(source.items).map(([id, tasks]) => [id, [...tasks]]));
+  const userId = source.account.split(':')[1]!;
+  const pending = classify(operations);
+  for (const op of pending) {
+    if (op.status === 'needs-review') continue;
+    const tasks = items[op.listId];
+    if (!tasks) continue;
+    if (op.change.type === 'remove') items[op.listId] = tasks.filter((task) => task.id !== op.taskId);
+    else if (op.change.type === 'create') {
+      if (!tasks.some((task) => task.id === op.taskId))
+        tasks.push({
+          ...op.change.data,
+          notes: op.change.data.notes ?? null,
+          dueDate: op.change.data.dueDate ?? null,
+          dueTime: op.change.data.dueTime ?? null,
+          assigneeId: op.change.data.assigneeId ?? null,
+          reminders: [],
+          id: op.taskId,
+          listId: op.listId,
+          isDone: false,
+          doneBy: null,
+          doneAt: null,
+          position: tasks.length,
+          createdBy: userId,
+          createdAt: op.submittedAt,
+          updatedAt: op.submittedAt,
+          checklist: [],
+          checklistOrderVersion: 0,
         });
-        current(captured);
-        if (!isAccountCurrent(token)) return;
-        emit({ ...data.snapshot, pending: data.operations, error: data.rejection, syncing: false });
-      } catch (error) {
-        if (captured === revision && isAccountCurrent(token))
-          emit({ ...state, error: `Nie można odczytać zapisanych zadań. ${errorText(error)}` });
-      }
-    })();
-    return ready;
-  }
-  function clear(removeStored = true) {
-    revision++;
-    sender?.stop();
-    sender = undefined;
-    running = undefined;
-    ready = Promise.resolve();
-    const account = state.account;
-    emit({ account: '', items: {}, pending: [], syncing: false });
-    if (removeStored && account) return clearTaskData(account);
-  }
-  function project(source = state): TaskOfflineState {
-    const items = Object.fromEntries(Object.entries(source.items).map(([id, tasks]) => [id, [...tasks]]));
-    const userId = source.account.split(':')[1]!;
-    const pending = classify(source.pending);
-    for (const op of pending) {
-      if (op.status === 'needs-review') continue;
-      const tasks = items[op.listId];
-      if (!tasks) continue;
-      if (op.change.type === 'remove') items[op.listId] = tasks.filter((task) => task.id !== op.taskId);
-      else if (op.change.type === 'create') {
-        if (!tasks.some((task) => task.id === op.taskId))
-          tasks.push({
-            ...op.change.data,
-            notes: op.change.data.notes ?? null,
-            dueDate: op.change.data.dueDate ?? null,
-            dueTime: op.change.data.dueTime ?? null,
-            assigneeId: op.change.data.assigneeId ?? null,
-            reminders: [],
-            id: op.taskId,
-            listId: op.listId,
-            isDone: false,
-            doneBy: null,
-            doneAt: null,
-            position: tasks.length,
-            createdBy: userId,
-            createdAt: op.submittedAt,
-            updatedAt: op.submittedAt,
-            checklist: [],
-            checklistOrderVersion: 0,
-          });
-      } else if (op.change.type === 'update') {
-        const closedAt = op.change.data.closedAt ?? op.submittedAt;
-        const data = Object.fromEntries(
-          Object.entries(op.change.data).filter(
-            ([key, value]) =>
-              value !== undefined &&
-              !['closedAt', 'expectedSeriesId', 'expectedSeriesVersion', 'expectedOccurrenceVersion'].includes(key),
-          ),
-        ) as Partial<Task>;
-        items[op.listId] = tasks.map((task) =>
-          task.id !== op.taskId
-            ? task
-            : {
-                ...task,
-                ...data,
-                reminders: task.reminders,
-                ...(data.isDone === undefined || data.isDone === task.isDone
-                  ? {}
-                  : { doneBy: data.isDone ? userId : null, doneAt: data.isDone ? closedAt : null }),
-                updatedAt: op.submittedAt,
-              },
-        );
-      } else {
-        items[op.listId] = tasks.map((task) => {
-          if (task.id !== op.taskId) return task;
-          try {
-            return projectChecklist(task, op, userId, false);
-          } catch {
-            return task;
-          } // Never resurrect a missing parent/item or invent an unknown checklist.
-        });
-      }
-      items[op.listId] = items[op.listId]!.map((task) =>
-        task.id === op.taskId ? projectTaskOccurrence(task, op, userId) : task,
+    } else if (op.change.type === 'update') {
+      const closedAt = op.change.data.closedAt ?? op.submittedAt;
+      const data = Object.fromEntries(
+        Object.entries(op.change.data).filter(
+          ([key, value]) =>
+            value !== undefined &&
+            !['closedAt', 'expectedSeriesId', 'expectedSeriesVersion', 'expectedOccurrenceVersion'].includes(key),
+        ),
+      ) as Partial<Task>;
+      items[op.listId] = tasks.map((task) =>
+        task.id !== op.taskId
+          ? task
+          : {
+              ...task,
+              ...data,
+              reminders: task.reminders,
+              ...(data.isDone === undefined || data.isDone === task.isDone
+                ? {}
+                : { doneBy: data.isDone ? userId : null, doneAt: data.isDone ? closedAt : null }),
+              updatedAt: op.submittedAt,
+            },
       );
-      if (op.occurrence && op.change.type === 'update' && op.change.data.isDone === false)
-        items[op.listId] = items[op.listId]!.filter(
-          (task) =>
-            task.recurrence?.seriesId !== op.occurrence!.seriesId ||
-            task.recurrence.sequence <= op.occurrence!.sequence,
-        );
+    } else {
+      items[op.listId] = tasks.map((task) => {
+        if (task.id !== op.taskId) return task;
+        try {
+          return projectChecklist(task, op, userId, false);
+        } catch {
+          return task;
+        } // Never resurrect a missing parent/item or invent an unknown checklist.
+      });
     }
-    return {
-      ...source,
-      pending,
-      items,
-      lists: source.lists?.map((list) => ({
+    items[op.listId] = items[op.listId]!.map((task) =>
+      task.id === op.taskId ? projectTaskOccurrence(task, op, userId) : task,
+    );
+    if (op.occurrence && op.change.type === 'update' && op.change.data.isDone === false)
+      items[op.listId] = items[op.listId]!.filter(
+        (task) =>
+          task.recurrence?.seriesId !== op.occurrence!.seriesId || task.recurrence.sequence <= op.occurrence!.sequence,
+      );
+  }
+  return {
+    ...source,
+    pending,
+    items,
+    lists: source.lists?.map((list) => ({
+      ...list,
+      openTaskCount: items[list.id]?.filter((task) => !task.isDone).length ?? list.openTaskCount,
+    })),
+  };
+}
+
+type TaskSyncContext = { transport: TaskTransport; hideList: (id: string) => void };
+type TaskChange = Awaited<ReturnType<typeof readTaskChanges>>[number];
+const taskModule = registerOfflineModule<TaskData, TaskChange, TaskView | undefined, TaskSyncContext>({
+  mode: 'read-write',
+  cache: taskCache,
+  readError: (detail) => `Nie można odczytać zapisanych zadań. ${detail}`,
+  prepareRead: prepareTaskRead,
+  readChanges: readTaskChanges,
+  project: (saved, changes): TaskView | undefined =>
+    saved && {
+      ...projectTasks(
+        saved.snapshot,
+        changes.map(({ operation }) => operation),
+      ),
+      error: saved.rejection ?? changes.find(({ error }) => error)?.error,
+    },
+  deferSync: true,
+  sync: (account, context?: TaskSyncContext) => taskAdapter(account, context?.transport, context?.hideList),
+});
+
+export function createTaskOfflineStore(transport: TaskTransport = apiFetch) {
+  const store = taskModule.createStore({ transport, hideList });
+  const newPresentation = () => ({
+    hidden: new Set<string>(),
+    lists: undefined as Snapshot['lists'],
+    error: undefined as string | undefined,
+    running: undefined as Promise<void> | undefined,
+  });
+  let scope = store.accountScope();
+  let presentation = newPresentation();
+  function currentPresentation() {
+    if (scope !== store.accountScope()) {
+      scope = store.accountScope();
+      presentation = newPresentation();
+    }
+    return presentation;
+  }
+  function hideList(id: string) {
+    const ui = currentPresentation();
+    ui.hidden.add(id);
+    ui.error = revokedTaskText;
+    store.notify();
+  }
+  let published: ReturnType<typeof store.snapshot> | undefined;
+  let view: TaskView & { syncing: boolean };
+  function getSnapshot() {
+    const state = store.snapshot();
+    if (state === published) return view;
+    const ui = currentPresentation();
+    const base = state.view ?? emptyView(state.account);
+    const lists =
+      ui.lists?.map((list) => ({
         ...list,
-        openTaskCount: items[list.id]?.filter((task) => !task.isDone).length ?? list.openTaskCount,
-      })),
+        openTaskCount: base.items[list.id]?.filter((task) => !task.isDone).length ?? list.openTaskCount,
+      })) ?? base.lists;
+    view = {
+      ...base,
+      lists: lists?.filter((list) => !ui.hidden.has(list.id)),
+      items: ui.hidden.size
+        ? Object.fromEntries(Object.entries(base.items).filter(([id]) => !ui.hidden.has(id)))
+        : base.items,
+      pending: ui.hidden.size ? base.pending.filter((op) => !ui.hidden.has(op.listId)) : base.pending,
+      error: ui.error ?? state.issue ?? base.error,
+      syncing: !!ui.running,
     };
+    published = state;
+    return view;
+  }
+  let alarmOperations = '';
+  store.subscribe(() => {
+    const next = getSnapshot()
+      .pending.filter(taskOperationBlocksAlarm)
+      .map((op) => op.id)
+      .join(',');
+    if (alarmOperations === next) return;
+    alarmOperations = next;
+    tasksChanged();
+  });
+
+  const assertCurrent = (scope: ReturnType<typeof store.accountScope>) => {
+    if (!scope.current()) throw new DOMException('Session changed', 'AbortError');
+  };
+  async function activeAccount() {
+    const scope = store.accountScope();
+    await store.whenReady();
+    assertCurrent(scope);
+    return scope;
   }
   async function enqueue(listId: string, taskId: string, change: TaskOperation['change']) {
-    const captured = revision;
-    await ready;
-    current(captured);
-    const account = state.account;
-    const result = await updateTaskData(account, (data) => {
-      if (!data.snapshot.lists?.some((list) => list.id === listId) || !data.snapshot.items[listId])
-        throw new Error(taskOfflineText.empty);
-      const operations = classify(data.operations);
-      const task = project({ ...data.snapshot, pending: operations, syncing: false }).items[listId]?.find(
-        (task) => task.id === taskId,
-      );
-      const recurrence = task?.recurrence;
-      if (change.type === 'remove' && recurrence?.state === 'active' && isOffline())
-        throw new Error('Pominięcie wystąpienia zadania cyklicznego wymaga internetu.');
-      if (
-        recurrence &&
-        recurrence.seriesVersion === undefined &&
-        change.type === 'update' &&
-        change.data.isDone !== undefined
-      )
-        throw new Error('Połącz się z internetem, aby pobrać wersję serii zadania.');
-      const occurrence =
-        recurrence?.seriesVersion !== undefined
-          ? {
-              seriesId: recurrence.seriesId,
-              sequence: recurrence.sequence,
-              version: recurrence.version,
-              seriesVersion: recurrence.seriesVersion!,
-            }
-          : undefined;
-      const actualAt = Date.now();
-      if (change.type === 'update' && change.data.isDone !== undefined && occurrence) {
-        change = {
-          ...change,
-          data: {
-            ...change.data,
-            expectedSeriesVersion: occurrence.seriesVersion,
-            expectedSeriesId: occurrence.seriesId,
-            expectedOccurrenceVersion: occurrence.version,
-            ...(change.data.isDone ? { closedAt: actualAt } : {}),
-          },
-        };
-      }
-      const candidate = operationSchema.parse({
-        id: crypto.randomUUID(),
-        submittedAt: Math.max(Date.now(), (operations.at(-1)?.submittedAt ?? 0) + 1),
-        listId,
-        taskId,
-        occurrence,
-        change,
-      });
-      if (
-        classify([...operations, candidate]).at(-1)?.status === 'needs-review' ||
-        (!change.type.startsWith('checklist-') &&
-          operations.some((op) => op.listId === listId && op.taskId === taskId && op.status === 'needs-review'))
-      )
-        throw new Error(taskOfflineText.blocked);
-      if (Object.values(data.discards).some((entry) => entry.listId === listId && entry.requiresRefresh))
-        throw new Error('Po odrzuceniu zmian połącz się z internetem i odśwież listę przed nowym zapisem.');
-      if (change.type.startsWith('checklist-')) {
-        const task = project({ ...data.snapshot, pending: operations, syncing: false }).items[listId]?.find(
-          (task) => task.id === taskId,
-        );
-        if (!task) throw new Error('Zadanie nie istnieje.');
-        if (task.checklist === undefined || task.checklistOrderVersion === undefined)
-          throw new Error(unknownChecklistText);
-        projectChecklist(task, candidate, account.split(':')[1]!);
-      }
-      data.operations = [...operations, candidate];
-    });
-    current(captured);
-    emit({ ...state, ...result.snapshot, pending: result.operations, error: undefined });
-    window.dispatchEvent(new Event('rodzina:tasks-changed'));
-    return project().items[listId]?.find((task) => task.id === taskId);
+    const scope = await activeAccount();
+    const { account } = scope;
+    const result = await updateTaskData(
+      account,
+      (data) => {
+        assertCurrent(scope);
+        if (
+          currentPresentation().hidden.has(listId) ||
+          !data.snapshot.lists?.some((list) => list.id === listId) ||
+          !data.snapshot.items[listId]
+        )
+          throw new Error(taskOfflineText.empty);
+        const operations = classify(data.operations);
+        const task = projectTasks(data.snapshot, operations).items[listId]?.find((task) => task.id === taskId);
+        const recurrence = task?.recurrence;
+        if (change.type === 'remove' && recurrence?.state === 'active' && isOffline())
+          throw new Error('Pominięcie wystąpienia zadania cyklicznego wymaga internetu.');
+        if (
+          recurrence &&
+          recurrence.seriesVersion === undefined &&
+          change.type === 'update' &&
+          change.data.isDone !== undefined
+        )
+          throw new Error('Połącz się z internetem, aby pobrać wersję serii zadania.');
+        const occurrence =
+          recurrence?.seriesVersion !== undefined
+            ? {
+                seriesId: recurrence.seriesId,
+                sequence: recurrence.sequence,
+                version: recurrence.version,
+                seriesVersion: recurrence.seriesVersion!,
+              }
+            : undefined;
+        const actualAt = Date.now();
+        if (change.type === 'update' && change.data.isDone !== undefined && occurrence) {
+          change = {
+            ...change,
+            data: {
+              ...change.data,
+              expectedSeriesVersion: occurrence.seriesVersion,
+              expectedSeriesId: occurrence.seriesId,
+              expectedOccurrenceVersion: occurrence.version,
+              ...(change.data.isDone ? { closedAt: actualAt } : {}),
+            },
+          };
+        }
+        const candidate = operationSchema.parse({
+          id: crypto.randomUUID(),
+          submittedAt: Math.max(Date.now(), (operations.at(-1)?.submittedAt ?? 0) + 1),
+          listId,
+          taskId,
+          occurrence,
+          change,
+        });
+        if (
+          classify([...operations, candidate]).at(-1)?.status === 'needs-review' ||
+          (!change.type.startsWith('checklist-') &&
+            operations.some((op) => op.listId === listId && op.taskId === taskId && op.status === 'needs-review'))
+        )
+          throw new Error(taskOfflineText.blocked);
+        if (Object.values(data.discards).some((entry) => entry.listId === listId && entry.requiresRefresh))
+          throw new Error('Po odrzuceniu zmian połącz się z internetem i odśwież listę przed nowym zapisem.');
+        if (change.type.startsWith('checklist-')) {
+          if (!task) throw new Error('Zadanie nie istnieje.');
+          if (task.checklist === undefined || task.checklistOrderVersion === undefined)
+            throw new Error(unknownChecklistText);
+          projectChecklist(task, candidate, account.split(':')[1]!);
+        }
+        data.operations = [...operations, candidate];
+      },
+      scope.token,
+    );
+    publishChange(scope, result);
+    return getSnapshot().items[listId]?.find((task) => task.id === taskId);
   }
   async function discardReview(operationIds: string[]) {
-    const captured = revision;
-    await ready;
-    current(captured);
-    const result = await updateTaskData(state.account, (data) => {
-      const operations = classify(data.operations);
-      const first = operations.find((op) => op.id === operationIds[0]);
-      const chain =
-        first &&
-        operations.filter(
-          (op) => op.listId === first.listId && op.taskId === first.taskId && op.status === 'needs-review',
-        );
-      if (
-        !chain?.length ||
-        chain.some((op) => op.status !== 'needs-review') ||
-        chain.length !== operationIds.length ||
-        chain.some((op, index) => op.id !== operationIds[index])
-      )
-        throw new Error('Lista zmian uległa zmianie. Otwórz ją ponownie przed odrzuceniem.');
-      data.discards[crypto.randomUUID()] = { operationIds, listId: first!.listId, requiresRefresh: true };
-      data.operations = operations.filter((op) => !operationIds.includes(op.id));
-    });
-    current(captured);
-    emit({ ...state, pending: result.operations, error: undefined });
-    window.dispatchEvent(new Event('rodzina:tasks-changed'));
+    const scope = await activeAccount();
+    const result = await updateTaskData(
+      scope.account,
+      (data) => {
+        assertCurrent(scope);
+        const operations = classify(data.operations);
+        const first = operations.find((op) => op.id === operationIds[0]);
+        const chain =
+          first &&
+          operations.filter(
+            (op) => op.listId === first.listId && op.taskId === first.taskId && op.status === 'needs-review',
+          );
+        if (
+          !chain?.length ||
+          chain.some((op) => op.status !== 'needs-review') ||
+          chain.length !== operationIds.length ||
+          chain.some((op, index) => op.id !== operationIds[index])
+        )
+          throw new Error('Lista zmian uległa zmianie. Otwórz ją ponownie przed odrzuceniem.');
+        data.discards[crypto.randomUUID()] = { operationIds, listId: first!.listId, requiresRefresh: true };
+        data.operations = operations.filter((op) => !operationIds.includes(op.id));
+      },
+      scope.token,
+    );
+    publishChange(scope, result);
+  }
+
+  function publishChange(scope: ReturnType<typeof store.accountScope>, data: TaskData) {
+    assertCurrent(scope);
+    currentPresentation().error = undefined;
+    store.publishCommitted(
+      scope,
+      { ...data, operations: [] },
+      data.operations.map((operation) => ({ operation, error: undefined })),
+    );
+    tasksChanged();
+  }
+
+  function keepVisible(data: TaskData, allowed: Set<string>) {
+    if (data.operations.some((op) => !allowed.has(op.listId))) data.rejection = revokedTaskText;
+    data.operations = data.operations.filter((op) => allowed.has(op.listId));
+    data.discards = Object.fromEntries(Object.entries(data.discards).filter(([, entry]) => allowed.has(entry.listId)));
   }
   async function synchronize() {
-    await ready;
-    if (!state.account) return;
-    if (running) return running;
-    const captured = revision;
-    const account = state.account;
-    let alarmsChanged = false;
+    const scope = store.accountScope();
+    await store.whenReady();
+    if (!scope.current()) return;
+    const { account, token } = scope;
+    const ui = currentPresentation();
+    if (ui.running) return ui.running;
+    const read = () => readTaskData(account, token);
+    const write = (update: (data: TaskData) => void) =>
+      updateTaskData(
+        account,
+        (data) => {
+          assertCurrent(scope);
+          update(data);
+        },
+        token,
+      );
+    const load = async () => {
+      const snapshot = taskSnapshotResponseSchema.parse(await transport<TaskSnapshotResponse>('/api/tasks/snapshot'));
+      assertCurrent(scope);
+      const visible = new Set(snapshot.lists.map((list) => list.id));
+      // Hide revoked content even if the following durable write fails.
+      const previous = store.snapshot().view;
+      const known = [
+        ...Object.keys(previous?.items ?? {}),
+        ...(previous?.lists?.map((list) => list.id) ?? []),
+        ...(previous?.pending.map((operation) => operation.listId) ?? []),
+      ];
+      for (const id of known) if (!visible.has(id)) ui.hidden.add(id);
+      for (const id of visible) ui.hidden.delete(id);
+      ui.lists = snapshot.lists;
+      store.notify();
+      return { snapshot, visible };
+    };
+    async function loseSession() {
+      assertCurrent(scope);
+      store.clear();
+      const cleared = store.accountScope();
+      await clearTaskData(account, token);
+      if (cleared === store.accountScope()) window.dispatchEvent(new Event('rodzina:session-lost'));
+    }
+
     let sessionConfirmed = false;
-    const work = async () => {
-      emit({ ...state, syncing: true });
+    ui.running = Promise.resolve().then(async () => {
       try {
         const session = await transport<{ user: { id: string }; family: { id: string } }>('/api/auth/me');
-        current(captured);
+        assertCurrent(scope);
         if (`${session.family.id}:${session.user.id}` !== account) {
-          await clear();
-          window.dispatchEvent(new Event('rodzina:session-lost'));
+          await loseSession();
           return;
         }
         sessionConfirmed = true;
-        // Access is refreshed before replay, including retries with saved responses.
-        const initialDiscards = await discards();
-        const initialItems = (await readTaskData(account))!.snapshot.items;
-        current(captured);
-        let snapshot = taskSnapshotResponseSchema.parse(await transport<TaskSnapshotResponse>('/api/tasks/snapshot'));
-        const { lists } = snapshot;
-        current(captured);
-        const allowed = new Set(lists.map((list) => list.id));
-        for (const list of lists) hiddenLists.delete(list.id);
-        for (const id of Object.keys(state.items)) if (!allowed.has(id)) hiddenLists.add(id);
-        alarmsChanged = state.pending.length > 0;
-        const items = Object.fromEntries(Object.entries(state.items).filter(([id]) => allowed.has(id)));
-        // Revoked content must leave the UI even if local storage has failed.
-        emit({ ...state, lists, items, pending: state.pending.filter((op) => allowed.has(op.listId)) });
-        const saved = await updateTaskData(account, (data) => {
-          current(captured);
-          if (data.operations.some((op) => !allowed.has(op.listId))) data.rejection = revokedTaskText;
-          data.snapshot.lists = lists;
+        const initial = await read();
+        assertCurrent(scope);
+        let { snapshot, visible } = await load();
+        const saved = await write((data) => {
+          data.snapshot.lists = snapshot.lists;
           data.snapshot.items = Object.fromEntries(
-            Object.entries(data.snapshot.items).filter(([id]) => allowed.has(id)),
+            Object.entries(data.snapshot.items).filter(([id]) => visible.has(id)),
           );
-          data.operations = data.operations.filter((op) => allowed.has(op.listId));
-          data.discards = Object.fromEntries(
-            Object.entries(data.discards).filter(([, entry]) => allowed.has(entry.listId)),
-          );
+          keepVisible(data, visible);
         });
-        current(captured);
-        emit({
-          ...state,
-          ...saved.snapshot,
-          pending: saved.operations,
-          error: saved.rejection,
-        });
-        sender ??= joinSync(
-          account,
-          taskAdapter(account, transport, (listId) => {
-            if (captured !== revision || !isAccountCurrent(sessionToken)) return;
-            hiddenLists.add(listId);
-            const items = { ...state.items };
-            delete items[listId];
-            emit({
-              ...state,
-              items,
-              lists: state.lists?.filter((list) => list.id !== listId),
-              pending: state.pending.filter((op) => op.listId !== listId),
-              error: revokedTaskText,
-            });
-          }),
-          async () => {
-            if (captured !== revision || !isAccountCurrent(sessionToken)) return;
-            // Publish one committed view; a second transaction could let a newer enqueue
-            // reach the UI before this callback restores an older journal.
-            const { data, operations } = await transact('readonly', async (tx) => ({
-              data: await readTaskTransaction(tx, account),
-              operations: await readOperations(tx, account),
-            }));
-            current(captured);
-            emit({
-              ...state,
-              ...data.snapshot,
-              pending: data.operations,
-              error: data.rejection ?? operations.find((op) => op.module === 'tasks' && op.lastError)?.lastError,
-            });
-            window.dispatchEvent(new Event('rodzina:tasks-changed'));
-          },
-        );
-        const replaying = state.pending.length > 0;
-        await sender.synchronize();
-        current(captured);
-        const awaitingRefresh = replaying ? await discards() : initialDiscards;
-        const before = JSON.stringify(
+        assertCurrent(scope);
+        ui.error = undefined;
+        const replaying = saved.operations.length > 0;
+        await store.synchronize();
+        assertCurrent(scope);
+
+        const before = replaying ? await read() : initial;
+        assertCurrent(scope);
+        const beforeItems = JSON.stringify(
           replaying
-            ? (await readTaskData(account))!.snapshot.items
-            : Object.fromEntries(Object.entries(initialItems).filter(([id]) => allowed.has(id))),
+            ? before.snapshot.items
+            : Object.fromEntries(Object.entries(before.snapshot.items).filter(([id]) => visible.has(id))),
         );
-        current(captured);
-        if (replaying) {
-          snapshot = taskSnapshotResponseSchema.parse(await transport<TaskSnapshotResponse>('/api/tasks/snapshot'));
-          current(captured);
-        }
-        const visible = new Set(snapshot.lists.map((list) => list.id));
-        for (const list of snapshot.lists) hiddenLists.delete(list.id);
-        for (const id of Object.keys(state.items)) if (!visible.has(id)) hiddenLists.add(id);
-        // Revocation takes effect even if the following durable write fails.
-        emit({
-          ...state,
-          lists: snapshot.lists,
-          items: Object.fromEntries(Object.entries(state.items).filter(([id]) => visible.has(id))),
-        });
-        // Replace the complete cache atomically, never a partial list response.
-        const savedSnapshot = await updateTaskData(account, (data) => {
-          current(captured);
-          if (JSON.stringify(data.snapshot.items) !== before) return;
-          // An uncertain closure is reconciled by the sender with its ACK.
-          // A background refresh must not publish its successor ahead of that.
+        if (replaying) ({ snapshot, visible } = await load());
+
+        await write((data) => {
+          if (JSON.stringify(data.snapshot.items) !== beforeItems) return;
+          // A background refresh must not publish a successor before the closure's ACK.
           if (
             data.operations.some(
               (op) =>
@@ -428,85 +427,62 @@ export function createTaskOfflineStore(transport: Transport = apiFetch) {
           )
             return;
           data.snapshot = { account, lists: snapshot.lists, items: snapshot.items, syncedAt: Date.now() };
-          const allowed = new Set(snapshot.lists.map((list) => list.id));
-          if (data.operations.some((op) => !allowed.has(op.listId))) data.rejection = revokedTaskText;
-          data.operations = data.operations.filter((op) => allowed.has(op.listId));
-          data.discards = Object.fromEntries(
-            Object.entries(data.discards).filter(([, entry]) => allowed.has(entry.listId)),
-          );
-          for (const { key } of awaitingRefresh) if (data.discards[key]) data.discards[key]!.requiresRefresh = false;
+          keepVisible(data, visible);
+          for (const key of Object.keys(before.discards))
+            if (data.discards[key]) data.discards[key]!.requiresRefresh = false;
         });
-        current(captured);
-        emit({
-          ...state,
-          ...savedSnapshot.snapshot,
-          pending: savedSnapshot.operations,
-          error: savedSnapshot.rejection ?? state.error,
-        });
+        assertCurrent(scope);
+        ui.lists = undefined;
+        await store.reload();
       } catch (error) {
-        if (captured === revision && isAccountCurrent(sessionToken)) {
-          if (error instanceof ApiRequestError && [401, 403].includes(error.status)) {
-            await clear();
-            window.dispatchEvent(new Event('rodzina:session-lost'));
-          } else if (!sessionConfirmed && error instanceof ApiRequestError && error.status === 404) {
-            const next = { account, lists: [], items: {} };
-            emit({ ...state, ...next, error: errorText(error) });
-            try {
-              await persist(next);
-            } catch {
-              emit({ ...state, error: storageError().message });
-            }
-          } else emit({ ...state, error: errorText(error) });
-        }
+        if (!scope.current()) return;
+        if (error instanceof ApiRequestError && [401, 403].includes(error.status)) await loseSession();
+        else if (!sessionConfirmed && error instanceof ApiRequestError && error.status === 404) {
+          const next = { account, lists: [], items: {} };
+          ui.lists = [];
+          for (const id of Object.keys(getSnapshot().items)) ui.hidden.add(id);
+          ui.error = errorText(error);
+          store.notify();
+          try {
+            await write((data) => {
+              data.snapshot = next;
+            });
+            await store.reload();
+          } catch {
+            ui.error =
+              'Nie można zapisać zadań na urządzeniu. Zwolnij miejsce lub włącz pamięć przeglądarki. Zmiana nie została przyjęta.';
+          }
+        } else ui.error = errorText(error);
       } finally {
-        if (captured === revision && isAccountCurrent(sessionToken)) {
-          running = undefined;
-          emit({ ...state, syncing: false });
-          if (alarmsChanged) window.dispatchEvent(new Event('rodzina:tasks-changed'));
+        if (scope.current()) {
+          ui.running = undefined;
+          store.notify();
         }
       }
-    };
-    running = work();
-    return running;
+    });
+    store.notify();
+    return ui.running;
   }
+
   return {
-    activate,
-    clear,
+    activate: store.activate,
+    clear: store.clear,
     enqueue,
     discardReview,
     blockedTasks: (account: string) =>
-      state.account === account
-        ? classify(state.pending)
-            .filter(taskOperationBlocksAlarm)
+      getSnapshot().account === account
+        ? getSnapshot()
+            .pending.filter(taskOperationBlocksAlarm)
             .map((op) => op.taskId)
         : [],
     synchronize,
-    project,
-    getSnapshot: () => state,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    reload: async () => {
-      const captured = revision;
-      await ready;
-      if (!state.account) return;
-      try {
-        const data = await updateTaskData(state.account, (value) => {
-          value.operations = classify(value.operations);
-        });
-        current(captured);
-        emit({ ...state, ...data.snapshot, pending: data.operations });
-        window.dispatchEvent(new Event('rodzina:tasks-changed'));
-      } catch (error) {
-        if (captured === revision && isAccountCurrent(sessionToken)) emit({ ...state, error: errorText(error) });
-      }
-    },
+    getSnapshot,
+    subscribe: store.subscribe,
+    reload: store.reload,
   };
 }
 export const taskStore = createTaskOfflineStore();
+export const registerTaskStore = () => taskModule.registerStore(taskStore);
 
 // Only content changes are accepted offline; access and reminder configuration
 // always go through an online request.
