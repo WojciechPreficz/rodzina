@@ -96,11 +96,12 @@ Nie deklarujemy gwarancji uruchamiania WWW offline.
 OCR.5: testy `ocrNative` sprawdzają kontrakt, limit podglądu, anulowanie
 i timeout; `PhotoEventPreview` także wybór/anulowanie/błąd Androida oraz
 spóźnioną odpowiedź po zmianie konta. `e2e/calendar-ocr.spec.ts` sprawdza
-przy 390/1280 px rzeczywisty OCR WWW oraz symulowany most ML Kit: odczyt
+przy 390/1280 px rzeczywisty OCR WWW oraz symulowany most Androida: odczyt
 offline, anulowanie, wspólne poprawianie/zatwierdzanie, zapis online i kalendarz.
 Symulacja mostu nie potwierdza działania natywnego OCR. JVM `OcrImagePolicyTest`
 sprawdza limity dekodowania, formaty, proporcje, rozmiar OCR/podglądu
-i kontrastu oraz rozdzielanie odległych słów. `ocrNativeMerge` sprawdza wybór
+i kontrastu, skalowanie obrazu, rozdzielanie odległych słów oraz próg ponownego
+odczytu. `ocrNativeMerge` sprawdza wybór
 czytelniejszego tytułu, odzyskanie pominiętych linii i zachowanie konfliktu dat.
 Regresja parsera obejmuje syntetyczny układ siedmiu listopadowych kartek:
 osobne „Sesja zdjęciowa świąteczna” (5.11), „Szkoła do hymnu” (9.11),
@@ -118,14 +119,15 @@ odpowiedzi, restart APK i ręczne retry bez duplikatów oraz czyszczenie konta.
 Właściciel zgłosił błędy odczytu listopadowego plakatu: przypisanie 9.11
 pierwszej kartce zamiast 5.11, brak „Szkoły do hymnu” i przekręcone litery.
 Po poprawce wymagany ponowny fizyczny odczyt tego zdjęcia, także offline,
-porównanie wszystkich siedmiu terminów i tytułów oraz anulowanie obu przebiegów.
+porównanie wszystkich siedmiu terminów i tytułów oraz anulowanie odczytu.
 Regresje geometrii są syntetyczne; rzeczywiste zdjęcie
 `test-fixtures/ocr/november-2026.jpg` sprawdza test headless „seven November”
 w `e2e/calendar-ocr.spec.ts` przy 390/1280 px: siedem pełnych tytułów i dat,
 w tym sesję 5.11 i „Szkołę do hymnu” 9.11, oraz zatwierdzenie i zapis.
-Agent nie potwierdził wyniku ML Kit na telefonie. Po ponownym odczycie
-pojedynczych wierszy wymagany jest odbiór nowego APK: pierwsza kartka ma mieć
-datę 5.11.2026, a wszystkie siedem tytułów ma odpowiadać zdjęciu, także offline.
+Po podmianie silnika wymagany jest odbiór APK z Tesseract4Android. Pierwsza
+kartka ma mieć datę 5.11.2026, a wszystkie siedem tytułów ma odpowiadać zdjęciu,
+także offline. Sprawdź również zdjęcia, dla których użytkownik zgłosił gorszy
+odczyt w APK niż w WWW. Porównaj tytuły, daty i czas oczekiwania.
 Sprawdź anulowanie podczas odczytu fragmentów i ponowny wybór zdjęcia.
 Pozostałe próby telefonu nadal wymagają potwierdzenia właściciela.
 

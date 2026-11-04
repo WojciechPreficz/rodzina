@@ -6,12 +6,11 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.util.AtomicFile;
 import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.PickVisualMediaRequest;
@@ -24,14 +23,16 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import com.google.mlkit.vision.common.InputImage;
-import com.google.mlkit.vision.text.Text;
-import com.google.mlkit.vision.text.TextRecognition;
-import com.google.mlkit.vision.text.TextRecognizer;
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import com.googlecode.tesseract.android.ResultIterator;
+import com.googlecode.tesseract.android.TessBaseAPI;
+import static com.googlecode.tesseract.android.TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE;
+import static com.googlecode.tesseract.android.TessBaseAPI.PageIteratorLevel.RIL_WORD;
+import static com.googlecode.tesseract.android.TessBaseAPI.PageSegMode.PSM_SINGLE_LINE;
+import static com.googlecode.tesseract.android.TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
@@ -60,8 +61,27 @@ public class RodzinaOcrPlugin extends Plugin {
         final String id;
         final PluginCall call;
         volatile boolean cancelled;
+        private TessBaseAPI recognizing;
+
         Run(String id, PluginCall call) { this.id = id; this.call = call; }
         void check() { if (cancelled) throw new CancellationException(); }
+
+        synchronized void startRecognition(TessBaseAPI engine) {
+            check();
+            recognizing = engine;
+        }
+
+        synchronized void endRecognition() { recognizing = null; }
+
+        synchronized void stopIfCancelled() {
+            if (cancelled && recognizing != null) recognizing.stop();
+        }
+
+        void cancel() {
+            cancelled = true;
+            stopIfCancelled();
+            call.reject("Odczyt anulowany.");
+        }
     }
 
     @PluginMethod
@@ -102,9 +122,8 @@ public class RodzinaOcrPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             Run run = active;
             if (run != null && run.id.equals(call.getString("requestId"))) {
-                run.cancelled = true;
                 active = null;
-                run.call.reject("Odczyt anulowany.");
+                run.cancel();
             }
             call.resolve();
         });
@@ -122,15 +141,14 @@ public class RodzinaOcrPlugin extends Plugin {
     private void read(Run run, Uri uri) {
         File source = null;
         Bitmap bitmap = null;
-        TextRecognizer recognizer = null;
-        boolean handedOff = false;
+        TessBaseAPI engine = null;
         try {
             run.check();
             if (!"content".equals(uri.getScheme())) throw new IllegalArgumentException("Nie można odczytać zdjęcia.");
             String mime = getContext().getContentResolver().getType(uri);
             if (!OcrImagePolicy.supported(mime)) throw new IllegalArgumentException("Wybierz zdjęcie JPEG, PNG lub WebP.");
             File directory = new File(getContext().getCacheDir(), "photo-ocr");
-            if (!directory.isDirectory() && !directory.mkdir()) throw new java.io.IOException();
+            if (!directory.isDirectory() && !directory.mkdir()) throw new IOException();
             source = File.createTempFile("source-", ".image", directory);
             try (InputStream input = getContext().getContentResolver().openInputStream(uri);
                  FileOutputStream output = new FileOutputStream(source)) {
@@ -161,172 +179,162 @@ public class RodzinaOcrPlugin extends Plugin {
             // ExifInterface defines rotation after horizontal mirroring (not before).
             if (exif.isFlipped()) matrix.postScale(-1, 1);
             matrix.postRotate(exif.getRotationDegrees());
-            int[] size = OcrImagePolicy.size(bitmap.getWidth(), bitmap.getHeight(), OcrImagePolicy.MAX_SIDE);
-            matrix.postScale(size[0] / (float) bitmap.getWidth(), size[1] / (float) bitmap.getHeight());
+            int[] size = OcrImagePolicy.recognitionSize(bitmap.getWidth(), bitmap.getHeight());
+            matrix.preScale(size[0] / (float) bitmap.getWidth(), size[1] / (float) bitmap.getHeight());
             Bitmap oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
             if (oriented != bitmap) bitmap.recycle();
             bitmap = oriented;
+            if (source.delete()) source = null;
             run.check();
             String preview = preview(bitmap);
-            recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            recognize(run, bitmap, recognizer, preview);
-            // Each asynchronous pass retains its input until the completion callback.
-            bitmap = null;
-            recognizer = null;
-            handedOff = true;
+            File data = prepareModel(run);
+            engine = new TessBaseAPI(progress -> run.stopIfCancelled());
+            if (!engine.init(data.getPath(), "pol", TessBaseAPI.OEM_LSTM_ONLY)) {
+                throw new IllegalStateException("Could not initialize Polish OCR data");
+            }
+            engine.setVariable("user_defined_dpi", "300");
+            finish(run, recognize(run, bitmap, engine).put("preview", preview), null);
         } catch (CancellationException ignored) {
             // No image or raw OCR is logged.
         } catch (OutOfMemoryError error) {
             finish(run, null, "Za mało pamięci. Wybierz mniejsze zdjęcie.");
-        } catch (Exception error) {
-            finish(run, null, error instanceof IllegalArgumentException ? error.getMessage() : "Nie można odczytać zdjęcia. Spróbuj ponownie.");
+        } catch (Exception | LinkageError error) {
+            String message = error instanceof IllegalArgumentException ? error.getMessage() : null;
+            finish(run, null, message != null ? message : "Nie udało się odczytać tekstu ze zdjęcia. Spróbuj ponownie.");
         } finally {
             if (bitmap != null) bitmap.recycle();
-            if (recognizer != null) recognizer.close();
+            if (engine != null) engine.recycle();
             if (source != null && !source.delete()) source.deleteOnExit();
-            if (!handedOff) processing = null;
+            processing = null;
         }
     }
 
-    private void recognize(Run run, Bitmap original, TextRecognizer recognizer, String preview) {
-        recognizer.process(InputImage.fromBitmap(original, 0))
-                .addOnCompleteListener(worker, task -> {
-                    Bitmap enhanced = null;
-                    JSObject first = null;
-                    boolean handedOff = false;
-                    try {
-                        run.check();
-                        if (!task.isSuccessful()) throw new IllegalStateException();
-                        int width = original.getWidth();
-                        int height = original.getHeight();
-                        first = document(task.getResult(), width, height);
-                        enhanced = contrast(original);
-                        run.check();
-                        Bitmap owned = enhanced;
-                        JSObject primary = first;
-                        recognizer.process(InputImage.fromBitmap(enhanced, 0)).addOnCompleteListener(worker, second -> {
-                            boolean refining = false;
-                            try {
-                                run.check();
-                                JSObject result = new JSObject().put("document", primary).put("preview", preview);
-                                if (second.isSuccessful()) result.put("alternateDocument", document(second.getResult(), owned.getWidth(), owned.getHeight()));
-                                List<Rect> fragments = new ArrayList<>();
-                                for (Text.TextBlock block : task.getResult().getTextBlocks()) for (Text.Line line : block.getLines()) {
-                                    if (fragments.size() >= 32) break;
-                                    if (line.getBoundingBox() != null && OcrImagePolicy.refineLine(line.getText(), line.getConfidence()))
-                                        fragments.add(new Rect(line.getBoundingBox()));
-                                }
-                                refine(run, original, recognizer, result, fragments, 0, new JSArray());
-                                refining = true;
-                            } catch (CancellationException ignored) {
-                                // Cancellation must not publish either pass.
-                            } catch (Exception | OutOfMemoryError error) {
-                                finish(run, new JSObject().put("document", primary).put("preview", preview), null);
-                            } finally {
-                                owned.recycle();
-                                if (!refining) {
-                                    original.recycle();
-                                    recognizer.close();
-                                    processing = null;
-                                }
-                            }
-                        });
-                        handedOff = true;
-                    } catch (CancellationException ignored) {
-                        // Cancellation already settled the call; never return a stale result.
-                    } catch (Exception | OutOfMemoryError error) {
-                        // The optional enhancement must not discard a completed original read.
-                        if (first != null) finish(run, new JSObject().put("document", first).put("preview", preview), null);
-                        else finish(run, null, "Nie udało się odczytać tekstu ze zdjęcia.");
-                    } finally {
-                        if (!handedOff) {
-                            original.recycle();
-                            if (enhanced != null) enhanced.recycle();
-                            recognizer.close();
-                            processing = null;
-                        }
-                    }
-                });
-    }
+    private File prepareModel(Run run) throws IOException {
+        File data = new File(getContext().getCodeCacheDir(), "photo-ocr");
+        File directory = new File(data, "tessdata");
+        if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException();
+        File model = new File(directory, "pol.traineddata");
+        if (model.length() > 0) return data;
 
-    private void refine(Run run, Bitmap original, TextRecognizer recognizer, JSObject result,
-                        List<Rect> fragments, int index, JSArray lines) {
-        Bitmap crop = null;
-        boolean handedOff = false;
-        try {
-            run.check();
-            if (index >= fragments.size()) {
-                result.put("refinedDocument", new JSObject()
-                    .put("image", new JSObject().put("width", original.getWidth()).put("height", original.getHeight()))
-                    .put("lines", lines));
-                finish(run, result, null);
-                return;
+        AtomicFile asset = new AtomicFile(model);
+        FileOutputStream output = asset.startWrite();
+        boolean complete = false;
+        try (InputStream input = getContext().getAssets().open("tessdata/pol.traineddata")) {
+            byte[] buffer = new byte[16 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                run.check();
+                output.write(buffer, 0, count);
             }
-            Rect box = fragments.get(index);
-            box.inset(-8, -8);
-            box.intersect(0, 0, original.getWidth(), original.getHeight());
-            int[] size = OcrImagePolicy.contrastSize(box.width(), box.height());
-            crop = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
-            new Canvas(crop).drawBitmap(original, box, new Rect(0, 0, size[0], size[1]), new Paint(Paint.FILTER_BITMAP_FLAG));
-            Bitmap owned = crop;
-            recognizer.process(InputImage.fromBitmap(crop, 0)).addOnCompleteListener(worker, task -> {
-                try {
-                    run.check();
-                    if (task.isSuccessful()) {
-                        org.json.JSONArray recovered = document(task.getResult(), owned.getWidth(), owned.getHeight()).getJSONArray("lines");
-                        for (int i = 0; i < recovered.length(); i++) {
-                            org.json.JSONObject item = recovered.getJSONObject(i);
-                            org.json.JSONObject local = item.getJSONObject("box");
-                            item.put("id", "refined-" + lines.length());
-                            item.put("box", new JSObject()
-                                .put("x", (box.left + local.getDouble("x") * box.width()) / original.getWidth())
-                                .put("y", (box.top + local.getDouble("y") * box.height()) / original.getHeight())
-                                .put("width", local.getDouble("width") * box.width() / original.getWidth())
-                                .put("height", local.getDouble("height") * box.height() / original.getHeight()));
-                            lines.put(item);
-                        }
-                    }
-                } catch (CancellationException ignored) {
-                    // The next iteration releases the retained original without publishing it.
-                } catch (Exception ignored) {
-                    // An optional fragment must not discard completed whole-image reads.
-                } finally {
-                    owned.recycle();
-                    refine(run, original, recognizer, result, fragments, index + 1, lines);
-                }
-            });
-            handedOff = true;
-        } catch (CancellationException ignored) {
-            // Cancellation invalidates every pending fragment.
-        } catch (Exception | OutOfMemoryError ignored) {
-            finish(run, result, null);
+            complete = true;
         } finally {
-            if (!handedOff) {
-                if (crop != null) crop.recycle();
-                original.recycle();
-                recognizer.close();
-                processing = null;
+            if (complete) asset.finishWrite(output);
+            else asset.failWrite(output);
+        }
+        return data;
+    }
+
+    private JSObject recognize(Run run, Bitmap original, TessBaseAPI engine) {
+        int width = original.getWidth();
+        int height = original.getHeight();
+        List<Line> primary = recognizeLines(run, original, engine, PSM_SPARSE_TEXT);
+        JSObject result = new JSObject().put("document", document(primary, width, height));
+        for (boolean binary : new boolean[] {false, true}) {
+            Bitmap variant = null;
+            try {
+                variant = imageVariant(run, original, binary);
+                List<Line> lines = recognizeLines(run, variant, engine, PSM_SPARSE_TEXT);
+                result.put(binary ? "binaryDocument" : "alternateDocument",
+                    document(lines, variant.getWidth(), variant.getHeight()));
+            } catch (RuntimeException | OutOfMemoryError ignored) {
+                // Keep completed reads if preparing or reading a variant fails.
+                run.check();
+            } finally {
+                if (variant != null) variant.recycle();
             }
+        }
+
+        List<Line> refined = new ArrayList<>();
+        int attempted = 0;
+        for (Line line : primary) {
+            run.check();
+            if (!OcrImagePolicy.refineLine(line.text(), line.confidence())) continue;
+            if (attempted++ == 32) break;
+            Bitmap crop = null;
+            try {
+                Rect box = new Rect(line.box());
+                box.inset(-8, -8);
+                if (!box.intersect(0, 0, width, height)) continue;
+                int[] size = OcrImagePolicy.contrastSize(box.width(), box.height());
+                crop = scaledRegion(original, box, size[0], size[1]);
+                List<Line> recovered = recognizeLines(run, crop, engine, PSM_SINGLE_LINE);
+                if (recovered.size() == 1) {
+                    Line reading = recovered.get(0);
+                    refined.add(new Line(reading.text(), line.box(), reading.confidence()));
+                }
+            } catch (RuntimeException | OutOfMemoryError ignored) {
+                run.check();
+            } finally {
+                if (crop != null) crop.recycle();
+            }
+        }
+        return result.put("refinedDocument", document(refined, width, height));
+    }
+
+    private static List<Line> recognizeLines(Run run, Bitmap image, TessBaseAPI engine,
+                                             @TessBaseAPI.PageSegMode.Mode int mode) {
+        run.check();
+        try {
+            engine.setPageSegMode(mode);
+            engine.setImage(image);
+            run.startRecognition(engine);
+            try {
+                // The wrapper only provides native cancellation through this entry point.
+                engine.getHOCRText(0);
+            } finally {
+                run.endRecognition();
+            }
+            run.check();
+            return readLines(run, engine);
+        } finally {
+            engine.clear();
         }
     }
 
-    private static Bitmap contrast(Bitmap original) {
-        int[] size = OcrImagePolicy.contrastSize(original.getWidth(), original.getHeight());
-        Bitmap result = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+    private static Bitmap scaledRegion(Bitmap original, Rect region, int width, int height) {
+        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         try {
             Canvas canvas = new Canvas(result);
             canvas.drawColor(Color.WHITE);
-            ColorMatrix gray = new ColorMatrix();
-            gray.setSaturation(0);
-            ColorMatrix gain = new ColorMatrix(new float[] {
-                1.6f, 0, 0, 0, -60, 0, 1.6f, 0, 0, -60, 0, 0, 1.6f, 0, -60, 0, 0, 0, 1, 0
-            });
-            gain.postConcat(gray);
-            Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
-            paint.setColorFilter(new ColorMatrixColorFilter(gain));
-            canvas.drawBitmap(original, null, new Rect(0, 0, size[0], size[1]), paint);
+            canvas.drawBitmap(original, region, new Rect(0, 0, width, height), new Paint(Paint.FILTER_BITMAP_FLAG));
             return result;
-        } catch (Exception | OutOfMemoryError error) {
+        } catch (RuntimeException | OutOfMemoryError error) {
+            result.recycle();
+            throw error;
+        }
+    }
+
+    private static Bitmap imageVariant(Run run, Bitmap original, boolean binary) {
+        run.check();
+        double scale = binary ? 0.75 : 1;
+        int width = Math.max(1, (int) Math.round(original.getWidth() * scale));
+        int height = Math.max(1, (int) Math.round(original.getHeight() * scale));
+        Bitmap result = scaledRegion(original, null, width, height);
+        try {
+            int[] pixels = new int[width];
+            for (int y = 0; y < height; y++) {
+                if (y % 128 == 0) run.check();
+                result.getPixels(pixels, 0, width, 0, y, width, 1);
+                for (int x = 0; x < width; x++) {
+                    int pixel = pixels[x];
+                    int value = (299 * Color.red(pixel) + 587 * Color.green(pixel) + 114 * Color.blue(pixel) + 500) / 1000;
+                    if (binary) value = value < 120 ? 0 : 255;
+                    pixels[x] = Color.rgb(value, value, value);
+                }
+                result.setPixels(pixels, 0, width, 0, y, width, 1);
+            }
+            return result;
+        } catch (RuntimeException | OutOfMemoryError error) {
             result.recycle();
             throw error;
         }
@@ -346,44 +354,87 @@ public class RodzinaOcrPlugin extends Plugin {
         }
     }
 
-    private static JSObject document(Text text, int width, int height) {
-        JSArray lines = new JSArray();
-        int id = 0;
-        for (Text.TextBlock block : text.getTextBlocks()) for (Text.Line line : block.getLines()) {
-            List<List<Text.Element>> fragments = new ArrayList<>();
-            List<Text.Element> elements = new ArrayList<>(line.getElements());
-            elements.removeIf(element -> element.getBoundingBox() == null);
-            elements.sort(Comparator.comparingInt(element -> element.getBoundingBox().left));
-            Text.Element previous = null;
-            for (Text.Element element : elements) {
-                Rect box = element.getBoundingBox();
-                Rect old = previous == null ? null : previous.getBoundingBox();
-                if (old == null || OcrImagePolicy.separateWords(old.right, old.centerY(), box.left, box.centerY(), Math.min(old.height(), box.height()))) fragments.add(new ArrayList<>());
-                fragments.get(fragments.size() - 1).add(element);
-                previous = element;
-            }
-            if (fragments.isEmpty()) fragments.add(new ArrayList<>());
-            for (List<Text.Element> fragment : fragments) {
-                Rect box = fragments.size() == 1 ? line.getBoundingBox() : null;
-                String value = line.getText();
-                if (fragments.size() > 1) {
-                    StringBuilder joined = new StringBuilder();
-                    for (Text.Element element : fragment) {
-                        if (box == null) box = new Rect(element.getBoundingBox()); else box.union(element.getBoundingBox());
-                        if (joined.length() > 0) joined.append(' ');
-                        joined.append(element.getText());
-                    }
-                    value = joined.toString();
+    private record Line(String text, Rect box, float confidence) {}
+    private record Word(String text, Rect box, float confidence) {}
+
+    private static List<Line> readLines(Run run, TessBaseAPI engine) {
+        List<Line> lines = new ArrayList<>();
+        ResultIterator iterator = engine.getResultIterator();
+        if (iterator == null) return lines;
+        try {
+            List<Word> words = new ArrayList<>();
+            String text = null;
+            iterator.begin();
+            do {
+                run.check();
+                if (iterator.isAtBeginningOf(RIL_TEXTLINE)) {
+                    appendLine(lines, text, words);
+                    words.clear();
+                    text = iterator.getUTF8Text(RIL_TEXTLINE);
                 }
-                if (box == null || value.trim().isEmpty()) continue;
-                double[] normalized = OcrImagePolicy.box(box.left, box.top, box.right, box.bottom, width, height);
-                if (normalized == null) continue;
-                if (++id > 10000 || value.length() > 10000) throw new IllegalArgumentException();
-                JSObject item = new JSObject().put("id", "line-" + id).put("text", value.trim())
-                    .put("box", new JSObject().put("x", normalized[0]).put("y", normalized[1]).put("width", normalized[2]).put("height", normalized[3]));
-                if (Float.isFinite(line.getConfidence()) && line.getConfidence() > 0) item.put("confidence", Math.min(100, line.getConfidence() * 100));
-                lines.put(item);
+                String word = iterator.getUTF8Text(RIL_WORD);
+                if (word == null || word.trim().isEmpty()) continue;
+                int[] bounds = iterator.getBoundingBox(RIL_WORD);
+                if (bounds == null || bounds[0] >= bounds[2] || bounds[1] >= bounds[3]) continue;
+                words.add(new Word(word.trim(), new Rect(bounds[0], bounds[1], bounds[2], bounds[3]),
+                    iterator.confidence(RIL_WORD)));
+            } while (iterator.next(RIL_WORD));
+            appendLine(lines, text, words);
+            return lines;
+        } finally {
+            iterator.delete();
+        }
+    }
+
+    private static void appendLine(List<Line> lines, String text, List<Word> words) {
+        if (words.isEmpty()) return;
+        int[] heights = words.stream()
+            .filter(word -> word.text().codePoints().anyMatch(Character::isLetterOrDigit))
+            .mapToInt(word -> word.box().height()).sorted().toArray();
+        int height = heights.length == 0 ? words.get(0).box().height() : heights[heights.length / 2];
+        words.sort(Comparator.comparingInt(word -> word.box().left));
+        int start = 0;
+        for (int index = 1; index < words.size(); index++) {
+            Rect previous = words.get(index - 1).box();
+            Rect next = words.get(index).box();
+            if (OcrImagePolicy.separateWords(previous.right, previous.centerY(), next.left, next.centerY(), height)) {
+                lines.add(fragment(words.subList(start, index), null));
+                start = index;
             }
+        }
+        lines.add(fragment(words.subList(start, words.size()), start == 0 ? text : null));
+    }
+
+    private static Line fragment(List<Word> words, String text) {
+        Rect box = new Rect();
+        StringBuilder joined = new StringBuilder();
+        float confidence = 0;
+        for (Word word : words) {
+            box.union(word.box());
+            if (joined.length() > 0) joined.append(' ');
+            joined.append(word.text());
+            confidence += word.confidence();
+        }
+        String value = text != null && !text.trim().isEmpty() ? text.trim() : joined.toString();
+        return new Line(value, box, confidence / words.size());
+    }
+
+    private static JSObject document(List<Line> recognized, int width, int height) {
+        JSArray lines = new JSArray();
+        for (Line line : recognized) {
+            Rect box = line.box();
+            double[] bounds = OcrImagePolicy.box(box.left, box.top, box.right, box.bottom, width, height);
+            if (bounds == null) continue;
+            if (lines.length() == 10000 || line.text().length() > 10000) {
+                throw new IllegalStateException("OCR output exceeds bridge limits");
+            }
+            JSObject item = new JSObject().put("id", "line-" + lines.length()).put("text", line.text())
+                .put("box", new JSObject().put("x", bounds[0]).put("y", bounds[1])
+                    .put("width", bounds[2]).put("height", bounds[3]));
+            if (Float.isFinite(line.confidence())) {
+                item.put("confidence", Math.max(0, Math.min(100, line.confidence())));
+            }
+            lines.put(item);
         }
         return new JSObject().put("image", new JSObject().put("width", width).put("height", height)).put("lines", lines);
     }
@@ -391,9 +442,8 @@ public class RodzinaOcrPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         Run run = active;
-        if (run != null) { run.cancelled = true; run.call.reject("Odczyt anulowany."); }
+        if (run != null) run.cancel();
         active = null;
         picker = null;
-        // Do not shut down the executor: an in-flight ML Kit task still needs its cleanup callback.
     }
 }
