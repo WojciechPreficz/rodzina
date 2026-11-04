@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { mealWeekResponseSchema, mealSuggestionsResponseSchema, mealOfflineChangeSchema } from '@rodzina/shared';
-import { assertContext, makeEntry, requestValue } from '../../offline/database.js';
-import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/registry.js';
+import { makeEntry, readAccountCache } from '../../offline/database.js';
+import { chargedBytes, type CacheEntry, type OfflineAdapter } from '../../offline/registry.js';
 import { readOperations, type Operation } from '../../offline/outbox.js';
 import { shiftMealDate } from './mealDates.js';
 
@@ -36,10 +36,9 @@ export const emptyMeals = (account: string): MealCache => ({
   exports: {},
   results: {},
 });
-registerAdapter({
+export const mealCache = {
   module: 'meals',
   schemaVersion: 1,
-  capabilities: 'read-write',
   separateMigration: true,
   legacyKey: 'rodzina:meals:v1',
   budget: 4 * 1048576,
@@ -50,22 +49,24 @@ registerAdapter({
     coverage: Object.keys((value as MealCache).weeks).length ? 'partial' : 'missing',
     syncedAt: Math.max(0, ...Object.values((value as MealCache).weeks).map((week) => week.syncedAt)) || null,
   }),
-});
+} satisfies Omit<OfflineAdapter, 'capabilities'>;
+
 export async function readMeals(tx: IDBTransaction, account: string) {
-  const active = await assertContext(tx);
-  if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
-  const entry = await requestValue<CacheEntry | undefined>(tx.objectStore('cache').get([account, 'meals', 'snapshot']));
+  const entry = await readAccountCache(tx, 'meals', account);
   if (entry && entry.schemaVersion !== 1)
     throw new Error('Nieobsługiwana wersja pamięci obiadów. Zaktualizuj aplikację.');
   const cache = entry ? mealCacheSchema.parse(entry.payload) : emptyMeals(account);
   if (cache.account !== account) throw new DOMException('Session changed', 'AbortError');
-  const operations = (await readOperations(tx, account))
+  return { cache, operations: await readMealChanges(tx, account) };
+}
+
+export async function readMealChanges(tx: IDBTransaction, account: string) {
+  return (await readOperations(tx, account))
     .filter((op) => op.module === 'meals')
     .map((op) => ({
       ...op,
       payload: mealOfflineChangeSchema.parse(op.payload),
     }));
-  return { cache, operations };
 }
 export async function putMeals(tx: IDBTransaction, cache: MealCache) {
   mealCacheSchema.parse(cache);
@@ -99,7 +100,8 @@ export async function putMeals(tx: IDBTransaction, cache: MealCache) {
     value: entry.chargedBytes + queueBytes,
   });
 }
-export function projectMeals(cache: MealCache, operations: MealOperation[], userId: string) {
+export function projectMeals(cache: MealCache, operations: readonly MealOperation[]) {
+  const [familyId, userId] = cache.account.split(':');
   const result = structuredClone(cache);
   for (const operation of operations) {
     if (operation.status === 'needs-review' || operation.payload.type !== 'write') continue;
@@ -115,12 +117,12 @@ export function projectMeals(cache: MealCache, operations: MealOperation[], user
             {
               ...write.data,
               id: write.id,
-              familyId: cache.account.split(':')[0]!,
+              familyId: familyId!,
               date: write.date,
               slot: 'dinner',
               notes: write.data.notes ?? null,
               ingredients: write.data.ingredients.map((item) => ({ ...item, quantity: item.quantity ?? null })),
-              createdBy: previous?.createdBy ?? userId,
+              createdBy: previous?.createdBy ?? userId!,
               createdAt: previous?.createdAt ?? operation.submittedAt,
               updatedAt: operation.submittedAt,
             },

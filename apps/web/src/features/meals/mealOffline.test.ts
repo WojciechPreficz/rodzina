@@ -17,13 +17,14 @@ import {
   queueMealCopy,
   queueMealExport,
   saveMealWeek,
+  saveMealSuggestions,
   mealRevision,
-  visibleMeals,
+  mealStore,
   localMealSuggestions,
   confirmMealExport,
 } from './mealOffline.js';
 import { discardMealOperation } from './mealOffline.js';
-import { readMeals } from './mealStorage.js';
+import { emptyMeals, readMeals } from './mealStorage.js';
 import { shiftMealDate } from './mealDates.js';
 import { ApiRequestError } from '../../api.js';
 
@@ -38,6 +39,7 @@ let client: QueryClient;
 const senders: ReturnType<typeof startSync>[] = [];
 const operations = () => transact('readonly', (tx) => readOperations(tx, account));
 const read = () => transact('readonly', (tx) => readMeals(tx, account));
+const visibleMeals = () => mealStore.snapshot().view?.cache ?? emptyMeals(mealStore.snapshot().account);
 const input = { title: 'Pomidorowa', notes: null, ingredients: [{ name: 'Pomidory', quantity: '1 kg' }] };
 const baseWeek = (start = week, meals: Meal[] = []) => ({
   ok: true,
@@ -305,6 +307,16 @@ it('does not apply a late response after changing accounts', async () => {
   release({ week: baseWeek() });
   await sender.synchronize();
   expect(visibleMeals().weeks).toEqual({});
+});
+
+it('rejects late week and suggestion responses after reactivating the same account', async () => {
+  const revision = mealRevision(week);
+  const before = await read();
+  stopMeals();
+  await restoreMeals(client, session);
+  await expect(saveMealWeek(baseWeek(), revision)).rejects.toMatchObject({ name: 'AbortError' });
+  await expect(saveMealSuggestions(revision.scope, [input])).rejects.toMatchObject({ name: 'AbortError' });
+  expect(await read()).toEqual(before);
 });
 
 it('requires explicit confirmation after a server repeat conflict and preserves dependent work', async () => {

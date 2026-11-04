@@ -11,7 +11,7 @@ import { mealDateLabel } from './mealDates.js';
 import { addNativeBackHandler } from '../../nativeNavigation.js';
 
 export function MealShoppingDialog({ week, meals, onClose }: { week: string; meals: Meal[]; onClose: () => void }) {
-  const { user } = useMe();
+  const { user, family } = useMe();
   const offline = useOffline();
   const [listId, setListId] = useState<string | null>(null);
   const [mealIds, setMealIds] = useState(meals.filter((meal) => meal.ingredients.length).map((meal) => meal.id));
@@ -29,14 +29,15 @@ export function MealShoppingDialog({ week, meals, onClose }: { week: string; mea
   );
   const [error, setError] = useState('');
   const state = useMealState();
+  const view = state.account === `${family?.id}:${user?.id}` ? state.view : undefined;
   const shopping = useShopping(listId);
   const lists = shopping.lists;
-  const result = attempt ? state.cache.results[attempt] : undefined;
-  const operation = state.operations.find((op) => op.operationId === attempt);
+  const result = attempt ? view?.cache?.results[attempt] : undefined;
+  const operation = view?.operations.find((op) => op.operationId === attempt);
   const needsConfirmation = operation?.reviewReason === 'MEAL_EXPORT_CONFIRMATION_REQUIRED';
   const repeated = repeat || needsConfirmation;
   const queued = !!attempt && !result && !repeated;
-  const writable = !!user && user.role !== 'child' && state.ready;
+  const writable = !!user && user.role !== 'child' && !!view;
   const send = async () => {
     if (sending.current || !writable || !listId || !mealIds.length || (repeated && !confirmed)) return;
     sending.current = true;

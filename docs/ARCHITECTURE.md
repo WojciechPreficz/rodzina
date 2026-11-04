@@ -89,6 +89,10 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   starszy dziennik IndexedDB do wspólnego outboxa po dotychczasowej migracji
   klucza `rodzina:shopping:v1` i dziennika localStorage. Projekcja łączy
   operacje zakupów z eksportami obiadów w kolejności outboxa.
+  Obiady korzystają ze wspólnego magazynu zapisu offline. Projekcja łączy
+  snapshot w wersji 1 z operacjami obiadów odczytanymi w tej samej transakcji.
+  Rejestracja przez kontrakt przywraca magazyn z sesją i klientem TanStack Query,
+  którego nadawca używa do anulowania odczytów zakupów przed eksportem.
 
 ## Dane, czas i uprawnienia
 
@@ -400,8 +404,7 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   usuniętego obiadu. Istniejące endpointy online zachowują kontrakty.
   Idempotencja obiadów używa istniejącej tabeli `shopping_operations`, bez
   nowej migracji; rola jest sprawdzana również przed odtworzeniem odpowiedzi.
-  Moduł jest zarejestrowany w cyklu życia magazynów konta i wspólnym nadawcy,
-  bez osobnego silnika ani odpytywania pustej kolejki. Powrót sieci i wznowienie
+  Wspólny nadawca obsługuje kolejkę obiadów. Powrót sieci i wznowienie
   aplikacji uruchamiają synchronizację. WWW obsługuje otwarte okno bez sieci,
   APK również restart lokalnego frontendu. Zamknięte APK nie synchronizuje.
   Cache obiadów ma budżet 4 MiB, z kolejką do 6 MiB; najstarsze tygodnie bez

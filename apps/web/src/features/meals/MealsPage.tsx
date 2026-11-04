@@ -33,6 +33,7 @@ function MealWeek() {
   const [notice, setNotice] = useState('');
   const [exportMeals, setExportMeals] = useState<Meal[] | null>(null);
   const account = `${family?.id}:${user?.id}`;
+  const view = savedState.account === account ? savedState.view : undefined;
   const canEdit = !!user && user.role !== 'child';
   const query = useMealWeek(week);
   const previousWeek = useMealWeek(shiftMealDate(week, -7), canEdit);
@@ -112,7 +113,7 @@ function MealWeek() {
       {query.status.reviewCount > 0 && (
         <Alert color="red" role="alert">
           Zmiany wymagają sprawdzenia i zostały zachowane na urządzeniu. {query.status.lastError}
-          {savedState.operations
+          {view?.operations
             .filter((op) => op.status === 'needs-review')
             .map((op) => (
               <Stack key={op.operationId} gap="xs" mt="sm">

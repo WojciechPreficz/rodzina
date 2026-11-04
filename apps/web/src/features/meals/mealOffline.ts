@@ -10,11 +10,12 @@ import {
   type Meal,
 } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
-import { accountToken, isAccountCurrent, transact, assertContext } from '../../offline/database.js';
+import { transact, assertContext } from '../../offline/database.js';
+import { registerOfflineModule } from '../../offline/moduleStore.js';
 import { appendOperation, readOperations, recountOutboxBudgets } from '../../offline/outbox.js';
-import { joinSync, type SyncAdapter } from '../../offline/sync.js';
-import { notifyOutboxChanged, watchOutbox } from '../../offline/signals.js';
-import { reportStorageIssue, storageError } from '../../offline/status.js';
+import type { SyncAdapter } from '../../offline/sync.js';
+import { notifyOutboxChanged } from '../../offline/signals.js';
+import { reportStorageIssue } from '../../offline/status.js';
 import {
   prepareMealExportSync,
   resolveMealExportTargets,
@@ -22,7 +23,15 @@ import {
   reconcileMealExport,
   revokeMealExportList,
 } from '../shopping/index.js';
-import { readMeals, putMeals, emptyMeals, projectMeals, type MealCache, type MealOperation } from './mealStorage.js';
+import {
+  readMeals,
+  putMeals,
+  readMealChanges,
+  mealCache,
+  projectMeals,
+  type MealCache,
+  type MealOperation,
+} from './mealStorage.js';
 import { mealWeekStart, shiftMealDate } from './mealDates.js';
 
 export function mealAdapter(account: string, client?: QueryClient): SyncAdapter {
@@ -76,166 +85,122 @@ export function mealAdapter(account: string, client?: QueryClient): SyncAdapter 
   };
 }
 
-type MealState = { account: string; cache: MealCache; operations: MealOperation[]; ready: boolean };
-const listeners = new Set<() => void>();
-let state: MealState = { account: '', cache: emptyMeals(''), operations: [], ready: false };
-let session: AccountSession | undefined;
-let sync: ReturnType<typeof joinSync> | undefined;
-let unwatch: (() => void) | undefined;
-let token = -1;
-let reloadQueue = Promise.resolve();
-const emit = () => {
-  listeners.forEach((listener) => listener());
-};
-export const useMealState = () =>
-  useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => state,
-  );
-export const mealRevision = (week: string) =>
-  JSON.stringify([
-    token,
-    state.account,
-    state.cache.weeks[week],
-    state.operations.filter((op) => op.payload.type === 'write' && op.payload.weekStart === week),
-  ]);
-function reload() {
-  const captured = token;
-  const account = state.account;
-  const loading = reloadQueue.then(async () => {
-    if (!isAccountCurrent(captured) || token !== captured || state.account !== account) return;
-    const data = await transact('readonly', (tx) => readMeals(tx, account), captured);
-    if (!isAccountCurrent(captured) || token !== captured || state.account !== account) return;
-    state = { account, ...data, ready: true };
-    emit();
-  });
-  reloadQueue = loading.catch(() => {});
-  return loading;
-}
+const mealsModule = registerOfflineModule({
+  mode: 'read-write',
+  cache: mealCache,
+  readError: (detail) => detail,
+  readChanges: readMealChanges,
+  project: (saved, operations) => ({ cache: saved && projectMeals(saved, operations), operations }),
+  sync: (account, getClient?: () => QueryClient | undefined) => mealAdapter(account, getClient?.()),
+});
+
+let session: { client: QueryClient; role: AccountSession['user']['role'] } | undefined;
+export const mealStore = mealsModule.createStore(() => session?.client);
+export const useMealState = () => useSyncExternalStore(mealStore.subscribe, mealStore.snapshot);
+
 export function stopMeals() {
-  sync?.stop();
-  sync = undefined;
-  unwatch?.();
-  unwatch = undefined;
   session = undefined;
-  token = -1;
-  state = { account: '', cache: emptyMeals(''), operations: [], ready: false };
-  emit();
+  mealStore.clear();
 }
+
 export async function restoreMeals(client: QueryClient, next: AccountSession) {
-  const account = `${next.family.id}:${next.user.id}`;
-  if (state.account === account && isAccountCurrent(token) && session) {
-    session = next;
-    return;
-  }
-  stopMeals();
-  const captured = accountToken();
-  token = captured;
-  session = next;
-  state = { account, cache: emptyMeals(account), operations: [], ready: false };
-  try {
-    await reload();
-    if (token !== captured || !isAccountCurrent(captured)) return;
-    unwatch = watchOutbox(account, () => {
-      void reload().catch(() => {});
-    });
-    sync = joinSync(account, mealAdapter(account, client), reload);
-  } catch (error) {
-    if (token === captured && isAccountCurrent(captured)) reportStorageIssue(storageError(error));
-  }
+  session = { client, role: next.user.role };
+  const ready = mealStore.activate(`${next.family.id}:${next.user.id}`);
+  const scope = mealStore.accountScope();
+  await ready;
+  const { issue } = mealStore.snapshot();
+  if (scope.current() && issue) reportStorageIssue(issue);
 }
-export function visibleMeals() {
-  return projectMeals(state.cache, state.operations, session?.user.id ?? '');
+
+export const registerMealsStore = () => mealsModule.registerStore({ restore: restoreMeals, clear: stopMeals });
+
+type MealScope = ReturnType<typeof mealStore.accountScope>;
+const aborted = () => new DOMException('Session changed', 'AbortError');
+
+async function commitMeals<T>(scope: MealScope, write: (tx: IDBTransaction, account: string) => Promise<T>) {
+  const { account, token } = scope;
+  const result = await transact(
+    'readwrite',
+    async (tx) => {
+      if (!scope.current() || (await assertContext(tx)).accountId !== account) throw aborted();
+      const result = await write(tx, account);
+      if (!scope.current()) throw aborted();
+      return result;
+    },
+    token,
+  );
+  if (!scope.current()) throw aborted();
+  await mealStore.reload();
+  if (!scope.current()) throw aborted();
+  return result;
 }
-export async function saveMealWeek(week: unknown, expectedRevision: string) {
+
+function weekRevision(week: string, cache?: MealCache, operations?: readonly MealOperation[]) {
+  return JSON.stringify([
+    cache?.weeks[week],
+    operations?.filter((op) => op.payload.type === 'write' && op.payload.weekStart === week) ?? [],
+  ]);
+}
+
+export function mealRevision(week: string) {
+  const { saved, view } = mealStore.snapshot();
+  return { scope: mealStore.accountScope(), value: weekRevision(week, saved, view?.operations) };
+}
+
+export async function saveMealWeek(week: unknown, expected: ReturnType<typeof mealRevision>) {
   const data = mealWeekResponseSchema.parse(week);
-  const captured = token;
-  const account = state.account;
-  await transact(
-    'readwrite',
-    async (tx) => {
-      const saved = await readMeals(tx, account);
-      if (expectedRevision !== mealRevision(data.weekStart)) return;
-      // Compare durable state as well: another tab may have committed before its signal arrived.
-      if (
-        JSON.stringify(
-          saved.operations.filter((op) => op.payload.type === 'write' && op.payload.weekStart === data.weekStart),
-        ) !==
-        JSON.stringify(
-          state.operations.filter((op) => op.payload.type === 'write' && op.payload.weekStart === data.weekStart),
-        )
-      )
-        return;
-      if (JSON.stringify(saved.cache.weeks[data.weekStart]) !== JSON.stringify(state.cache.weeks[data.weekStart]))
-        return;
-      saved.cache.weeks[data.weekStart] = { data, syncedAt: Date.now() };
-      await putMeals(tx, saved.cache);
-    },
-    captured,
-  );
-  if (token === captured && isAccountCurrent(captured)) await reload();
+  await commitMeals(expected.scope, async (tx, account) => {
+    const saved = await readMeals(tx, account);
+    if (expected.value !== mealRevision(data.weekStart).value) return;
+    // Another tab may have committed before its signal arrived.
+    if (expected.value !== weekRevision(data.weekStart, saved.cache, saved.operations)) return;
+    saved.cache.weeks[data.weekStart] = { data, syncedAt: Date.now() };
+    await putMeals(tx, saved.cache);
+  });
 }
-export async function saveMealSuggestions(account: string, suggestions: MealCache['suggestions']) {
-  const captured = token;
-  if (account !== state.account) throw new DOMException('Session changed', 'AbortError');
-  await transact(
-    'readwrite',
-    async (tx) => {
-      const { cache } = await readMeals(tx, account);
-      cache.suggestions = suggestions;
-      await putMeals(tx, cache);
-    },
-    captured,
-  );
-  if (token === captured && isAccountCurrent(captured)) await reload();
+
+export async function saveMealSuggestions(scope: MealScope, suggestions: MealCache['suggestions']) {
+  await commitMeals(scope, async (tx, account) => {
+    const { cache } = await readMeals(tx, account);
+    cache.suggestions = suggestions;
+    await putMeals(tx, cache);
+  });
 }
-export async function queueMealChange(
+
+async function queueMealChange(
   build: (
     cache: MealCache,
     operations: MealOperation[],
     tx: IDBTransaction,
   ) => Promise<MealOfflineChange> | MealOfflineChange,
 ) {
-  if (!session || session.user.role === 'child' || !state.ready || !isAccountCurrent(token))
+  const scope = mealStore.accountScope();
+  if (!session || session.role === 'child' || !mealStore.snapshot().view || !scope.current())
     throw new Error('Pamięć obiadów nie jest gotowa lub nie masz uprawnień do zapisu.');
-  const account = state.account;
-  const captured = token;
-  const userId = session.user.id;
-  const result = await transact(
-    'readwrite',
-    async (tx) => {
-      const saved = await readMeals(tx, account);
-      const projected = projectMeals(saved.cache, saved.operations, userId);
-      const change = mealOfflineChangeSchema.parse(await build(projected, saved.operations, tx));
-      const orderingKeys =
-        change.type === 'export'
-          ? [`meals:week:${change.data.weekStart}`, `shopping:list:${change.data.listId}`]
-          : [`meals:week:${change.weekStart}`];
-      const operations = await readOperations(tx, account);
-      const operationId = crypto.randomUUID();
-      await appendOperation(tx, account, 'meals', {
-        operationId,
-        submittedAt: Date.now(),
-        entityId: orderingKeys[0]!,
-        orderingKeys,
-        payload: change,
-        dependsOn: operations
-          .filter((op) => op.orderingKeys.some((key) => orderingKeys.includes(key)))
-          .map((op) => op.operationId),
-      });
-      await putMeals(tx, saved.cache);
-      if (change.type === 'export') await projectQueuedMealExport(tx, account);
-      return { ...change, operationId };
-    },
-    captured,
-  );
-  if (token !== captured || !isAccountCurrent(captured)) throw new DOMException('Session changed', 'AbortError');
-  await reload();
-  sync?.wake();
-  return result;
+  return commitMeals(scope, async (tx, account) => {
+    const saved = await readMeals(tx, account);
+    const projected = projectMeals(saved.cache, saved.operations);
+    const change = mealOfflineChangeSchema.parse(await build(projected, saved.operations, tx));
+    const orderingKeys =
+      change.type === 'export'
+        ? [`meals:week:${change.data.weekStart}`, `shopping:list:${change.data.listId}`]
+        : [`meals:week:${change.weekStart}`];
+    const operations = await readOperations(tx, account);
+    const operationId = crypto.randomUUID();
+    await appendOperation(tx, account, 'meals', {
+      operationId,
+      submittedAt: Date.now(),
+      entityId: orderingKeys[0]!,
+      orderingKeys,
+      payload: change,
+      dependsOn: operations
+        .filter((op) => op.orderingKeys.some((key) => orderingKeys.includes(key)))
+        .map((op) => op.operationId),
+    });
+    await putMeals(tx, saved.cache);
+    if (change.type === 'export') await projectQueuedMealExport(tx, account);
+    return { ...change, operationId };
+  });
 }
 export function queueMeal(date: string, data: PutMeal | null) {
   return queueMealChange((cache) => {
@@ -307,76 +272,62 @@ export async function queueMealExport(weekStart: string, listId: string, mealIds
   });
 }
 export async function confirmMealExport(operationId: string) {
-  await transact(
-    'readwrite',
-    async (tx) => {
-      await assertContext(tx);
-      const operations = await readOperations(tx, state.account);
-      const op = operations.find((op) => op.operationId === operationId && op.module === 'meals');
-      if (!op || op.status !== 'needs-review') throw new Error('Ta zmiana wymaga ręcznego sprawdzenia.');
-      const change = mealOfflineChangeSchema.parse(op.payload);
-      if (change.type !== 'export' || op.reviewReason !== 'MEAL_EXPORT_CONFIRMATION_REQUIRED')
-        throw new Error('Nie można potwierdzić tej zmiany.');
-      tx.objectStore('outbox').put({
-        ...op,
-        status: 'pending',
-        reviewReason: undefined,
-        lastError: undefined,
-        payload: { ...change, data: { ...change.data, confirmRepeat: true } },
-      });
-      const blocked = new Set<string>();
-      const blockedKeys = new Set<string>();
-      for (const child of operations) {
-        if (child.operationId === op.operationId) continue;
-        if (
-          child.status === 'needs-review' &&
-          child.reviewReason === 'dependency' &&
-          !child.dependsOn.some((id) => blocked.has(id)) &&
-          !child.orderingKeys.some((key) => blockedKeys.has(key))
-        ) {
-          tx.objectStore('outbox').put({ ...child, status: 'pending', reviewReason: undefined, lastError: undefined });
-        } else if (child.status === 'needs-review') {
-          blocked.add(child.operationId);
-          child.orderingKeys.forEach((key) => blockedKeys.add(key));
-        }
+  await commitMeals(mealStore.accountScope(), async (tx, account) => {
+    const operations = await readOperations(tx, account);
+    const op = operations.find((op) => op.operationId === operationId && op.module === 'meals');
+    if (!op || op.status !== 'needs-review') throw new Error('Ta zmiana wymaga ręcznego sprawdzenia.');
+    const change = mealOfflineChangeSchema.parse(op.payload);
+    if (change.type !== 'export' || op.reviewReason !== 'MEAL_EXPORT_CONFIRMATION_REQUIRED')
+      throw new Error('Nie można potwierdzić tej zmiany.');
+    tx.objectStore('outbox').put({
+      ...op,
+      status: 'pending',
+      reviewReason: undefined,
+      lastError: undefined,
+      payload: { ...change, data: { ...change.data, confirmRepeat: true } },
+    });
+    const blocked = new Set<string>();
+    const blockedKeys = new Set<string>();
+    for (const child of operations) {
+      if (child.operationId === op.operationId) continue;
+      if (
+        child.status === 'needs-review' &&
+        child.reviewReason === 'dependency' &&
+        !child.dependsOn.some((id) => blocked.has(id)) &&
+        !child.orderingKeys.some((key) => blockedKeys.has(key))
+      ) {
+        tx.objectStore('outbox').put({ ...child, status: 'pending', reviewReason: undefined, lastError: undefined });
+      } else if (child.status === 'needs-review') {
+        blocked.add(child.operationId);
+        child.orderingKeys.forEach((key) => blockedKeys.add(key));
       }
-      notifyOutboxChanged(tx, state.account);
-    },
-    token,
-  );
-  await reload();
-  sync?.wake();
+    }
+    notifyOutboxChanged(tx, account);
+  });
 }
 export async function discardMealOperation(operationId: string) {
-  await transact(
-    'readwrite',
-    async (tx) => {
-      await assertContext(tx);
-      const operations = await readOperations(tx, state.account);
-      const selected = operations.find(
-        (op) => op.module === 'meals' && op.operationId === operationId && op.status === 'needs-review',
-      );
-      if (!selected) throw new Error('Można odrzucić tylko zmianę wymagającą sprawdzenia.');
-      const removed = new Set<string>();
-      const keys = new Set<string>();
-      for (const op of operations) {
-        if (
-          op === selected ||
-          op.dependsOn.some((id) => removed.has(id)) ||
-          op.orderingKeys.some((key) => keys.has(key))
-        ) {
-          removed.add(op.operationId);
-          op.orderingKeys.forEach((key) => keys.add(key));
-          tx.objectStore('outbox').delete([state.account, op.operationId]);
-        }
+  await commitMeals(mealStore.accountScope(), async (tx, account) => {
+    const operations = await readOperations(tx, account);
+    const selected = operations.find(
+      (op) => op.module === 'meals' && op.operationId === operationId && op.status === 'needs-review',
+    );
+    if (!selected) throw new Error('Można odrzucić tylko zmianę wymagającą sprawdzenia.');
+    const removed = new Set<string>();
+    const keys = new Set<string>();
+    for (const op of operations) {
+      if (
+        op === selected ||
+        op.dependsOn.some((id) => removed.has(id)) ||
+        op.orderingKeys.some((key) => keys.has(key))
+      ) {
+        removed.add(op.operationId);
+        op.orderingKeys.forEach((key) => keys.add(key));
+        tx.objectStore('outbox').delete([account, op.operationId]);
       }
-      await recountOutboxBudgets(tx, state.account);
-      notifyOutboxChanged(tx, state.account);
-    },
-    token,
-  );
-  await reload();
-  sync?.wake();
+    }
+    await recountOutboxBudgets(tx, account);
+    notifyOutboxChanged(tx, account);
+  });
 }
 export function localMealSuggestions(cache: MealCache, search: string) {
   const normalize = (value: string) => value.normalize('NFKC').toLocaleLowerCase('pl').replace(/\s+/g, ' ').trim();

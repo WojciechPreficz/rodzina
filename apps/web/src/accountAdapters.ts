@@ -12,7 +12,7 @@ import { accountId, familyMembersKey, hydrateOfflineData, restoreOfflineData, sa
 import { listMembers } from './features/family/familyApi.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
 import { isAndroid } from './platform.js';
-import { restoreMeals, stopMeals } from './features/meals/mealOffline.js';
+import { registerMealsStore } from './features/meals/mealOffline.js';
 
 export const accountServices: AccountServices = {
   accountId,
@@ -47,13 +47,7 @@ export function registerApplicationStores() {
   registerCalendarStore();
   registerTaskStore();
   registerShoppingStore();
-  registerAccountStore({
-    name: 'meals',
-    restore: restoreMeals,
-    stop: stopMeals,
-    phase: 'before-invalidation',
-    clear: stopMeals,
-  });
+  registerMealsStore();
   registerAccountStore({
     name: 'offline-data',
     phase: 'before-invalidation',

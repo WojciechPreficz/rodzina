@@ -7,7 +7,7 @@ import { apiFetch } from '../../api.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { useOffline } from '../../connectivity.js';
-import { useMealState, visibleMeals, localMealSuggestions, saveMealSuggestions } from './mealOffline.js';
+import { mealStore, useMealState, localMealSuggestions, saveMealSuggestions } from './mealOffline.js';
 
 export function MealForm({
   meal,
@@ -34,22 +34,25 @@ export function MealForm({
   const [error, setError] = useState('');
   const [search] = useDebouncedValue(title.trim(), 250);
   const state = useMealState();
+  const view = state.account === account ? state.view : undefined;
   const offline = useOffline();
   const remote = useQuery({
     queryKey: ['meal-suggestions', account, search],
-    enabled: !disabled && !offline && state.account === account && state.ready,
+    enabled: !disabled && !offline && !!view,
     queryFn: async ({ signal }) => {
+      const scope = mealStore.accountScope();
+      if (scope.account !== account) throw new DOMException('Session changed', 'AbortError');
       const suggestions = mealSuggestionsResponseSchema.parse(
         await apiFetch(`/api/meals/suggestions?q=${encodeURIComponent(search)}`, { signal }),
       ).suggestions;
       signal.throwIfAborted();
-      await saveMealSuggestions(account, suggestions);
+      await saveMealSuggestions(scope, suggestions);
       return suggestions;
     },
   });
   const suggestions = {
     ...remote,
-    data: state.account === account ? localMealSuggestions(visibleMeals(), search) : [],
+    data: view?.cache ? localMealSuggestions(view.cache, search) : [],
   };
   async function submit(event: FormEvent) {
     event.preventDefault();

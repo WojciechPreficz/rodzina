@@ -54,11 +54,17 @@ export function registerOfflineModule<Snapshot extends AccountSnapshot, Change, 
   registerAdapter({ ...definition.cache, capabilities: definition.mode });
   return {
     createStore: (context?: Context) => createOfflineStore(definition, context),
-    registerStore: (store: { activate: (account: string) => Promise<void>; clear: () => void }) =>
+    registerStore: (
+      store: { clear: () => void } & (
+        | { activate: (account: string) => Promise<void> }
+        | { restore: NonNullable<Parameters<typeof registerAccountStore>[0]['restore']> }
+      ),
+    ) =>
       registerAccountStore({
         name: definition.cache.module,
         phase: 'before-invalidation',
-        activate: store.activate,
+        // Some stores need the session and query client before activating.
+        ...('restore' in store ? { restore: store.restore } : { activate: store.activate }),
         clear: store.clear,
         stop: store.clear,
       }),
