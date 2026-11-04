@@ -102,7 +102,7 @@ describe('contacts IndexedDB snapshot', () => {
     expect(store.snapshot().issue).toMatch(/budżet/);
     expect(await readCache('contacts', account)).toEqual(original);
   });
-  it.each([true, false])('invalidates delayed responses when clear(removeStored=%s)', async (remove) => {
+  it('invalidates delayed responses when the store is cleared', async () => {
     const store = createContactsStore();
     await store.activate(account);
     await store.fetch(account, async () => data);
@@ -114,11 +114,11 @@ describe('contacts IndexedDB snapshot', () => {
           finish = resolve;
         }),
     );
-    await store.clear(remove);
+    store.clear();
     finish(data);
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     expect(store.snapshot().saved).toBeUndefined();
-    expect(!!(await readCache('contacts', account))).toBe(!remove);
+    expect(await readCache('contacts', account)).toBeDefined();
   });
   it('cuts off previous-account responses before they can rebuild durable data', async () => {
     const store = createContactsStore();
@@ -131,7 +131,7 @@ describe('contacts IndexedDB snapshot', () => {
           finish = resolve;
         }),
     );
-    store.clear(false);
+    store.clear();
     await clearDatabase();
     const next = `${id(1)}:${id(9)}`;
     await store.activate(next);

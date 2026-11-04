@@ -195,17 +195,19 @@ export async function recoverPendingClear() {
 export async function readCache(module: CacheModule, accountId?: string) {
   checkPendingClear();
   return transact('readonly', async (tx) => {
-    if (accountId) {
-      await assertContext(tx);
-      if (context?.accountId !== accountId) throw changed();
-      return requestValue<CacheEntry | undefined>(tx.objectStore('cache').get([accountId, module, 'snapshot']));
-    }
+    if (accountId) return readAccountCache(tx, module, accountId);
     const active = await requestValue<Active | undefined>(tx.objectStore('metadata').get(['__origin__', 'active']));
     if (!active) return;
     return requestValue<CacheEntry | undefined>(
       tx.objectStore('cache').get([active.value.accountId, module, 'snapshot']),
     );
   });
+}
+export async function readAccountCache(tx: IDBTransaction, module: CacheModule, accountId: string) {
+  checkPendingClear();
+  const active = await assertContext(tx);
+  if (active.accountId !== accountId) throw changed();
+  return requestValue<CacheEntry | undefined>(tx.objectStore('cache').get([accountId, module, 'snapshot']));
 }
 export function makeEntry(module: CacheModule, input: unknown): CacheEntry {
   const adapter = adapters.get(module)!;
@@ -241,7 +243,7 @@ function putEntry(tx: IDBTransaction, entry: CacheEntry) {
     value: entry.chargedBytes,
   });
 }
-export async function writeCache(module: CacheModule, value: unknown, token = epoch) {
+export async function writeCache(module: CacheModule, value: unknown, token = epoch, assertCurrent?: () => void) {
   checkPendingClear();
   if (token !== epoch) throw changed();
   await ensureMigrated();
@@ -252,6 +254,7 @@ export async function writeCache(module: CacheModule, value: unknown, token = ep
     async (tx) => {
       const active = await assertContext(tx, captured);
       if (entry.accountId !== active.accountId) throw changed();
+      assertCurrent?.();
       putEntry(tx, entry);
     },
     token,

@@ -124,7 +124,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   cleanup();
-  contactsStore.clear(false);
+  contactsStore.clear();
   client?.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -145,7 +145,7 @@ describe('contacts online', () => {
     expect(await readCache('contacts')).toBeDefined();
     cleanup();
     client.clear();
-    await contactsStore.clear(false);
+    contactsStore.clear();
     connection.offline = true;
     session.familyConfirmed = false;
     const fetch = setup();

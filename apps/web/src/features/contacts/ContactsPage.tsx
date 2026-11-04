@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -25,7 +25,8 @@ import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ContactForm } from './ContactForm.js';
 import { contactBirthdayText, contactInitials, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import './contacts.css';
-import { CONTACTS_SIGNAL, contactsStore } from './contactsOffline.js';
+import { contactsStore } from './contactsOffline.js';
+import { useOfflineModule } from '../../offline/moduleStore.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 
@@ -37,16 +38,7 @@ export function ContactsPage() {
   const offline = useOffline();
   const client = useQueryClient();
   const account = user && family ? `${family.id}:${user.id}` : '';
-  const state = useSyncExternalStore(contactsStore.subscribe, contactsStore.snapshot);
-  useEffect(() => {
-    if (account) void contactsStore.activate(account);
-    const reload = (event: StorageEvent) => {
-      if (event.key === CONTACTS_SIGNAL || event.key === null) void contactsStore.reload();
-    };
-    window.addEventListener('storage', reload);
-    return () => window.removeEventListener('storage', reload);
-  }, [account]);
-  const saved = state.account === account ? state.saved : undefined;
+  const { saved, view, issue } = useOfflineModule(contactsStore, account);
   const key = ['contacts', family?.id, user?.id];
   const query = useQuery({
     queryKey: key,
@@ -70,8 +62,8 @@ export function ContactsPage() {
     setMobileFilters([]);
     setSearch('');
   }, [account]);
-  const groups = saved?.data.groups ?? [];
-  const contacts = saved?.data.contacts ?? [];
+  const groups = view?.groups ?? [];
+  const contacts = view?.contacts ?? [];
   const selected = groups.find((group) => group.id === selectedId) ?? groups[0];
   const filteredGroups = mobile
     ? groups.filter((group) => mobileFilters.includes(group.id))
@@ -135,12 +127,7 @@ export function ContactsPage() {
           )
         }
       />
-      <OfflineNotice
-        offline={offline}
-        syncedAt={saved?.syncedAt}
-        issue={state.account === account ? state.issue : undefined}
-        role="alert"
-      >
+      <OfflineNotice offline={offline} syncedAt={saved?.syncedAt} issue={issue} role="alert">
         Brak połączenia z internetem. Dodawanie, edycja i usuwanie są niedostępne. Kontakty mogą być nieaktualne.
       </OfflineNotice>
       {query.isPending && !saved && !offline && (

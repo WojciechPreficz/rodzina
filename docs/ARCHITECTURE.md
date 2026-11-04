@@ -52,6 +52,27 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Release zawiera public/ i drizzle/; ścieżki liczymy względem paczki.
   Konfigurację i procedury opisuje [DEPLOY.md](DEPLOY.md).
 
+## Moduły offline
+
+- `OfflineModule<Snapshot, Change, View>` rejestruje w istniejącym rejestrze
+  adapter cache z parserem, wersją, budżetem, opisem pokrycia i regułą
+  przycinania. IndexedDB przechowuje snapshot bazowy i wspólny outbox.
+  Moduł deklaruje format danych oraz własne reguły migracji i zapisu.
+- Wspólny magazyn aktywuje konto, wczytuje snapshot i wystawia stabilny stan
+  przez `useSyncExternalStore`. Rejestracja w `registerAccountStore` wiąże
+  aktywację i czyszczenie pamięci z cyklem życia konta. Trwałe usuwanie obsługuje
+  wspólna baza. Generacja bazy i rewizja magazynu odcinają spóźnione odpowiedzi.
+  Sygnał między kartami inicjuje ponowny odczyt IndexedDB.
+- Moduł z odczytem offline wyprowadza widok ze snapshotu. Odświeżenie
+  online waliduje dane, zapisuje je przez adapter cache i publikuje widok.
+  Kontakty korzystają z tego trybu, z formatem wersji 1 i dotychczasową
+  migracją z klucza `rodzina:contacts:v1`.
+- Moduł z zapisem offline odczytuje snapshot i uporządkowane zmiany w jednej
+  transakcji, a następnie czysta funkcja wyprowadza z nich widok. Sygnały
+  outboxa odświeżają tę projekcję po zatwierdzeniu transakcji. Reguły zapisu
+  i kolejkowania należą do modułu. Wspólny nadawca używa `SyncAdapter` danego konta
+  do przygotowania, wysłania i rozliczenia operacji oraz obsługi utraty dostępu.
+
 ## Dane, czas i uprawnienia
 
 - Identyfikatory: crypto.randomUUID() jako text. Momenty: integer ms UTC.

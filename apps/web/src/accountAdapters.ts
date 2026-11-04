@@ -4,7 +4,7 @@ import { taskStore } from './features/tasks/taskOffline.js';
 import { clearShoppingStorage, stopShoppingPersistence, restoreShopping } from './features/shopping/shoppingOffline.js';
 import { forgetOfflineData } from './offlineData.js';
 import { clearDatabase } from './offline/database.js';
-import { contactsStore } from './features/contacts/contactsOffline.js';
+import { CONTACTS_STORAGE_KEY, registerContactsStore } from './features/contacts/contactsOffline.js';
 
 import type { AccountServices } from './accountLifecycle.js';
 import { registerAccountStore } from './accountStorage.js';
@@ -12,7 +12,6 @@ import { accountId, familyMembersKey, hydrateOfflineData, restoreOfflineData, sa
 import { listMembers } from './features/family/familyApi.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
 import { isAndroid } from './platform.js';
-import { CONTACTS_STORAGE_KEY } from './features/contacts/contactsOffline.js';
 import { restoreMeals, stopMeals } from './features/meals/mealOffline.js';
 
 export const accountServices: AccountServices = {
@@ -43,13 +42,7 @@ let registered = false;
 export function registerApplicationStores() {
   if (registered) return;
   registered = true;
-  registerAccountStore({
-    name: 'contacts',
-    stop: () => contactsStore.clear(false),
-    activate: (account) => contactsStore.activate(account),
-    phase: 'before-invalidation',
-    clear: () => contactsStore.clear(false),
-  });
+  registerContactsStore();
 
   registerAccountStore({
     name: 'calendar',
