@@ -1,7 +1,6 @@
-import type { AccountSession } from '../../session.js';
 import type { QueryClient } from '@tanstack/react-query';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
-import { apiFetch, ApiRequestError } from '../../api.js';
+import { apiFetch } from '../../api.js';
 import { assertContext, transact } from '../../offline/database.js';
 import { appendOperation, type Intent, type Operation } from '../../offline/outbox.js';
 import type { SyncAdapter } from '../../offline/sync.js';
@@ -84,11 +83,7 @@ export function shoppingAdapter(account: ShoppingAccount): SyncAdapter {
   const accountId = `${account.familyId}:${account.userId}`;
   return {
     module: 'shopping',
-    prepare: async (_operation, signal) => {
-      const session = await apiFetch<AccountSession>('/api/auth/me', { signal });
-      if (`${session.family.id}:${session.user.id}` !== accountId)
-        throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
-    },
+    sessionTransport: apiFetch,
     send: async (operation, signal) => {
       // Confirm a legacy cache online before replay. Never invert destructive intents heuristically.
       const data = await transact('readonly', (tx) => readShoppingTransaction(tx, accountId));

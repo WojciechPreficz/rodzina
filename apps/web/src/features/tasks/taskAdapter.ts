@@ -1,6 +1,6 @@
 import { taskChecklistResponseSchema, taskSchema, taskSnapshotResponseSchema, type TaskList } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
-import type { SyncAdapter } from '../../offline/sync.js';
+import type { SyncAdapter, SyncRun } from '../../offline/sync.js';
 import { readTaskTransaction, putTaskTransaction, putTaskBaseTransaction, taskOperation } from './taskStorage.js';
 
 export type TaskTransport = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -11,20 +11,34 @@ export function taskAdapter(
   transport: TaskTransport = apiFetch,
   hideList?: (id: string) => void,
 ): SyncAdapter {
+  const accessByRun = new WeakMap<SyncRun, Set<string>>();
+  const readAccess = async (signal: AbortSignal, run?: SyncRun) => {
+    if (run) accessByRun.delete(run);
+    const { lists } = await transport<{ lists: TaskList[] }>('/api/tasks/lists', { signal });
+    signal.throwIfAborted();
+    const access = new Set(lists.map((list) => list.id));
+    if (run) accessByRun.set(run, access);
+    return access;
+  };
+  const revoke = (listId: string, signal: AbortSignal): never => {
+    signal.throwIfAborted();
+    hideList?.(listId);
+    throw new ApiRequestError(revokedTaskText, 403, 'TASK_LIST_REVOKED');
+  };
   return {
     module: 'tasks',
-    prepare: async (operation, signal) => {
-      const session = await transport<{ user: { id: string }; family: { id: string } }>('/api/auth/me', { signal });
-      if (`${session.family.id}:${session.user.id}` !== account)
-        throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
-      const { lists } = await transport<{ lists: TaskList[] }>('/api/tasks/lists', { signal });
-      const op = taskOperation(operation);
-      if (!lists.some((list) => list.id === op.listId)) {
-        if (!signal.aborted) hideList?.(op.listId);
-        throw new ApiRequestError(revokedTaskText, 403, 'TASK_LIST_REVOKED');
+    sessionTransport: transport,
+    prepare: async (operation, signal, run) => {
+      const cached = accessByRun.get(run);
+      const access = cached ?? (await readAccess(signal, run));
+      const { listId } = taskOperation(operation);
+      if (!access.has(listId)) {
+        // A cached negative may predate a change to list membership.
+        if (cached && (await readAccess(signal, run)).has(listId)) return;
+        revoke(listId, signal);
       }
     },
-    send: async (operation, signal) => {
+    send: async (operation, signal, run) => {
       const op = taskOperation(operation);
       const change = op.change;
       const checklist = change.type.startsWith('checklist-');
@@ -54,16 +68,21 @@ export function taskAdapter(
           (change.type === 'update' && change.data.isDone !== undefined)
         ) {
           const snapshot = taskSnapshotResponseSchema.parse(await transport('/api/tasks/snapshot', { signal }));
+          if (run && !snapshot.lists.some((list) => list.id === op.listId)) accessByRun.delete(run);
           return { response, snapshot };
         }
         return response;
       } catch (error) {
-        if (error instanceof ApiRequestError && [403, 404].includes(error.status)) {
-          const { lists } = await transport<{ lists: TaskList[] }>('/api/tasks/lists', { signal });
-          if (!lists.some((list) => list.id === op.listId)) {
-            if (!signal.aborted) hideList?.(op.listId);
-            throw new ApiRequestError(revokedTaskText, 403, 'TASK_LIST_REVOKED');
-          }
+        if (!(error instanceof ApiRequestError) || error.status === 401 || error.code === 'SESSION_CHANGED')
+          throw error;
+        if (error.code === 'TASK_LIST_REVOKED') {
+          if (run) accessByRun.delete(run);
+          revoke(op.listId, signal);
+        }
+        if (error.status === 403 || error.status === 404) {
+          if (run && error.status === 403) delete run.session;
+          const access = await readAccess(signal, run);
+          if (!access.has(op.listId)) revoke(op.listId, signal);
           if (checklist && error.status === 404) {
             // A missing item is not evidence that its parent was deleted.
             try {

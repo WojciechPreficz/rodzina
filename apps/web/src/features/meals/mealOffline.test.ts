@@ -170,7 +170,7 @@ it('depends on a local list and atomically reconciles export identities without 
   const meals = mealAdapter(account);
   const adapter: SyncAdapter = {
     ...meals,
-    prepare: async () => {},
+    sessionTransport: async () => session,
     send: async (op) => {
       if (op.operationId === exported.operationId)
         return { ok: true, added: 0, updated: 1, items: [actual], aliases: { [localId]: actualId } };
@@ -216,7 +216,7 @@ it('keeps replay IDs and payloads after a lost response and serializes competing
   let maxActive = 0;
   const adapter: SyncAdapter = {
     ...mealAdapter(account),
-    prepare: async () => {},
+    sessionTransport: async () => session,
     send: async (op) => {
       calls.push([op.operationId, op.payload]);
       active++;
@@ -259,7 +259,11 @@ it('retains expired changes for review, refuses child writes and clears account 
   stopMeals();
   const send = vi.fn();
   onlineManager.setOnline(true);
-  const sender = startSync(account, [{ ...mealAdapter(account), prepare: async () => {}, send }], () => {});
+  const sender = startSync(
+    account,
+    [{ ...mealAdapter(account), sessionTransport: async () => session, send }],
+    () => {},
+  );
   senders.push(sender);
   await sender.synchronize();
   expect(send).not.toHaveBeenCalled();
@@ -287,7 +291,11 @@ it('does not apply a late response after changing accounts', async () => {
       }),
   );
   onlineManager.setOnline(true);
-  const sender = startSync(account, [{ ...mealAdapter(account), prepare: async () => {}, send }], () => {});
+  const sender = startSync(
+    account,
+    [{ ...mealAdapter(account), sessionTransport: async () => session, send }],
+    () => {},
+  );
   senders.push(sender);
   await vi.waitFor(() => expect(send).toHaveBeenCalled());
   await clearDatabase();

@@ -4,25 +4,30 @@ import { onlineManager } from '@tanstack/react-query';
 import { IDBDatabase } from 'fake-indexeddb';
 import { OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../api.js';
+import { invalidateSessionRequests } from '../platform.js';
+import type { AccountSession } from '../session.js';
 import { activateOfflineAccount, transact, clearDatabase, requestValue } from './database.js';
 import { appendOperation, readOperations, type Lease } from './outbox.js';
 import { joinSync, retryAt, startSync, type SyncAdapter } from './sync.js';
 import { OUTBOX_SIGNAL } from './signals.js';
 
 const account = 'family:user';
+const session = { user: { id: 'user' }, family: { id: 'family' } } as AccountSession;
 const senders: ReturnType<typeof startSync>[] = [];
 const read = () => transact('readonly', (tx) => readOperations(tx, account));
-async function seed() {
-  await activateOfflineAccount(account);
-  await transact('readwrite', (tx) =>
+const enqueue = (operationId: string, orderingKey: string) =>
+  transact('readwrite', (tx) =>
     appendOperation(tx, account, 'shopping', {
-      operationId: 'stable-id',
+      operationId,
       submittedAt: Date.now(),
       entityId: 'item',
       payload: { name: 'Mleko' },
-      orderingKeys: ['list:a'],
+      orderingKeys: [orderingKey],
     }),
   );
+async function seed() {
+  await activateOfflineAccount(account);
+  await enqueue('stable-id', 'list:a');
 }
 function start(overrides: Partial<SyncAdapter> = {}) {
   const adapter: SyncAdapter = {
@@ -364,21 +369,73 @@ describe('shared account sender', () => {
       expect(operations[0]).toMatchObject({ status: 'needs-review', reviewReason: 'conflict' });
     });
   });
-  it('stops on 401 without sending another operation', async () => {
+  it.each([
+    [401, undefined],
+    [409, 'SESSION_CHANGED'],
+  ] as const)('stops on %s %s without sending another operation', async (status, code) => {
     await seed();
+    await enqueue('other-id', 'list:b');
     const lost = vi.fn();
     window.addEventListener('rodzina:session-lost', lost);
     const send = vi.fn(async () => {
-      throw new ApiRequestError('Sesja wygasła', 401);
+      throw new ApiRequestError('Sesja wygasła', status, code);
     });
     try {
-      start({ send });
+      start({ send, sessionTransport: async () => session });
       await vi.waitFor(() => expect(lost).toHaveBeenCalledOnce());
       expect(send).toHaveBeenCalledOnce();
-      expect(await read()).toHaveLength(1);
+      expect(await read()).toHaveLength(2);
     } finally {
       window.removeEventListener('rodzina:session-lost', lost);
     }
+  });
+  it.each(['403', 'transport failure', 'offline and online', 'session generation change'] as const)(
+    'confirms again before independent work after %s',
+    async (interruption) => {
+      onlineManager.setOnline(false);
+      vi.spyOn(Math, 'random').mockReturnValue(1);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      await seed();
+      await enqueue('other-id', 'list:b');
+      const requests: string[] = [];
+      const sender = start({
+        sessionTransport: async (path) => {
+          requests.push(path);
+          return session;
+        },
+        send: async ({ operationId }) => {
+          requests.push(operationId);
+          if (operationId === 'stable-id') {
+            if (interruption === '403') throw new ApiRequestError('Brak dostępu', 403);
+            if (interruption === 'transport failure') throw new TypeError('Network lost');
+            if (interruption === 'offline and online') {
+              onlineManager.setOnline(false);
+              onlineManager.setOnline(true);
+              throw new TypeError('Network lost');
+            }
+            if (interruption === 'session generation change') invalidateSessionRequests();
+          }
+          return {};
+        },
+      });
+      onlineManager.setOnline(true);
+      await sender.synchronize();
+      expect(requests).toEqual(['/api/auth/me', 'stable-id', '/api/auth/me', 'other-id']);
+      expect(await read()).toMatchObject([
+        { operationId: 'stable-id', status: interruption === '403' ? 'needs-review' : 'retry-wait' },
+      ]);
+    },
+  );
+  it('does not reuse a completed run’s confirmation for newly queued work', async () => {
+    await seed();
+    const sessionTransport = vi.fn(async () => session);
+    const sender = start({ sessionTransport });
+    await sender.synchronize();
+    expect(sessionTransport).toHaveBeenCalledOnce();
+    await enqueue('later-id', 'list:a');
+    await sender.synchronize();
+    expect(sessionTransport).toHaveBeenCalledTimes(2);
+    expect(await read()).toEqual([]);
   });
   it('cannot reconcile a late response after account clearing', async () => {
     await seed();
@@ -406,15 +463,19 @@ describe('shared account sender', () => {
   });
   it('fences a late response after another tab takes over the lease', async () => {
     await seed();
+    vi.useFakeTimers({ toFake: ['Date'] });
     let finish!: (value: unknown) => void;
     const reconcile = vi.fn(async () => {});
-    start({
-      send: () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-      reconcile,
-    });
+    const sessionTransport = vi.fn(async () => session);
+    const send = vi
+      .fn<SyncAdapter['send']>(async () => ({}))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    const sender = start({ send, reconcile, sessionTransport });
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
     await transact('readwrite', async (tx) => {
       const store = tx.objectStore('metadata');
@@ -426,8 +487,13 @@ describe('shared account sender', () => {
       });
     });
     finish({});
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await sender.synchronize();
     expect(reconcile).not.toHaveBeenCalled();
     expect((await read())[0]?.operationId).toBe('stable-id');
+    vi.setSystemTime(Date.now() + 60001);
+    await sender.synchronize();
+    expect(sessionTransport).toHaveBeenCalledTimes(2);
+    expect(reconcile).toHaveBeenCalledOnce();
+    expect(await read()).toEqual([]);
   });
 });

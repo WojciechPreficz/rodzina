@@ -25,11 +25,9 @@ import { mealWeekStart, shiftMealDate } from './mealDates.js';
 export function mealAdapter(account: string, client?: QueryClient): SyncAdapter {
   return {
     module: 'meals',
-    prepare: async (op, signal) => {
-      const session = await apiFetch<AccountSession>('/api/auth/me', { signal });
-      if (`${session.family.id}:${session.user.id}` !== account)
-        throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
-      if (session.user.role === 'child')
+    sessionTransport: apiFetch,
+    prepare: async (op, _signal, { session }) => {
+      if (session?.user.role === 'child')
         throw new ApiRequestError('Zapis jest dostępny tylko dla dorosłych.', 403, 'FORBIDDEN');
       if (client && mealOfflineChangeSchema.parse(op.payload).type === 'export') {
         await client.cancelQueries({

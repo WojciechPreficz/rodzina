@@ -1,6 +1,8 @@
 import { focusManager, onlineManager } from '@tanstack/react-query';
 import { assertOfflineReplayAge, OfflineOperationExpiredError, OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../api.js';
+import { getSessionGeneration } from '../platform.js';
+import type { AccountSession } from '../session.js';
 import { accountToken, isAccountCurrent, transact, requestValue } from './database.js';
 import {
   acquireLease,
@@ -15,10 +17,13 @@ import {
 import { publishSyncStatus, reportStorageIssue, storageError } from './status.js';
 import { notifyOutboxChanged, watchOutbox } from './signals.js';
 
+export type SyncRun = { session?: AccountSession };
+
 export type SyncAdapter = {
   module: string;
-  prepare: (operation: Operation, signal: AbortSignal) => Promise<void>;
-  send: (operation: Operation, signal: AbortSignal) => Promise<unknown>;
+  sessionTransport?: (path: string, init?: RequestInit) => Promise<AccountSession>;
+  prepare?: (operation: Operation, signal: AbortSignal, run: SyncRun) => Promise<void>;
+  send: (operation: Operation, signal: AbortSignal, run?: SyncRun) => Promise<unknown>;
   reconcile: (tx: IDBTransaction, operation: Operation, response: unknown) => Promise<void>;
   invalidateAccess: (tx: IDBTransaction, operation: Operation, error: ApiRequestError) => Promise<void>;
 };
@@ -28,9 +33,9 @@ export function retryAt(attempts: number, retryAfterMs = 0, now = Date.now(), ra
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const abort = () => reject(new DOMException('Sender stopped', 'AbortError'));
-    if (signal.aborted) return abort();
-    signal.addEventListener('abort', abort, { once: true });
     promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
   });
 }
 export function startSync(accountId: string, adapters: SyncAdapter[], changed: () => Promise<void> | void) {
@@ -41,7 +46,8 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
   let controller: AbortController | undefined;
   let lease: Lease | undefined;
   let revision = '';
-  let sessionConfirmed = false;
+  let preparation: SyncRun | undefined;
+  let networkRevision = 0;
   let timer: number | undefined;
   let requested = false;
   const current = () => active && isAccountCurrent(token);
@@ -94,6 +100,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
       token,
     );
     if (!current()) return;
+    const sessionConfirmed = !!preparation?.session;
     const nextRevision = JSON.stringify([
       operations,
       synced.filter((entry) => entry.key.startsWith('last-sync:')),
@@ -118,11 +125,14 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
   };
   const run = async () => {
     if (!current()) return;
+    const network = networkRevision;
+    const online = () => network === networkRevision && onlineManager.isOnline();
+    let generation = getSessionGeneration();
     try {
       await status();
-      while (current() && onlineManager.isOnline()) {
+      while (current() && online()) {
         const preview = await inspect();
-        if (!current() || !onlineManager.isOnline()) break;
+        if (!current() || !online()) break;
         const ready = nextOperation(preview.operations, Date.now(), available);
         const heldByOther = preview.held && preview.held.owner !== owner && preview.held.expiresAt > Date.now();
         const reviewParents = preview.operations.filter((op) => op.status === 'needs-review');
@@ -137,6 +147,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
               )),
         );
         if (!needsClassification && (!ready || heldByOther)) break;
+        const previousLease = lease;
         const operation = await transaction(async (tx) => {
           const operations = await readOperations(tx, accountId);
           let classified = false;
@@ -186,8 +197,18 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         const adapter = adapters.find((adapter) => adapter.module === operation.module);
         if (!adapter) continue;
         const captured = lease!;
+        if (previousLease?.epoch !== captured.epoch || generation !== getSessionGeneration()) {
+          preparation = undefined;
+          generation = getSessionGeneration();
+        }
+        const context = (preparation ??= {});
         const request = new AbortController();
         controller = request;
+        const assertRequestCurrent = () => {
+          request.signal.throwIfAborted();
+          if (!online() || generation !== getSessionGeneration())
+            throw new DOMException('Sender context changed', 'AbortError');
+        };
         const renewal = window.setInterval(() => {
           void transaction(async (tx) => {
             const old = await assertLease(tx, accountId, captured, Date.now());
@@ -200,13 +221,25 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         }, 5000);
         const timeout = window.setTimeout(() => request.abort(), 60000);
         try {
-          await abortable(adapter.prepare(operation, request.signal), request.signal);
-          sessionConfirmed = true;
+          assertRequestCurrent();
+          if (adapter.sessionTransport && !context.session) {
+            const session = await abortable(
+              adapter.sessionTransport('/api/auth/me', { signal: request.signal }),
+              request.signal,
+            );
+            assertRequestCurrent();
+            if (`${session.family.id}:${session.user.id}` !== accountId)
+              throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
+            context.session = session;
+          }
+          if (adapter.prepare) await abortable(adapter.prepare(operation, request.signal, context), request.signal);
           if (!current()) break;
           await transaction((tx) => assertLease(tx, accountId, captured, Date.now()));
+          assertRequestCurrent();
           assertOfflineReplayAge(operation.submittedAt);
-          const response = await abortable(adapter.send(operation, request.signal), request.signal);
+          const response = await abortable(adapter.send(operation, request.signal, context), request.signal);
           if (!current()) break;
+          assertRequestCurrent();
           await transaction(async (tx) => {
             await assertLease(tx, accountId, captured, Date.now());
             const operations = await readOperations(tx, accountId);
@@ -217,6 +250,8 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             tx.objectStore('metadata').put({ accountId, key: `last-sync:${operation.module}`, value: Date.now() });
           });
         } catch (error) {
+          if (!(error instanceof ApiRequestError)) preparation = undefined;
+          else if (error.status === 403) delete context.session;
           if (!current()) break;
           if (error instanceof ApiRequestError && (error.status === 401 || error.code === 'SESSION_CHANGED')) {
             stop();
@@ -267,6 +302,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
       if (current() && !(error instanceof DOMException && error.name === 'AbortError'))
         reportStorageIssue(`Nie można zsynchronizować zmian. ${storageError(error)}`);
     } finally {
+      preparation = undefined;
       if (current()) {
         if (lease) {
           const captured = lease;
@@ -302,7 +338,14 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
     }
     void synchronize();
   };
-  const stopOnline = onlineManager.subscribe(wake);
+  const stopOnline = onlineManager.subscribe((isOnline) => {
+    if (!isOnline) {
+      networkRevision++;
+      preparation = undefined;
+      controller?.abort();
+    }
+    wake();
+  });
   const stopFocus = focusManager.subscribe((focused) => {
     if (focused) wake();
   });
@@ -314,6 +357,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
   function stop() {
     if (!active) return;
     active = false;
+    preparation = undefined;
     controller?.abort();
     window.clearTimeout(timer);
     stopOnline();

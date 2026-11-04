@@ -356,5 +356,12 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
 - [ ] Pamięć i bateria: pomiar navigator.storage.estimate() oraz liczników
       cache/kolejki przed i po rzeczywistych danych, zachowanie przy granicach
       i brak okresowej pracy pustego nadawcy; próba na fizycznym telefonie.
+- [ ] Synchronizacja po powrocie sieci: w fizycznym APK pobrać zadania, zakupy
+      i obiady, odłączyć sieć i zapisać 20–30 zmian, w tym wykonanie zadania
+      cyklicznego. Przywrócić łączność przy aktywnej aplikacji i sprawdzić
+      opróżnienie kolejki, zgodność danych na drugim urządzeniu, brak duplikatów
+      oraz pojawienie się następcy po potwierdzeniu wykonania. Zanotować czas
+      synchronizacji i zużycie baterii według Androida. Porównać powtarzane
+      przebiegi z poprzednim APK na tym samym telefonie i przy zbliżonym zasięgu.
 - [ ] Hosting: zaufane proxy, backup/odzyskanie oraz powrót ze starej PWA
       (wyrejestrowanie workera, zachowana sesja, manifest 410), po zleconym deployu.

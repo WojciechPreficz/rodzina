@@ -382,7 +382,11 @@ it('retains conflict dependencies and alarm blocks after restart while independe
   expect(restored.project().items[listId]?.find((entry) => entry.id === taskId)?.dueDate).toBe(task.dueDate);
 });
 
-it('removes private payloads and dependent work when access changes during a mutation', async () => {
+it.each([
+  [403, undefined],
+  [404, undefined],
+  [409, 'TASK_LIST_REVOKED'],
+] as const)('removes private work after mutation returns %s %s', async (status, code) => {
   const f = await fixture();
   await f.store.synchronize();
   await f.store.enqueue(listId, taskId, { type: 'update', data: { notes: 'Prywatna treść' } });
@@ -391,7 +395,7 @@ it('removes private payloads and dependent work when access changes during a mut
   f.request.mockImplementation(async (path, init) => {
     if (init?.method) {
       f.revoke();
-      throw new ApiRequestError('Nie istnieje', 404);
+      throw new ApiRequestError('Utracono dostęp', status, code);
     }
     return original(path, init);
   });
@@ -402,6 +406,7 @@ it('removes private payloads and dependent work when access changes during a mut
   expect(await transact('readonly', (tx) => readOperations(tx, account))).toEqual([]);
   expect((await readTaskData(account))?.rejection).toContain('Utracono dostęp');
   expect(f.request.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1);
+  expect(f.request.mock.calls.filter(([path]) => path === '/api/tasks/lists')).toHaveLength(code ? 1 : 2);
 });
 
 it.each(['partial', 'failure'] as const)('preserves the complete cache on a %s snapshot', async (mode) => {

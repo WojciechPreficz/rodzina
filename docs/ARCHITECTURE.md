@@ -38,6 +38,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   zmiana konta i utrata sesji czyszczą również ten rekord, a spóźnione operacje
   poprzedniego konta nie mogą go odtworzyć. Lokalna kopia nie zastępuje
   sprawdzenia uprawnień przez API. Klucz `rodzina:pending-logout` zachowuje wartość.
+- Wspólny nadawca outboxa potwierdza użytkownika i rodzinę przez `/api/auth/me`
+  przed pierwszą gotową operacją zadań, zakupów lub obiadów. Potwierdzenie
+  współdzielą moduły w obrębie jednego przebiegu i dzierżawy. Zmiana konta lub
+  generacji, utrata dzierżawy, przerwa transportu i koniec przebiegu je wygaszają.
+  Po `403` kolejna operacja wymaga ponownego potwierdzenia; `401` i
+  `SESSION_CHANGED` zatrzymują nadawcę i uruchamiają obsługę utraty sesji.
+  Każda mutacja nadal podlega autoryzacji po stronie API.
 - Produkcja: cPanel vh.pl, Node 24, HTTPS i Phusion Passenger.
   Passenger może usypiać proces: bez stałego workera, WebSocketów,
   Dockera i Redisa. Jedynym cronem jest backup.
@@ -259,8 +266,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Zapis snapshotu z następcą i potwierdzenie outboxa są jedną transakcją.
   Błąd pobrania lub zapisu pozostawia operację do retry z tym samym ID;
   odświeżenie w tle nie publikuje następcy przed potwierdzeniem wykonania.
-  Konflikty, anomalie czasu i wiek ponad 30 dni wymagają sprawdzenia;
-  dostęp sprawdzamy przed replay, a zmiana konta odrzuca spóźnione odpowiedzi.
+  Konflikty, anomalie czasu i wiek ponad 30 dni wymagają sprawdzenia.
+  Dostęp do list pobieramy przed pierwszą operacją zadań w przebiegu nadawcy.
+  Po `403` lub `404` adapter odświeża dostęp, aby odróżnić utratę listy od
+  błędu pojedynczego zadania. Brak listy skutkuje `TASK_LIST_REVOKED`, ukryciem
+  listy i usunięciem jej lokalnych danych oraz oczekujących zmian. Jawny
+  sygnał `TASK_LIST_REVOKED` od razu ukrywa listę i wygasza odczyt dostępu
+  przed następną operacją. Zmiana konta odrzuca spóźnione odpowiedzi.
   Istniejący taskOperationBlocksAlarm wstrzymuje alarmy pending także po
   restarcie i w stanie do sprawdzenia; uzgodnienie odświeża harmonogram.
   Konfiguracja, pominięcie i zatrzymanie serii wymagają internetu.
