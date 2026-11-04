@@ -9,7 +9,9 @@ export const mealWeekStartSchema = calendarDateSchema.refine(
   'Początek tygodnia musi być poniedziałkiem.',
 );
 export const mealParamsSchema = z.object({ date: calendarDateSchema, slot: z.literal('dinner') }).strict();
-export const mealWeekQuerySchema = z.object({ weekStart: mealWeekStartSchema }).strict();
+export const mealWeekQuerySchema = z
+  .object({ weekStart: mealWeekStartSchema, multiple: z.literal('true').optional() })
+  .strict();
 export const mealIngredientInputSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -58,7 +60,7 @@ export const mealsToShoppingListSchema = z
   .object({
     weekStart: mealWeekStartSchema,
     listId: z.string().uuid(),
-    mealIds: z.array(z.string().uuid()).min(1).max(7).optional(),
+    mealIds: z.array(z.string().uuid()).min(1).optional(),
     confirmRepeat: z.boolean().default(false),
     snapshot: z
       .array(
@@ -71,12 +73,8 @@ export const mealsToShoppingListSchema = z
           .strict(),
       )
       .min(1)
-      .max(7)
       .optional(),
-    targets: z
-      .array(z.object({ name: z.string().trim().min(1).max(200), id: z.string().uuid() }).strict())
-      .max(700)
-      .optional(),
+    targets: z.array(z.object({ name: z.string().trim().min(1).max(200), id: z.string().uuid() }).strict()).optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -116,22 +114,30 @@ export const mealOfflineWriteSchema = z
     data: putMealSchema.nullable(),
   })
   .strict();
-export const mealOfflineChangeSchema = z.discriminatedUnion('type', [
-  z
-    .object({
-      type: z.literal('write'),
-      weekStart: mealWeekStartSchema,
-      writes: z
-        .array(mealOfflineWriteSchema)
-        .max(7)
-        .refine(
-          (writes) =>
-            new Set(writes.map((write) => write.date)).size === writes.length &&
-            new Set(writes.map((write) => write.id)).size === writes.length,
-          'Daty i identyfikatory zapisów nie mogą się powtarzać.',
-        ),
-    })
-    .strict(),
-  z.object({ type: z.literal('export'), data: mealsToShoppingListSchema }).strict(),
-]);
+export const mealOfflineChangeSchema = z
+  .discriminatedUnion('type', [
+    z
+      .object({
+        type: z.literal('write'),
+        weekStart: mealWeekStartSchema,
+        // Omitted by older clients, whose writes target the first meal on a date.
+        byId: z.literal(true).optional(),
+        expectedDays: z.record(calendarDateSchema, z.array(z.string().uuid())).optional(),
+        writes: z
+          .array(mealOfflineWriteSchema)
+          .refine(
+            (writes) => new Set(writes.map((write) => write.id)).size === writes.length,
+            'Identyfikatory zapisów nie mogą się powtarzać.',
+          ),
+      })
+      .strict(),
+    z.object({ type: z.literal('export'), data: mealsToShoppingListSchema }).strict(),
+  ])
+  .refine(
+    (change) =>
+      change.type !== 'write' ||
+      change.byId ||
+      (!change.expectedDays && new Set(change.writes.map((write) => write.date)).size === change.writes.length),
+    'Nieprawidłowy zapis dla starszego klienta.',
+  );
 export type MealOfflineChange = z.infer<typeof mealOfflineChangeSchema>;

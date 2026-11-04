@@ -232,6 +232,13 @@
       "when": 1793690181625,
       "tag": "0032_clammy_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1793818395846,
+      "tag": "0033_superb_klaw",
+      "breakpoints": true
     }
   ]
 }

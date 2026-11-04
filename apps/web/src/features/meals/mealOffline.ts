@@ -60,6 +60,14 @@ export function mealAdapter(account: string, client?: QueryClient): SyncAdapter 
       const change = mealOfflineChangeSchema.parse(op.payload);
       if (change.type === 'write') {
         const week = mealWeekResponseSchema.parse((response as { week: unknown }).week);
+        // A replay from a previous app version returns only the first meal for each day.
+        if (!change.byId) {
+          const known = cache.weeks[week.weekStart]?.data.days;
+          for (const [index, day] of week.days.entries()) {
+            const additional = known?.[index]?.meals.slice(1) ?? [];
+            day.meals.push(...additional.filter((meal) => !day.meals.some((item) => item.id === meal.id)));
+          }
+        }
         cache.weeks[week.weekStart] = { data: week, syncedAt: Date.now() };
       } else {
         const result = mealsToShoppingListResponseSchema.parse(response);
@@ -202,16 +210,18 @@ async function queueMealChange(
     return { ...change, operationId };
   });
 }
-export function queueMeal(date: string, data: PutMeal | null) {
+export function queueMeal(date: string, data: PutMeal | null, id: string | null) {
   return queueMealChange((cache) => {
     const weekStart = mealWeekStart(date);
     const week = cache.weeks[weekStart];
     if (!week) throw new Error('Ten tydzień nie został pobrany. Połącz się z internetem.');
-    const existing = week.data.days.find((day) => day.date === date)?.meals[0];
+    if (id && !week.data.days.find((day) => day.date === date)?.meals.some((meal) => meal.id === id))
+      throw new Error('Tego dania nie ma już w planie.');
     return {
       type: 'write',
       weekStart,
-      writes: [{ date, id: existing?.id ?? crypto.randomUUID(), expectedId: existing?.id ?? null, data }],
+      byId: true,
+      writes: [{ date, id: id ?? crypto.randomUUID(), expectedId: id, data }],
     };
   });
 }
@@ -220,20 +230,21 @@ export function queueMealCopy(weekStart: string, overwrite: boolean) {
     const source = cache.weeks[shiftMealDate(weekStart, -7)];
     const target = cache.weeks[weekStart];
     if (!source || !target) throw new Error('Najpierw pobierz tydzień źródłowy i docelowy.');
-    const writes = source.data.days.flatMap((day, index) => {
-      const meal = day.meals[0];
-      const previous = target.data.days[index]!.meals[0];
-      if (!meal || (!overwrite && previous)) return [];
-      return [
-        {
-          date: target.data.days[index]!.date,
-          id: previous?.id ?? crypto.randomUUID(),
-          expectedId: previous?.id ?? null,
-          data: { title: meal.title, notes: meal.notes, ingredients: meal.ingredients },
-        },
-      ];
+    const expectedDays: Record<string, string[]> = {};
+    const writes = source.data.days.flatMap(({ meals }, index) => {
+      const { date, meals: previous } = target.data.days[index]!;
+      if (!meals.length || (!overwrite && previous.length)) return [];
+      expectedDays[date] = previous.map((meal) => meal.id);
+      const copies = meals.map(({ title, notes, ingredients }, position) => ({
+        date,
+        id: previous[position]?.id ?? crypto.randomUUID(),
+        expectedId: previous[position]?.id ?? null,
+        data: { title, notes, ingredients },
+      }));
+      const removals = previous.slice(meals.length).map(({ id }) => ({ date, id, expectedId: id, data: null }));
+      return [...copies, ...removals];
     });
-    return { type: 'write', weekStart, writes };
+    return { type: 'write', weekStart, byId: true, expectedDays, writes };
   });
 }
 export async function queueMealExport(weekStart: string, listId: string, mealIds: string[], confirmRepeat: boolean) {

@@ -38,23 +38,27 @@ export function createMealService(database: DatabaseConnection) {
       requireAdult(role);
       if (change.type !== 'write') throw new ApiError(400, 'VALIDATION_ERROR', 'Nieprawidłowa zmiana obiadów.');
       return database.db.transaction(() => {
-        const current = repository.week(familyId, change.weekStart, day(change.weekStart, 6));
-        for (const write of change.writes) {
-          if (write.date < change.weekStart || write.date > day(change.weekStart, 6))
+        const lastDate = day(change.weekStart, 6);
+        const current = repository.week(familyId, change.weekStart, lastDate);
+        const conflict = () =>
+          new ApiError(409, 'MEAL_CONFLICT', 'Plan zmienił się na innym urządzeniu. Sprawdź oczekującą zmianę.');
+        for (const date of [...change.writes.map((write) => write.date), ...Object.keys(change.expectedDays ?? {})]) {
+          if (date < change.weekStart || date > lastDate)
             throw new ApiError(400, 'VALIDATION_ERROR', 'Data nie należy do zapisanego tygodnia.');
-          const existing = current.find((meal) => meal.date === write.date);
-          if ((existing?.id ?? null) !== write.expectedId || (existing && write.id !== existing.id))
-            throw new ApiError(
-              409,
-              'MEAL_CONFLICT',
-              'Plan zmienił się na innym urządzeniu. Sprawdź oczekującą zmianę.',
-            );
+        }
+        for (const [date, expected] of Object.entries(change.expectedDays ?? {})) {
+          const ids = current.filter((meal) => meal.date === date).map((meal) => meal.id);
+          if (ids.length !== expected.length || ids.some((id, index) => id !== expected[index])) throw conflict();
+        }
+        for (const write of change.writes) {
+          const existing = current.find((meal) => meal.date === write.date && (!change.byId || meal.id === write.id));
+          if ((existing?.id ?? null) !== write.expectedId || (existing && write.id !== existing.id)) throw conflict();
           if (!existing && database.db.select().from(meals).where(eq(meals.id, write.id)).get())
             throw new ApiError(409, 'MEAL_CONFLICT', 'Identyfikator obiadu jest już używany.');
           if (write.data) repository.put(familyId, actorId, write.date, write.data, write.id);
-          else if (existing) repository.remove(familyId, write.date);
+          else if (existing) repository.remove(familyId, existing.id);
         }
-        return { ok: true, week: { ok: true, ...this.week(familyId, change.weekStart) } };
+        return { ok: true, week: { ok: true, ...this.week(familyId, change.weekStart, change.byId) } };
       });
     },
     toShoppingList(familyId: string, actorId: string, role: FamilyRole, data: MealsToShoppingList) {
@@ -150,43 +154,58 @@ export function createMealService(database: DatabaseConnection) {
         { behavior: 'immediate' },
       );
     },
-    week(familyId: string, weekStart: string) {
+    week(familyId: string, weekStart: string, multiple = false) {
       return database.db.transaction(() => {
         const meals = repository.week(familyId, weekStart, day(weekStart, 6));
         return {
           weekStart,
           days: Array.from({ length: 7 }, (_, offset) => {
             const date = day(weekStart, offset);
-            return { date, meals: meals.filter((meal) => meal.date === date) };
+            const planned = meals.filter((meal) => meal.date === date);
+            return { date, meals: multiple ? planned : planned.slice(0, 1) };
           }),
         };
       });
     },
     put(familyId: string, actorId: string, role: FamilyRole, date: string, data: PutMeal) {
       requireAdult(role);
-      return database.db.transaction(() => repository.put(familyId, actorId, date, data));
+      return database.db.transaction(
+        () => repository.put(familyId, actorId, date, data, repository.firstId(familyId, date)),
+        {
+          behavior: 'immediate',
+        },
+      );
     },
     remove(familyId: string, role: FamilyRole, date: string) {
       requireAdult(role);
-      if (!repository.remove(familyId, date)) throw new ApiError(404, 'NOT_FOUND', 'Obiad nie istnieje.');
+      return database.db.transaction(
+        () => {
+          const id = repository.firstId(familyId, date);
+          if (!id || !repository.remove(familyId, id)) throw new ApiError(404, 'NOT_FOUND', 'Obiad nie istnieje.');
+        },
+        { behavior: 'immediate' },
+      );
     },
     copy(familyId: string, actorId: string, role: FamilyRole, data: CopyMealWeek) {
       requireAdult(role);
-      return database.db.transaction(() => {
-        const source = repository.week(familyId, data.fromWeekStart, day(data.fromWeekStart, 6));
-        const target = repository.week(familyId, data.toWeekStart, day(data.toWeekStart, 6));
-        let copied = 0;
-        for (const meal of source) {
-          const offset = Math.round(
-            (Date.parse(`${meal.date}T00:00:00Z`) - Date.parse(`${data.fromWeekStart}T00:00:00Z`)) / 86400000,
-          );
-          const date = day(data.toWeekStart, offset);
-          if (!data.overwrite && target.some((item) => item.date === date)) continue;
-          repository.put(familyId, actorId, date, meal);
-          copied++;
-        }
-        return copied;
-      });
+      return database.db.transaction(
+        () => {
+          const source = this.week(familyId, data.fromWeekStart).days.flatMap((day) => day.meals);
+          let copied = 0;
+          for (const meal of source) {
+            const offset = Math.round(
+              (Date.parse(`${meal.date}T00:00:00Z`) - Date.parse(`${data.fromWeekStart}T00:00:00Z`)) / 86400000,
+            );
+            const date = day(data.toWeekStart, offset);
+            const id = repository.firstId(familyId, date);
+            if (!data.overwrite && id) continue;
+            repository.put(familyId, actorId, date, meal, id);
+            copied++;
+          }
+          return copied;
+        },
+        { behavior: 'immediate' },
+      );
     },
     suggestions(familyId: string, query: string) {
       return database.db.transaction(() => repository.suggestions(familyId, query));

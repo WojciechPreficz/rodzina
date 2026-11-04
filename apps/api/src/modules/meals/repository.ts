@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Meal, PutMeal } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import { mealIngredients, meals } from '../../db/schema.js';
 
 export function createMealRepository(database: DatabaseConnection) {
   const db = database.db;
-  const scope = (familyId: string, date: string) =>
-    and(eq(meals.familyId, familyId), eq(meals.date, date), eq(meals.slot, 'dinner'));
+  const order = [asc(meals.createdAt), asc(sql`${meals}.rowid`)] as const;
   function hydrate(rows: (typeof meals.$inferSelect)[]): Meal[] {
     if (!rows.length) return [];
     const ingredients = db
@@ -30,13 +29,21 @@ export function createMealRepository(database: DatabaseConnection) {
     return rows.map((row) => ({ ...row, ingredients: grouped.get(row.id) ?? [] }));
   }
   return {
+    firstId(familyId: string, date: string) {
+      return db
+        .select({ id: meals.id })
+        .from(meals)
+        .where(and(eq(meals.familyId, familyId), eq(meals.date, date)))
+        .orderBy(...order)
+        .get()?.id;
+    },
     week(familyId: string, start: string, end: string) {
       return hydrate(
         db
           .select()
           .from(meals)
           .where(and(eq(meals.familyId, familyId), gte(meals.date, start), lte(meals.date, end)))
-          .orderBy(asc(meals.date))
+          .orderBy(asc(meals.date), ...order)
           .all(),
       );
     },
@@ -56,7 +63,7 @@ export function createMealRepository(database: DatabaseConnection) {
           updatedAt: now,
         })
         .onConflictDoUpdate({
-          target: [meals.familyId, meals.date, meals.slot],
+          target: meals.id,
           set: { title: data.title, notes: data.notes || null, updatedAt: now },
         })
         .returning()
@@ -76,8 +83,12 @@ export function createMealRepository(database: DatabaseConnection) {
           .run();
       return hydrate([row])[0]!;
     },
-    remove(familyId: string, date: string) {
-      return db.delete(meals).where(scope(familyId, date)).returning({ id: meals.id }).get();
+    remove(familyId: string, id: string) {
+      return db
+        .delete(meals)
+        .where(and(eq(meals.familyId, familyId), eq(meals.id, id)))
+        .returning({ id: meals.id })
+        .get();
     },
     suggestions(familyId: string, query: string) {
       const normalize = (value: string) => value.normalize('NFKC').toLocaleLowerCase('pl').replace(/\s+/g, ' ').trim();

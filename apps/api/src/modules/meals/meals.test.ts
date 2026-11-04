@@ -114,6 +114,42 @@ describe('meals API', () => {
   function offline(change: unknown, operationId = randomUUID(), user = admin) {
     return request('POST', `/api/meals/offline?operationId=${operationId}&actorId=${user.id}`, change, user);
   }
+  it('keeps same-day dishes independent and exposes them to the new client and shopping export', async () => {
+    const first = await put();
+    const writes = Array.from({ length: 7 }, (_, index) => ({
+      date: start,
+      id: randomUUID(),
+      expectedId: null,
+      data: { title: `Danie ${index + 2}`, ingredients: [{ name: `Składnik ${index + 2}` }] },
+    }));
+    const change = { type: 'write', weekStart: start, byId: true };
+    const added = await offline({ ...change, writes });
+    expect(added.statusCode, added.body).toBe(200);
+    const fullWeek = await request('GET', `/api/meals?weekStart=${start}&multiple=true`, undefined, child);
+    const planned = mealWeekResponseSchema.parse(fullWeek.json()).days[0]!.meals;
+    expect(planned.map(({ id }) => id)).toEqual([first.id, ...writes.map(({ id }) => id)]);
+    expect((await week()).days[0]!.meals.map(({ id }) => id)).toEqual([first.id]);
+
+    const exported = await exportMeals(list().id, {
+      mealIds: planned.map(({ id }) => id),
+      snapshot: planned.map(({ id, date, ingredients }) => ({ mealId: id, date, ingredients })),
+    });
+    expect(exported.statusCode, exported.body).toBe(200);
+    expect(exported.json().added).toBe(9);
+
+    const [edit, remove] = writes;
+    const updated = await offline({
+      ...change,
+      writes: [
+        { ...edit, expectedId: edit!.id, data: { ...edit!.data, title: 'Zmienione danie' } },
+        { ...remove, expectedId: remove!.id, data: null },
+      ],
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    const remaining = mealWeekResponseSchema.parse(updated.json().week).days[0]!.meals;
+    expect(remaining.map(({ id }) => id)).toEqual([first.id, edit!.id, ...writes.slice(2).map(({ id }) => id)]);
+    expect(remaining[1]!.title).toBe('Zmienione danie');
+  });
   it('replays a retained offline response written with the legacy fingerprint', async () => {
     const operationId = randomUUID();
     const url = `/api/meals/offline?operationId=${operationId}&actorId=${admin.id}`;
@@ -408,7 +444,6 @@ describe('meals API', () => {
       { listId: 'bad' },
       { mealIds: [] },
       { mealIds: ['bad'] },
-      { mealIds: Array(8).fill(saved.id) },
       { confirmRepeat: 'true' },
       { familyId },
     ]) {
@@ -642,14 +677,9 @@ describe('meals API', () => {
     expect((await copy(true)).statusCode).toBe(500);
     expect(await week(target)).toEqual(beforeTarget);
   });
-  it('enforces unique slots and cascades, preserving meals when their creator is removed', async () => {
+  it('enforces unique meal IDs and cascades, preserving meals when their creator is removed', async () => {
     const saved = await put(start, meal, member);
-    expect(() =>
-      database.db
-        .insert(schema.meals)
-        .values({ ...saved, id: randomUUID() })
-        .run(),
-    ).toThrow();
+    expect(() => database.db.insert(schema.meals).values(saved).run()).toThrow();
     database.db.delete(schema.users).where(eq(schema.users.id, member.id)).run();
     expect((await week()).days[0]!.meals[0]!.createdBy).toBeNull();
     database.db.delete(schema.families).where(eq(schema.families.id, familyId)).run();

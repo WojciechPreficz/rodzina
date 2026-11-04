@@ -20,7 +20,7 @@ export const mealCacheSchema = z
         week.data.days.some(
           (day, index) =>
             day.date !== shiftMealDate(weekStart, index) ||
-            day.meals.length > 1 ||
+            new Set(day.meals.map((meal) => meal.id)).size !== day.meals.length ||
             day.meals.some((meal) => meal.familyId !== cache.account.split(':')[0] || meal.date !== day.date),
         )
       )
@@ -105,29 +105,43 @@ export function projectMeals(cache: MealCache, operations: readonly MealOperatio
   const result = structuredClone(cache);
   for (const operation of operations) {
     if (operation.status === 'needs-review' || operation.payload.type !== 'write') continue;
-    const { weekStart, writes } = operation.payload;
+    const { weekStart, writes, byId, expectedDays } = operation.payload;
     const week = result.weeks[weekStart];
     if (!week) continue;
+    if (
+      expectedDays &&
+      week.data.days.some(({ date, meals }) => {
+        const expected = expectedDays[date];
+        return (
+          expected && (meals.length !== expected.length || meals.some((meal, index) => meal.id !== expected[index]))
+        );
+      })
+    )
+      continue;
     for (const write of writes) {
       const day = week.data.days.find((day) => day.date === write.date);
       if (!day) continue;
-      const previous = day.meals[0];
-      day.meals = write.data
-        ? [
-            {
-              ...write.data,
-              id: write.id,
-              familyId: familyId!,
-              date: write.date,
-              slot: 'dinner',
-              notes: write.data.notes ?? null,
-              ingredients: write.data.ingredients.map((item) => ({ ...item, quantity: item.quantity ?? null })),
-              createdBy: previous?.createdBy ?? userId!,
-              createdAt: previous?.createdAt ?? operation.submittedAt,
-              updatedAt: operation.submittedAt,
-            },
-          ]
-        : [];
+      const index = byId ? day.meals.findIndex((meal) => meal.id === write.id) : day.meals.length ? 0 : -1;
+      const previous = day.meals[index];
+      if ((previous?.id ?? null) !== write.expectedId || (previous && previous.id !== write.id)) continue;
+      if (!write.data) {
+        if (previous) day.meals.splice(index, 1);
+        continue;
+      }
+      const meal: (typeof day.meals)[number] = {
+        ...write.data,
+        id: write.id,
+        familyId: familyId!,
+        date: write.date,
+        slot: 'dinner',
+        notes: write.data.notes ?? null,
+        ingredients: write.data.ingredients.map((item) => ({ ...item, quantity: item.quantity ?? null })),
+        createdBy: previous ? previous.createdBy : userId!,
+        createdAt: previous?.createdAt ?? operation.submittedAt,
+        updatedAt: operation.submittedAt,
+      };
+      if (previous) day.meals[index] = meal;
+      else day.meals.push(meal);
     }
   }
   return result;

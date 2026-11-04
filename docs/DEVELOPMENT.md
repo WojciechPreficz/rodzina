@@ -277,6 +277,7 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       dziecko tylko odczytuje. Domyślnej grupy nie usuwamy, usunięcie innej
       przenosi kontakty. Izolacja rodzin i cofnięcie dostępu.
 - [ ] Obiady (6.3): ręcznie zaplanować pięć obiadów i skopiować tydzień,
+      w tym dodać dwa dania tego samego dnia i zmienić lub usunąć jedno z nich,
       sprawdzić pomijanie oraz nadpisanie zajętych dni, podpowiedzi składników,
       edycję, usuwanie i odczyt dziecka. Odbiór przy 390/1280 px i w fizycznym
       APK, w tym klawiatura, fokus oraz systemowy Wstecz. Test transportu Androida

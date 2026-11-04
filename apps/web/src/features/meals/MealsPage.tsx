@@ -26,8 +26,8 @@ function MealWeek() {
   const savedState = useMealState();
   const today = todayInTimezone(family?.timezone ?? 'Europe/Warsaw');
   const [week, setWeek] = useState(() => mealWeekStart(today));
-  const [editor, setEditor] = useState<string | null>(null);
-  const [removal, setRemoval] = useState<string | null>(null);
+  const [editor, setEditor] = useState<{ date: string; meal?: Meal } | null>(null);
+  const [removal, setRemoval] = useState<Meal | null>(null);
   const [copying, setCopying] = useState(false);
   const [overwrite, setOverwrite] = useState(false);
   const [notice, setNotice] = useState('');
@@ -41,8 +41,8 @@ function MealWeek() {
   const mutation = useMutation({
     networkMode: 'always',
     retry: false,
-    mutationFn: async (action: { date: string; data: PutMeal | null } | { overwrite: boolean }) =>
-      'date' in action ? queueMeal(action.date, action.data) : queueMealCopy(week, action.overwrite),
+    mutationFn: async (action: { date: string; id: string | null; data: PutMeal | null } | { overwrite: boolean }) =>
+      'date' in action ? queueMeal(action.date, action.data, action.id) : queueMealCopy(week, action.overwrite),
   });
   const close = () => {
     if (mutation.isPending || (editor && !allowNavigation())) return;
@@ -56,16 +56,17 @@ function MealWeek() {
     setWeek(value);
     setNotice('');
   };
-  const selected = query.data?.days.find((day) => day.date === editor)?.meals[0];
   const runAction = async () => {
     try {
       if (removal) {
-        await mutation.mutateAsync({ date: removal, data: null });
+        await mutation.mutateAsync({ date: removal.date, id: removal.id, data: null });
         setNotice('Obiad został usunięty.');
         setRemoval(null);
       } else {
         const result = await mutation.mutateAsync({ overwrite });
-        setNotice(`Skopiowano obiadów: ${result.type === 'write' ? result.writes.length : 0}.`);
+        setNotice(
+          `Skopiowano obiadów: ${result.type === 'write' ? result.writes.filter((write) => write.data).length : 0}.`,
+        );
         setCopying(false);
       }
     } catch {
@@ -204,95 +205,93 @@ function MealWeek() {
       )}
       {query.data && (
         <div className="meal-week-grid">
-          {query.data.days.map(({ date, meals }) => {
-            const meal = meals[0];
-            return (
-              <Paper
-                component="article"
-                withBorder
-                radius="lg"
-                p="lg"
-                key={date}
-                className="meal-day"
-                aria-label={mealDateLabel(date, true)}
-              >
-                <Stack h="100%">
-                  <div>
-                    <Title order={2} size="h4">
-                      {mealDateLabel(date, true)}
+          {query.data.days.map(({ date, meals }) => (
+            <Paper
+              component="article"
+              withBorder
+              radius="lg"
+              p="lg"
+              key={date}
+              className="meal-day"
+              aria-label={mealDateLabel(date, true)}
+            >
+              <Stack h="100%">
+                <div>
+                  <Title order={2} size="h4">
+                    {mealDateLabel(date, true)}
+                  </Title>
+                  {date === today && <Badge mt="xs">Dziś</Badge>}
+                </div>
+                {meals.map((meal) => (
+                  <Stack key={meal.id} gap="xs" className="meal-dish">
+                    <Title order={3} size="h3">
+                      {meal.title}
                     </Title>
-                    {date === today && <Badge mt="xs">Dziś</Badge>}
-                  </div>
-                  {meal ? (
-                    <>
-                      <Title order={3} size="h3">
-                        {meal.title}
-                      </Title>
-                      {meal.notes && (
-                        <Text className="meal-notes" size="sm">
-                          {meal.notes}
-                        </Text>
-                      )}
-                      {meal.ingredients.length > 0 && (
-                        <ul className="meal-ingredients">
-                          {meal.ingredients.map((item, index) => (
-                            <li key={index}>
-                              {item.name}
-                              {item.quantity ? ` — ${item.quantity}` : ''}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {canEdit && (
-                        <Group mt="auto" gap="xs">
-                          <Button
-                            variant="light"
-                            disabled={!writable}
-                            onClick={() => {
-                              mutation.reset();
-                              setNotice('');
-                              setEditor(date);
-                            }}
-                            aria-label={`Edytuj obiad: ${mealDateLabel(date)}`}
-                          >
-                            Edytuj
-                          </Button>
-                          <Button
-                            variant="subtle"
-                            color="red"
-                            disabled={!writable}
-                            onClick={() => {
-                              mutation.reset();
-                              setRemoval(date);
-                            }}
-                            aria-label={`Usuń obiad: ${mealDateLabel(date)}`}
-                          >
-                            Usuń
-                          </Button>
-                        </Group>
-                      )}
-                    </>
-                  ) : canEdit ? (
-                    <Button
-                      mt="auto"
-                      variant="light"
-                      disabled={!writable}
-                      aria-label={`Dodaj obiad: ${mealDateLabel(date)}`}
-                      onClick={() => {
-                        mutation.reset();
-                        setNotice('');
-                        setEditor(date);
-                      }}
-                    >
-                      ＋ Dodaj obiad
-                    </Button>
-                  ) : (
-                    <Text c="dimmed">Brak zaplanowanego obiadu.</Text>
-                  )}
-                </Stack>
-              </Paper>
-            );
-          })}
+                    {meal.notes && (
+                      <Text className="meal-notes" size="sm">
+                        {meal.notes}
+                      </Text>
+                    )}
+                    {meal.ingredients.length > 0 && (
+                      <ul className="meal-ingredients">
+                        {meal.ingredients.map((item, index) => (
+                          <li key={index}>
+                            {item.name}
+                            {item.quantity ? ` — ${item.quantity}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {canEdit && (
+                      <Group gap="xs">
+                        <Button
+                          variant="light"
+                          disabled={!writable}
+                          onClick={() => {
+                            mutation.reset();
+                            setNotice('');
+                            setEditor({ date, meal });
+                          }}
+                          aria-label={`Edytuj obiad: ${meal.title}`}
+                        >
+                          Edytuj
+                        </Button>
+                        <Button
+                          variant="subtle"
+                          color="red"
+                          disabled={!writable}
+                          onClick={() => {
+                            mutation.reset();
+                            setRemoval(meal);
+                          }}
+                          aria-label={`Usuń obiad: ${meal.title}`}
+                        >
+                          Usuń
+                        </Button>
+                      </Group>
+                    )}
+                  </Stack>
+                ))}
+                {canEdit ? (
+                  <Button
+                    mt="auto"
+                    variant="light"
+                    disabled={!writable}
+                    aria-label={`Dodaj danie: ${mealDateLabel(date)}`}
+                    onClick={() => {
+                      mutation.reset();
+                      setNotice('');
+                      setEditor({ date });
+                    }}
+                  >
+                    ＋ Dodaj danie
+                  </Button>
+                ) : (
+                  !meals.length && <Text c="dimmed">Brak zaplanowanego obiadu.</Text>
+                )}
+              </Stack>
+            </Paper>
+          ))}
         </div>
       )}
       <Modal
@@ -301,7 +300,7 @@ function MealWeek() {
         size="lg"
         title={
           editor
-            ? `${selected ? 'Edytuj obiad' : 'Dodaj obiad'} — ${mealDateLabel(editor)}`
+            ? `${editor.meal ? 'Edytuj obiad' : 'Dodaj obiad'} — ${mealDateLabel(editor.date)}`
             : removal
               ? 'Usuń obiad'
               : 'Skopiuj poprzedni tydzień'
@@ -312,14 +311,14 @@ function MealWeek() {
       >
         {editor && (
           <MealForm
-            key={editor}
-            meal={selected}
+            key={editor.meal?.id ?? editor.date}
+            meal={editor.meal}
             account={account}
             disabled={!writable}
             pending={mutation.isPending}
             onCancel={() => setEditor(null)}
             onSave={async (data: PutMeal) => {
-              await mutation.mutateAsync({ date: editor, data });
+              await mutation.mutateAsync({ date: editor.date, id: editor.meal?.id ?? null, data });
               setNotice('Obiad został zapisany.');
             }}
           />
@@ -328,13 +327,13 @@ function MealWeek() {
           <Stack>
             <Text>
               {removal
-                ? 'Czy usunąć zaplanowany obiad wraz ze składnikami?'
+                ? `Czy usunąć „${removal.title}” wraz ze składnikami?`
                 : `Skopiować obiady z tygodnia ${mealDateLabel(shiftMealDate(week, -7))} do tygodnia ${mealDateLabel(week)}?`}
             </Text>
             {copying && (
               <Checkbox
                 label="Nadpisz istniejące obiady"
-                description="Bez zaznaczenia skopiujemy tylko obiady na wolne dni. Pozostałe dni nie zmienią się."
+                description="Z zaznaczeniem zastąpimy cały plan w dniach, z których kopiujemy dania. Bez zaznaczenia skopiujemy dania tylko na wolne dni."
                 checked={overwrite}
                 disabled={mutation.isPending}
                 onChange={(event) => setOverwrite(event.currentTarget.checked)}

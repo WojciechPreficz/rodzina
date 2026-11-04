@@ -322,14 +322,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   na rodzinę; pozostałe początkowe grupy: Rodzina, Znajomi, Praca.
   Usunięcie grupy przenosi kontakty do domyślnej w transakcji.
   Dorośli edytują, cała rodzina odczytuje; brak integracji z książką telefonu.
-- Obiady: jeden `dinner` na datę i rodzinę, składniki zachowują kolejność.
-  `GET /api/meals?weekStart=YYYY-MM-DD` wymaga poniedziałku i zwraca siedem
-  `days` z datą i tablicą `meals`, również dla pustych dni. Dorośli wykonują
-  `PUT` (upsert) i `DELETE /api/meals/:date/dinner`; dziecko tylko odczytuje.
-  PUT zastępuje składniki i notatkę, zachowując ID i autora istniejącego obiadu.
-  `POST /api/meals/copy-week` kopiuje dni źródła atomowo: `overwrite=false`
-  pomija zajęte dni, `true` zastępuje ich zawartość. Pozostałe dni docelowe
-  pozostają bez zmian; kopiowanie na ten sam tydzień jest odrzucane.
+- Obiady: rodzina może zaplanować wiele dań typu `dinner` na dzień.
+  Każde danie ma własne ID i uporządkowane składniki.
+  `GET /api/meals?weekStart=YYYY-MM-DD&multiple=true` wymaga poniedziałku
+  i zwraca siedem dni z tablicami dań. Bez `multiple=true` zwraca pierwsze
+  danie każdego dnia dla starszych klientów. Starsze zapisy po dacie
+  (`PUT` i `DELETE /api/meals/:date/dinner` oraz `POST /api/meals/copy-week`)
+  również działają na pierwszym daniu. Dziecko ma dostęp tylko do odczytu.
   `GET /api/meals/suggestions?q=` zwraca do 20 różnych tytułów z aktualnie
   zapisanych obiadów rodziny wraz ze składnikami ostatnio zapisanego wariantu.
   Wyszukiwanie i grupowanie ignorują wielkość liter i różnice białych znaków.
@@ -337,14 +336,16 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   i powrót do bieżącego tygodnia według strefy rodziny. Dorośli dodają,
   edytują i usuwają obiady; formularz pozwala wybrać wcześniejsze danie
   z jego składnikami, zmienić notatkę i składniki. Kopiowanie poprzedniego
-  tygodnia wymaga potwierdzenia z opcjonalnym nadpisaniem zajętych dni.
+  tygodnia kopiuje wszystkie dania z każdego dnia źródłowego na odpowiadający
+  mu wolny dzień. Opcja nadpisania zastępuje także zawartość zajętych dni,
+  do których trafiają dania.
   Dziecko widzi wyłącznie odczyt. Pobrane tygodnie i podpowiedzi są zapisywane
   w istniejącym IndexedDB dla rodziny i użytkownika. Dorośli mogą przeglądać,
   edytować i usuwać obiady offline oraz kopiować znany tydzień do znanego
   tygodnia. Niepobrany tydzień nie oznacza pustego planu i blokuje zapis.
   Niezapisany formularz ma ochronę przed przypadkowym zamknięciem.
   `POST /api/meals/to-shopping-list?operationId=<UUID>` przyjmuje `weekStart`,
-  `listId`, opcjonalne `mealIds` (1–7 ID z tego tygodnia) i `confirmRepeat`
+  `listId`, opcjonalne `mealIds` (ID dań z tego tygodnia) i `confirmRepeat`
   (domyślnie false). Brak filtra wybiera cały tydzień; nieznane ID daje 404,
   powtórzone ID nie zwielokrotnia składników. Eksport jest tylko dla dorosłych.
   W jednej transakcji scala składniki po nazwie (NFKC, białe znaki, wielkość
@@ -391,19 +392,20 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   spoza danego modułu `features/<moduł>` przechodziły przez jego publiczny
   `index.ts`. Istniejące wyjątki są zapisane w `eslint.config.mjs` jako
   konkretne pary pliku importującego i pliku docelowego.
-  Karta „Dziś na obiad” na górze kalendarza pokazuje nazwę i notatkę obiadu
+  Karta „Dziś na obiad” na górze kalendarza pokazuje nazwy i notatki dań
   według strefy rodziny, niezależnie od oglądanej daty kalendarza. Współdzieli
   odczyt tygodnia z zakładką Obiady; zapis, usunięcie lub kopiowanie odświeża
   kartę. Uwzględnia cache i oczekujące zmiany; brak zapisanej zawartości nie
   oznacza braku obiadu. Baner tygodnia pokazuje tryb offline, czas pobrania,
   stan kolejki i zmiany wymagające reakcji.
   Mutacje z kolejki trafiają do `POST /api/meals/offline?operationId=<UUID>&actorId=<UUID>`.
-  Operacja `write` zawiera tydzień i zamrożone zapisy dni (`date`, `id`,
-  `expectedId`, `data`, a `data=null` oznacza usunięcie). Kopiowanie jest jedną
-  atomową operacją. Niezgodność tożsamości daje konflikt zamiast odtworzenia
-  usuniętego obiadu. Istniejące endpointy online zachowują kontrakty.
-  Idempotencja obiadów używa istniejącej tabeli `shopping_operations`, bez
-  nowej migracji; rola jest sprawdzana również przed odtworzeniem odpowiedzi.
+  Operacja `write` z `byId: true` zawiera tydzień i zapisy pojedynczych dań
+  (`date`, `id`, `expectedId`, `data`, a `data=null` oznacza usunięcie).
+  Kopiowanie zapisuje zamrożone dane i oczekiwane ID dań w dniach docelowych
+  w jednej atomowej operacji. Niezgodność tożsamości daje konflikt.
+  Starsze operacje z kolejki działają na pierwszym daniu każdego dnia.
+  Idempotencja obiadów używa tabeli `shopping_operations`. Rola jest sprawdzana
+  również przed odtworzeniem odpowiedzi.
   Wspólny nadawca obsługuje kolejkę obiadów. Powrót sieci i wznowienie
   aplikacji uruchamiają synchronizację. WWW obsługuje otwarte okno bez sieci,
   APK również restart lokalnego frontendu. Zamknięte APK nie synchronizuje.

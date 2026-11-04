@@ -49,7 +49,7 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 
 **Endpointy:**
 
-- `GET /api/meals?weekStart=YYYY-MM-DD` (poniedziałek) zwraca 7 dni z posiłkami i składnikami.
+- `GET /api/meals?weekStart=YYYY-MM-DD&multiple=true` (poniedziałek) zwraca 7 dni ze wszystkimi daniami i składnikami.
 - `PUT /api/meals/:date/:slot` z `{ title, notes?, ingredients: [{ name, quantity? }] }` (upsert), `DELETE /api/meals/:date/:slot`.
 - `POST /api/meals/copy-week` z `{ fromWeekStart, toWeekStart, overwrite: boolean }`.
 - `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Scala składniki po znormalizowanej nazwie zarówno między wybranymi daniami, jak i z pozycjami już obecnymi na docelowej liście zakupów. Ilości łączymy tekstowo, np. "500 g + 1 kg". Podsumowanie rozróżnia pozycje dodane i uzupełnione.
@@ -58,7 +58,7 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 **UI:**
 
 - Widok tygodnia (pon-nd) ze strzałkami poprzedni/następny tydzień i przyciskiem "dziś".
-- Każdy dzień to karta z obiadem albo "+ Dodaj obiad".
+- Karta dnia pokazuje wszystkie zaplanowane dania i pozwala dodać kolejne.
 - Formularz: nazwa dania z podpowiedziami (wybór podpowiedzi uzupełnia składniki), notatka, lista składników.
 - Akcje tygodnia: "Skopiuj poprzedni tydzień", "Dodaj składniki do listy zakupów" (wybór listy i dań, potem podsumowanie).
 - Karta "Dziś na obiad" na górze kalendarza (lekki dashboard).
@@ -127,7 +127,7 @@ Wdrożenie jest osobną czynnością na polecenie właściciela.
 #### Krok 6.3 - UI: tydzień obiadów
 
 - **Status:** zaimplementowane lokalnie; końcowe CI i odbiór ręczny oraz fizyczne APK do potwierdzenia. Funkcje online, bez eksportu do zakupów i trwałej kolejki offline.
-- **Zakres:** zakładka Obiady z widokiem tygodnia (pon-nd), strzałkami i przyciskiem "dziś". Karta dnia albo "+ Dodaj obiad". Formularz (nazwa z podpowiedziami, które po wyborze uzupełniają składniki, notatka, lista składników), usuwanie, "Skopiuj poprzedni tydzień" z pytaniem o nadpisanie. Dziecko widzi tylko odczyt.
+- **Zakres:** zakładka Obiady z widokiem tygodnia (pon-nd), strzałkami i przyciskiem "dziś". Karta dnia z przyciskiem „+ Dodaj danie”. Formularz (nazwa z podpowiedziami, które po wyborze uzupełniają składniki, notatka, lista składników), usuwanie, "Skopiuj poprzedni tydzień" z pytaniem o nadpisanie. Dziecko widzi tylko odczyt.
 - **Gotowe, gdy:** testy komponentów formularza i podpowiedzi. Ręcznie: zaplanowanie 5 obiadów i skopiowanie tygodnia.
 
 #### Krok 6.4 - UI: dodawanie do listy zakupów i karta "Dziś na obiad"

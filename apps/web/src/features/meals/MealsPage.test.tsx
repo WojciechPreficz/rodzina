@@ -135,7 +135,10 @@ it('navigates weeks and explicitly chooses whether to overwrite when copying', a
   const start = new URL(initial, 'http://localhost').searchParams.get('weekStart')!;
   fireEvent.click(screen.getByRole('button', { name: 'Następny tydzień' }));
   await waitFor(() =>
-    expect(request).toHaveBeenCalledWith(`/api/meals?weekStart=${shiftMealDate(start, 7)}`, expect.anything()),
+    expect(request).toHaveBeenCalledWith(
+      `/api/meals?weekStart=${shiftMealDate(start, 7)}&multiple=true`,
+      expect.anything(),
+    ),
   );
   await screen.findAllByRole('article');
   fireEvent.click(screen.getByRole('button', { name: 'Skopiuj poprzedni tydzień' }));
@@ -152,6 +155,8 @@ it('navigates weeks and explicitly chooses whether to overwrite when copying', a
       payload: {
         type: 'write',
         weekStart: shiftMealDate(start, 7),
+        byId: true,
+        expectedDays: {},
         writes: [],
       },
     }),
@@ -162,13 +167,13 @@ it('shows seven read-only days for a child', async () => {
   mount();
   expect(await screen.findAllByRole('article')).toHaveLength(7);
   expect(screen.getAllByText('Brak zaplanowanego obiadu.')).toHaveLength(7);
-  expect(screen.queryByRole('button', { name: /Dodaj obiad/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Dodaj danie/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Skopiuj poprzedni tydzień' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Dodaj składniki do listy zakupów' })).not.toBeInTheDocument();
 });
-it('durably saves when connectivity changes after opening the editor', async () => {
+it('adds two dishes to the same day when connectivity changes after opening the editor', async () => {
   mount();
-  fireEvent.click((await screen.findAllByRole('button', { name: /Dodaj obiad:/ }))[0]!);
+  fireEvent.click((await screen.findAllByRole('button', { name: /Dodaj danie:/ }))[0]!);
   const dialog = await screen.findByRole('dialog');
   fireEvent.change(within(dialog).getByRole('textbox', { name: 'Nazwa dania' }), { target: { value: 'Obiad' } });
   connection.offline = true;
@@ -176,6 +181,14 @@ it('durably saves when connectivity changes after opening the editor', async () 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
   await screen.findByText('Obiad został zapisany.', {}, { timeout: 5000 });
   expect(await screen.findByRole('heading', { name: 'Obiad' })).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  const day = within(screen.getAllByRole('article')[0]!);
+  fireEvent.click(day.getByRole('button', { name: /Dodaj danie:/ }));
+  const next = within(await screen.findByRole('dialog'));
+  fireEvent.change(next.getByRole('textbox', { name: 'Nazwa dania' }), { target: { value: 'Zupa' } });
+  fireEvent.click(next.getByRole('button', { name: 'Zapisz' }));
+  expect(await day.findByRole('heading', { name: 'Zupa' })).toBeInTheDocument();
+  expect(day.getByRole('heading', { name: 'Obiad' })).toBeInTheDocument();
   expect(request.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method)).toBe(false);
 });
 it('shows loading errors without presenting the week as empty', async () => {

@@ -81,16 +81,16 @@ afterEach(() => {
 });
 
 it('persists edits, deletions, frozen copies, suggestions and an unknown week across a restart', async () => {
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   const id = visibleMeals().weeks[week]!.data.days[0]!.meals[0]!.id;
-  await queueMeal(week, { ...input, title: 'Zmieniona pomidorowa' });
+  await queueMeal(week, { ...input, title: 'Zmieniona pomidorowa' }, id);
   await seedWeek('2026-11-02');
   await queueMealCopy('2026-11-02', false);
-  await queueMeal(week, null);
+  await queueMeal(week, null, id);
   expect(visibleMeals().weeks[week]!.data.days[0]!.meals).toEqual([]);
   expect(visibleMeals().weeks['2026-11-02']!.data.days[0]!.meals[0]!.title).toBe('Zmieniona pomidorowa');
   expect(localMealSuggestions(visibleMeals(), ' POMIDOROWA ')).toHaveLength(1);
-  await expect(queueMeal('2026-11-09', input)).rejects.toThrow('nie został pobrany');
+  await expect(queueMeal('2026-11-09', input, null)).rejects.toThrow('nie został pobrany');
   stopMeals();
   await closeDatabase();
   await activateOfflineAccount(account);
@@ -103,10 +103,10 @@ it('persists edits, deletions, frozen copies, suggestions and an unknown week ac
 });
 
 it('freezes export ingredients, projects purchases once and requires a separate repeat confirmation', async () => {
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   const meal = visibleMeals().weeks[week]!.data.days[0]!.meals[0]!;
   await queueMealExport(week, listId, [meal.id], false);
-  await queueMeal(week, { ...input, ingredients: [{ name: 'Ryż', quantity: '10 kg' }] });
+  await queueMeal(week, { ...input, ingredients: [{ name: 'Ryż', quantity: '10 kg' }] }, meal.id);
   const shopping = (await transact('readonly', (tx) => readShoppingTransaction(tx, account)))!;
   const exportOperation = shopping.operations.find((op) => op.change.type === 'mealExport')!;
   expect(exportOperation.change).toMatchObject({ ingredients: [{ name: 'Pomidory', quantity: '1 kg' }] });
@@ -133,7 +133,7 @@ it('depends on a local list and atomically reconciles export identities without 
       payload: { type: 'createList', id: listId, name: 'Lokalna lista' },
     }),
   );
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   const meal = visibleMeals().weeks[week]!.data.days[0]!.meals[0]!;
   const exported = await queueMealExport(week, listId, [meal.id], false);
   const queued = await operations();
@@ -203,13 +203,13 @@ it('does not confirm local success or append an operation when durable storage f
   vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
     throw new DOMException('full', 'QuotaExceededError');
   });
-  await expect(queueMeal(week, input)).rejects.toThrow();
+  await expect(queueMeal(week, input, null)).rejects.toThrow();
   expect(visibleMeals()).toEqual(before);
   expect(await operations()).toHaveLength(0);
 });
 
 it('keeps replay IDs and payloads after a lost response and serializes competing tab senders', async () => {
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   const queued = (await operations())[0]!;
   stopMeals();
   const calls: unknown[] = [];
@@ -253,7 +253,7 @@ it('keeps replay IDs and payloads after a lost response and serializes competing
 });
 
 it('retains expired changes for review, refuses child writes and clears account data', async () => {
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   await transact('readwrite', async (tx) => {
     const op = (await readOperations(tx, account))[0]!;
     tx.objectStore('outbox').put({ ...op, submittedAt: Date.now() - OFFLINE_REPLAY_MAX_AGE_MS - 1 });
@@ -273,7 +273,7 @@ it('retains expired changes for review, refuses child writes and clears account 
   sender.stop();
   onlineManager.setOnline(false);
   await restoreMeals(client, { ...session, user: { ...session.user, role: 'child' } });
-  await expect(queueMeal(week, input)).rejects.toThrow('uprawnień');
+  await expect(queueMeal(week, input, null)).rejects.toThrow('uprawnień');
   stopMeals();
   await clearDatabase();
   await activateOfflineAccount(account);
@@ -283,7 +283,7 @@ it('retains expired changes for review, refuses child writes and clears account 
 });
 
 it('does not apply a late response after changing accounts', async () => {
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   stopMeals();
   let release: (value: unknown) => void = () => {};
   const send = vi.fn(
@@ -320,10 +320,10 @@ it('rejects late week and suggestion responses after reactivating the same accou
 });
 
 it('requires explicit confirmation after a server repeat conflict and preserves dependent work', async () => {
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   const meal = visibleMeals().weeks[week]!.data.days[0]!.meals[0]!;
   const exported = await queueMealExport(week, listId, [meal.id], false);
-  await queueMeal(week, { ...input, title: 'Późniejsza zmiana' });
+  await queueMeal(week, { ...input, title: 'Późniejsza zmiana' }, meal.id);
   await transact('readwrite', async (tx) => {
     for (const op of await readOperations(tx, account))
       tx.objectStore('outbox').put({
@@ -339,10 +339,10 @@ it('requires explicit confirmation after a server repeat conflict and preserves 
 });
 
 it('retains a rejected export on access loss and discards dependent work only on an explicit decision', async () => {
-  await queueMeal(week, input);
+  await queueMeal(week, input, null);
   const meal = visibleMeals().weeks[week]!.data.days[0]!.meals[0]!;
   const exported = await queueMealExport(week, listId, [meal.id], false);
-  await queueMeal(week, { ...input, title: 'Późniejszy zapis' });
+  await queueMeal(week, { ...input, title: 'Późniejszy zapis' }, meal.id);
   const before = await operations();
   await transact('readwrite', async (tx) => {
     const op = (await readOperations(tx, account)).find((op) => op.operationId === exported.operationId)!;

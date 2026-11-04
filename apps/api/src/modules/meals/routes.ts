@@ -62,8 +62,8 @@ export function registerMealRoutes(
   });
   app.get('/api/meals', (request) => {
     const user = requireUser(request);
-    const { weekStart } = parse(mealWeekQuerySchema, request.query);
-    return mealWeekResponseSchema.parse({ ok: true, ...service.week(user.familyId, weekStart) });
+    const { weekStart, multiple } = parse(mealWeekQuerySchema, request.query);
+    return mealWeekResponseSchema.parse({ ok: true, ...service.week(user.familyId, weekStart, multiple === 'true') });
   });
   app.get('/api/meals/suggestions', (request) => {
     const user = requireUser(request);

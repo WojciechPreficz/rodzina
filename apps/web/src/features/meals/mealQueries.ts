@@ -21,7 +21,9 @@ export function useMealWeek(week: string, enabled = true) {
     queryFn: async ({ signal }) => {
       const revision = mealRevision(week);
       if (revision.scope.account !== account) throw new DOMException('Session changed', 'AbortError');
-      const data = mealWeekResponseSchema.parse(await apiFetch(`/api/meals?weekStart=${week}`, { signal }));
+      const data = mealWeekResponseSchema.parse(
+        await apiFetch(`/api/meals?weekStart=${week}&multiple=true`, { signal }),
+      );
       signal.throwIfAborted();
       await saveMealWeek(data, revision);
       return data;

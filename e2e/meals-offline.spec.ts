@@ -119,7 +119,7 @@ for (const native of [false, true]) {
     await dialog.getByRole('button', { name: 'Zapisz', exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await page
-      .getByRole('button', { name: /Dodaj obiad:/ })
+      .getByRole('button', { name: /Dodaj danie:/ })
       .first()
       .click();
     await dialog.getByRole('textbox', { name: 'Nazwa dania' }).fill('Makaron offline');

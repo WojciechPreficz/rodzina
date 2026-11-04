@@ -19,7 +19,7 @@ export const meals = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (table) => [
-    uniqueIndex('meals_family_date_slot_idx').on(table.familyId, table.date, table.slot),
+    index('meals_family_date_idx').on(table.familyId, table.date),
     index('meals_family_updated_idx').on(table.familyId, table.updatedAt),
     check('meals_dinner_slot', sql`${table.slot} = 'dinner'`),
   ],

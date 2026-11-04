@@ -23,7 +23,7 @@ export function TodayMeal() {
     };
   }, [timezone]);
   const query = useMealWeek(mealWeekStart(today));
-  const meal = query.data?.days.find((day) => day.date === today)?.meals[0];
+  const meals = query.data?.days.find((day) => day.date === today)?.meals ?? [];
   return (
     <Paper component="section" aria-label="Dziś na obiad" withBorder p="lg" radius="lg" style={{ minWidth: 0 }}>
       <Stack gap="xs">
@@ -46,17 +46,19 @@ export function TodayMeal() {
           </Alert>
         ) : query.isPending ? (
           <Loader size="sm" aria-label="Ładowanie dzisiejszego obiadu" />
-        ) : meal ? (
-          <>
-            <Text fw={600} style={{ overflowWrap: 'anywhere' }}>
-              {meal.title}
-            </Text>
-            {meal.notes && (
-              <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                {meal.notes}
+        ) : meals.length ? (
+          meals.map((meal) => (
+            <Stack key={meal.id} gap={4}>
+              <Text fw={600} style={{ overflowWrap: 'anywhere' }}>
+                {meal.title}
               </Text>
-            )}
-          </>
+              {meal.notes && (
+                <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {meal.notes}
+                </Text>
+              )}
+            </Stack>
+          ))
         ) : (
           <Text size="sm" c="dimmed">
             Brak zaplanowanego obiadu na dziś.
