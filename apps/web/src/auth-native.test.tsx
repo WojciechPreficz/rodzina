@@ -14,9 +14,14 @@ import { AppSession as AuthProvider } from './AppSession.js';
 import { useMe } from './sessionContext.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
 import { ACCOUNT_SIGNAL_KEY, clearDatabase } from './offline/database.js';
-import { readShoppingData } from './features/shopping/shoppingStorage.js';
+import {
+  readShoppingData,
+  SHOPPING_STORAGE_KEY,
+  emptyShopping,
+  updateShoppingData,
+} from './features/shopping/shoppingStorage.js';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
-import { restoreShopping, stopShoppingPersistence, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingOffline.js';
+import { createShoppingStore } from './features/shopping/shoppingOffline.js';
 vi.mock('./features/notifications/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined), invalidate: vi.fn() },
 }));
@@ -83,10 +88,11 @@ describe('native session lifecycle', () => {
     mount();
     await screen.findByText('Anna');
     await clearDatabase();
-    const other = new QueryClient();
-    await restoreShopping(other, { ...session, user: { ...session.user, id: 'other' } });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    stopShoppingPersistence(other);
+    const other = createShoppingStore();
+    await other.activate('family:other');
+    await updateShoppingData('family:other', () =>
+      emptyShopping({ ...session, user: { ...session.user, id: 'other' } }),
+    );
     other.clear();
     window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_SIGNAL_KEY, newValue: 'changed' }));
     await screen.findByText('logged out');
@@ -94,11 +100,14 @@ describe('native session lifecycle', () => {
   });
 
   it('restores the shopping account after a cold offline start', async () => {
-    const previous = new QueryClient();
-    await restoreShopping(previous, session);
-    previous.setQueryData(['shopping', 'family', 'adult', 'lists'], []);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    stopShoppingPersistence(previous);
+    const previous = createShoppingStore();
+    await previous.activate('family:adult');
+    await previous.fetchRange(
+      session,
+      ['shopping', 'family', 'adult', 'lists'],
+      async () => [],
+      new AbortController().signal,
+    );
     previous.clear();
     request.mockRejectedValueOnce(new Error('offline'));
     mount();
@@ -106,10 +115,9 @@ describe('native session lifecycle', () => {
   });
 
   it('discards offline data when the server rejects an expired session', async () => {
-    const previous = new QueryClient();
-    await restoreShopping(previous, session);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    stopShoppingPersistence(previous);
+    const previous = createShoppingStore();
+    await previous.activate('family:adult');
+    await updateShoppingData('family:adult', () => emptyShopping(session));
     previous.clear();
     request.mockResolvedValueOnce({ status: 401, body: '{}' });
     mount();

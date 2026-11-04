@@ -1,4 +1,4 @@
-import type { AccountSession } from '../../session.js';
+import { saveAccountSession, type AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
@@ -11,7 +11,7 @@ import { ApiRequestError, apiFetch } from '../../api.js';
 import { MealShoppingDialog } from './MealShoppingDialog.js';
 import { TodayMeal } from './TodayMeal.js';
 import { shiftMealDate } from './mealDates.js';
-import { restoreShopping, stopShoppingPersistence } from '../shopping/shoppingOffline.js';
+import { shoppingStore } from '../shopping/shoppingOffline.js';
 import { restoreMeals, stopMeals, saveMealWeek, mealRevision } from './mealOffline.js';
 
 const session = vi.hoisted(() => ({
@@ -91,13 +91,14 @@ beforeEach(async () => {
       };
     return { ok: true, added: 1, updated: 2, items: [], aliases: {} };
   });
-  await restoreShopping(client, session as unknown as AccountSession);
+  await saveAccountSession(session as unknown as AccountSession);
+  await shoppingStore.activate(`${session.family.id}:${session.user.id}`);
   await restoreMeals(client, session as unknown as AccountSession);
 });
 afterEach(() => {
   cleanup();
   stopMeals();
-  stopShoppingPersistence(client);
+  shoppingStore.clear();
   client.clear();
   onlineManager.setOnline(true);
   vi.restoreAllMocks();

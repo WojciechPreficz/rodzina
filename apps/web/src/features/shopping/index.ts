@@ -1,5 +1,4 @@
 export {
-  flushShoppingForMealExport,
   prepareMealExportSync,
   resolveMealExportTargets,
   projectQueuedMealExport,

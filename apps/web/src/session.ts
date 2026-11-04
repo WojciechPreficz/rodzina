@@ -36,6 +36,11 @@ const minimalSession = (session: AccountSession): AccountSession => ({
   family: { ...session.family },
 });
 
+export async function readSavedAccountSession(tx: IDBTransaction, account: string) {
+  const record = await requestValue<Record | undefined>(tx.objectStore('metadata').get([account, SESSION_KEY]));
+  return record && parseSession(record.value, account);
+}
+
 async function readStored(token: number, migrate: boolean) {
   const active = await transact(
     'readonly',
@@ -50,9 +55,8 @@ async function readStored(token: number, migrate: boolean) {
     async (tx) => {
       const current = await assertContext(tx);
       if (current.generation !== active.value.generation) throw new DOMException('Session changed', 'AbortError');
-      const store = tx.objectStore('metadata');
-      const record = await requestValue<Record | undefined>(store.get([current.accountId, SESSION_KEY]));
-      if (record) return parseSession(record.value, current.accountId);
+      const saved = await readSavedAccountSession(tx, current.accountId);
+      if (saved) return saved;
       if (!migrate) return;
       // Only the legacy session envelope is needed; module data and outboxes are independent.
       for (const module of ['family', 'shopping']) {
@@ -69,7 +73,7 @@ async function readStored(token: number, migrate: boolean) {
         )
           throw new Error('Zapisana sesja należy do innego konta.');
         const value = minimalSession(parseSession(parsed.data, current.accountId));
-        store.put({ accountId: current.accountId, key: SESSION_KEY, value });
+        tx.objectStore('metadata').put({ accountId: current.accountId, key: SESSION_KEY, value });
         return value;
       }
     },

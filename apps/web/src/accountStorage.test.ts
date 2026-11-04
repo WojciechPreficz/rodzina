@@ -11,8 +11,8 @@ import { clearAccountData, registerAccountStore } from './accountStorage.js';
 import { calendarStore, CALENDAR_STORAGE_KEY } from './features/calendar/calendarOffline.js';
 import { holidayLayersStorageKey, readHolidayLayers, saveHolidayLayers } from './features/calendar/holidayLayers.js';
 import { taskStore, TASK_STORAGE_KEY } from './features/tasks/taskOffline.js';
-import { enqueueShopping, restoreShopping, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingOffline.js';
-import { readShoppingData } from './features/shopping/shoppingStorage.js';
+import { shoppingStore } from './features/shopping/shoppingOffline.js';
+import { readShoppingData, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingStorage.js';
 import { accountId, OFFLINE_DATA_KEY, saveOfflineData } from './offlineData.js';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 
@@ -92,17 +92,14 @@ async function seedAccount(client: QueryClient) {
   await taskStore.synchronize();
   await taskStore.enqueue(list.id, crypto.randomUUID(), { type: 'create', data: { title: 'Farba' } });
   onlineManager.setOnline(false);
-  await restoreShopping(client, session);
-  client.setQueryData(['shopping', user.familyId, user.id, 'lists'], []);
-  await enqueueShopping(
-    client,
-    { familyId: user.familyId, userId: user.id },
-    {
-      type: 'createList',
-      id: crypto.randomUUID(),
-      name: 'Zakupy',
-    },
+  await shoppingStore.activate(accountId(session));
+  await shoppingStore.fetchRange(
+    session,
+    ['shopping', user.familyId, user.id, 'lists'],
+    async () => [],
+    new AbortController().signal,
   );
+  await shoppingStore.enqueue(accountId(session), { type: 'createList', id: crypto.randomUUID(), name: 'Zakupy' });
   await saveOfflineData(session, [user], Date.now());
   await contactsStore.activate(accountId(session));
   await contactsStore.fetch(accountId(session), async () => ({

@@ -83,6 +83,12 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   list. Zachowują wersję 1 i migrację z klucza `rodzina:tasks:v1` oraz kluczy
   dziennika. Odpowiedzi odświeżania i zapisy sprawdzają zakres aktywnego konta,
   niezależnie od przeładowania widoku po sygnale outboxa.
+  Zakupy korzystają z tego samego trybu zapisu offline. Snapshot w wersji 1
+  zachowuje format zapisanych zakresów TanStack Query, a odświeżanie zapisuje
+  pobrany zakres w transakcji przed publikacją widoku. Magazyn przejmuje
+  starszy dziennik IndexedDB do wspólnego outboxa po dotychczasowej migracji
+  klucza `rodzina:shopping:v1` i dziennika localStorage. Projekcja łączy
+  operacje zakupów z eksportami obiadów w kolejności outboxa.
 
 ## Dane, czas i uprawnienia
 
@@ -373,9 +379,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Obiady przekazują transakcję do publicznego API zakupów
   (`features/shopping/index.ts`). Zakupy wyznaczają `targets` z lokalnej
   projekcji, zabezpieczają jej bazę po dopisaniu eksportu do kolejki i rozliczają
-  wynik serwera wraz z mapowaniem identyfikatorów. Publiczne API udostępnia
-  listy do dialogu, pozwala poczekać na zapis pamięci zakupów i anuluje trwające
-  odczyty przed wysłaniem eksportu. Obiady odpowiadają za `snapshot`
+  wynik serwera wraz z mapowaniem identyfikatorów. Dialog korzysta z tej samej
+  projekcji co ekran zakupów. Publiczne API anuluje trwające odczyty przed
+  wysłaniem eksportu. Obiady odpowiadają za `snapshot`
   i zależności w kolejce.
   Reguła ESLint `architecture/public-feature-imports` wymaga, aby importy
   spoza danego modułu `features/<moduł>` przechodziły przez jego publiczny

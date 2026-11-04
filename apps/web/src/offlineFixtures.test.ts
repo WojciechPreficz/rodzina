@@ -5,7 +5,7 @@ import './offline/testSetup.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { onlineManager, QueryClient, type DehydratedState } from '@tanstack/react-query';
+import { onlineManager, type DehydratedState } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
   contactsResponseSchema,
@@ -23,7 +23,7 @@ import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
 import { createCalendarStore, readCalendarRange } from './features/calendar/calendarOffline.js';
 import { createContactsStore } from './features/contacts/contactsOffline.js';
 import { createTaskOfflineStore } from './features/tasks/taskOffline.js';
-import { restoreShopping, stopShoppingPersistence } from './features/shopping/shoppingOffline.js';
+import { createShoppingStore } from './features/shopping/shoppingOffline.js';
 import { readShoppingData } from './features/shopping/shoppingStorage.js';
 
 const fixture = z
@@ -120,7 +120,7 @@ const taskSources = () =>
       .filter((key) => key === 'rodzina:tasks:v1' || key.startsWith('rodzina:tasks:v1:'))
       .map((key) => [key, localStorage.getItem(key)!]),
   );
-const clients: QueryClient[] = [];
+const shopping = createShoppingStore();
 const read = (name: string): unknown => JSON.parse(localStorage.getItem(key(name))!);
 const record = (value: unknown) => z.record(z.unknown()).parse(value);
 const mutation = (name: string) =>
@@ -154,10 +154,7 @@ beforeEach(async () => {
   seed();
 });
 afterEach(async () => {
-  for (const client of clients.splice(0)) {
-    stopShoppingPersistence(client);
-    client.clear();
-  }
+  shopping.clear();
   localStorage.clear();
   onlineManager.setOnline(true);
   vi.restoreAllMocks();
@@ -223,20 +220,13 @@ describe('O.1 legacy storage fixtures', () => {
     await expect(tasks.enqueue(id('taskList'), id('task'), { type: 'update', data: { title: 'New' } })).rejects.toThrow(
       /odrzuceniu zmian/,
     );
-    const client = new QueryClient();
-    clients.push(client);
-    await restoreShopping(client, saved!.session);
-    const prefix = ['shopping', id('family'), id('user')];
-    expect(shoppingListSchema.parse(client.getQueryData<unknown[]>([...prefix, 'lists'])?.[0]).id).toBe(
-      id('shoppingList'),
-    );
-    expect(
-      shoppingItemSchema.parse(client.getQueryData<unknown[]>([...prefix, 'items', id('shoppingList')])?.[0]).id,
-    ).toBe(id('milk'));
+    await shopping.activate(fixture.accountId);
+    const view = shopping.snapshot().view;
+    expect(shoppingListSchema.parse(view?.lists?.[0]).id).toBe(id('shoppingList'));
+    expect(shoppingItemSchema.parse(view?.items(id('shoppingList'))?.[0]).id).toBe(id('milk'));
     expect((await readShoppingData(fixture.accountId))?.operations.map((entry) => entry.operationId)).toEqual(
       fixture.expected.pendingShoppingIds,
     );
-    expect(client.getMutationCache().getAll()).toHaveLength(0);
   });
 
   it('keeps fixture identities unique and measures synthetic data within the declared budgets', async () => {

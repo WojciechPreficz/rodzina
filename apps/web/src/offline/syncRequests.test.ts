@@ -89,7 +89,7 @@ it.each([
       });
       sender = startSync(
         account,
-        [taskAdapter(account), shoppingAdapter({ familyId, userId }), mealAdapter(account)],
+        [taskAdapter(account), { ...shoppingAdapter(account), module: 'shopping' }, mealAdapter(account)],
         () => {},
       );
       onlineManager.setOnline(true);

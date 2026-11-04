@@ -105,7 +105,7 @@ const featureImportExceptions = new Map(
       'contacts/contactsOffline.js',
       'tasks/taskStorage.js',
       'tasks/taskOffline.js',
-      'shopping/shoppingAdapter.js',
+      'shopping/shoppingOffline.js',
       'shopping/shoppingStorage.js',
     ],
     'offline/database.test.ts': ['calendar/calendarOffline.js'],

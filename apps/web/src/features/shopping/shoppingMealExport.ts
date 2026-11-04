@@ -1,23 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { normalizeShoppingName, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
 import { readOperations } from '../../offline/outbox.js';
-import { flushShoppingPersistence } from './shoppingOffline.js';
-import { applyShoppingChange, shoppingKey } from './shoppingOptimistic.js';
+import { projectShopping, shoppingAccount, shoppingKey } from './shoppingOptimistic.js';
 import { putShoppingTransaction, readShoppingTransaction } from './shoppingStorage.js';
-
-function shoppingAccount(accountId: string) {
-  const [familyId, userId] = accountId.split(':');
-  return { familyId: familyId!, userId: userId! };
-}
-
-export function flushShoppingForMealExport(client: QueryClient) {
-  return flushShoppingPersistence(client);
-}
 
 export async function prepareMealExportSync(client: QueryClient, accountId: string) {
   // Shopping queries pause automatic refresh while meals sync. Cancel any earlier fetch.
   await client.cancelQueries({ queryKey: shoppingKey(shoppingAccount(accountId)) });
-  await flushShoppingPersistence(client);
 }
 
 export async function resolveMealExportTargets(
@@ -28,22 +17,9 @@ export async function resolveMealExportTargets(
 ) {
   const shopping = await readShoppingTransaction(tx, accountId);
   if (!shopping) throw new Error('Najpierw pobierz listę zakupów.');
-  const projected = new Map(shopping.queries.map((q) => [JSON.stringify(q.queryKey), q.state.data]));
-  const account = shoppingAccount(accountId);
-  const client = {
-    setQueryData: (key: readonly unknown[], update: (old: unknown) => unknown) => {
-      const value = update(projected.get(JSON.stringify(key)));
-      projected.set(JSON.stringify(key), value);
-      return value;
-    },
-  } as Pick<QueryClient, 'setQueryData'>;
-  const pending = shopping.operations.filter((op) => !op.review);
-  for (const op of pending) applyShoppingChange(client, account, op.change, op.submittedAt);
-  const key = shoppingKey(account);
-  const lists = projected.get(JSON.stringify([...key, 'lists'])) as ShoppingList[] | undefined;
-  const items = (projected.get(JSON.stringify([...key, 'items', listId])) ??
-    (pending.some((op) => op.change.type === 'createList' && op.change.id === listId) ? [] : undefined)) as
-    ShoppingItem[] | undefined;
+  const projected = projectShopping(shopping, shopping.operations);
+  const lists = projected.lists;
+  const items = projected.items(listId);
   if (!lists?.some((list) => list.id === listId) || !items)
     throw new Error('Najpierw pobierz zawartość docelowej listy zakupów.');
 

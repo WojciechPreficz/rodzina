@@ -1,12 +1,19 @@
-import type { QueryClient } from '@tanstack/react-query';
 import { mergeQuantities, normalizeShoppingName, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
 import type { ShoppingChange, MealShoppingProjection } from './shoppingApi.js';
+import type { ShoppingData, StoredShoppingOperation } from './shoppingStorage.js';
 
 export type ShoppingAccount = { familyId: string; userId: string };
+export function shoppingAccount(account: string): ShoppingAccount {
+  const [familyId, userId] = account.split(':');
+  return { familyId: familyId!, userId: userId! };
+}
+export type ShoppingDataWriter = {
+  setQueryData<T>(key: readonly string[], update: (old: T | undefined) => T): void;
+};
 export const shoppingKey = (account: ShoppingAccount) => ['shopping', account.familyId, account.userId];
 
 export function applyShoppingChange(
-  client: Pick<QueryClient, 'setQueryData'>,
+  client: ShoppingDataWriter,
   account: ShoppingAccount,
   change: ShoppingChange | MealShoppingProjection,
   submittedAt: number,
@@ -92,4 +99,27 @@ export function applyShoppingChange(
       }
     });
   }
+}
+
+export function projectShopping(data: ShoppingData, changes: readonly StoredShoppingOperation[]) {
+  const account = shoppingAccount(data.account);
+  const key = shoppingKey(account);
+  const projected = new Map(data.queries.map((query) => [JSON.stringify(query.queryKey), query.state.data]));
+  const pending = changes.filter((operation) => !operation.review);
+  const localLists = new Set(pending.flatMap(({ change }) => (change.type === 'createList' ? [change.id] : [])));
+  const writer: ShoppingDataWriter = {
+    setQueryData<T>(key: readonly string[], update: (old: T | undefined) => T) {
+      const hash = JSON.stringify(key);
+      projected.set(hash, update(projected.get(hash) as T | undefined));
+    },
+  };
+  for (const { change, submittedAt } of pending) applyShoppingChange(writer, account, change, submittedAt);
+  return {
+    lists: projected.get(JSON.stringify([...key, 'lists'])) as ShoppingList[] | undefined,
+    items: (listId: string) =>
+      (projected.get(JSON.stringify([...key, 'items', listId])) as ShoppingItem[] | undefined) ??
+      (localLists.has(listId) ? [] : undefined),
+    localLists,
+    pendingCount: pending.length,
+  };
 }

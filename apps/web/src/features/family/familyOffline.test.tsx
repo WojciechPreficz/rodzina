@@ -26,13 +26,8 @@ import {
   readOfflineData,
   saveOfflineData,
 } from '../../offlineData.js';
-import {
-  enqueueShopping,
-  restoreShopping,
-  SHOPPING_STORAGE_KEY,
-  stopShoppingPersistence,
-} from '../shopping/shoppingOffline.js';
-import { readShoppingData } from '../shopping/shoppingStorage.js';
+import { createShoppingStore, shoppingStore } from '../shopping/shoppingOffline.js';
+import { readShoppingData, SHOPPING_STORAGE_KEY } from '../shopping/shoppingStorage.js';
 import { FamilyPage } from './FamilyPage.js';
 
 const admin: AuthUser = {
@@ -123,8 +118,8 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   cleanup();
+  shoppingStore.clear();
   for (const client of clients.splice(0)) {
-    stopShoppingPersistence(client);
     client.clear();
   }
   vi.restoreAllMocks();
@@ -152,11 +147,15 @@ describe('family offline lifecycle through the Android transport', () => {
   });
 
   it('shows the no-cache message and does not treat a legacy empty code as valid', async () => {
-    const previous = new QueryClient();
-    await restoreShopping(previous, session);
-    previous.setQueryData(['shopping', 'family', 'admin', 'lists'], []);
+    const previous = createShoppingStore();
+    await previous.activate('family:admin');
+    await previous.fetchRange(
+      session,
+      ['shopping', 'family', 'admin', 'lists'],
+      async () => [],
+      new AbortController().signal,
+    );
     await new Promise((resolve) => setTimeout(resolve, 10));
-    stopShoppingPersistence(previous);
     previous.clear();
     onlineManager.setOnline(false);
     mount();
@@ -168,15 +167,15 @@ describe('family offline lifecycle through the Android transport', () => {
 
   it('restores an account without dropping IndexedDB shopping operations', async () => {
     onlineManager.setOnline(false);
-    const previous = new QueryClient();
-    await restoreShopping(previous, session);
-    previous.setQueryData(['shopping', 'family', 'admin', 'lists'], []);
-    await enqueueShopping(
-      previous,
-      { familyId: 'family', userId: 'admin' },
-      { type: 'createList', id: 'pending', name: 'Sklep' },
-    ).catch(() => {});
-    stopShoppingPersistence(previous);
+    const previous = createShoppingStore();
+    await previous.activate('family:admin');
+    await previous.fetchRange(
+      session,
+      ['shopping', 'family', 'admin', 'lists'],
+      async () => [],
+      new AbortController().signal,
+    );
+    await previous.enqueue('family:admin', { type: 'createList', id: 'pending', name: 'Sklep' });
     previous.clear();
     const savedOperation = (await readShoppingData())?.operations;
     const view = mount();
@@ -273,6 +272,7 @@ describe('family offline lifecycle through the Android transport', () => {
     expect((await readAccountSession())?.user.id).toBe('admin');
     expect(readOfflineData()).toBeUndefined();
     cleanup();
+    shoppingStore.clear();
     onlineManager.setOnline(false);
     mount();
     expect(await screen.findByText(/Brak danych rodziny zapisanych/)).toBeVisible();

@@ -10,7 +10,7 @@ import { createCalendarStore } from '../features/calendar/calendarOffline.js';
 import { createContactsStore } from '../features/contacts/contactsOffline.js';
 import { readTaskData, updateTaskData } from '../features/tasks/taskStorage.js';
 import { taskOperationBlocksAlarm } from '../features/tasks/taskOffline.js';
-import { takeOverShopping } from '../features/shopping/shoppingAdapter.js';
+import { createShoppingStore } from '../features/shopping/shoppingOffline.js';
 import { readShoppingData } from '../features/shopping/shoppingStorage.js';
 import {
   activateOfflineAccount,
@@ -32,10 +32,15 @@ const account = fixture.accountId;
 function seed() {
   for (const { key, value } of fixture.entries) localStorage.setItem(key, JSON.stringify(value));
 }
+async function takeOverShopping() {
+  const store = createShoppingStore();
+  await store.activate(account);
+  store.clear();
+}
 async function upgrade() {
   await ensureMigrated(true);
   await activateOfflineAccount(account);
-  await takeOverShopping(account);
+  await takeOverShopping();
   await updateTaskData(account, () => {});
 }
 afterEach(() => {
@@ -193,7 +198,7 @@ it('resumes a failed task handover without losing the already migrated shopping 
   seed();
   await ensureMigrated(true);
   await activateOfflineAccount(account);
-  await takeOverShopping(account);
+  await takeOverShopping();
   const before = await transact('readonly', (tx) => readOperations(tx, account));
   const put = IDBObjectStore.prototype.put;
   const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (

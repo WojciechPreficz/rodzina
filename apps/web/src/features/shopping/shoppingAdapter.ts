@@ -1,20 +1,19 @@
-import type { QueryClient } from '@tanstack/react-query';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { assertContext, transact } from '../../offline/database.js';
 import { appendOperation, type Intent, type Operation } from '../../offline/outbox.js';
 import type { SyncAdapter } from '../../offline/sync.js';
 import { changeShopping, listShoppingLists, listShoppingItems, type ShoppingChange } from './shoppingApi.js';
-import { applyShoppingChange, shoppingKey, type ShoppingAccount } from './shoppingOptimistic.js';
+import { applyShoppingChange, shoppingKey, shoppingAccount, type ShoppingDataWriter } from './shoppingOptimistic.js';
 import {
   readShoppingTransaction,
+  readShoppingData,
   putShoppingTransaction,
   shoppingUsesOutbox,
   shoppingOperation,
   type ShoppingData,
   type StoredShoppingOperation,
+  type QueuedShoppingChange,
 } from './shoppingStorage.js';
-import type { QueuedShoppingChange } from './shoppingOffline.js';
 
 export function shoppingIntent(op: QueuedShoppingChange, reviewReason?: string): Intent {
   const change = op.change;
@@ -28,33 +27,27 @@ export function shoppingIntent(op: QueuedShoppingChange, reviewReason?: string):
     ...(reviewReason ? { reviewReason } : {}),
   };
 }
-export async function takeOverShopping(accountId: string) {
-  await transact('readwrite', async (tx) => {
-    const active = await assertContext(tx);
-    if (active.accountId !== accountId) throw new DOMException('Session changed', 'AbortError');
-    if (await shoppingUsesOutbox(tx, accountId)) return;
-    const data = await readShoppingTransaction(tx, accountId);
-    if (!data) throw new Error('Brak pamięci zakupów do przeniesienia.');
-    for (const op of data.operations) {
-      if (op.change.type === 'mealExport') throw new Error('Eksport wymaga wspólnej kolejki.');
-      await appendOperation(tx, accountId, 'shopping', shoppingIntent({ ...op, change: op.change }, op.review));
-    }
-    await putShoppingTransaction(tx, data, true);
-  });
+export async function takeOverShopping(tx: IDBTransaction, accountId: string, data: ShoppingData) {
+  if (await shoppingUsesOutbox(tx, accountId)) return;
+  for (const op of data.operations) {
+    if (op.change.type === 'mealExport') throw new Error('Eksport wymaga wspólnej kolejki.');
+    await appendOperation(tx, accountId, 'shopping', shoppingIntent({ ...op, change: op.change }, op.review));
+  }
+  await putShoppingTransaction(tx, data, true);
 }
 function projected(
   data: ShoppingData,
-  account: ShoppingAccount,
+  account: ReturnType<typeof shoppingAccount>,
   op: Pick<StoredShoppingOperation, 'change' | 'submittedAt'>,
   response: unknown,
 ) {
   const queries = new Map(data.queries.map((q) => [JSON.stringify(q.queryKey), q]));
-  const cache = {
-    setQueryData: (key: readonly unknown[], update: (old: unknown) => unknown) => {
+  const cache: ShoppingDataWriter = {
+    setQueryData<T>(key: readonly string[], update: (old: T | undefined) => T) {
       const hash = JSON.stringify(key);
       const old = queries.get(hash);
       // A missing range is not an empty list. New local lists have a known empty base.
-      const value = update(old?.state.data);
+      const value = update(old?.state.data as T | undefined);
       const template = old ?? data.queries[0];
       if (template)
         queries.set(hash, {
@@ -63,9 +56,8 @@ function projected(
           queryHash: hash,
           state: { ...template.state, data: value, dataUpdatedAt: Date.now() },
         });
-      return value;
     },
-  } as Pick<QueryClient, 'setQueryData'>;
+  };
   applyShoppingChange(cache, account, op.change, op.submittedAt);
   const result = response as { item?: ShoppingItem; list?: ShoppingList };
   if (result?.item)
@@ -79,14 +71,13 @@ function projected(
   return [...queries.values()];
 }
 
-export function shoppingAdapter(account: ShoppingAccount): SyncAdapter {
-  const accountId = `${account.familyId}:${account.userId}`;
+export function shoppingAdapter(accountId: string): Omit<SyncAdapter, 'module'> {
+  const account = shoppingAccount(accountId);
   return {
-    module: 'shopping',
     sessionTransport: apiFetch,
     send: async (operation, signal) => {
       // Confirm a legacy cache online before replay. Never invert destructive intents heuristically.
-      const data = await transact('readonly', (tx) => readShoppingTransaction(tx, accountId));
+      const data = await readShoppingData(accountId);
       if (data?.legacyCache) {
         const lists = await listShoppingLists(signal);
         const ranges = await Promise.all(

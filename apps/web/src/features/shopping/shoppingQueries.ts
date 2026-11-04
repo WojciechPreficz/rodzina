@@ -1,84 +1,73 @@
-import { onlineManager, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
-import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { useMe } from '../../sessionContext.js';
 import { useOfflineSyncStatus } from '../../offline/status.js';
+import { useOfflineModule } from '../../offline/moduleStore.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { listShoppingItems, listShoppingLists, type ShoppingChange } from './shoppingApi.js';
-import { enqueueShopping, discardShoppingReview } from './shoppingOffline.js';
-import type { StoredShoppingOperation } from './shoppingStorage.js';
-import { applyShoppingChange, shoppingKey } from './shoppingOptimistic.js';
+import { shoppingStore } from './shoppingOffline.js';
+import { shoppingKey } from './shoppingOptimistic.js';
 
 export function useShopping(selected: string | null) {
   const { user, family } = useMe();
   const client = useQueryClient();
-  const account = { familyId: family!.id, userId: user!.id };
-  const key = shoppingKey(account);
+  const session = { user: user!, family: family! };
+  const account = `${session.family.id}:${session.user.id}`;
+  const key = shoppingKey({ familyId: session.family.id, userId: session.user.id });
   const online = useSyncExternalStore(onlineManager.subscribe, () => onlineManager.isOnline());
-  const status = useOfflineSyncStatus(`${account.familyId}:${account.userId}`, 'shopping');
-  const mealsStatus = useOfflineSyncStatus(`${account.familyId}:${account.userId}`, 'meals');
+  const status = useOfflineSyncStatus(account, 'shopping');
+  const mealsStatus = useOfflineSyncStatus(account, 'meals');
+  const { saved, view, issue } = useOfflineModule(shoppingStore, account);
   const syncing = status.syncing || mealsStatus.syncing;
-  const operationsQuery = useQuery<StoredShoppingOperation[]>({
-    queryKey: [...key, 'operations'],
-    queryFn: () => client.getQueryData<StoredShoppingOperation[]>([...key, 'operations']) ?? [],
-    enabled: false,
-  });
-  const changes = operationsQuery.data ?? [];
   const refresh = {
     refetchInterval: () => (syncing ? (false as const) : SYNC_INTERVAL_MS),
     refetchOnWindowFocus: () => (syncing ? false : ('always' as const)),
     refetchOnReconnect: () => (syncing ? false : ('always' as const)),
   };
+  const listsKey = [...key, 'lists'];
   const lists = useQuery({
-    queryKey: [...key, 'lists'],
-    queryFn: ({ signal }) => listShoppingLists(signal),
+    queryKey: listsKey,
+    queryFn: ({ signal }) => shoppingStore.fetchRange(session, listsKey, () => listShoppingLists(signal), signal),
     enabled: !syncing,
     ...refresh,
   });
-  // Keep server data separate from pending changes: rejecting one write must
-  // never roll back later offline edits, and refetches cannot overwrite them.
-  const projected = new Map(
-    client.getQueriesData({ queryKey: key }).map(([queryKey, data]) => [JSON.stringify(queryKey), data]),
-  );
-  const optimistic = {
-    setQueryData: (queryKey: readonly unknown[], update: (old: unknown) => unknown) => {
-      const hash = JSON.stringify(queryKey);
-      const value = update(projected.get(hash));
-      projected.set(hash, value);
-      return value;
-    },
-  } as Pick<QueryClient, 'setQueryData'>;
-  for (const entry of changes.filter((op) => !op.review))
-    applyShoppingChange(optimistic, account, entry.change, entry.submittedAt);
-  const visibleLists = projected.get(JSON.stringify([...key, 'lists'])) as ShoppingList[] | undefined;
+  const visibleLists = view?.lists ?? (lists.data?.scope.current() ? lists.data.data : undefined);
   const active = visibleLists?.find((list) => list.id === selected) ?? visibleLists?.[0];
   const listId = active?.id;
+  const itemsKey = [...key, 'items', listId ?? ''];
   const items = useQuery({
-    queryKey: [...key, 'items', listId],
-    queryFn: ({ signal }) => listShoppingItems(listId!, signal),
-    enabled:
-      !syncing && !!listId && !changes.some(({ change }) => change.type === 'createList' && change.id === listId),
+    queryKey: itemsKey,
+    queryFn: ({ signal }) =>
+      shoppingStore.fetchRange(session, itemsKey, () => listShoppingItems(listId!, signal), signal),
+    enabled: !syncing && !!listId && !view?.localLists.has(listId),
     ...refresh,
   });
-  const visibleItems = (projected.get(JSON.stringify([...key, 'items', listId])) ??
-    (changes.some(({ change }) => change.type === 'createList' && change.id === listId) ? [] : undefined)) as
-    ShoppingItem[] | undefined;
+  const visibleItems = listId
+    ? (view?.items(listId) ??
+      (!saved?.revokedLists?.includes(listId) && items.data?.scope.current() ? items.data.data : undefined))
+    : undefined;
+  const syncedAt = (kind: string, id?: string) =>
+    saved?.queries.find((query) => query.queryKey[3] === kind && query.queryKey[4] === id)?.state.dataUpdatedAt;
   return {
     lists: { ...lists, data: visibleLists, isPending: !visibleLists && lists.isPending },
-    items: { ...items, data: visibleItems ?? items.data, isPending: !visibleItems && items.isPending },
-    // Acceptance is local. Network completion is reported separately and must
-    // not block the next checkbox or leave a quick-add dialog open offline.
+    items: { ...items, data: visibleItems, isPending: !visibleItems && items.isPending },
     queueChange: async (change: ShoppingChange) => {
-      await enqueueShopping(client, account, change);
+      const scope = shoppingStore.accountScope();
+      await client.cancelQueries({ queryKey: key });
+      if (!scope.current()) throw new DOMException('Session changed', 'AbortError');
+      await shoppingStore.enqueue(account, change);
     },
     active,
     online,
-    syncedAt: items.dataUpdatedAt || lists.dataUpdatedAt || undefined,
-    pendingCount: changes.filter((op) => !op.review).length,
+    syncedAt: syncedAt('items', listId) || syncedAt('lists') || undefined,
+    pendingCount: view?.pendingCount ?? 0,
     syncError: status.reviewCount
       ? (status.lastError ?? 'Zapisane zmiany zakupów wymagają sprawdzenia. Zachowano je na urządzeniu.')
-      : status.storageIssue,
+      : (issue ?? status.storageIssue),
     reviewCount: status.reviewCount,
-    discardReview: () => discardShoppingReview(client, account),
+    discardReview: async () => {
+      await shoppingStore.discardReview(account);
+      void client.invalidateQueries({ queryKey: key });
+    },
   };
 }

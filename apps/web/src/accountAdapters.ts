@@ -1,7 +1,7 @@
 import { readAccountSession, saveAccountSession, PENDING_LOGOUT_KEY } from './session.js';
 import { calendarStore, registerCalendarStore } from './features/calendar/calendarOffline.js';
 import { registerTaskStore } from './features/tasks/taskOffline.js';
-import { clearShoppingStorage, stopShoppingPersistence, restoreShopping } from './features/shopping/shoppingOffline.js';
+import { registerShoppingStore } from './features/shopping/shoppingOffline.js';
 import { forgetOfflineData } from './offlineData.js';
 import { clearDatabase } from './offline/database.js';
 import { CONTACTS_STORAGE_KEY, registerContactsStore } from './features/contacts/contactsOffline.js';
@@ -46,17 +46,7 @@ export function registerApplicationStores() {
 
   registerCalendarStore();
   registerTaskStore();
-  registerAccountStore({
-    name: 'shopping',
-    restore: restoreShopping,
-    stop: (client) => {
-      if (client) stopShoppingPersistence(client);
-    },
-    clear: ({ removeStored, queryClient }) => {
-      if (removeStored) clearShoppingStorage(queryClient);
-      else if (queryClient) stopShoppingPersistence(queryClient);
-    },
-  });
+  registerShoppingStore();
   registerAccountStore({
     name: 'meals',
     restore: restoreMeals,

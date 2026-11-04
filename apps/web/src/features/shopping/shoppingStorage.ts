@@ -21,11 +21,10 @@ import {
   PROTOCOL_KEY,
   CLEAR_PENDING_KEY,
 } from '../../offline/database.js';
-import { registerAdapter, chargedBytes, type CacheEntry } from '../../offline/registry.js';
+import { chargedBytes, type CacheEntry } from '../../offline/registry.js';
 import { requireMigration } from '../../offline/status.js';
 import { freezeParticipants, resumeParticipants } from '../../offline/coordinator.js';
-import type { QueuedShoppingChange } from './shoppingOffline.js';
-import type { MealShoppingProjection } from './shoppingApi.js';
+import type { ShoppingChange, MealShoppingProjection } from './shoppingApi.js';
 import { readOperations, type Operation } from '../../offline/outbox.js';
 
 export const SHOPPING_STORAGE_KEY = 'rodzina:shopping:v1';
@@ -79,6 +78,7 @@ const operationSchema = variablesSchema.extend({
     ])
     .optional(),
 });
+export type QueuedShoppingChange = { change: ShoppingChange; operationId: string; submittedAt: number };
 export type StoredShoppingOperation = Omit<QueuedShoppingChange, 'change'> & {
   change: QueuedShoppingChange['change'] | MealShoppingProjection;
   sequence: number;
@@ -123,14 +123,13 @@ function parseQueries(input: unknown[], account: string): DehydratedState['queri
     return query;
   });
 }
-registerAdapter({
-  module: 'shopping',
-  schemaVersion: 1,
-  capabilities: 'read-write',
+export const shoppingCache = {
+  module: 'shopping' as const,
+  schemaVersion: 1 as const,
   separateMigration: true,
   legacyKey: SHOPPING_STORAGE_KEY,
   budget: 4 * 1048576,
-  parseCache: (value) => {
+  parseCache: (value: unknown) => {
     const data = value as ShoppingData;
     if (data?.version !== 1 || typeof data.account !== 'string') error('Nieobsługiwany format pamięci zakupów.');
     const session = snapshotSchema.shape.session.parse(data.session);
@@ -140,15 +139,15 @@ registerAdapter({
     z.array(operationSchema).parse(data.operations);
     return data;
   },
-  trim: (value) => value,
-  describe: (value) => {
+  trim: (value: unknown) => value,
+  describe: (value: unknown) => {
     const data = value as ShoppingData;
     return {
       syncedAt: Math.max(0, ...data.queries.map((q) => q.state.dataUpdatedAt)) || null,
-      coverage: data.queries.length ? 'partial' : 'missing',
+      coverage: data.queries.length ? ('partial' as const) : ('missing' as const),
     };
   },
-});
+};
 function entry(data: ShoppingData, outboxBytes = 0, outbox = false): CacheEntry {
   const record = {
     accountId: data.account,
@@ -240,20 +239,35 @@ export async function shoppingUsesOutbox(tx: IDBTransaction, account: string) {
       ?.value === 'outbox-v1'
   );
 }
+export async function readShoppingChanges(tx: IDBTransaction, account: string, data: ShoppingData | undefined) {
+  if (!data) return [];
+  const outbox = await shoppingUsesOutbox(tx, account);
+  const operations = outbox
+    ? (await readOperations(tx, account)).flatMap((op) => {
+        if (op.module === 'shopping') return [shoppingOperation(op)];
+        const projection = mealShoppingOperation(op);
+        return projection ? [projection] : [];
+      })
+    : data.operations;
+  if (
+    !Number.isSafeInteger(data.nextSequence) ||
+    data.nextSequence < 1 ||
+    operations.some(
+      (op, i) => (!outbox && op.sequence >= data.nextSequence) || (i > 0 && op.sequence <= operations[i - 1]!.sequence),
+    ) ||
+    new Set(operations.map((op) => op.operationId)).size !== operations.length
+  )
+    error('Nieprawidłowa kolejność zapisanych zmian zakupów.');
+  return operations;
+}
 export async function readShoppingTransaction(tx: IDBTransaction, account: string) {
   const record = await requestValue<CacheEntry | undefined>(
     tx.objectStore('cache').get([account, 'shopping', 'snapshot']),
   );
   if (!record) return;
-  const data = record.payload as ShoppingData;
-  if (record.schemaVersion !== 1 || data.version !== 1 || data.account !== account)
-    error('Nieobsługiwana wersja pamięci zakupów.');
-  if (!(await shoppingUsesOutbox(tx, account))) return data;
-  const operations = (await readOperations(tx, account)).flatMap((op) => {
-    if (op.module === 'shopping') return [shoppingOperation(op)];
-    const projection = mealShoppingOperation(op);
-    return projection ? [projection] : [];
-  });
+  const data = shoppingCache.parseCache(record.payload);
+  if (record.schemaVersion !== 1 || data.account !== account) error('Nieobsługiwana wersja pamięci zakupów.');
+  const operations = await readShoppingChanges(tx, account, data);
   return { ...data, operations, nextSequence: Math.max(data.nextSequence, ...operations.map((op) => op.sequence + 1)) };
 }
 export async function readShoppingData(account?: string) {
@@ -266,29 +280,14 @@ export async function readShoppingData(account?: string) {
           )
         )?.value;
     if (!active || (account && active.accountId !== account)) return;
-    const data = await readShoppingTransaction(tx, active.accountId);
-    if (!data) return;
-    const session = snapshotSchema.shape.session.parse(data.session);
-    if (`${session.family.id}:${session.user.id}` !== data.account || session.user.familyId !== session.family.id)
-      error('Zapisane zakupy należą do innego konta.');
-    parseQueries(data.queries, data.account);
-    const operations = z.array(operationSchema).parse(data.operations);
-    if (
-      !Number.isSafeInteger(data.nextSequence) ||
-      data.nextSequence < 1 ||
-      operations.some(
-        (op, i) => op.sequence >= data.nextSequence || (i > 0 && op.sequence <= operations[i - 1]!.sequence),
-      ) ||
-      new Set(operations.map((op) => op.operationId)).size !== operations.length
-    )
-      error('Nieprawidłowa kolejność zapisanych zmian zakupów.');
-    return data;
+    return readShoppingTransaction(tx, active.accountId);
   });
 }
 export async function updateShoppingData(
   account: string,
   update: (old: ShoppingData | undefined) => ShoppingData,
   token = accountToken(),
+  assertCurrent?: () => void,
 ) {
   if (localStorage.getItem(CLEAR_PENDING_KEY)) error('Usuwanie danych konta nie zostało zakończone.');
   return transact(
@@ -296,9 +295,12 @@ export async function updateShoppingData(
     async (tx) => {
       const active = await assertContext(tx);
       if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
-      const value = update(await readShoppingTransaction(tx, account));
+      const old = await readShoppingTransaction(tx, account);
+      assertCurrent?.();
+      const value = update(old);
       if (value.account !== account) throw new DOMException('Session changed', 'AbortError');
       await putShoppingTransaction(tx, value, await shoppingUsesOutbox(tx, account));
+      assertCurrent?.();
       return value;
     },
     token,
@@ -311,7 +313,6 @@ export function notifyShopping() {
   } catch {
     /* IDB is authoritative. */
   }
-  window.dispatchEvent(new Event(SHOPPING_SIGNAL));
 }
 export function emptyShopping(session: AccountSession): ShoppingData {
   return {

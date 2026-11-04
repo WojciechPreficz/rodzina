@@ -1,4 +1,4 @@
-import type { AccountSession } from '../../session.js';
+import { saveAccountSession, type AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
@@ -8,7 +8,7 @@ import '@testing-library/jest-dom/vitest';
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { ShoppingPage } from './ShoppingPage.js';
 import { MemoryRouter } from 'react-router';
-import { restoreShopping, stopShoppingPersistence } from './shoppingOffline.js';
+import { shoppingStore } from './shoppingOffline.js';
 import { readShoppingData } from './shoppingStorage.js';
 
 const session = vi.hoisted(() => ({
@@ -84,7 +84,8 @@ async function setup(
   });
   vi.stubGlobal('fetch', fetchMock);
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  await restoreShopping(client, session as AccountSession);
+  await saveAccountSession(session as AccountSession);
+  await shoppingStore.activate(`${session.family.id}:${session.user.id}`);
   render(
     <QueryClientProvider client={client}>
       <MantineProvider env="test">
@@ -122,7 +123,7 @@ describe('shopping UI', () => {
     );
   });
   afterEach(() => {
-    stopShoppingPersistence(client);
+    shoppingStore.clear();
     focusManager.setFocused(undefined);
     cleanup();
     client?.clear();

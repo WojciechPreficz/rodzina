@@ -16,7 +16,6 @@ import { joinSync, type SyncAdapter } from '../../offline/sync.js';
 import { notifyOutboxChanged, watchOutbox } from '../../offline/signals.js';
 import { reportStorageIssue, storageError } from '../../offline/status.js';
 import {
-  flushShoppingForMealExport,
   prepareMealExportSync,
   resolveMealExportTargets,
   projectQueuedMealExport,
@@ -81,7 +80,6 @@ type MealState = { account: string; cache: MealCache; operations: MealOperation[
 const listeners = new Set<() => void>();
 let state: MealState = { account: '', cache: emptyMeals(''), operations: [], ready: false };
 let session: AccountSession | undefined;
-let queryClient: QueryClient | undefined;
 let sync: ReturnType<typeof joinSync> | undefined;
 let unwatch: (() => void) | undefined;
 let token = -1;
@@ -123,12 +121,11 @@ export function stopMeals() {
   unwatch?.();
   unwatch = undefined;
   session = undefined;
-  queryClient = undefined;
   token = -1;
   state = { account: '', cache: emptyMeals(''), operations: [], ready: false };
   emit();
 }
-export async function restoreMeals(_client: QueryClient, next: AccountSession) {
+export async function restoreMeals(client: QueryClient, next: AccountSession) {
   const account = `${next.family.id}:${next.user.id}`;
   if (state.account === account && isAccountCurrent(token) && session) {
     session = next;
@@ -138,7 +135,6 @@ export async function restoreMeals(_client: QueryClient, next: AccountSession) {
   const captured = accountToken();
   token = captured;
   session = next;
-  queryClient = _client;
   state = { account, cache: emptyMeals(account), operations: [], ready: false };
   try {
     await reload();
@@ -146,7 +142,7 @@ export async function restoreMeals(_client: QueryClient, next: AccountSession) {
     unwatch = watchOutbox(account, () => {
       void reload().catch(() => {});
     });
-    sync = joinSync(account, mealAdapter(account, _client), reload);
+    sync = joinSync(account, mealAdapter(account, client), reload);
   } catch (error) {
     if (token === captured && isAccountCurrent(captured)) reportStorageIssue(storageError(error));
   }
@@ -276,9 +272,6 @@ export function queueMealCopy(weekStart: string, overwrite: boolean) {
   });
 }
 export async function queueMealExport(weekStart: string, listId: string, mealIds: string[], confirmRepeat: boolean) {
-  const captured = token;
-  if (queryClient) await flushShoppingForMealExport(queryClient);
-  if (captured !== token || !isAccountCurrent(captured)) throw new DOMException('Session changed', 'AbortError');
   return queueMealChange(async (cache, operations, tx) => {
     const week = cache.weeks[weekStart];
     const meals = week?.data.days.flatMap((day) => day.meals).filter((meal) => mealIds.includes(meal.id));

@@ -1,11 +1,11 @@
-import type { AccountSession } from '../../session.js';
+import { saveAccountSession, type AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
-import { onlineManager, QueryClient } from '@tanstack/react-query';
+import { onlineManager } from '@tanstack/react-query';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
-import { enqueueShopping, restoreShopping, stopShoppingPersistence } from './shoppingOffline.js';
-import { readShoppingData, updateShoppingData, notifyShopping } from './shoppingStorage.js';
+import { createShoppingStore } from './shoppingOffline.js';
+import { readShoppingData, updateShoppingData } from './shoppingStorage.js';
 import { readOperations } from '../../offline/outbox.js';
 import { shoppingKey } from './shoppingOptimistic.js';
 import { clearDatabase, closeDatabase, transact } from '../../offline/database.js';
@@ -39,17 +39,19 @@ const item = {
   createdAt: 1,
   updatedAt: 1,
 } as ShoppingItem;
-const clients: QueryClient[] = [];
+const accountId = 'family:user';
+const stores: ReturnType<typeof createShoppingStore>[] = [];
 async function start(seed = false) {
-  const client = new QueryClient();
-  clients.push(client);
-  client.mount();
-  await restoreShopping(client, session);
+  if (seed) await saveAccountSession(session);
+  const store = createShoppingStore();
+  stores.push(store);
+  await store.activate(accountId);
   if (seed) {
-    client.setQueryData([...key, 'lists'], [list]);
-    client.setQueryData([...key, 'items', 'list'], [item]);
+    const { signal } = new AbortController();
+    await store.fetchRange(session, [...key, 'lists'], async () => [list], signal);
+    await store.fetchRange(session, [...key, 'items', 'list'], async () => [item], signal);
   }
-  return client;
+  return store;
 }
 const data = () => readShoppingData('family:user');
 const edit = { type: 'edit' as const, id: 'milk', listId: 'list', data: { isChecked: true } };
@@ -62,32 +64,38 @@ const api = (write?: (path: string) => Promise<unknown>) =>
     }),
   );
 afterEach(() => {
-  for (const client of clients.splice(0)) {
-    stopShoppingPersistence(client);
-    client.unmount();
-    client.clear();
-  }
+  for (const store of stores.splice(0)) store.clear();
   onlineManager.setOnline(true);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 describe('shopping adapter for the shared outbox', () => {
-  it('keeps an observed range that is not yet persisted while refreshing queue state', async () => {
+  it('ignores a delayed refresh after the account scope is cleared and reactivated', async () => {
     onlineManager.setOnline(false);
-    const client = await start(true);
-    const range = client
-      .getQueryCache()
-      .build(client, { queryKey: [...key, 'items', 'loading'], queryFn: () => new Promise(() => {}) });
-    notifyShopping();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(client.getQueryCache().find({ queryKey: [...key, 'items', 'loading'], exact: true })).toBe(range);
+    const store = await start(true);
+    let finish!: (items: ShoppingItem[]) => void;
+    const refresh = store.fetchRange(
+      session,
+      [...key, 'items', 'list'],
+      () =>
+        new Promise<ShoppingItem[]>((resolve) => {
+          finish = resolve;
+        }),
+      new AbortController().signal,
+    );
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    store.clear();
+    await store.activate(accountId);
+    finish([]);
+    await expect(refresh).rejects.toMatchObject({ name: 'AbortError' });
+    expect(store.snapshot().view?.items('list')).toEqual([item]);
   });
   it.each([403, 404])(
     'interprets shopping %s without restoring a missing item or hiding readable family data',
     async (status) => {
       onlineManager.setOnline(false);
       const client = await start(true);
-      await enqueueShopping(client, account, edit);
+      await client.enqueue(accountId, edit);
       vi.stubGlobal(
         'fetch',
         vi.fn(async (path: string) =>
@@ -105,35 +113,32 @@ describe('shopping adapter for the shared outbox', () => {
       );
       onlineManager.setOnline(true);
       await vi.waitFor(async () => expect((await data())?.operations[0]?.review).toBe('rejected'));
-      await vi.waitFor(() =>
-        expect(client.getQueryData([...key, 'items', 'list'])).toEqual(status === 403 ? [item] : []),
-      );
-      expect(client.getQueryData([...key, 'lists'])).toEqual([list]);
+      await vi.waitFor(() => expect(client.snapshot().view?.items('list')).toEqual(status === 403 ? [item] : []));
+      expect(client.snapshot().view?.lists).toEqual([list]);
     },
   );
-  it('commits before acknowledging, persists only shopping and restores a killed process', async () => {
+  it('commits before acknowledging and restores the projection after a restart', async () => {
     onlineManager.setOnline(false);
     const first = await start(true);
-    first.setQueryData(['events'], ['private calendar']);
-    await enqueueShopping(first, account, edit);
-    await enqueueShopping(first, account, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } });
+    await first.enqueue(accountId, edit);
+    await first.enqueue(accountId, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } });
     const saved = await data();
     expect(saved?.operations).toHaveLength(2);
     expect(saved?.operations.map((op) => op.sequence)).toEqual([1, 2]);
-    expect(JSON.stringify(saved)).not.toContain('private calendar');
     expect(Object.keys(localStorage).some((key) => key.startsWith('rodzina:shopping'))).toBe(false);
-    stopShoppingPersistence(first);
     first.clear();
     await closeDatabase();
     const restored = await start();
-    expect(restored.getQueryData([...key, 'items', 'list'])).toEqual([item]);
-    expect(restored.getMutationCache().getAll()).toHaveLength(0);
-    expect(restored.getQueryData([...key, 'operations'])).toHaveLength(2);
+    expect(restored.snapshot().view?.items('list')).toMatchObject([
+      { ...item, isChecked: true, checkedAt: expect.any(Number), checkedBy: 'user', updatedAt: expect.any(Number) },
+      { id: 'bread' },
+    ]);
+    expect(restored.snapshot().view?.pendingCount).toBe(2);
     expect((await data())?.operations).toEqual(saved?.operations);
   });
   it('refuses a full store without rendering or sending an uncommitted operation', async () => {
     const client = await start(true);
-    await enqueueShopping(client, account, edit);
+    await client.enqueue(accountId, edit);
     api();
     await vi.waitFor(async () => expect((await data())?.operations).toHaveLength(0));
     const put = IDBObjectStore.prototype.put;
@@ -144,11 +149,10 @@ describe('shopping adapter for the shared outbox', () => {
       if (this.name === 'cache') throw new DOMException('Full', 'QuotaExceededError');
       return put.apply(this, args);
     });
-    const before = client.getMutationCache().getAll().length;
     await expect(
-      enqueueShopping(client, account, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } }),
+      client.enqueue(accountId, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } }),
     ).rejects.toThrow();
-    expect(client.getMutationCache().getAll()).toHaveLength(before);
+    expect(client.snapshot().view?.pendingCount).toBe(0);
     expect((await data())?.operations).toHaveLength(0);
   });
   it('merges journals from two clients and sends each operation once in committed order', async () => {
@@ -156,8 +160,8 @@ describe('shopping adapter for the shared outbox', () => {
     const a = await start(true);
     const b = await start();
     await Promise.all([
-      enqueueShopping(a, account, edit),
-      enqueueShopping(b, account, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } }),
+      a.enqueue(accountId, edit),
+      b.enqueue(accountId, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } }),
     ]);
     expect((await data())?.operations).toHaveLength(2);
     const writes: string[] = [];
@@ -176,10 +180,9 @@ describe('shopping adapter for the shared outbox', () => {
       sent = true;
       await new Promise(() => {});
     });
-    await enqueueShopping(first, account, { type: 'add', id: 'stable-id', listId: 'list', data: { name: 'Chleb' } });
+    await first.enqueue(accountId, { type: 'add', id: 'stable-id', listId: 'list', data: { name: 'Chleb' } });
     await vi.waitFor(() => expect(sent).toBe(true));
     const saved = (await data())!.operations[0]!;
-    stopShoppingPersistence(first);
     first.clear();
     const writes: string[] = [];
     api(async (path) => {
@@ -195,9 +198,8 @@ describe('shopping adapter for the shared outbox', () => {
     onlineManager.setOnline(false);
     const first = await start(true);
     const second = await start();
-    await enqueueShopping(first, account, edit);
-    await enqueueShopping(second, account, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } });
-    stopShoppingPersistence(first);
+    await first.enqueue(accountId, edit);
+    await second.enqueue(accountId, { type: 'add', id: 'bread', listId: 'list', data: { name: 'Chleb' } });
     first.clear();
     const writes: string[] = [];
     api(async (path) => {
@@ -213,8 +215,7 @@ describe('shopping adapter for the shared outbox', () => {
   it('retains an expired operation as review even after correcting the device clock', async () => {
     onlineManager.setOnline(false);
     const first = await start(true);
-    await enqueueShopping(first, account, edit);
-    stopShoppingPersistence(first);
+    await first.enqueue(accountId, edit);
     first.clear();
     await transact('readwrite', async (tx) => {
       const operations = await readOperations(tx, 'family:user');
@@ -226,7 +227,6 @@ describe('shopping adapter for the shared outbox', () => {
     const restored = await start();
     await vi.waitFor(async () => expect((await data())?.operations[0]?.review).toBe('expired'));
     expect(fetch).not.toHaveBeenCalled();
-    stopShoppingPersistence(restored);
     restored.clear();
     vi.spyOn(Date, 'now').mockReturnValue(1);
     await start();
@@ -242,20 +242,19 @@ describe('shopping adapter for the shared outbox', () => {
           finish = resolve;
         }),
     );
-    await enqueueShopping(client, account, edit);
+    await client.enqueue(accountId, edit);
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
-    stopShoppingPersistence(client);
     client.clear();
     await clearDatabase();
     finish();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(await readShoppingData()).toBeUndefined();
-    expect(client.getQueryData([...key, 'lists'])).toBeUndefined();
+    expect(client.snapshot().view).toBeUndefined();
   });
   it('enforces the pinned queue budget without trimming an existing intent', async () => {
     onlineManager.setOnline(false);
     const client = await start(true);
-    await enqueueShopping(client, account, edit);
+    await client.enqueue(accountId, edit);
     const saved = await data();
     await expect(
       updateShoppingData('family:user', (old) => ({

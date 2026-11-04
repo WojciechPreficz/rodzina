@@ -1,5 +1,6 @@
-import type { AccountSession } from '../../session.js';
+import { saveAccountSession, type AccountSession } from '../../session.js';
 import '../../offline/testSetup.js';
+import { onlineManager } from '@tanstack/react-query';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { describe, expect, it, vi, afterEach } from 'vitest';
@@ -12,6 +13,7 @@ import {
   updateShoppingData,
   emptyShopping,
 } from './shoppingStorage.js';
+import { createShoppingStore } from './shoppingOffline.js';
 import '../../offlineData.js';
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
@@ -96,6 +98,25 @@ describe('shopping legacy import', () => {
     expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).toBeNull();
     await ensureMigrated();
     expect((await readShoppingData(fixture.accountId))?.operations).toHaveLength(2);
+  });
+  it('retries activation for the same account after confirming the migration', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
+    onlineManager.setOnline(false);
+    const store = createShoppingStore();
+    try {
+      seed();
+      await saveAccountSession(session);
+      await store.activate(fixture.accountId);
+      expect(store.snapshot().issue).toMatch(/Zamknij starsze karty/);
+
+      await ensureMigrated(true);
+      await store.activate(fixture.accountId);
+      expect(store.snapshot().issue).toBeUndefined();
+      expect(store.snapshot().view?.pendingCount).toBe(2);
+    } finally {
+      store.clear();
+      onlineManager.setOnline(true);
+    }
   });
   it('does not discard sources on quota failure or a failed import transaction', async () => {
     seed();
