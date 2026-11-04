@@ -73,8 +73,10 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
   let request = 0;
   let token = accountToken();
   let ready = Promise.resolve();
+  let updates = Promise.resolve();
   let stopSync: (() => void) | undefined;
   const listeners = new Set<() => void>();
+  const current = (captured: number) => captured === revision && !!state.account && isAccountCurrent(token);
 
   function emit(next: State<Snapshot, View>) {
     state = next;
@@ -128,8 +130,36 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
     if (event.key === signal || event.key === null) void reload();
   }
 
+  async function persistSnapshot(
+    saved: Snapshot,
+    mode: Extract<typeof definition, { mode: 'read-only' }>,
+    assertCurrent: () => void,
+    keepAbortedPreview = true,
+  ) {
+    let durable: unknown;
+    try {
+      durable = await writeCache(module, saved, token, assertCurrent);
+    } catch (cause) {
+      assertCurrent();
+      const issue = mode.writeError(storageError(cause));
+      const aborted = cause instanceof DOMException && cause.name === 'AbortError';
+      emit(
+        aborted && !keepAbortedPreview
+          ? { ...state, issue }
+          : { account: saved.account, saved, view: mode.project(saved), issue },
+      );
+      return false;
+    }
+    assertCurrent();
+    const stored = durable === saved ? saved : parseCache(durable);
+    emit({ account: saved.account, saved: stored, view: mode.project(stored) });
+    return true;
+  }
+
   return {
     snapshot: () => state,
+    token: () => revision,
+    current,
     subscribe(listener: () => void) {
       if (!listeners.size) window.addEventListener('storage', onStorage);
       listeners.add(listener);
@@ -155,6 +185,27 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
       emit({ account: '' });
     },
     reload,
+    // Merge independently fetched parts in order. Existing caches can keep their signaling protocol.
+    updateSnapshot(captured: number, update: (account: string, saved: Snapshot | undefined) => Snapshot) {
+      if (definition.mode !== 'read-only') throw new Error('Use the module transaction to refresh a writable cache');
+      const mode = definition;
+      const work = updates.then(async () => {
+        await ready;
+        if (!current(captured)) return;
+        const assertCurrent = () => {
+          if (!current(captured)) throw new DOMException('Session changed', 'AbortError');
+        };
+        try {
+          const saved = parseCache(update(state.account, state.saved));
+          if (saved.account !== state.account) throw new DOMException('Session changed', 'AbortError');
+          await persistSnapshot(saved, mode, assertCurrent, false);
+        } catch (cause) {
+          if (current(captured)) emit({ ...state, issue: mode.writeError(storageError(cause)) });
+        }
+      });
+      updates = work;
+      return work;
+    },
     async fetchSnapshot<Raw>(account: string, load: () => Promise<Raw>, toSnapshot: (raw: Raw) => unknown) {
       if (definition.mode !== 'read-only') throw new Error('Use the module transaction to refresh a writable cache');
       const captured = revision;
@@ -175,21 +226,13 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View>(
       assertCurrent();
       const saved = parseCache(toSnapshot(raw));
       if (saved.account !== account) throw new DOMException('Session changed', 'AbortError');
-      let durable: unknown;
-      try {
-        durable = await writeCache(module, saved, capturedToken, assertCurrent);
-      } catch (cause) {
+      if (await persistSnapshot(saved, definition, assertCurrent)) {
         assertCurrent();
-        emit({ account, saved, view: definition.project(saved), issue: definition.writeError(storageError(cause)) });
-        return saved;
-      }
-      assertCurrent();
-      const stored = durable === saved ? saved : parseCache(durable);
-      emit({ account, saved: stored, view: definition.project(stored) });
-      try {
-        localStorage.setItem(signal, crypto.randomUUID());
-      } catch {
-        // IDB remains authoritative.
+        try {
+          localStorage.setItem(signal, crypto.randomUUID());
+        } catch {
+          // IDB remains authoritative.
+        }
       }
       return saved;
     },

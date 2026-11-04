@@ -161,7 +161,7 @@ it('filters saved occurrences locally by member while offline', async () => {
 });
 it('restores complete details and personal reminders before fetching and disables every write', async () => {
   await save();
-  calendarStore.clear(false);
+  calendarStore.clear();
   await calendarStore.activate(`${state.familyId}:${state.userId}`);
   show(true);
   expect(screen.getByRole('heading', { name: event.title })).toBeVisible();

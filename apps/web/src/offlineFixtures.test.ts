@@ -20,7 +20,7 @@ import {
   taskSchema,
 } from '@rodzina/shared';
 import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
-import { CalendarOfflineStore, readCalendarRange } from './features/calendar/calendarOffline.js';
+import { createCalendarStore, readCalendarRange } from './features/calendar/calendarOffline.js';
 import { createContactsStore } from './features/contacts/contactsOffline.js';
 import { createTaskOfflineStore } from './features/tasks/taskOffline.js';
 import { restoreShopping, stopShoppingPersistence } from './features/shopping/shoppingOffline.js';
@@ -198,13 +198,13 @@ describe('O.1 legacy storage fixtures', () => {
     expect(saved?.session.user.id).toBe(id('user'));
     expect(saved?.session.family.joinCode).toBe('TEST-CODE');
     expect(saved?.members).toHaveLength(1);
-    const calendar = new CalendarOfflineStore();
+    const calendar = createCalendarStore();
     await calendar.activate(fixture.accountId);
-    expect(calendar.issue).toBeUndefined();
-    expect(eventSchema.parse(calendar.snapshot().details[id('event')]?.event).id).toBe(id('event'));
-    expect(calendar.snapshot().personal[id('event')]?.[0]?.userId).toBe(id('user'));
+    expect(calendar.snapshot().issue).toBeUndefined();
+    expect(eventSchema.parse(calendar.snapshot().view?.details[id('event')]?.event).id).toBe(id('event'));
+    expect(calendar.snapshot().view?.personal[id('event')]?.[0]?.userId).toBe(id('user'));
     expect(
-      readCalendarRange(calendar.snapshot(), { from: '2026-10-26', to: '2026-10-26' }, 'Europe/Warsaw'),
+      readCalendarRange(calendar.snapshot().view, { from: '2026-10-26', to: '2026-10-26' }, 'Europe/Warsaw'),
     ).toMatchObject({ coverage: 'complete', data: [expect.objectContaining({ eventId: id('event') })] });
     const contacts = createContactsStore();
     await contacts.activate(fixture.accountId);

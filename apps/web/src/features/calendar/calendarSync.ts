@@ -71,8 +71,8 @@ export function fetchSavedMonth(month: string, token = calendarStore.token(), si
     await calendarStore.saveRange(month, occurrences, token);
     const results = await Promise.allSettled(
       [...new Set(occurrences.map((o) => o.eventId))].map((id) => {
-        const saved = calendarStore.snapshot();
-        return saved.details[id] && saved.details[id].syncedAt >= since && saved.personal[id]
+        const saved = calendarStore.snapshot().view;
+        return saved?.details[id] && saved.details[id].syncedAt >= since && saved.personal[id]
           ? Promise.resolve(saved.details[id].event)
           : fetchSavedEvent(id, token);
       }),

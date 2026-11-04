@@ -11,7 +11,7 @@ import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import { calendarOnlineHint, useCalendarOnlineMutation, useCalendarReadOnly } from './calendarQueries.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { fetchPersonal } from './calendarSync.js';
-import { useCalendarSnapshot } from './calendarOffline.js';
+import { useCalendarOffline } from './calendarOffline.js';
 import { EventSection } from './EventSection.js';
 import './event.css';
 
@@ -21,7 +21,7 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
   const client = useQueryClient();
   const readOnly = useCalendarReadOnly();
   const offline = useOffline();
-  const snapshot = useCalendarSnapshot();
+  const { view } = useCalendarOffline();
   const key = ['calendar', family?.id, user?.id, 'my-reminders', event.id];
   const query = useQuery({
     queryKey: key,
@@ -47,8 +47,7 @@ export function MyReminders({ event }: { event: CalendarEvent }) {
     sync,
   );
   const pending = create.isPending || remove.isPending;
-  const reminders =
-    snapshot.account === `${family?.id}:${user?.id}` ? (snapshot.personal[event.id] ?? query.data) : query.data;
+  const reminders = view?.personal[event.id] ?? query.data;
   return (
     <EventSection title={text.myReminders}>
       {query.isPending && !offline && !reminders && <Loader aria-label={text.loading} />}

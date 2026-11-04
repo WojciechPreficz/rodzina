@@ -72,7 +72,7 @@ it('bounds detail concurrency at four and deduplicates IDs and simultaneous rang
   expect(getEvent).toHaveBeenCalledTimes(10);
   expect(maximum).toBeLessThanOrEqual(4);
   expect(maximum).toBeGreaterThan(1);
-  expect(Object.keys(calendarStore.snapshot().personal)).toHaveLength(10);
+  expect(Object.keys(calendarStore.snapshot().view?.personal ?? {})).toHaveLength(10);
 });
 it('retains the old preview after transport failure and refreshes it on the next successful request', async () => {
   vi.mocked(listOccurrences).mockResolvedValue([]);
@@ -80,19 +80,20 @@ it('retains the old preview after transport failure and refreshes it on the next
   vi.mocked(listOccurrences).mockRejectedValueOnce(new TypeError('Network failed'));
   await expect(fetchSavedMonth('2026-10')).rejects.toThrow('Network failed');
   expect(
-    readCalendarRange(calendarStore.snapshot(), { from: '2026-10-01', to: '2026-10-31' }, 'Europe/Warsaw').coverage,
+    readCalendarRange(calendarStore.snapshot().view, { from: '2026-10-01', to: '2026-10-31' }, 'Europe/Warsaw')
+      .coverage,
   ).toBe('complete');
   await fetchSavedEvent(event.id);
   vi.mocked(getEvent).mockResolvedValueOnce({ ...event, title: 'Nowy tytuł' });
   await fetchSavedEvent(event.id);
-  expect(calendarStore.snapshot().details[event.id]?.event.title).toBe('Nowy tytuł');
+  expect(calendarStore.snapshot().view?.details[event.id]?.event.title).toBe('Nowy tytuł');
 });
 it('removes 404 details and invalidates ranges', async () => {
   await calendarStore.saveEvent(event, calendarStore.token());
   vi.mocked(getEvent).mockRejectedValueOnce(new ApiRequestError('Usunięte', 404));
   await expect(fetchSavedEvent(event.id)).rejects.toThrow('Usunięte');
-  expect(calendarStore.snapshot().details[event.id]).toBeUndefined();
-  expect(calendarStore.snapshot().ranges[0]?.complete).toBe(false);
+  expect(calendarStore.snapshot().view?.details[event.id]).toBeUndefined();
+  expect(calendarStore.snapshot().view?.ranges[0]?.complete).toBe(false);
 });
 it.each([401, 403])('revokes offline access on %i without falling back to old data', async (status) => {
   await calendarStore.saveEvent(event, calendarStore.token());
@@ -101,7 +102,7 @@ it.each([401, 403])('revokes offline access on %i without falling back to old da
   try {
     vi.mocked(getEvent).mockRejectedValueOnce(new ApiRequestError('Brak dostępu', status));
     await expect(fetchSavedEvent(event.id)).rejects.toThrow('Brak dostępu');
-    expect(calendarStore.snapshot().details).toEqual({});
+    expect(calendarStore.snapshot().view).toBeUndefined();
   } finally {
     window.removeEventListener('rodzina:session-lost', lost);
   }
@@ -118,12 +119,11 @@ it('ignores late responses from another account', async () => {
   await calendarStore.activate(`${familyId}:other`);
   finish(event);
   await expect(work).rejects.toThrow('Session changed');
-  expect(calendarStore.snapshot().details).toEqual({});
-  expect(calendarStore.snapshot().personal).toEqual({});
+  expect(calendarStore.snapshot().view).toBeUndefined();
 });
 it('persists distant details and personal reminders without visiting details', async () => {
   vi.mocked(listDistantEvents).mockResolvedValueOnce([{ ...event, kind: 'distant', startDate: '2030-01-01' }]);
   await fetchSavedDistant();
-  expect(calendarStore.snapshot().details[event.id]?.event.startDate).toBe('2030-01-01');
-  expect(calendarStore.snapshot().personal[event.id]).toEqual([]);
+  expect(calendarStore.snapshot().view?.details[event.id]?.event.startDate).toBe('2030-01-01');
+  expect(calendarStore.snapshot().view?.personal[event.id]).toEqual([]);
 });

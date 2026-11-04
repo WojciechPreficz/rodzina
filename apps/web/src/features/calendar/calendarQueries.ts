@@ -7,7 +7,7 @@ import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 import { createEvent, deleteEvent, updateEvent, type CalendarRange } from './calendarApi.js';
-import { calendarStore, readCalendarRange, useCalendarSnapshot } from './calendarOffline.js';
+import { calendarStore, readCalendarRange, useCalendarOffline } from './calendarOffline.js';
 import { fetchSavedDistant, fetchSavedEvent, fetchSavedRange } from './calendarSync.js';
 
 export const calendarOnlineHint = 'Dostępne po połączeniu z internetem';
@@ -31,18 +31,16 @@ export function useCalendarOnlineMutation<T, R>(action: (input: T) => Promise<R>
 function useCalendarAccount() {
   const { family, user, familyConfirmed } = useMe();
   const offline = useOffline();
-  const snapshot = useCalendarSnapshot();
-  const account = `${family?.id}:${user?.id}`;
+  const { view } = useCalendarOffline();
   return {
     family,
     user,
-    snapshot,
+    view,
     enabled: !!family && !!user && familyConfirmed && !offline,
-    matches: snapshot.account === account,
   };
 }
 export function useDistantEvents() {
-  const { family, user, snapshot, enabled, matches } = useCalendarAccount();
+  const { family, user, view, enabled } = useCalendarAccount();
   const query = useQuery({
     queryKey: ['calendar', family?.id, user?.id, 'distant'],
     queryFn: () => {
@@ -54,15 +52,14 @@ export function useDistantEvents() {
     refetchOnWindowFocus: false,
     retry: false,
   });
-  const saved = matches ? snapshot.distant : undefined;
   return {
     ...query,
-    data: saved?.ids.flatMap((id) => snapshot.details[id]?.event ?? []) ?? query.data,
-    syncedAt: saved?.syncedAt,
+    data: view?.distant?.ids.flatMap((id) => view.details[id]?.event ?? []) ?? query.data,
+    syncedAt: view?.distant?.syncedAt,
   };
 }
 export function useOccurrences(range: CalendarRange) {
-  const { family, user, snapshot, enabled, matches } = useCalendarAccount();
+  const { family, user, view, enabled } = useCalendarAccount();
   const query = useQuery({
     queryKey: ['calendar', family?.id, user?.id, 'occurrences', range],
     queryFn: () => {
@@ -77,15 +74,11 @@ export function useOccurrences(range: CalendarRange) {
   useEffect(() => {
     calendarStore.touch({ from: range.from, to: range.to });
   }, [range.from, range.to]);
-  const saved = readCalendarRange(
-    matches ? snapshot : { ...snapshot, ranges: [] },
-    range,
-    family?.timezone ?? 'Europe/Warsaw',
-  );
+  const saved = readCalendarRange(view, range, family?.timezone ?? 'Europe/Warsaw');
   return { ...query, ...saved };
 }
 export function useEvent(id: string) {
-  const { family, user, snapshot, enabled, matches } = useCalendarAccount();
+  const { family, user, view, enabled } = useCalendarAccount();
   const query = useQuery({
     queryKey: ['calendar', family?.id, user?.id, 'event', id],
     queryFn: () => {
@@ -98,7 +91,7 @@ export function useEvent(id: string) {
     retry: false,
   });
   const revoked = query.error instanceof ApiRequestError && [401, 403, 404].includes(query.error.status);
-  const saved = matches ? snapshot.details[id] : undefined;
+  const saved = view?.details[id];
   return { ...query, data: revoked ? undefined : saved?.event, syncedAt: saved?.syncedAt };
 }
 export function useCalendarMutations() {

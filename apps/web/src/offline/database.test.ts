@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { accountId, hydrateOfflineData, saveOfflineData, readOfflineData, forgetOfflineData } from '../offlineData.js';
-import { CalendarOfflineStore } from '../features/calendar/calendarOffline.js';
+import { createCalendarStore } from '../features/calendar/calendarOffline.js';
 import {
   activateOfflineAccount,
   clearDatabase,
@@ -56,10 +56,10 @@ describe('shared IndexedDB previews', () => {
     forgetOfflineData();
     const data = await hydrateOfflineData();
     expect(data?.session.family.joinCode).toBe('TEST-CODE');
-    const store = new CalendarOfflineStore();
+    const store = createCalendarStore();
     await store.activate(fixture.accountId);
-    expect(store.snapshot().ranges).toHaveLength(1);
-    expect(Object.keys(store.snapshot().personal)).toHaveLength(1);
+    expect(store.snapshot().view?.ranges).toHaveLength(1);
+    expect(Object.keys(store.snapshot().view?.personal ?? {})).toHaveLength(1);
     expect(await transact('readonly', async (tx) => requestValue(tx.objectStore('migration').count()))).toBe(0);
   });
   it('retains both sources and rolls back every target when a transaction runs out of space', async () => {

@@ -67,6 +67,11 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   online waliduje dane, zapisuje je przez adapter cache i publikuje widok.
   Kontakty korzystają z tego trybu, z formatem wersji 1 i dotychczasową
   migracją z klucza `rodzina:contacts:v1`.
+  Kalendarz korzysta z tego samego trybu. Pobrane zakresy miesięczne,
+  szczegóły wydarzeń, przypomnienia osobiste i wydarzenia odległe uzupełniają
+  snapshot kolejno przez `updateSnapshot`, z kontrolą bieżącej rewizji
+  i generacji konta. Zachowuje format wersji 1 i migrację z klucza
+  `rodzina:calendar:v1`.
 - Moduł z zapisem offline odczytuje snapshot i uporządkowane zmiany w jednej
   transakcji, a następnie czysta funkcja wyprowadza z nich widok. Sygnały
   outboxa odświeżają tę projekcję po zatwierdzeniu transakcji. Reguły zapisu

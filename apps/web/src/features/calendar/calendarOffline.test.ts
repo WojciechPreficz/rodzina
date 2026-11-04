@@ -1,7 +1,7 @@
 import '../../offline/testSetup.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expandOccurrences, occurrencesQuerySchema, type CalendarEvent } from '@rodzina/shared';
-import { CALENDAR_STORAGE_KEY, CalendarOfflineStore, monthWindow, readCalendarRange } from './calendarOffline.js';
+import { CALENDAR_STORAGE_KEY, createCalendarStore, monthWindow, readCalendarRange } from './calendarOffline.js';
 import type { CalendarOccurrence } from './calendarApi.js';
 
 const familyId = '11111111-1111-4111-8111-111111111111';
@@ -35,24 +35,24 @@ const occurrences = (): CalendarOccurrence[] =>
     createdBy: userId,
     participants: event.participants,
   }));
-let store: CalendarOfflineStore;
+let store: ReturnType<typeof createCalendarStore>;
 beforeEach(async () => {
   localStorage.clear();
-  store = new CalendarOfflineStore();
+  store = createCalendarStore();
   await store.activate(`${familyId}:${userId}`);
 });
 afterEach(async () => vi.restoreAllMocks());
-const read = (from: string, to = from) => readCalendarRange(store.snapshot(), { from, to }, timezone);
+const read = (from: string, to = from) => readCalendarRange(store.snapshot().view, { from, to }, timezone);
 
 describe('durable calendar preview', () => {
   it('restores full details, monthly coverage, participants and empty personal reminders after a cold start', async () => {
     await store.saveRange('2026-10', occurrences(), store.token());
     await store.saveEvent(event, store.token());
     await store.savePersonal(event.id, [], store.token());
-    store = new CalendarOfflineStore();
+    store = createCalendarStore();
     await store.activate(`${familyId}:${userId}`);
-    expect(store.snapshot().details[event.id]?.event).toEqual(event);
-    expect(store.snapshot().personal[event.id]).toEqual([]);
+    expect(store.snapshot().view?.details[event.id]?.event).toEqual(event);
+    expect(store.snapshot().view?.personal[event.id]).toEqual([]);
     expect(read('2026-10-24').data).toHaveLength(1);
     expect(read('2026-10-19', '2026-10-25').data).toHaveLength(2);
     expect(read('2026-10-01', '2026-10-31').coverage).toBe('complete');
@@ -72,9 +72,9 @@ describe('durable calendar preview', () => {
     vi.mocked(Date.now).mockReturnValue(100);
     await store.saveRange('2026-10', [], store.token());
     expect(read('2026-10-24').data).toEqual([]);
-    expect(store.snapshot().details[event.id]).toBeUndefined();
+    expect(store.snapshot().view?.details[event.id]).toBeUndefined();
     vi.mocked(Date.now).mockReturnValue(9999999999999);
-    store = new CalendarOfflineStore();
+    store = createCalendarStore();
     await store.activate(`${familyId}:${userId}`);
     expect(read('2026-10-24').coverage).toBe('complete');
   });
@@ -86,14 +86,14 @@ describe('durable calendar preview', () => {
       vi.mocked(Date.now).mockReturnValue(month + 1);
       await store.saveRange(`2027-${String(month).padStart(2, '0')}`, [], store.token());
     }
-    expect(store.snapshot().ranges).toHaveLength(12);
+    expect(store.snapshot().view?.ranges).toHaveLength(12);
     expect(read('2026-10-24').coverage).toBe('missing');
-    expect(store.snapshot().details[event.id]).toBeUndefined();
+    expect(store.snapshot().view?.details[event.id]).toBeUndefined();
     vi.mocked(Date.now).mockReturnValue(100);
     await store.touch({ from: '2027-01-10', to: '2027-01-10' });
     vi.mocked(Date.now).mockReturnValue(101);
     await store.saveRange('2028-01', [], store.token());
-    expect(store.snapshot().ranges.some((r) => r.month === '2027-01')).toBe(true);
+    expect(store.snapshot().view?.ranges.some((r) => r.month === '2027-01')).toBe(true);
   });
   it('enforces the API 62-day limit for every month including leap years', async () => {
     for (const year of [2026, 2028])
@@ -130,15 +130,15 @@ describe('durable calendar preview', () => {
     await store.saveRange('2026-10', occurrences(), store.token());
     await store.saveEvent(event, store.token());
     await store.forgetEvent(event.id, store.token());
-    expect(store.snapshot().details[event.id]).toBeUndefined();
+    expect(store.snapshot().view?.details[event.id]).toBeUndefined();
     expect(read('2026-10-24')).toMatchObject({ coverage: 'partial', data: [] });
   });
   it('preserves distant details while bounding month data', async () => {
     const distant = { ...event, kind: 'distant' as const, rrule: null, startDate: '2030-01-01' };
     await store.saveDistant([distant], store.token());
-    expect(store.snapshot().details[event.id]?.event).toEqual(distant);
+    expect(store.snapshot().view?.details[event.id]?.event).toEqual(distant);
     await store.saveDistant([], store.token());
-    expect(store.snapshot().details[event.id]).toBeUndefined();
+    expect(store.snapshot().view?.details[event.id]).toBeUndefined();
   });
   it('clears accounts, rejects late responses and never restores another user’s personal reminders', async () => {
     const token = store.token();
@@ -147,31 +147,25 @@ describe('durable calendar preview', () => {
     await store.activate(`${familyId}:44444444-4444-4444-8444-444444444444`);
     await store.saveEvent(event, token);
     await store.saveRange('2026-10', occurrences(), token);
-    expect(store.snapshot().details).toEqual({});
-    expect(store.snapshot().ranges).toEqual([]);
+    expect(store.snapshot().view).toBeUndefined();
     expect(localStorage.getItem(CALENDAR_STORAGE_KEY)).toBeNull();
   });
   it('reports corrupt, inaccessible and full storage without claiming persistence', async () => {
     localStorage.setItem(CALENDAR_STORAGE_KEY, '{bad');
-    store = new CalendarOfflineStore();
+    store = createCalendarStore();
     await store.activate(`${familyId}:${userId}`);
-    expect(store.issue).toContain('odczytać');
+    expect(store.snapshot().issue).toContain('odczytać');
     localStorage.removeItem(CALENDAR_STORAGE_KEY);
-    store.clear(false);
+    store.clear();
     await store.activate(`${familyId}:${userId}`);
     const { IDBObjectStore } = await import('fake-indexeddb');
     vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
       throw new Error('QuotaExceededError');
     });
     await store.saveRange('2026-10', occurrences(), store.token());
-    expect(store.issue).toContain('Nie można zapisać');
+    expect(store.snapshot().issue).toContain('Nie można zapisać');
     expect(read('2026-10-24').data).toHaveLength(1);
     const { readCache } = await import('../../offline/database.js');
     expect(await readCache('calendar', `${familyId}:${userId}`)).toBeUndefined();
-    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
-      throw new Error('denied');
-    });
-    store.clear();
-    expect(store.issue).toContain('Nie można usunąć');
   });
 });
