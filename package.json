@@ -11,6 +11,7 @@
     "apps/*"
   ],
   "scripts": {
+    "check:logged": "node scripts/check-logged.mjs",
     "android:sync": "node scripts/android.mjs sync",
     "android:debug": "node scripts/android.mjs debug",
     "android:release": "node scripts/android.mjs release && node scripts/package-android.mjs",

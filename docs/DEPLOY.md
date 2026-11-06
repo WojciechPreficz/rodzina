@@ -79,6 +79,15 @@ Próby lokalne z atrapą nie potwierdzają dostarczalności produkcyjnej.
 
 ## Paczka i migracje
 
+Build WWW dołącza stronę marketingową z `page/` jako `public/strona/`
+(HTML, CSS i dwa skrypty). `/strona` przekierowuje na `/strona/`;
+brakujące zasoby tego katalogu zwracają 404. Przyciski używają bieżącej domeny,
+więc dla `rodzina.preficze.pl` nie trzeba zmieniać `APP_BASE_URL` w źródłowym
+prototypie ani `RODZINA_PUBLIC_URL`. Wdróż cały katalog `public/` z paczki.
+`release:smoke` sprawdza ZIP, pliki przez HTTP, przekierowanie i CSP.
+Brak nowych migracji, zależności runtime, zmiennych i cronów. APK zachowuje
+dotychczasowy ekran wejścia; jego build nie zawiera strony marketingowej.
+
 OCR.2 dołącza do `public/ocr/<hash>/` lokalny worker Tesseract.js, warianty
 silnika WASM, polski model i licencje. Wdróż cały katalog `public/` z paczki;
 nie korzystamy z CDN. `release:smoke` sprawdza manifest `/ocr/manifest.json`,

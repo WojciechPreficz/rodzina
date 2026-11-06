@@ -186,6 +186,28 @@ try {
     fail('serwer nie dostarczył index.html.');
   }
 
+  const landingRedirect = await fetch(`http://127.0.0.1:${port}/strona`, { redirect: 'manual' });
+  if (landingRedirect.status !== 302 || landingRedirect.headers.get('location') !== '/strona/')
+    fail('brak przekierowania na stronę prezentującą aplikację.');
+  for (const [name, type] of [
+    ['index.html', 'text/html'],
+    ['styles.css', 'text/css'],
+    ['app.js', 'javascript'],
+    ['config.js', 'javascript'],
+  ]) {
+    const contents = entries[`public/strona/${name}`];
+    if (!contents?.length) fail(`brak pliku strony w ZIP: ${name}`);
+    const response = await fetch(`http://127.0.0.1:${port}/strona/${name === 'index.html' ? '' : name}`);
+    if (!response.ok || !response.headers.get('content-type')?.includes(type))
+      fail(`plik strony niedostępny lub niepoprawny typ: ${name}`);
+    if (!Buffer.from(await response.arrayBuffer()).equals(Buffer.from(contents)))
+      fail(`plik strony różni się od zawartości ZIP: ${name}`);
+    if (!response.headers.get('content-security-policy')?.includes("script-src 'self'"))
+      fail(`brak CSP strony: ${name}`);
+  }
+  if ((await fetch(`http://127.0.0.1:${port}/strona/missing.js`)).status !== 404)
+    fail('brak zasobu strony zwraca SPA zamiast 404.');
+
   for (const route of ['/zaproszenie/smoke-token', '/reset-hasla/smoke-token', '/login-child']) {
     const response = await fetch(`http://127.0.0.1:${port}${route}`);
     if (!response.ok || !(await response.text()).includes('<div id="root"></div>')) {

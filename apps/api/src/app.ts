@@ -98,6 +98,11 @@ export async function buildApp(
     });
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', config.RODZINA_WEB_DIR);
     await app.register(fastifyStatic, { root, prefix: '/' });
+    app.get('/strona', async (request, reply) => {
+      const search = request.url.includes('?') ? request.url.slice(request.url.indexOf('?')) : '';
+      return reply.redirect(`/strona/${search}`);
+    });
+    app.get('/strona/', async (_request, reply) => reply.sendFile('strona/index.html'));
     app.setNotFoundHandler((request, reply) => {
       // Match the router's decoded path before considering the SPA fallback.
       let pathname: string;
@@ -110,6 +115,7 @@ export async function buildApp(
         pathname === '/api' ||
         pathname.startsWith('/api/') ||
         pathname.startsWith('/downloads/') ||
+        pathname.startsWith('/strona/') ||
         pathname.startsWith('/ocr/')
       ) {
         return reply.code(404).send({

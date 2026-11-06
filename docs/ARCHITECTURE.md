@@ -2,6 +2,15 @@
 
 ## Produkt i platformy
 
+Publiczna strona prezentująca aplikację działa pod `/strona/`, z przekierowaniem
+z `/strona`. W WWW niezalogowany użytkownik trafia na nią z `/`, również
+z parametrami i fragmentem adresu; zalogowany widzi kalendarz. APK zachowuje
+ekran `/witaj` i nie zawiera plików strony marketingowej. Bezpośrednie linki
+do funkcji nadal prowadzą przez logowanie z zachowaniem adresu docelowego.
+Strona ma własny dokument HTML i lokalne zasoby, korzysta z istniejącej CSP,
+a rejestracja i oba logowania działają na tej samej domenie. Źródłem jest `page/`;
+plugin Vite dołącza wyłącznie HTML, CSS i dwa skrypty do builda WWW.
+
 Rodzina organizuje kalendarz, zakupy, zadania, dokumenty i kontakty.
 Obiady mają plan tygodnia, eksport do zakupów i dzisiejszą kartę, również z trwałą obsługą offline. Rodzina ma wspólne konto
 z wieloma domownikami; listy zadań są prywatne lub udostępniane.

@@ -3,11 +3,13 @@ import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { ocrAssets } from './ocr-assets.js';
+import { landingPage } from './landing-page.js';
 
 export default defineConfig(({ mode }) => ({
   build: { outDir: mode === 'android' ? 'dist-android' : 'dist' },
   plugins: [
     react(),
+    ...(mode === 'android' ? [] : [landingPage()]),
     ...(mode === 'android' ? [] : [ocrAssets()]),
     ...(mode === 'android'
       ? []

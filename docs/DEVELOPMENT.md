@@ -14,23 +14,32 @@ Przed npm ci zatrzymaj API i testy watch: Windows blokuje załadowane moduły
 natywne (EPERM przy Argon2). Nie usuwaj lockfile ani bazy; zamknij proces
 tej aplikacji w jego terminalu i ponów instalację.
 
-## Prototyp strony marketingowej
+## Strona marketingowa
 
-Folder `page/` zawiera samodzielny prototyp HTML/CSS/JS, niezależny od API
-i builda WWW/APK. Uruchom `node page/server.mjs` i otwórz
-<http://127.0.0.1:4177>. Strona działa też po otwarciu `page/index.html`
-w przeglądarce. Zmiany plików wymagają odświeżenia podglądu.
+Przy `npm run dev` strona jest dostępna pod <http://localhost:5173/strona/>.
+Niezalogowany użytkownik WWW trafia tam z `/`; zalogowany nadal widzi
+kalendarz. Przyciski otwierają istniejące formularze na tej samej domenie.
+Build WWW zawiera stronę w `strona/`, a build Androida ją pomija i zachowuje
+dotychczasowy ekran `/witaj`.
 
-Docelowy adres aplikacji ustaw w `page/config.js` przez `APP_BASE_URL`.
-Rejestracja, logowanie i logowanie dziecka prowadzą odpowiednio do
-`/register`, `/login` i `/login-child`. Bez adresu wyświetlany jest komunikat
-podglądu; prototyp nie tworzy kont i nie łączy się z API.
-Publikacja i wybór domen pozostają osobnym krokiem.
+Folder `page/` pozostaje źródłem HTML/CSS/JS i osobnym podglądem: uruchom
+`node page/server.mjs` i otwórz <http://127.0.0.1:4177> lub otwórz
+`page/index.html` w przeglądarce. Zmiany wymagają odświeżenia.
+Wyłącznie w tym samodzielnym podglądzie `APP_BASE_URL` w `page/config.js`
+ustawia adres formularzy; brak adresu pokazuje komunikat prototypu.
+Build i Vite ustawiają adres automatycznie na bieżącą domenę.
 
-Po `npm ci` sprawdź prototyp przez
-`npm run test:e2e -- --config page/playwright.config.mjs`.
-Testy działają headless przy 390/1280 px, uruchamiają osobny serwer
-na porcie 4178 i zapisują raport oraz zrzuty w `test-results/`.
+Po `npm ci` sprawdź samodzielny podgląd przez
+`npm run test:e2e -- --config page/playwright.config.mjs` (port 4178),
+a integrację po buildzie przez `npm run test:e2e -- e2e/landing.spec.ts`.
+Testy działają headless przy 390/1280 px. Pakowanie i serwowanie czterech plików
+przez rzeczywisty serwer paczki kontroluje `npm run release:smoke`.
+Pełne logi wybranej kontroli można zapisać w ignorowanym `.check-logs/`
+przez `npm run check:logged -- test <ścieżka>` lub analogicznie `test:e2e`,
+`build`, `typecheck`, `lint`, `format:check`, `release:smoke`. Skrypt zachowuje
+kod wyjścia npm i wypisuje podsumowanie oraz ścieżkę logu.
+Pozostaje odbiór fizycznego APK: ekran wejścia, logowanie, kalendarz i Wstecz;
+symulowany transport Androida nie zastępuje telefonu. Wdrożenie jest osobne.
 
 ## Testy
 

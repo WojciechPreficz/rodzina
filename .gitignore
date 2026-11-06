@@ -11,6 +11,7 @@ coverage/
 *.tsbuildinfo
 test-results/
 playwright-report/
+.check-logs/
 **/dist-android/
 android/.gradle/
 android/**/build/

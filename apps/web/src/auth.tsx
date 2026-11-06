@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sanitizeNextPath } from './api.js';
 import { AuthContext, useMe, type AuthState } from './sessionContext.js';
+import { isAndroid } from './platform.js';
 
 export function AuthProvider({ children, value }: { children?: ReactNode; value: AuthState }) {
   return <AuthContext.Provider value={value}>{children ?? <Outlet />}</AuthContext.Provider>;
@@ -15,8 +16,13 @@ export function getSafeNextPath(search: string | undefined): string {
 export function ProtectedRoute({ children }: { children?: ReactNode }) {
   const { user, isLoading } = useMe();
   const location = useLocation();
+  const showLanding = !isLoading && !user && location.pathname === '/' && !isAndroid();
 
-  if (isLoading) {
+  useEffect(() => {
+    if (showLanding) window.location.replace(`/strona/${location.search}${location.hash}`);
+  }, [showLanding, location.search, location.hash]);
+
+  if (isLoading || showLanding) {
     return null;
   }
 

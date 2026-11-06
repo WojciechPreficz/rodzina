@@ -47,7 +47,7 @@ async function expectRetired(page: Page) {
 
 test('new visitors get a website without registering a service worker', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Witamy w Rodzinie' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Mniej pamiętania.');
   await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
   const manifest = await page.request.get('/manifest.webmanifest');

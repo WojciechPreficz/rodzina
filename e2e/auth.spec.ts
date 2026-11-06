@@ -19,7 +19,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
   });
   try {
     await page.goto('/');
-    await page.getByRole('link', { name: 'Załóż rodzinę' }).click();
+    await page.locator('.hero-actions').getByRole('link', { name: 'Załóż rodzinę' }).click();
     await expect(page.getByLabel('Nazwa rodziny', { exact: true })).toHaveAttribute('placeholder', 'Nasz dom');
     await page.screenshot({ path: testInfo.outputPath('registration.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

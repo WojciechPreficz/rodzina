@@ -28,6 +28,7 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
 | Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
 | LP.1: prototyp strony marketingowej                           | Zweryfikowane lokalnie, oczekuje na CI                                          | Docelowy adres aplikacji i publikacja poza zakresem prototypu     |
+| LP.2: strona marketingowa pod /strona                         | Zweryfikowane lokalnie, oczekuje na CI                                          | Fizyczne APK i publikacja do potwierdzenia                        |
 
 Zadania cykliczne C.1–C.2 (#65–#66): zweryfikowane lokalnie, oczekuje na CI.
 Wykonanie offline C.3 (#67): zweryfikowane lokalnie, oczekuje na CI.
@@ -57,6 +58,24 @@ Odbiór obejmuje UI i Playwright headless przy 390/1280 px, klawiaturę,
 przełączanie funkcji, checklisty, eksport demonstracyjny bez duplikatów,
 reset, FAQ i przyciski z ustawionym oraz brakującym adresem aplikacji.
 Status: zweryfikowane lokalnie, oczekuje na CI.
+
+## LP.2 — strona marketingowa na obecnej domenie
+
+Publiczne `/strona/` prezentuje aplikację; `/strona` przekierowuje na ten
+adres. Niezalogowany użytkownik WWW trafia tam z `/`, a zalogowany zachowuje
+kalendarz. Przyciski prowadzą do rejestracji i logowania na bieżącej domenie.
+APK zachowuje obecny ekran `/witaj`; build Androida nie zawiera landing page.
+
+Build WWW dołącza cztery pliki z `page/` do `public/strona/` w paczce release.
+Brakujący zasób zwraca 404, a strona korzysta z istniejącej CSP. Bez zmian
+domeny, API, migracji, zmiennych środowiskowych i publikacji na serwerze.
+
+Odbiór: routowanie, anonimowy i zalogowany użytkownik, rejestracja oraz oba
+logowania, działające demonstracje i UI przy 390/1280 px. Testy komponentów,
+serwowania plików, Playwright headless, build WWW/Android i release:smoke.
+Fizyczne APK: istniejący ekran wejścia, logowanie, kalendarz i systemowy Wstecz.
+Status: zweryfikowane lokalnie, oczekuje na CI; odbiór fizycznego APK
+i publikacja do potwierdzenia.
 
 ## Faza 6 — plan obiadów
 
