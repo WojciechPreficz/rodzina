@@ -27,6 +27,7 @@ nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
 | Potwierdzanie sesji w przebiegu nadawcy                       | Zweryfikowane lokalnie, oczekuje na CI                                          | Końcowe CI i próba synchronizacji oraz baterii w fizycznym APK    |
 | Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
 | Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
+| LP.1: prototyp strony marketingowej                           | Zweryfikowane lokalnie, oczekuje na CI                                          | Docelowy adres aplikacji i publikacja poza zakresem prototypu     |
 
 Zadania cykliczne C.1–C.2 (#65–#66): zweryfikowane lokalnie, oczekuje na CI.
 Wykonanie offline C.3 (#67): zweryfikowane lokalnie, oczekuje na CI.
@@ -42,6 +43,20 @@ Publiczne API zakupów dla eksportu obiadów i reguła granic importów — zwer
 
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
+
+## LP.1 — prototyp strony prezentującej aplikację
+
+Osobny statyczny prototyp w `page/`, przeznaczony dla przyszłej strony
+`rodzina.pl`. Ciepła kolorystyka, prezentacja istniejących funkcji i główna
+akcja „Załóż rodzinę”. Interaktywne podglądy kalendarza, zadań, zakupów
+i przenoszenia składników obiadów korzystają wyłącznie z przykładowych danych.
+Adres aplikacji pozostaje do ustalenia; bez niego przyciski pokazują komunikat
+podglądu. Bez zmian aplikacji WWW/APK, API i hostingu oraz bez publikacji.
+
+Odbiór obejmuje UI i Playwright headless przy 390/1280 px, klawiaturę,
+przełączanie funkcji, checklisty, eksport demonstracyjny bez duplikatów,
+reset, FAQ i przyciski z ustawionym oraz brakującym adresem aplikacji.
+Status: zweryfikowane lokalnie, oczekuje na CI.
 
 ## Faza 6 — plan obiadów
 

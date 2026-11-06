@@ -14,6 +14,24 @@ Przed npm ci zatrzymaj API i testy watch: Windows blokuje załadowane moduły
 natywne (EPERM przy Argon2). Nie usuwaj lockfile ani bazy; zamknij proces
 tej aplikacji w jego terminalu i ponów instalację.
 
+## Prototyp strony marketingowej
+
+Folder `page/` zawiera samodzielny prototyp HTML/CSS/JS, niezależny od API
+i builda WWW/APK. Uruchom `node page/server.mjs` i otwórz
+<http://127.0.0.1:4177>. Strona działa też po otwarciu `page/index.html`
+w przeglądarce. Zmiany plików wymagają odświeżenia podglądu.
+
+Docelowy adres aplikacji ustaw w `page/config.js` przez `APP_BASE_URL`.
+Rejestracja, logowanie i logowanie dziecka prowadzą odpowiednio do
+`/register`, `/login` i `/login-child`. Bez adresu wyświetlany jest komunikat
+podglądu; prototyp nie tworzy kont i nie łączy się z API.
+Publikacja i wybór domen pozostają osobnym krokiem.
+
+Po `npm ci` sprawdź prototyp przez
+`npm run test:e2e -- --config page/playwright.config.mjs`.
+Testy działają headless przy 390/1280 px, uruchamiają osobny serwer
+na porcie 4178 i zapisują raport oraz zrzuty w `test-results/`.
+
 ## Testy
 
 Zakres obowiązkowych kontroli określa [AGENTS.md](../AGENTS.md).

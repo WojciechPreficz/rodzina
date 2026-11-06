@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f3eb" />
+    <meta
+      name="description"
+      content="Wspólny kalendarz, zadania, zakupy i obiady. Poznaj Rodzinę — aplikację, która pomaga poukładać domową codzienność."
+    />
+    <title>Rodzina — mniej pamiętania, więcej bycia razem</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='20' fill='%23426655'/%3E%3Ctext x='17' y='48' font-family='Georgia' font-size='54' fill='%23fffefa'%3Er%3C/text%3E%3Ctext x='37' y='26' font-size='22' fill='%23e0b07b'%3E✦%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="config.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Przejdź do treści</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#" aria-label="Rodzina — początek strony"
+          ><span class="brand-mark" aria-hidden="true">r<span>✦</span></span
+          >Rodzina<span class="brand-dot">.</span></a
+        >
+        <button class="menu-toggle" aria-expanded="false" aria-controls="navigation" aria-label="Otwórz menu">
+          <span></span><span></span>
+        </button>
+        <nav id="navigation" aria-label="Główna nawigacja">
+          <div class="nav-links">
+            <a href="#funkcje">Funkcje</a><a href="#jak-to-dziala">Jak to działa</a><a href="#pytania">Pytania</a>
+          </div>
+          <div class="nav-actions">
+            <a class="login-link" href="#podglad" data-app-path="/login"
+              >Zaloguj się <span aria-hidden="true">↗</span></a
+            ><a class="button button-small" href="#podglad" data-app-path="/register"
+              >Załóż rodzinę <span aria-hidden="true">→</span></a
+            >
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero container" aria-labelledby="hero-heading">
+        <div class="hero-copy">
+          <p class="eyebrow">
+            <span class="tiny-spark" aria-hidden="true">✳</span> Wasza codzienność, trochę spokojniejsza
+          </p>
+          <h1 id="hero-heading">
+            Mniej pamiętania.<br />Więcej czasu<br />dla <em>rodziny.</em
+            ><svg class="word-underline" viewBox="0 0 230 15" aria-hidden="true">
+              <path d="M3 10Q103-3 226 6M18 14Q110 5 203 11" />
+            </svg>
+          </h1>
+          <p class="hero-description">
+            Wspólny kalendarz, zadania, zakupy i obiady.<br class="desktop-break" />
+            Poukładajcie codzienność w jednym miejscu.
+          </p>
+          <div class="hero-actions">
+            <a class="button" href="#podglad" data-app-path="/register"
+              >Załóż rodzinę <span aria-hidden="true">→</span></a
+            ><a class="text-link" href="#funkcje"
+              ><span class="play-icon" aria-hidden="true">▷</span> Zobacz, jak to działa</a
+            >
+          </div>
+          <div class="hero-note">
+            <span class="small-device" aria-hidden="true">▱</span> W przeglądarce i na Androidzie
+            <span class="note-dot">·</span> Razem, po swojemu
+          </div>
+        </div>
+        <div class="hero-art">
+          <svg class="hero-spark" viewBox="0 0 70 70" aria-hidden="true">
+            <path d="M35 3v64M3 35h64M12 12l46 46M12 58l46-46" />
+          </svg>
+          <div class="app-window hero-window">
+            <div class="window-top">
+              <span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span
+              ><span>Wasz mały świat, w jednym miejscu</span><span class="window-lock" aria-hidden="true">⌂</span>
+            </div>
+            <div class="mini-app">
+              <aside class="mini-sidebar" aria-hidden="true">
+                <span class="mini-logo">r<span>✦</span></span
+                ><span class="sidebar-item active">▦</span><span class="sidebar-item">☑</span
+                ><span class="sidebar-item">♧</span><span class="sidebar-item">♨</span
+                ><span class="sidebar-bottom">AK</span>
+              </aside>
+              <div class="mini-content">
+                <div class="mini-app-heading">
+                  <div>
+                    <span class="mini-overline">DOBRZE BYĆ RAZEM</span>
+                    <h2>Wasz rodzinny tydzień<span class="mini-dot">.</span></h2>
+                  </div>
+                  <div class="avatar-stack" aria-label="Anna, Marek i Zosia">
+                    <span>A</span><span>M</span><span>Z</span>
+                  </div>
+                </div>
+                <div class="mini-welcome">
+                  <span aria-hidden="true">☀</span>
+                  <div>
+                    <strong>Dobry plan. Spokojniejsza głowa.</strong><small>Każdy wie, co dziś przed Wami.</small>
+                  </div>
+                </div>
+                <div class="calendar-title">
+                  <strong>Listopad 2026</strong><span>9–13 listopada <span aria-hidden="true">‹ &nbsp; ›</span></span>
+                </div>
+                <div class="week-grid">
+                  <div class="week-day">
+                    <span>PON</span><b>9</b>
+                    <div class="event event-sage">
+                      <small>16:00</small><strong>Basen Zosi</strong><span>● Zosia</span>
+                    </div>
+                  </div>
+                  <div class="week-day">
+                    <span>WT</span><b>10</b>
+                    <div class="event event-peach">
+                      <small>17:30</small><strong>Dentysta</strong><span>● Marek</span>
+                    </div>
+                  </div>
+                  <div class="week-day today">
+                    <span>ŚR</span><b>11</b>
+                    <div class="event event-lilac">
+                      <small>Cały dzień</small><strong>Dzień razem</strong><span>● Wszyscy</span>
+                    </div>
+                    <div class="event event-sage">
+                      <small>14:00</small><strong>Spacer w lesie</strong><span>● Wszyscy</span>
+                    </div>
+                  </div>
+                  <div class="week-day">
+                    <span>CZW</span><b>12</b>
+                    <div class="event event-peach">
+                      <small>16:00</small><strong>Angielski</strong><span>● Zosia</span>
+                    </div>
+                  </div>
+                  <div class="week-day">
+                    <span>PT</span><b>13</b>
+                    <div class="event event-sage">
+                      <small>18:00</small><strong>Wieczór gier</strong><span>● Wszyscy</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="mini-bottom">
+                  <span><span aria-hidden="true">♨</span> Dziś na obiad</span><strong>Makaron z pomidorami</strong
+                  ><span aria-hidden="true">↗</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="floating-note">
+            <span class="note-check" aria-hidden="true">✓</span>
+            <div><strong>Mleko? Już na liście.</strong><span>Jedno pytanie mniej przy kolacji.</span></div>
+          </div>
+          <div class="art-caption">
+            <svg viewBox="0 0 70 40" aria-hidden="true"><path d="M65 35Q15 40 9 5m0 0L2 17M9 5l12 7" /></svg
+            ><span>Małe plany. Więcej wspólnego czasu.</span>
+          </div>
+          <span class="demo-label hero-demo-label">Przykładowe dane</span>
+        </div>
+      </section>
+
+      <div class="benefit-strip container">
+        <span>Jeden wspólny plan <i aria-hidden="true">✦</i></span
+        ><span>Obowiązki podzielone <i aria-hidden="true">✦</i></span
+        ><span>Zakupy bez zgadywania <i aria-hidden="true">✦</i></span
+        ><span>Więcej bycia razem</span>
+      </div>
+
+      <section class="section container features-section" id="funkcje" aria-labelledby="features-heading">
+        <div class="section-heading">
+          <p class="eyebrow">MNIEJ „A PAMIĘTASZ O…?”</p>
+          <h2 id="features-heading">Cała codzienność.<br /><em>Wreszcie w jednym miejscu.</em></h2>
+          <p>
+            Zamiast szukać po wiadomościach i karteczkach,<br class="desktop-break" />
+            zajrzyjcie do Waszej Rodziny.
+          </p>
+        </div>
+        <div class="feature-showcase">
+          <div class="feature-tabs" role="tablist" aria-label="Poznaj funkcje aplikacji" aria-orientation="vertical">
+            <button
+              class="feature-tab"
+              id="tab-calendar"
+              role="tab"
+              aria-selected="true"
+              aria-controls="panel-calendar"
+              tabindex="0"
+            >
+              <span class="feature-icon" aria-hidden="true">▦</span
+              ><span
+                ><strong>Kalendarz dla wszystkich</strong
+                ><small>Zajęcia, wizyty i wspólne plany.<br />Każdy wie, co i kiedy.</small></span
+              ><span class="tab-arrow" aria-hidden="true">↗</span>
+            </button>
+            <button
+              class="feature-tab"
+              id="tab-tasks"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-tasks"
+              tabindex="-1"
+            >
+              <span class="feature-icon" aria-hidden="true">☑</span
+              ><span
+                ><strong>Obowiązki, które mają swój plan</strong
+                ><small>Podzielcie zadania, rozpiszcie kroki<br />i ustawcie powtarzanie.</small></span
+              ><span class="tab-arrow" aria-hidden="true">↗</span>
+            </button>
+            <button
+              class="feature-tab"
+              id="tab-shopping"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-shopping"
+              tabindex="-1"
+            >
+              <span class="feature-icon" aria-hidden="true">♧</span
+              ><span
+                ><strong>Lista, z którą łatwiej kupować</strong
+                ><small>Dopisujcie potrzebne produkty.<br />Odhaczajcie to, co już w koszyku.</small></span
+              ><span class="tab-arrow" aria-hidden="true">↗</span>
+            </button>
+          </div>
+          <div class="interactive-preview">
+            <div class="preview-meta">
+              <span class="live-dot" aria-hidden="true"></span> WASZA RODZINA
+              <span class="demo-label">Przykładowe dane</span>
+            </div>
+            <div id="panel-calendar" class="feature-panel" role="tabpanel" aria-labelledby="tab-calendar" tabindex="0">
+              <div class="panel-heading">
+                <div>
+                  <p>ŚRODA, 11 LISTOPADA</p>
+                  <h3>Dziś jest dobry dzień.</h3>
+                </div>
+                <span class="sun-icon" aria-hidden="true">☀</span>
+              </div>
+              <div class="agenda-row">
+                <time>Cały dzień</time><span class="agenda-line lilac"></span>
+                <div><strong>Dzień razem</strong><small>Wspólny dzień bez pośpiechu</small></div>
+                <span class="person person-lilac">Wszyscy</span>
+              </div>
+              <div class="agenda-row">
+                <time>14:00</time><span class="agenda-line sage"></span>
+                <div><strong>Spacer w lesie</strong><small>Termos herbaty i wygodne buty</small></div>
+                <span class="person">Wszyscy</span>
+              </div>
+              <div class="agenda-row">
+                <time>18:00</time><span class="agenda-line peach"></span>
+                <div><strong>Kolacja u dziadków</strong><small>Czas na rodzinne historie</small></div>
+                <span class="person person-peach">Anna</span>
+              </div>
+              <div class="panel-footnote">
+                <span aria-hidden="true">↳</span> Wspólny plan, do którego każdy może zajrzeć.
+              </div>
+            </div>
+            <div id="panel-tasks" class="feature-panel" role="tabpanel" aria-labelledby="tab-tasks" tabindex="0" hidden>
+              <div class="panel-heading">
+                <div>
+                  <p>MAŁE KROKI, WSPÓLNY EFEKT</p>
+                  <h3>Dom ogarniamy razem.</h3>
+                </div>
+                <span class="count-badge" id="task-progress">0 / 3</span>
+              </div>
+              <div class="checklist">
+                <label
+                  ><input type="checkbox" data-demo-task /><span class="custom-check" aria-hidden="true"></span
+                  ><span><strong>Podlać kwiaty</strong><small>Anna · co tydzień</small></span
+                  ><span aria-hidden="true" class="task-symbol">♧</span></label
+                ><label
+                  ><input type="checkbox" data-demo-task /><span class="custom-check" aria-hidden="true"></span
+                  ><span><strong>Przygotować plecak</strong><small>Zosia · checklista na jutro</small></span
+                  ><span aria-hidden="true" class="task-symbol">▤</span></label
+                ><label
+                  ><input type="checkbox" data-demo-task /><span class="custom-check" aria-hidden="true"></span
+                  ><span><strong>Wynieść segregację</strong><small>Marek · wieczorem</small></span
+                  ><span aria-hidden="true" class="task-symbol">↻</span></label
+                >
+              </div>
+              <p class="panel-footnote">Kliknij zadanie i poczuj tę małą satysfakcję.</p>
+              <span class="sr-only" id="task-status" role="status"></span>
+            </div>
+            <div
+              id="panel-shopping"
+              class="feature-panel"
+              role="tabpanel"
+              aria-labelledby="tab-shopping"
+              tabindex="0"
+              hidden
+            >
+              <div class="panel-heading">
+                <div>
+                  <p>NA NAJBLIŻSZE ZAKUPY</p>
+                  <h3>Wszystko na jednej liście.</h3>
+                </div>
+                <span class="count-badge">4 produkty</span>
+              </div>
+              <div class="checklist shopping-checklist">
+                <label
+                  ><input type="checkbox" /><span class="custom-check" aria-hidden="true"></span><strong>Mleko</strong
+                  ><span class="quantity">1 l</span></label
+                ><label
+                  ><input type="checkbox" /><span class="custom-check" aria-hidden="true"></span
+                  ><strong>Chleb żytni</strong><span class="quantity">1 szt.</span></label
+                ><label
+                  ><input type="checkbox" /><span class="custom-check" aria-hidden="true"></span><strong>Jabłka</strong
+                  ><span class="quantity">1 kg</span></label
+                ><label
+                  ><input type="checkbox" /><span class="custom-check" aria-hidden="true"></span
+                  ><strong>Jogurt naturalny</strong><span class="quantity">2 szt.</span></label
+                >
+              </div>
+              <p class="panel-footnote">Spróbuj odhaczyć produkt. Jedna rzecz z głowy.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="meals-section" aria-labelledby="meals-heading">
+        <div class="container meals-layout">
+          <div class="meals-copy">
+            <p class="eyebrow">ZAPLANOWANE. DOPISANE. GOTOWE.</p>
+            <h2 id="meals-heading">„Co dziś na obiad?”<br /><em>Już wiecie.</em></h2>
+            <p>
+              Zaplanujcie obiady na tydzień, a składniki przenieście prosto na listę zakupów. Bez przepisywania i bez
+              kolejnej karteczki.
+            </p>
+            <ul class="simple-benefits">
+              <li><span aria-hidden="true">✓</span> Wasze ulubione dania na cały tydzień</li>
+              <li><span aria-hidden="true">✓</span> Składniki z planu na wspólnej liście</li>
+              <li><span aria-hidden="true">✓</span> Dzisiejszy obiad zawsze pod ręką</li>
+            </ul>
+            <span class="handwritten">Od planowania do gotowania.</span>
+          </div>
+          <div class="meal-demo">
+            <div class="meal-demo-top">
+              <span class="eyebrow">MAŁY PODGLĄD, DUŻE UŁATWIENIE</span><span class="demo-label">Przykładowe dane</span>
+            </div>
+            <div class="meal-cards">
+              <div class="meal-card">
+                <span class="meal-day">PONIEDZIAŁEK</span
+                ><span class="food-art pasta" aria-hidden="true"
+                  ><svg viewBox="0 0 110 80">
+                    <ellipse cx="55" cy="43" rx="46" ry="30" fill="#faf5e6" stroke="#ded6c0" stroke-width="2" />
+                    <ellipse cx="55" cy="43" rx="33" ry="21" fill="#e9c685" />
+                    <path
+                      d="M31 38q22-15 46 2M28 46q23-15 52 1M37 54q17-11 34 0M39 31q-10 18 0 28M51 26q-9 18 0 35M64 28q-8 15 1 31M75 35q-7 9-1 18"
+                      fill="none"
+                      stroke="#bf863e"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                    />
+                    <circle cx="42" cy="39" r="7" fill="#be6551" />
+                    <circle cx="68" cy="49" r="6" fill="#be6551" />
+                    <path d="M58 34q-12-20-16-4 9 10 16 4m1 1q0-18 12-11 0 10-12 11" fill="#5f8053" /></svg
+                ></span>
+                <h3>Makaron<br />z pomidorami</h3>
+                <span>Makaron · pomidory · bazylia</span>
+              </div>
+              <div class="meal-card">
+                <span class="meal-day">WTOREK</span
+                ><span class="food-art" aria-hidden="true"
+                  ><svg viewBox="0 0 110 80">
+                    <ellipse cx="55" cy="43" rx="46" ry="30" fill="#faf5e6" stroke="#ded6c0" stroke-width="2" />
+                    <ellipse cx="55" cy="43" rx="34" ry="22" fill="#e9c990" />
+                    <path d="M31 34l15-9 17 13-9 15-16 6-13-14zM64 31l19 6 4 16-18 5-12-12z" fill="#789164" />
+                    <path d="M37 31l8 14-9 8m35-17-5 12 14 5" fill="none" stroke="#a2b181" stroke-width="5" />
+                    <circle cx="57" cy="31" r="7" fill="#c87a58" />
+                    <circle cx="52" cy="53" r="8" fill="#c87a58" />
+                    <path d="M45 24l8 9M75 50l-7 10" stroke="#f8e4ad" stroke-width="4" /></svg
+                ></span>
+                <h3>Warzywa<br />z piekarnika</h3>
+                <span>Ziemniaki · marchew · brokuł</span>
+              </div>
+            </div>
+            <button class="button meal-add" id="add-ingredients">
+              <span aria-hidden="true">＋</span> Dodaj składniki do zakupów <span aria-hidden="true">→</span>
+            </button>
+            <div class="meal-result" id="meal-result">
+              <div class="meal-result-heading">
+                <strong>Nasza lista zakupów</strong><span id="ingredient-count">1 produkt</span>
+              </div>
+              <ul id="ingredient-list">
+                <li><span>Mleko</span><span>1 l</span></li>
+              </ul>
+              <p id="meal-status" role="status">Wypróbuj przycisk — zobaczysz tutaj składniki.</p>
+            </div>
+            <button class="reset-demo" id="reset-meals">↺ Zacznij od nowa</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section container photo-section" aria-labelledby="photo-heading">
+        <div class="photo-illustration" aria-label="Ilustracja: wydarzenia z plakatu trafiają do podglądu kalendarza">
+          <div class="paper-poster">
+            <span class="poster-pin" aria-hidden="true"></span><span class="poster-small">OSIEDLOWY DOM KULTURY</span
+            ><span class="poster-flower" aria-hidden="true">✳</span
+            ><strong>Małe chwile,<br />wielkie wspomnienia.</strong>
+            <div class="poster-event">
+              <b>14.11</b><span>Rodzinne warsztaty<br />sobota · 11:00</span>
+            </div>
+            <div class="poster-event">
+              <b>21.11</b><span>Wieczór planszówek<br />sobota · 17:00</span>
+            </div>
+            <span class="poster-bottom">Spotkajmy się w sąsiedztwie.</span>
+          </div>
+          <span class="photo-arrow" aria-hidden="true">↗</span>
+          <div class="extracted-event">
+            <span class="extracted-check" aria-hidden="true">✓</span><small>DO SPRAWDZENIA PRZED ZAPISEM</small
+            ><strong>Rodzinne warsztaty</strong><span>14 listopada 2026 · 11:00</span>
+            <div><span class="person">Wydarzenie ze zdjęcia</span><span aria-hidden="true">▦</span></div>
+          </div>
+          <span class="demo-label photo-demo-label">Ilustracja działania · przykładowe dane</span>
+        </div>
+        <div class="photo-copy">
+          <p class="eyebrow">ZDJĘCIE ZAMIAST PRZEPISYWANIA</p>
+          <h2 id="photo-heading">Z plakatu.<br /><em>Do Waszych planów.</em></h2>
+          <p>
+            Szkolna kartka, plakat wydarzenia, zrzut ekranu. Wybierz zdjęcie, sprawdź odczytane propozycje i dodaj
+            wydarzenia do kalendarza.
+          </p>
+          <ol class="photo-steps">
+            <li><span>01</span>Wybierz zdjęcie</li>
+            <li><span>02</span>Sprawdź i popraw propozycje</li>
+            <li><span>03</span>Dodaj do kalendarza</li>
+          </ol>
+          <p class="privacy-note">
+            <span aria-hidden="true">⌁</span> Zdjęcie zostaje na urządzeniu. Do aplikacji trafiają zatwierdzone
+            wydarzenia.
+          </p>
+        </div>
+      </section>
+
+      <section class="container little-things" aria-labelledby="little-heading">
+        <div class="little-heading">
+          <p class="eyebrow">JESZCZE KILKA RZECZY Z GŁOWY</p>
+          <h2 id="little-heading">Bo dom to też<br /><em>te małe sprawy.</em></h2>
+        </div>
+        <article>
+          <span class="detail-icon" aria-hidden="true">▤</span>
+          <h3>Ważne dokumenty</h3>
+          <p>Terminy ważności pod ręką. Łatwiej pamiętać o odnowieniu dokumentów.</p>
+        </article>
+        <article>
+          <span class="detail-icon peach-icon" aria-hidden="true">❀</span>
+          <h3>Bliscy i ich urodziny</h3>
+          <p>Rodzinne kontakty w jednym miejscu. Ważne daty bliskich też mają swój plan.</p>
+        </article>
+        <article>
+          <span class="detail-icon lilac-icon" aria-hidden="true">↻</span>
+          <h3>Rytm codzienności</h3>
+          <p>Cykliczne obowiązki i checklisty. Duże zadania rozpisane na małe kroki.</p>
+        </article>
+      </section>
+
+      <section class="section container getting-started" id="jak-to-dziala" aria-labelledby="start-heading">
+        <div class="section-heading">
+          <p class="eyebrow">POCZĄTEK JEST PROSTY</p>
+          <h2 id="start-heading">Wasza rodzina.<br /><em>Wasz sposób na codzienność.</em></h2>
+        </div>
+        <ol class="start-steps">
+          <li>
+            <span class="step-number">01<span aria-hidden="true">✦</span></span>
+            <h3>Załóż rodzinę</h3>
+            <p>Utwórz swoje konto i nazwij<br />Waszą wspólną przestrzeń.</p>
+          </li>
+          <li>
+            <span class="step-number">02<span aria-hidden="true">✦</span></span>
+            <h3>Dodaj domowników</h3>
+            <p>Zaproś dorosłych, dodaj dzieci.<br />Niech każdy ma swoje miejsce.</p>
+          </li>
+          <li>
+            <span class="step-number">03<span aria-hidden="true">✦</span></span>
+            <h3>Zaplanujcie pierwszy tydzień</h3>
+            <p>Dodajcie pierwsze plany i obowiązki.<br />Resztę poukładacie po swojemu.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="platform-section">
+        <div class="container platform-inner">
+          <div class="platform-symbols" aria-hidden="true">
+            <span class="browser-drawing"><i></i><b>r✦</b></span
+            ><span class="phone-drawing"><i></i><b>r✦</b></span>
+          </div>
+          <div>
+            <p class="eyebrow">TAM, GDZIE WY</p>
+            <h2>Przy biurku. W sklepie.<br /><em>W środku życia.</em></h2>
+            <p>
+              Korzystajcie w przeglądarce albo w aplikacji na Androida.<br class="desktop-break" />
+              Ten sam rodzinny plan, na Waszych urządzeniach.
+            </p>
+          </div>
+          <a class="text-link" href="#pytania">Poznaj szczegóły <span aria-hidden="true">↘</span></a>
+        </div>
+      </section>
+
+      <section class="section container faq-section" id="pytania" aria-labelledby="faq-heading">
+        <div class="faq-heading">
+          <p class="eyebrow">DOBRZE WIEDZIEĆ</p>
+          <h2 id="faq-heading">Jeszcze<br /><em>jakieś pytania?</em></h2>
+          <p>Kilka odpowiedzi na dobry początek.</p>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>Czy cała rodzina może korzystać z aplikacji?<span aria-hidden="true">＋</span></summary>
+            <p>
+              Tak. Rodzina ma wspólną przestrzeń z osobnymi kontami domowników. Dorośli mogą organizować codzienność, a
+              dzieci korzystają z funkcji zgodnie ze swoimi uprawnieniami. Dzieci logują się osobną ścieżką.
+            </p>
+            <a href="#podglad" class="text-link" data-app-path="/login-child"
+              >Logowanie dziecka <span aria-hidden="true">→</span></a
+            >
+          </details>
+          <details>
+            <summary>Czy muszę instalować aplikację?<span aria-hidden="true">＋</span></summary>
+            <p>
+              Nie. Możesz korzystać z Rodziny w zwykłej przeglądarce na komputerze lub telefonie. Na Androidzie dostępna
+              jest też aplikacja instalowana z pliku APK. Nie jest potrzebna instalacja PWA.
+            </p>
+          </details>
+          <details>
+            <summary>Jak działają przypomnienia?<span aria-hidden="true">＋</span></summary>
+            <p>
+              Przypomnienia w postaci alarmów dostarcza aplikacja na Androidzie po uzyskaniu wymaganych uprawnień.
+              Wersja przeglądarkowa nie wysyła powiadomień Web Push. Aby telefon pobrał zmiany z innych urządzeń, otwórz
+              aplikację i połącz ją z internetem.
+            </p>
+          </details>
+          <details>
+            <summary>Co mogę zrobić bez internetu?<span aria-hidden="true">＋</span></summary>
+            <p>
+              Wcześniej pobrane dane wybranych modułów są dostępne bez sieci. Zakupy, zadania i plan obiadów obsługują
+              także określone zmiany offline, które synchronizują się po odzyskaniu połączenia w aktywnej aplikacji.
+              Zakres zależy od modułu. APK pozwala wrócić do zapisanych danych po restarcie bez internetu; uruchomienie
+              strony WWW wymaga połączenia.
+            </p>
+          </details>
+          <details>
+            <summary>Czy zdjęcie jest automatycznie dodawane do kalendarza?<span aria-hidden="true">＋</span></summary>
+            <p>
+              Nie. Po wybraniu zdjęcia najpierw oglądasz odczytane propozycje. Możesz poprawić daty i treść, odrzucić
+              zbędne wpisy i wybrać wydarzenia do zapisania. Zapis zatwierdzonych wydarzeń wymaga internetu. Samo
+              zdjęcie i surowy odczyt nie są wysyłane na serwer.
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <section class="closing-section container" aria-labelledby="closing-heading">
+        <span class="closing-spark" aria-hidden="true">✳</span>
+        <p class="eyebrow">MNIEJ NA GŁOWIE. WIĘCEJ RAZEM.</p>
+        <h2 id="closing-heading">Zróbcie miejsce<br />na <em>spokojniejszą codzienność.</em></h2>
+        <p>Wielkie ułatwienie zaczyna się od małego wspólnego planu.</p>
+        <a class="button" href="#podglad" data-app-path="/register">Załóż rodzinę <span aria-hidden="true">→</span></a
+        ><span class="closing-caption">Po Waszemu. Dla Was wszystkich.</span>
+      </section>
+    </main>
+
+    <footer class="container site-footer">
+      <a class="brand" href="#" aria-label="Rodzina — początek strony"
+        ><span class="brand-mark" aria-hidden="true">r<span>✦</span></span
+        >Rodzina<span class="brand-dot">.</span></a
+      >
+      <p>Małe plany. Dobre życie razem.</p>
+      <span>Prototyp strony · 2026</span><a href="#" class="back-to-top">Do góry <span aria-hidden="true">↑</span></a>
+    </footer>
+    <dialog id="prototype-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
+      <button class="dialog-close" aria-label="Zamknij komunikat">×</button
+      ><span class="dialog-spark" aria-hidden="true">✦</span>
+      <p class="eyebrow">RODZINA · PODGLĄD</p>
+      <h2 id="dialog-title">To dopiero początek.</h2>
+      <p id="dialog-description">To podgląd strony. Rejestracja i logowanie będą dostępne w aplikacji.</p>
+      <button class="button dialog-confirm">Wracam do odkrywania <span aria-hidden="true">→</span></button>
+    </dialog>
+  </body>
+</html>
