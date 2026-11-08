@@ -312,7 +312,7 @@ describe('deploy configuration and archive', () => {
   });
   it('workflow is manual only, rejects other branches before checkout and checks before deploy', async () => {
     const workflow = await readFile(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8');
-    expect(workflow).toMatch(/on:\s+workflow_dispatch:\s+permissions:/);
+    expect(workflow.split('\npermissions:')[0].match(/^ {2}\w+:/gm)).toEqual(['  workflow_dispatch:']);
     expect(workflow).toContain('contents: read');
     expect(workflow).toContain('persist-credentials: false');
     expect(workflow).toContain('ref: ${{ github.sha }}');

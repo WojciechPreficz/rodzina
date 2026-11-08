@@ -3,7 +3,8 @@
 Istniejąca instalacja: https://rodzina.preficze.pl, cPanel vh.pl, Passenger,
 Node 24. Nie powtarzamy pierwszego wdrożenia ani rejestracji rodziny.
 Push uruchamia CI; wdrożenie jest ręczne: Actions → Deploy → Run workflow → main.
-Deploy weryfikuje dokładny commit, buduje i publikuje API/WWW oraz podpisane APK.
+Deploy weryfikuje dokładny commit, buduje i publikuje API/WWW. Publikacja APK
+zależy od zmian w `android/` lub opcji `force_android`.
 Instalację aktualizacji na telefonie zatwierdza użytkownik.
 
 ## Konfiguracja API
@@ -232,6 +233,11 @@ w prywatnej sesji SSH, bez kopiowania sekretów do issue lub logów Actions.
 
 ### Podpisywanie Androida w Actions
 
+Deploy porównuje zawartość `android/` z ostatnim udanym przebiegiem Deploy dla
+`main`. Gdy katalog się nie zmienił lub brakuje poprzedniego udanego przebiegu,
+Deploy wdraża tylko API/WWW. Zaznacz `force_android` w formularzu uruchomienia,
+jeśli chcesz opublikować APK mimo to, np. po zmianie wspólnego frontendu.
+
 Secrets: ANDROID_KEYSTORE_BASE64 (istniejący keystore w Base64),
 ANDROID_STORE_PASSWORD, ANDROID_KEY_PASSWORD. Variables: ANDROID_KEY_ALIAS
 (np. rodzina), ANDROID_CERTIFICATE_SHA256 (64 cyfry hex, z dwukropkami lub bez).
@@ -247,8 +253,9 @@ zachowuje. Nie ustawiaj konfliktującej wartości w panelu cPanel.
 
 ### Przebieg aktualizacji
 
-1. Workflow wykonuje pełne kontrole API/WWW, smoke, podpisane APK, testy JVM
-   i Android Lint. Weryfikuje commit, sumy paczek i zgodność poprzedniego APK.
+1. Workflow wykonuje pełne kontrole API/WWW i smoke. Gdy publikuje APK, buduje
+   podpisaną paczkę, wykonuje testy JVM i Android Lint. Weryfikuje commit, sumy
+   paczek i dostępność poprzedniego APK.
 2. SSH sprawdza instalację i blokadę .rodzina-deploy-lock. Prywatny staging
    obok aplikacji służy przygotowaniu paczki i zależności, nie jest drugim środowiskiem.
 3. Dotychczasowy job tworzy backup. Job nowej paczki wykonuje migracje.
@@ -259,8 +266,9 @@ zachowuje. Nie ustawiaj konfliktującej wartości w panelu cPanel.
    Restart przez tmp/restart.txt. Podmiana jest sekwencyjna: wybierz mały ruch
    i nie przerywaj kopiowania. Równoległe wdrożenia czekają na blokadę.
 5. HTTPS sprawdza health JSON (ok i dbOk), stronę HTML, 401 auth/me bez sesji
-   oraz stare metadane/sumę APK. Dopiero potem publikuje nowe APK pod niezmienną
-   nazwą z wersją, a na końcu atomowo latest.json. Ponownie sprawdza pobranie.
+   oraz stare metadane/sumę APK. Przy wydaniu APK publikuje nową paczkę pod
+   niezmienną nazwą z wersją, a na końcu atomowo latest.json. Ponownie sprawdza
+   pobranie.
 6. Podsumowanie podaje commit, sumy i wynik. Zielone CI nie zastępuje udanego
    Deploy; sam restart lub działająca strona nie potwierdza całej aktualizacji.
 

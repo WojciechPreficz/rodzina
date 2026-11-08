@@ -2,8 +2,14 @@ name: Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      force_android:
+        description: Publish a new APK even when android/ has not changed
+        type: boolean
+        default: false
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -22,7 +28,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Decide whether to publish Android
+        id: android
+        shell: bash
+        env:
+          FORCE_ANDROID: ${{ inputs.force_android }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          publish=false
+          if [[ "$FORCE_ANDROID" == true ]]; then
+            publish=true
+          else
+            previous=$(gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/runs?branch=main&event=workflow_dispatch&status=success" \
+              --jq '.workflow_runs[] | [.updated_at, .head_sha] | @tsv' |
+              LC_ALL=C sort -r | awk 'NR == 1 { print $2 }')
+            if [[ -z "$previous" ]]; then
+              echo 'No successful Deploy to compare. Use force_android to publish an APK.'
+            else
+              previous_tree=$(git rev-parse --verify "$previous:android")
+              current_tree=$(git rev-parse --verify HEAD:android)
+              if [[ "$previous_tree" != "$current_tree" ]]; then
+                publish=true
+              fi
+            fi
+          fi
+          echo "Publish Android: $publish"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -37,16 +71,22 @@ jobs:
       - run: npm run test:e2e
       - run: npm run release:smoke
       - uses: actions/setup-java@v4
+        if: steps.android.outputs.publish == 'true'
         with:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.android.outputs.publish == 'true'
       - uses: android-actions/setup-android@v3
+        if: steps.android.outputs.publish == 'true'
         with:
           packages: platform-tools
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        if: steps.android.outputs.publish == 'true'
       - run: chmod +x android/gradlew
+        if: steps.android.outputs.publish == 'true'
       - name: Build and verify signed Android release
+        if: steps.android.outputs.publish == 'true'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
@@ -55,10 +95,11 @@ jobs:
           ANDROID_CERTIFICATE_SHA256: ${{ vars.ANDROID_CERTIFICATE_SHA256 }}
         run: node scripts/android-ci.mjs
       - run: ./gradlew testDebugUnitTest lintDebug --no-daemon --no-configuration-cache
+        if: steps.android.outputs.publish == 'true'
         working-directory: android
       - name: Deploy checked release
         env:
-          DEPLOY_ANDROID_RELEASE: android-releases/deploy/latest.json
+          DEPLOY_ANDROID_RELEASE: ${{ steps.android.outputs.publish == 'true' && 'android-releases/deploy/latest.json' || '' }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
