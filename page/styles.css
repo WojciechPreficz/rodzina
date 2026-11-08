@@ -1702,6 +1702,7 @@ svg {
 }
 .site-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 25px;
   padding-block: 38px;
@@ -1725,6 +1726,12 @@ svg {
 .site-footer p {
   font-size: 10px;
   color: var(--muted);
+}
+.footer-legal {
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  padding-block: 12px;
 }
 .site-footer > span {
   font-size: 8px;

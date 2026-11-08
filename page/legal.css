@@ -1,0 +1,143 @@
+.legal-header {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.legal-back {
+  padding-block: 12px;
+  font-size: 14px;
+}
+.legal-hero {
+  max-width: 840px;
+  padding-block: 64px 32px;
+}
+.legal-hero h1 {
+  font-size: clamp(38px, 6vw, 68px);
+  margin-block: 16px 24px;
+}
+.legal-hero > p:last-child {
+  max-width: 660px;
+  color: var(--muted);
+  font-size: 17px;
+}
+.legal-layout {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+.legal-toc {
+  position: sticky;
+  top: 110px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+}
+.legal-toc ol {
+  padding-left: 20px;
+  margin-bottom: 0;
+}
+.legal-toc a {
+  display: block;
+  padding-block: 5px;
+  font-size: 14px;
+}
+.legal-content {
+  min-width: 0;
+  max-width: 760px;
+  overflow-wrap: anywhere;
+}
+.legal-content section {
+  padding-block: 32px;
+  border-bottom: 1px solid var(--line);
+}
+.legal-content h2 {
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  margin-bottom: 20px;
+}
+.legal-content p + p,
+.legal-content li + li {
+  margin-top: 12px;
+}
+.legal-content ul {
+  padding-left: 22px;
+}
+.legal-content a,
+.legal-back,
+.legal-toc a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.legal-note {
+  padding: 24px;
+  background: var(--peach);
+  border-radius: 18px;
+}
+.legal-note strong {
+  display: block;
+  margin-bottom: 8px;
+}
+.legal-meta {
+  color: var(--muted);
+  font-size: 14px;
+}
+@media (max-width: 900px) {
+  .legal-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .legal-toc {
+    position: static;
+  }
+  .legal-toc ol {
+    columns: 2;
+    column-gap: 32px;
+  }
+  .legal-toc li {
+    break-inside: avoid;
+  }
+}
+@media (max-width: 650px) {
+  .legal-hero {
+    padding-top: 36px;
+  }
+  .legal-toc ol {
+    columns: 1;
+  }
+  .legal-content h2 {
+    font-size: 27px;
+  }
+}
+@media print {
+  :root {
+    background: white;
+    color: black;
+  }
+  .site-header,
+  .site-footer,
+  .legal-toc,
+  .skip-link {
+    display: none;
+  }
+  .container,
+  .legal-content,
+  .legal-hero {
+    width: 100%;
+    max-width: none;
+  }
+  .legal-layout {
+    display: block;
+  }
+  .legal-content {
+    font-size: 11pt;
+  }
+  .legal-content h2 {
+    break-after: avoid;
+  }
+  .legal-note {
+    border: 1px solid black;
+  }
+}

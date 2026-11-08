@@ -191,6 +191,8 @@ try {
     fail('brak przekierowania na stronę prezentującą aplikację.');
   for (const [name, type] of [
     ['index.html', 'text/html'],
+    ['regulamin.html', 'text/html'],
+    ['legal.css', 'text/css'],
     ['styles.css', 'text/css'],
     ['app.js', 'javascript'],
     ['config.js', 'javascript'],

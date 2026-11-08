@@ -32,7 +32,7 @@ Build i Vite ustawiają adres automatycznie na bieżącą domenę.
 Po `npm ci` sprawdź samodzielny podgląd przez
 `npm run test:e2e -- --config page/playwright.config.mjs` (port 4178),
 a integrację po buildzie przez `npm run test:e2e -- e2e/landing.spec.ts`.
-Testy działają headless przy 390/1280 px. Pakowanie i serwowanie czterech plików
+Testy działają headless przy 390/1280 px. Pakowanie i serwowanie plików strony
 przez rzeczywisty serwer paczki kontroluje `npm run release:smoke`.
 Pełne logi wybranej kontroli można zapisać w ignorowanym `.check-logs/`
 przez `npm run check:logged -- test <ścieżka>` lub analogicznie `test:e2e`,
@@ -40,6 +40,18 @@ przez `npm run check:logged -- test <ścieżka>` lub analogicznie `test:e2e`,
 kod wyjścia npm i wypisuje podsumowanie oraz ścieżkę logu.
 Pozostaje odbiór fizycznego APK: ekran wejścia, logowanie, kalendarz i Wstecz;
 symulowany transport Androida nie zastępuje telefonu. Wdrożenie jest osobne.
+
+Regulamin: `/strona/regulamin.html` (samodzielny podgląd: `/regulamin.html`),
+odnośnik w stopce. Test `page/tests/legal.pw.mjs` sprawdza nawigację klawiaturą,
+kotwice, powrót, brak przepełnienia i druk bez JavaScriptu przy 390/1280 px.
+Treść pozostaje projektem do uzupełnienia o adres operatora, informację
+o prywatności, właściwe obowiązki konsumenckie i datę wejścia w życie.
+Przed publicznym naborem trzeba udostępnić regulamin także przed rejestracją
+i dołączeniem dorosłego; obecna zmiana obejmuje wyłącznie stronę marketingową.
+Punkty odniesienia dla zakresu treści: [FamilyWall](https://www.familywall.com/terms.html)
+i [Cozi](https://www.cozi.com/terms-of-use/); własne brzmienie dopasowane do aplikacji.
+Podstawa przeglądu: [ustawa o świadczeniu usług drogą elektroniczną](https://eli.gov.pl/api/acts/DU/2024/1513/text.html)
+i [ustawa o prawach konsumenta](https://eli.gov.pl/api/acts/DU/2024/1796/text.html).
 
 ## Testy
 

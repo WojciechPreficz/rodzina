@@ -45,6 +45,17 @@ Publiczne API zakupów dla eksportu obiadów i reguła granic importów — zwer
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 
+## LP.3 — regulamin i zasady korzystania
+
+Podstrona `/strona/regulamin.html` ze źródłem w `page/`, linkiem w stopce,
+spisem treści i stylem do druku. Bezpłatna aplikacja z dobrowolnym wsparciem;
+operator Wojciech Preficz, kontakt `kontakt@preficze.pl`. Dokument jest projektem:
+adres operatora, informacja o prywatności, obowiązki konsumenckie i data wejścia
+w życie wymagają uzupełnienia przed publicznym uruchomieniem.
+Poza zakresem: płatności, zmiany rejestracji, APK i publikacja.
+Odbiór: headless 390/1280 px, klawiatura, kotwice, druk, build i release:smoke.
+Status: zweryfikowane lokalnie, oczekuje na CI; odbiór właściciela do potwierdzenia.
+
 ## LP.1 — prototyp strony prezentującej aplikację
 
 Osobny statyczny prototyp w `page/`, przeznaczony dla przyszłej strony
@@ -66,7 +77,7 @@ adres. Niezalogowany użytkownik WWW trafia tam z `/`, a zalogowany zachowuje
 kalendarz. Przyciski prowadzą do rejestracji i logowania na bieżącej domenie.
 APK zachowuje obecny ekran `/witaj`; build Androida nie zawiera landing page.
 
-Build WWW dołącza cztery pliki z `page/` do `public/strona/` w paczce release.
+Build WWW dołącza pliki strony z `page/` do `public/strona/` w paczce release.
 Brakujący zasób zwraca 404, a strona korzysta z istniejącej CSP. Bez zmian
 domeny, API, migracji, zmiennych środowiskowych i publikacji na serwerze.
 

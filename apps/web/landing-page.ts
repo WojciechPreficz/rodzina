@@ -3,6 +3,8 @@ import type { Plugin } from 'vite';
 
 const assets = new Map([
   ['index.html', 'text/html; charset=utf-8'],
+  ['regulamin.html', 'text/html; charset=utf-8'],
+  ['legal.css', 'text/css; charset=utf-8'],
   ['styles.css', 'text/css; charset=utf-8'],
   ['app.js', 'text/javascript; charset=utf-8'],
   ['config.js', 'text/javascript; charset=utf-8'],
