@@ -4,7 +4,7 @@ test('navigates calendar periods with touch while preserving taps and vertical s
   page,
   baseURL,
 }, testInfo) => {
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Gesty',

@@ -73,7 +73,7 @@ describe('auth API', () => {
 
     const registerResponse = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         familyName: 'Nowa Rodzina',
@@ -109,7 +109,7 @@ describe('auth API', () => {
 
     await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         familyName: 'Zła Rodzina',
@@ -147,7 +147,7 @@ describe('auth API', () => {
 
     const registerResponse = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         familyName: 'Sesyjna Rodzina',
@@ -184,7 +184,7 @@ describe('auth API', () => {
 
     const csrfResponse = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'https://evil.example', host: 'localhost:3000' },
       payload: {
         familyName: 'Evil',
@@ -199,7 +199,7 @@ describe('auth API', () => {
 
     const disabledResponse = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         familyName: 'Evil',
@@ -220,7 +220,7 @@ describe('auth API', () => {
 
     const adminResponse = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         familyName: 'Rodzina Testowa',
@@ -344,7 +344,7 @@ describe('auth API', () => {
 
     const secondFamilyResponse = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         familyName: 'Druga Rodzina',
@@ -377,7 +377,7 @@ describe('auth API', () => {
 
     const adminResponse = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         familyName: 'Rodzina Zaproszeń',

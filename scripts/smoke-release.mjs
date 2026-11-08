@@ -146,6 +146,33 @@ try {
   }
 
   const pageResponse = await fetch(`http://127.0.0.1:${port}/`);
+  const confirmationPage = await fetch(`http://127.0.0.1:${port}/potwierdz-rodzine`);
+  if (
+    !confirmationPage.ok ||
+    confirmationPage.headers.get('cache-control') !== 'no-store' ||
+    confirmationPage.headers.get('referrer-policy') !== 'no-referrer'
+  )
+    fail('strona potwierdzenia rejestracji nie ma wymaganych nagłówków prywatności.');
+  const registrationData = {
+    familyName: 'Smoke family',
+    displayName: 'Admin',
+    email: 'smoke@example.com',
+    password: 'smoke-password',
+  };
+  for (const endpoint of ['registration-requests', 'register-family', 'confirm-registration']) {
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${port}` },
+      body: JSON.stringify(endpoint === 'confirm-registration' ? { token: 'a'.repeat(64) } : registrationData),
+    });
+    if (response.status !== 403) fail('wyłączona rejestracja pozwala zgłosić lub potwierdzić rodzinę.');
+  }
+  const fixtureResponse = await fetch(`http://127.0.0.1:${port}/api/test/families`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${port}` },
+    body: JSON.stringify(registrationData),
+  });
+  if (fixtureResponse.status !== 404) fail('paczka produkcyjna ujawnia endpoint danych testowych.');
   const ocrManifestResponse = await fetch(`http://127.0.0.1:${port}/ocr/manifest.json`);
   if (!ocrManifestResponse.ok || !ocrManifestResponse.headers.get('content-type')?.includes('application/json'))
     fail('brak manifestu lokalnych zasobów OCR.');

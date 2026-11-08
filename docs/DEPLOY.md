@@ -33,8 +33,9 @@ RODZINA_SMTP_PASSWORD=
 RODZINA_MAIL_FROM=
 ```
 
-RODZINA_ALLOW_REGISTRATION włączamy tylko na czas zakładania rodziny.
-PUBLIC_URL określa linki zaproszeń/resetu. DOWNLOAD_DIR puste oznacza brak
+RODZINA_ALLOW_REGISTRATION włączamy, gdy przyjmujemy nowe rodziny; wymaga to
+działającego SMTP. Wyłączenie blokuje też potwierdzenie oczekujących zgłoszeń.
+PUBLIC_URL określa linki rejestracji/zaproszeń/resetu. DOWNLOAD_DIR puste oznacza brak
 wydania (404 JSON). SHA256_CERT_FINGERPRINTS to publiczne odciski certyfikatów,
 32 pary hex z dwukropkami, wiele wartości oddzielonych przecinkiem.
 Puste odciski wyłączają weryfikację App Links.
@@ -47,7 +48,30 @@ nadpisywanie X-Forwarded-* oraz brak bezpośredniego dostępu do portu API.
 Nie wpisuj wszystkich adresów ani niepotwierdzonych zakresów. Kontrolowana próba
 z własnym X-Forwarded-For nie może zmienić IP używanego przez limity.
 
-### Reset hasła przez e-mail
+### Rejestracja i reset hasła przez e-mail
+
+Nowe rodziny zawsze wymagają potwierdzenia e-mail. Istniejące konta i sesje
+pozostają bez zmian, bez wezwania do weryfikacji. Rejestracja korzysta z SMTP
+niezależnie od RODZINA_PASSWORD_RESET_EMAIL_ENABLED. Bez skonfigurowanej poczty
+API działa, ale rejestracja zwraca 503 i nie zapisuje zgłoszenia ani konta.
+Podanie częściowej lub niepoprawnej konfiguracji SMTP zatrzymuje start API.
+Nie ma nowej zmiennej ani możliwości rejestracji bez potwierdzenia.
+
+Migracja 0034 tworzy pending_registrations, bez modyfikowania users, families
+ani sessions. Wykonaj backup i jawny job migracji przed startem nowego API.
+Zgłoszenie przechowuje dane formularza, hash hasła i hash tokenu; wygasłe
+rekordy usuwamy przy następnym żądaniu rejestracji lub potwierdzenia, bez crona.
+Prawidłowe potwierdzenie usuwa wszystkie zgłoszenia tego adresu. Błąd SMTP
+unieważnia tylko nowo wysyłany link. Limity rejestracji: 10 prób/15 minut/IP
+i 3/godzinę/adres, niezależne od resetu hasła.
+
+Link /potwierdz-rodzine#token=… jest ważny 24 godziny i przechowuje sekret we
+fragmencie URL, który nie jest wysyłany w żądaniu strony. Otwarcie linku nie
+tworzy konta: potrzebny jest przycisk potwierdzenia. Po nim użytkownik loguje
+się w WWW lub wraca do APK. Nowa ścieżka otwiera się w przeglądarce, bez
+rozszerzania Android App Links. Starsze APK pokazuje instrukcję potwierdzenia
+przez e-mail w komunikacie API; logowanie istniejących kont pozostaje zgodne.
+Nowy interfejs APK wymaga osobnego builda i publikacji.
 
 RODZINA_PASSWORD_RESET_EMAIL_ENABLED=false ukrywa akcję odzyskiwania; obecne
 logowanie i linki administratora działają nadal. Aby włączyć funkcję, przygotuj
@@ -59,7 +83,7 @@ nadawcy muszą być dozwolone przez dostawcę SMTP.
 Port 587 z SECURE=false wymusza STARTTLS; port 465 z SECURE=true uruchamia TLS
 od początku. Weryfikacja certyfikatów jest obowiązkowa, minimum TLS 1.2.
 PUBLIC_URL musi być adresem origin HTTPS, bez ścieżki, danych logowania,
-query i fragmentu. Niepełna konfiguracja przy włączonej funkcji zatrzymuje start.
+query i fragmentu. Niepełna konfiguracja SMTP lub błędny adres zatrzymują start.
 Sekrety wpisz wyłącznie do prywatnego .env poza aplikacją; nie do repo ani Actions.
 Po zmianie konfiguracji zrestartuj aplikację.
 
@@ -69,7 +93,7 @@ nieznanego adresu i błędów wysyłki. Timeout lub niepewny wynik unieważnia n
 link. Nie ponawiamy wysyłki automatycznie. Publiczne 202 nie potwierdza dostawy.
 Limity korzystają z istniejącej tabeli auth_rate_limits: 10 przyjętych prób
 na 15 minut/IP i 3 na godzinę/adres, także dla nieistniejących kont.
-Nie ma nowej migracji; obowiązuje zwykła procedura sprawdzenia migracji wydania.
+Sam reset hasła nie dodaje migracji; rejestracja wymaga opisanej wyżej migracji 0034.
 
 Przed odbiorem sprawdź SPF, DKIM i DMARC według dostawcy oraz rzeczywisty odbiór
 wiadomości na kontrolowanej skrzynce, folder Spam i poprawność linku HTTPS.

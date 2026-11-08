@@ -21,4 +21,4 @@ Object.assign(process.env, {
 // Production startup only verifies migrations. Prepare the isolated test database first.
 const { runMigrations } = await import('../apps/api/dist/jobs/migrate-db.js');
 runMigrations();
-await import('../apps/api/dist/server.js');
+await import('../e2e/fixtures/server.ts');

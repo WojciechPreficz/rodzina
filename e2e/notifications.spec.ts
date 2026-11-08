@@ -9,7 +9,7 @@ test('website explains APK reminders without browser push or installation prompt
   page.on('request', (request) => {
     if (new URL(request.url()).pathname.startsWith('/api/push/')) pushRequests.push(request.url());
   });
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Powiadomienia',

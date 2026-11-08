@@ -91,7 +91,7 @@ test('calendar form survives rejecting discard on cancel and browser navigation'
   page,
   baseURL,
 }, testInfo) => {
-  const registered = await page.request.post('/api/auth/register-family', {
+  const registered = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Nawigacja',

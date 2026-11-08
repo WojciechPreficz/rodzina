@@ -55,6 +55,26 @@ i [ustawa o prawach konsumenta](https://eli.gov.pl/api/acts/DU/2024/1796/text.ht
 
 ## Testy
 
+Nowe rodziny: skonfiguruj SMTP według DEPLOY.md. Samo
+RODZINA_ALLOW_REGISTRATION=true bez poczty nie pozwala utworzyć konta.
+Testy auth/registration, registration-migration i registration-mail sprawdzają
+zgłoszenie, atomowe potwierdzenie, wygaśnięcie, ponowienia, limity, błąd poczty
+oraz zachowanie istniejących kont i sesji. Komponenty: AuthPages,
+ConfirmRegistration i AppShell. Headless e2e/registration.spec.ts sprawdza
+WWW i transport Androida przy 390/1280 px; e2e/auth.spec.ts obejmuje pełną
+rejestrację, potwierdzenie i logowanie. Skrzynka i tworzenie kont testowych
+istnieją wyłącznie w serwerze E2E oraz fixture testów, poza paczką produkcyjną.
+Link potwierdzenia otwiera przeglądarkę; po jego użyciu wracamy do APK
+i logujemy się. Nie zmieniamy Android App Links. Build frontendu Androida:
+npm run build --workspace @rodzina/web -- --mode android.
+
+Pozostaje ręczny odbiór: rzeczywisty e-mail (także Spam, SPF/DKIM/DMARC),
+nowa rodzina założona z fizycznego APK, otwarcie wiadomości w przeglądarce,
+potwierdzenie i powrót do logowania w aplikacji; starsze APK z komunikatem
+potwierdzenia oraz istniejące konto bez dodatkowej weryfikacji. Testowa skrzynka
+i emulowany transport nie zaliczają tych prób. Wdrożenie i publikacja APK
+są osobnymi czynnościami.
+
 Zakres obowiązkowych kontroli określa [AGENTS.md](../AGENTS.md).
 Komendy: npm run lint, npm run format:check, npm run typecheck, npm test,
 npm run build, npm run test:e2e, npm run release:smoke.

@@ -188,7 +188,7 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.getByText('Nazwa rodziny musi mieć co najmniej 2 znaki.')).toBeInTheDocument());
   });
 
-  it('sends registration fields to the API and returns to the requested page', async () => {
+  it('sends registration fields and waits for email confirmation without creating a session', async () => {
     const fetchMock = vi.fn(async (url: string) => ({
       ok: url !== '/api/auth/me',
       text: async () =>
@@ -216,11 +216,12 @@ describe('AppShell', () => {
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'anna@example.com' } });
     fireEvent.change(screen.getByLabelText('Hasło'), { target: { value: 'password123' } });
     fireEvent.click(screen.getByRole('button', { name: 'Utwórz rodzinę' }));
-    expect(await screen.findByText('Registered destination')).toBeInTheDocument();
-    const registration = fetchMock.mock.calls.find(([url]) => url === '/api/auth/register-family');
+    expect(await screen.findByRole('status')).toHaveTextContent('Konto rodziny jeszcze nie istnieje');
+    expect(screen.queryByText('Registered destination')).not.toBeInTheDocument();
+    const registration = fetchMock.mock.calls.find(([url]) => url === '/api/auth/registration-requests');
     expect(registration).toBeDefined();
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/auth/register-family',
+      '/api/auth/registration-requests',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildApp } from './app.js';
+import { buildFixtureApp as buildApp } from './test-fixtures.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { trustedMutationHeaders } from './test-helpers.js';
@@ -41,7 +41,7 @@ describe('API mutation source verification', () => {
     async (headers) => {
       const response = await app.inject({
         method: 'POST',
-        url: '/api/auth/register-family',
+        url: '/api/test/families',
         headers,
         payload: { familyName: 'Rodzina', displayName: 'Admin', email: 'csrf@example.com', password: 'password123' },
       });

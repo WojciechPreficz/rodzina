@@ -4,7 +4,7 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
   page,
   baseURL,
 }, testInfo) => {
-  const registered = await page.request.post('/api/auth/register-family', {
+  const registered = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Alarmy',

@@ -82,7 +82,7 @@ async function complexPoster(page: Page, layout: 'grid' | 'ticket' | 'graphic' |
 }
 
 test.beforeEach(async ({ page, baseURL }, info) => {
-  const registered = await page.request.post('/api/auth/register-family', {
+  const registered = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'OCR',

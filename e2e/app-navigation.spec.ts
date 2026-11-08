@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { openNavigation } from './navigation.js';
 
 test.beforeEach(async ({ page, baseURL }, info) => {
-  const response = await page.request.post('/api/auth/register-family', {
+  const response = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Menu Rodziny',

@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { contactsResponseSchema, type Contact, type ContactGroup } from '@rodzina/shared';
-import { buildApp } from '../../app.js';
+import { buildFixtureApp as buildApp } from '../../test-fixtures.js';
 import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
@@ -128,7 +128,7 @@ describe('contacts API', () => {
     ).toBeNull();
   });
   it('creates initial groups transactionally when a new family registers', async () => {
-    const response = await request('POST', '/api/auth/register-family', {
+    const response = await request('POST', '/api/test/families', {
       familyName: 'Nowa rodzina',
       displayName: 'Anna',
       email: 'anna@example.com',

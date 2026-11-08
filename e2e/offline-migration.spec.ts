@@ -133,7 +133,7 @@ test('shows a storage denial while keeping the online family view usable', async
   const email = `idb-denied-${info.project.name}@example.com`;
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers: { Origin: baseURL! },
         data: { familyName: 'Bez pamięci', displayName: 'Ania', email, password: 'password123' },
       })

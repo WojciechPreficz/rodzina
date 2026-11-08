@@ -449,6 +449,27 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   przywraca sprawdzanie; zmiana konta w drugiej karcie pozwala wykryć nową sesję.
 - Limity logowania: 10 prób/15 minut dla IP–konto, osobno hasło i PIN,
   trwałe w SQLite. Poprawne logowanie usuwa własny licznik.
+- Nowa rodzina wymaga potwierdzenia e-mail. POST /api/auth/registration-requests
+  zapisuje tylko pending_registrations i zwraca 202 po przyjęciu wiadomości
+  przez SMTP. Nie tworzy rodziny, użytkownika, grup kontaktów ani sesji.
+  Istniejące konta, sesje i zaproszenia do rodziny nie wymagają weryfikacji.
+  Dane zgłoszenia zawierają hash hasła Argon2 i hash losowego tokenu 256 bitów.
+  Link /potwierdz-rodzine#token=… jest ważny 24 godziny; sekret we fragmencie
+  nie trafia do żądania strony. GET nie tworzy konta. Przycisk potwierdzenia
+  wysyła POST /api/auth/confirm-registration, który w transakcji immediate
+  tworzy rodzinę, administratora i grupy kontaktów oraz usuwa wszystkie
+  zgłoszenia adresu. Równoległe potwierdzenia nie tworzą duplikatów. Nie
+  uruchamiamy sesji z linku: po sukcesie użytkownik loguje się swoim hasłem.
+  Błąd SMTP usuwa tylko nowy token; wcześniejsze ważne linki pozostają aktywne.
+  Dopóki SMTP nie zakończy się sukcesem, zgłoszenia nie można potwierdzić.
+  Wygasłe dane są usuwane przy żądaniach rejestracji/potwierdzenia, bez crona.
+  Rejestracja ma osobne trwałe limity IP (10/15 minut) i adresu (3/godzinę),
+  z kluczami hash w auth_rate_limits i Retry-After przy 429.
+  RODZINA_ALLOW_REGISTRATION=false blokuje zgłoszenia i potwierdzanie; brak
+  SMTP oznacza 503, nigdy rejestrację bez poczty. Flaga resetu hasła nie
+  wyłącza potwierdzeń. Stare POST /api/auth/register-family wykonuje tę samą
+  wysyłkę, a następnie zwraca 409 EMAIL_CONFIRMATION_REQUIRED z instrukcją
+  dla starszego APK, które oczekiwałoby sesji przy odpowiedzi sukcesu.
 - GET /api/auth/password-recovery udostępnia wyłącznie dostępność funkcji.
   Formularz /nie-pamietam-hasla wysyła POST /api/auth/forgot-password.
   Domyślnie wysyłka jest wyłączona (503 bez sprawdzania konta). Po włączeniu

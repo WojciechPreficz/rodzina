@@ -33,7 +33,7 @@ test('visitors reach the public landing and can enter registration and login', a
 });
 
 test('signed-in visitors keep their calendar and can still view the public landing', async ({ page, baseURL }) => {
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Rodzina strony',

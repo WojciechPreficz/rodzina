@@ -8,7 +8,7 @@ test('creates a series from a new task and preserves the draft on conflict and o
   const headers = { Origin: baseURL! };
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers,
         data: {
           familyName: 'Nowa seria',
@@ -71,7 +71,7 @@ for (const native of [false, true])
       const headers = { Origin: baseURL! };
       expect(
         (
-          await page.request.post('/api/auth/register-family', {
+          await page.request.post('/api/test/families', {
             headers,
             data: {
               familyName: 'Serie',

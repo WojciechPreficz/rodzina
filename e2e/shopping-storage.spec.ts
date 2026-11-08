@@ -12,7 +12,7 @@ async function add(page: Page, name: string) {
 test.beforeEach(async ({ page, baseURL }, info) => {
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers: { Origin: baseURL! },
         data: {
           familyName: 'Pamięć zakupów',

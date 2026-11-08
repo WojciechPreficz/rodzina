@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { openNavigation } from './navigation.js';
+import { confirmRegistrationFromInbox } from './registration.js';
 
 test('registers, joins through an invitation, logs in a child and resets a password', async ({
   page,
@@ -28,6 +29,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await page.getByLabel('E-mail', { exact: true }).fill(`anna-${suffix}@example.com`);
     await page.getByLabel('Hasło', { exact: true }).fill('password123');
     await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
+    await confirmRegistrationFromInbox(page, `anna-${suffix}@example.com`);
     await expect(page.locator('.mantine-AppShell-main')).toBeVisible();
     await page.reload();
     await expect(page.locator('.mantine-AppShell-main')).toBeVisible();

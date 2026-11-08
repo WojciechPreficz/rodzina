@@ -4,7 +4,7 @@ import { installNativeTransport } from './nativeTransport.js';
 const title = 'Zajęcia w przedszkolu';
 const date = '2026-11-12';
 test.beforeEach(async ({ page, baseURL }, info) => {
-  const registered = await page.request.post('/api/auth/register-family', {
+  const registered = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Duplikaty',

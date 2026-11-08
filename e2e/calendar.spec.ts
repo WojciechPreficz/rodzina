@@ -3,7 +3,7 @@ import { Temporal } from 'temporal-polyfill';
 
 test('filters events by clicking member buttons', async ({ page, baseURL }, testInfo) => {
   const headers = { Origin: baseURL! };
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers,
     data: {
       familyName: 'Filtry',
@@ -110,7 +110,7 @@ test('filters events by clicking member buttons', async ({ page, baseURL }, test
 
 test('creates a single event and opens its deep link after reload and login', async ({ page, baseURL }, testInfo) => {
   const email = `calendar-${testInfo.project.name}@example.com`;
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: { familyName: 'Kalendarz', displayName: 'Anna', email, password: 'password123' },
   });
@@ -158,7 +158,7 @@ for (const today of ['2026-10-15', '2026-10-26']) {
     baseURL,
   }, info) => {
     const headers = { Origin: baseURL! };
-    const registered = await page.request.post('/api/auth/register-family', {
+    const registered = await page.request.post('/api/test/families', {
       headers,
       data: {
         familyName: 'Nowy kalendarz',

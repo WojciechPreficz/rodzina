@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('failed save and rejected kind change retain the dirty full form', async ({ page, baseURL }, info) => {
-  const registered = await page.request.post('/api/auth/register-family', {
+  const registered = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Błąd zapisu',
@@ -54,7 +54,7 @@ for (const [kind, label] of [
     baseURL,
   }, info) => {
     const headers = { Origin: baseURL! };
-    const registered = await page.request.post('/api/auth/register-family', {
+    const registered = await page.request.post('/api/test/families', {
       headers,
       data: {
         familyName: 'Formularze',

@@ -11,7 +11,7 @@ for (const native of [false, true]) {
   }, info) => {
     test.setTimeout(120000);
     const headers = { Origin: baseURL! };
-    const registered = await page.request.post('/api/auth/register-family', {
+    const registered = await page.request.post('/api/test/families', {
       headers,
       data: {
         familyName: 'Wspólne zadania',

@@ -10,7 +10,7 @@ for (const native of [false, true]) {
     const headers = { Origin: baseURL! };
     expect(
       (
-        await page.request.post('/api/auth/register-family', {
+        await page.request.post('/api/test/families', {
           headers,
           data: {
             familyName: 'Kontakty offline',

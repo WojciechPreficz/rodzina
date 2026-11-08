@@ -13,7 +13,7 @@ for (const native of [false, true]) {
     const email = `family-offline-${native}-${testInfo.project.name}@example.com`;
     expect(
       (
-        await page.request.post('/api/auth/register-family', {
+        await page.request.post('/api/test/families', {
           headers,
           data: {
             familyName: 'Rodzina offline',

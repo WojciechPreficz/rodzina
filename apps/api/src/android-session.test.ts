@@ -4,7 +4,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
 import { hashToken, SESSION_REFRESH_INTERVAL_MS, SESSION_TTL_MS } from './auth.js';
 import { sessions } from './db/schema.js';
-import { buildApp } from './app.js';
+import { buildFixtureApp as buildApp } from './test-fixtures.js';
 import { createDatabase } from './db/client.js';
 import { loadConfig } from './config.js';
 
@@ -34,7 +34,7 @@ describe('native cookie transport with unchanged browser security', () => {
   it('supports adult and child sessions, renewal, calendar CRUD and logout using native cookie headers', async () => {
     const registration = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers,
       payload: credentials,
     });
@@ -107,7 +107,7 @@ describe('native cookie transport with unchanged browser security', () => {
   it('rejects WebView and foreign origins, missing sessions and another family', async () => {
     const registered = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers,
       payload: credentials,
     });
@@ -130,7 +130,7 @@ describe('native cookie transport with unchanged browser security', () => {
     });
     const other = await app.inject({
       method: 'POST',
-      url: '/api/auth/register-family',
+      url: '/api/test/families',
       headers,
       payload: { ...credentials, email: 'other@example.com' },
     });

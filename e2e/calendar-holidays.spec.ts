@@ -7,7 +7,7 @@ test('holiday layers work in every view, persist independently and remain availa
   page,
   baseURL,
 }, info) => {
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Święta',
@@ -80,7 +80,7 @@ test('holiday layers work in every view, persist independently and remain availa
 });
 
 test('holiday layers survive an events API error', async ({ page, baseURL }, info) => {
-  const registered = await page.request.post('/api/auth/register-family', {
+  const registered = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Święta bez API',

@@ -20,6 +20,13 @@ export function resetMailContent({ link, expiresAt }: ResetMail) {
 }
 
 export async function sendResetMail(config: AppConfig, mail: ResetMail): Promise<void> {
+  return sendMail(config, { to: mail.to, ...resetMailContent(mail) });
+}
+
+export async function sendMail(
+  config: AppConfig,
+  mail: { to: string; subject: string; text: string; html: string },
+): Promise<void> {
   const socket = new Socket();
   const transport = nodemailer.createTransport({
     // Open the socket here so the total deadline also cancels DNS/connect work;
@@ -54,7 +61,9 @@ export async function sendResetMail(config: AppConfig, mail: ResetMail): Promise
         .sendMail({
           from: { name: 'Rodzina', address: config.RODZINA_MAIL_FROM },
           to: mail.to,
-          ...resetMailContent(mail),
+          subject: mail.subject,
+          text: mail.text,
+          html: mail.html,
         })
         .then((result) => {
           if (result.accepted.length !== 1 || result.rejected.length)

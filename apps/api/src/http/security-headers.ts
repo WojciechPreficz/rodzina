@@ -23,6 +23,7 @@ export function registerSecurityHeaders(app: FastifyInstance, config: AppConfig)
       pathname.startsWith('/api/') ||
       pathname === '/sw.js' ||
       pathname.startsWith('/reset-hasla/') ||
+      pathname === '/potwierdz-rodzine' ||
       pathname === '/nie-pamietam-hasla'
     )
       reply.header('Cache-Control', 'no-store');

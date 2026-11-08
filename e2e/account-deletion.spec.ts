@@ -10,7 +10,7 @@ for (const native of [false, true]) {
     const headers = { Origin: baseURL! };
     const password = 'password123';
     const email = `deletion-${native}-${info.project.name}@example.com`;
-    const register = await page.request.post('/api/auth/register-family', {
+    const register = await page.request.post('/api/test/families', {
       headers,
       data: { familyName: 'Rodzina testowa', displayName: 'Anna', email, password },
     });

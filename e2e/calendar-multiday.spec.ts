@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('creates and edits timed and all-day multi-day events', async ({ page, baseURL }, info) => {
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Wyjazdy',

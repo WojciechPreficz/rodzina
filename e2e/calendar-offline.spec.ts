@@ -19,7 +19,7 @@ for (const native of [false, true]) {
     const email = `calendar-offline-${native}-${info.project.name}@example.com`;
     expect(
       (
-        await page.request.post('/api/auth/register-family', {
+        await page.request.post('/api/test/families', {
           headers,
           data: {
             familyName: 'Kalendarz offline',

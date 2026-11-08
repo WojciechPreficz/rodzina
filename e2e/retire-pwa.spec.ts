@@ -70,7 +70,7 @@ test('returning legacy PWA leaves its cached shell and reopens the website with 
   context,
   baseURL,
 }, info) => {
-  const registered = await page.request.post('/api/auth/register-family', {
+  const registered = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Powrót z PWA',

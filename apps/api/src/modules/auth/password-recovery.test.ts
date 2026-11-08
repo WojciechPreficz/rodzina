@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { buildApp } from '../../app.js';
+import { buildFixtureApp as buildApp } from '../../test-fixtures.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import { authRateLimits, passwordResets, users } from '../../db/schema.js';
@@ -58,7 +58,7 @@ describe('password recovery', () => {
     database = createDatabase(config);
     migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
     app = await buildApp(config, database);
-    const registration = await post('/api/auth/register-family', {
+    const registration = await post('/api/test/families', {
       familyName: 'Rodzina',
       displayName: 'Admin',
       email: 'admin@example.com',
@@ -148,7 +148,7 @@ describe('password recovery', () => {
   it('revokes all own sessions and tokens atomically while preserving another account', async () => {
     const login = await post('/api/auth/login', { email: 'admin@example.com', password: 'password123' });
     const secondCookie = String(login.headers['set-cookie']).split(';')[0]!;
-    const other = await post('/api/auth/register-family', {
+    const other = await post('/api/test/families', {
       familyName: 'Inna rodzina',
       displayName: 'Inny admin',
       email: 'other@example.com',
@@ -174,7 +174,7 @@ describe('password recovery', () => {
   });
 
   it('does not end another local account session when resetting a different user', async () => {
-    const other = await post('/api/auth/register-family', {
+    const other = await post('/api/test/families', {
       familyName: 'Inna rodzina',
       displayName: 'Inny admin',
       email: 'other@example.com',

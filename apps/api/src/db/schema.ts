@@ -112,6 +112,25 @@ export const passwordResets = sqliteTable('password_resets', {
   usedAt: integer('used_at'),
 });
 
+export const pendingRegistrations = sqliteTable(
+  'pending_registrations',
+  {
+    id: text('id').primaryKey(),
+    tokenHash: text('token_hash').notNull().unique(),
+    email: text('email').notNull(),
+    familyName: text('family_name').notNull(),
+    displayName: text('display_name').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    ready: integer('ready', { mode: 'boolean' }).notNull().default(false),
+  },
+  (table) => [
+    index('pending_registrations_email_idx').on(table.email),
+    index('pending_registrations_expiry_idx').on(table.expiresAt),
+  ],
+);
+
 export const jobRuns = sqliteTable('job_runs', {
   id: text('id').primaryKey(),
   job: text('job').notNull(),

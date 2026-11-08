@@ -7,7 +7,8 @@ import {
   resetPasswordSchema,
 } from './schemas.js';
 import {
-  registerFamilyResponseSchema,
+  registrationRequestResponseSchema,
+  confirmRegistrationInputSchema,
   loginResponseSchema,
   familyMembersResponseSchema,
   loginChildResponseSchema,
@@ -25,16 +26,21 @@ import { createAuthService } from './service.js';
 import { createSessionFactory } from './session.js';
 import { createPasswordRecovery, RecoveryRateLimitError } from './password-recovery.js';
 import type { sendResetMail } from './reset-mail.js';
+import type { sendRegistrationMail } from './registration-mail.js';
+import { createRegistration, RegistrationRateLimitError } from './registration.js';
+import { ApiError } from '../../http/errors.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
   database: DatabaseConnection,
   config: AppConfig,
   mailSender?: typeof sendResetMail,
+  registrationMailSender?: typeof sendRegistrationMail,
 ) {
-  const service = createAuthService(database, config);
+  const service = createAuthService(database);
   const createSession = createSessionFactory(database, config);
   const recoverPassword = createPasswordRecovery(database, config, app.log, mailSender);
+  const registration = createRegistration(database, config, app.log, registrationMailSender);
   app.get('/api/auth/password-recovery', { config: { auth: 'public' } }, async () =>
     passwordRecoveryAvailabilitySchema.parse({ enabled: config.RODZINA_PASSWORD_RESET_EMAIL_ENABLED }),
   );
@@ -47,17 +53,30 @@ export function registerAuthRoutes(
       throw error;
     }
   });
-  app.post('/api/auth/register-family', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
-    return reply
-      .code(201)
-      .send(
-        registerFamilyResponseSchema.parse(
-          await service.registerFamily(
-            parse(registerFamilySchema, request.body, 'Dane rejestracji są niepoprawne.'),
-            (id, now) => createSession(reply, request, id, now),
-          ),
-        ),
-      );
+  for (const url of ['/api/auth/registration-requests', '/api/auth/register-family']) {
+    app.post(url, { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
+      try {
+        const result = await registration.request(
+          parse(registerFamilySchema, request.body, 'Dane rejestracji są niepoprawne.'),
+          request.ip,
+        );
+        // Older APKs expect a session on success. Their error UI can display the next step safely.
+        if (url === '/api/auth/register-family')
+          throw new ApiError(
+            409,
+            'EMAIL_CONFIRMATION_REQUIRED',
+            'Sprawdź pocztę i potwierdź założenie rodziny linkiem w wiadomości. Konto powstanie po potwierdzeniu. Następnie zaloguj się w aplikacji.',
+          );
+        return reply.code(202).send(registrationRequestResponseSchema.parse(result));
+      } catch (error) {
+        if (error instanceof RegistrationRateLimitError) reply.header('Retry-After', error.retryAfter);
+        throw error;
+      }
+    });
+  }
+  app.post('/api/auth/confirm-registration', { config: { auth: 'public', idempotency: false } }, async (request) => {
+    const { token } = parse(confirmRegistrationInputSchema, request.body, 'Link potwierdzenia jest nieprawidłowy.');
+    return authOkResponseSchema.parse(registration.confirm(token));
   });
   app.post('/api/auth/login', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
     return loginResponseSchema.parse(

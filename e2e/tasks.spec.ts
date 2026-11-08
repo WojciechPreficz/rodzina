@@ -10,7 +10,7 @@ for (const native of [false, true]) {
     const headers = { Origin: baseURL! };
     expect(
       (
-        await page.request.post('/api/auth/register-family', {
+        await page.request.post('/api/test/families', {
           headers,
           data: {
             familyName: 'Katalog zadań',
@@ -145,7 +145,7 @@ for (const native of [false, true]) {
     baseURL,
   }, info) => {
     const headers = { Origin: baseURL! };
-    const registration = await page.request.post('/api/auth/register-family', {
+    const registration = await page.request.post('/api/test/families', {
       headers,
       data: {
         familyName: 'Porządki',
@@ -223,7 +223,7 @@ for (const native of [false, true]) {
   }, info) => {
     test.setTimeout(60000);
     const headers = { Origin: baseURL! };
-    const registration = await page.request.post('/api/auth/register-family', {
+    const registration = await page.request.post('/api/test/families', {
       headers,
       data: {
         familyName: 'Zadania',
@@ -317,7 +317,7 @@ test('task URLs show access denied and missing tasks without revealing private c
   baseURL,
 }, info) => {
   const headers = { Origin: baseURL! };
-  const registration = await page.request.post('/api/auth/register-family', {
+  const registration = await page.request.post('/api/test/families', {
     headers,
     data: {
       familyName: 'Prywatność',

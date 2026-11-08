@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
-import { buildApp } from './app.js';
+import { buildFixtureApp as buildApp } from './test-fixtures.js';
 import { createDatabase } from './db/client.js';
 import { loadConfig } from './config.js';
 import { hashToken, SESSION_REFRESH_INTERVAL_MS, SESSION_TTL_MS } from './auth.js';
@@ -37,7 +37,7 @@ describe('authentication regressions', () => {
     database = createDatabase(config);
     migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
     app = await buildApp(config, database);
-    const response = await post('/api/auth/register-family', registerBody);
+    const response = await post('/api/test/families', registerBody);
     expect(response.statusCode).toBe(201);
     admin = response.json();
     cookie = String(response.headers['set-cookie']).split(';')[0]!;
@@ -203,7 +203,7 @@ describe('authentication regressions', () => {
   it('rolls back a family when the email is registered concurrently', async () => {
     const responses = await Promise.all(
       [0, 1].map((i) =>
-        post('/api/auth/register-family', {
+        post('/api/test/families', {
           ...registerBody,
           familyName: `Family ${i}`,
           email: 'duplicate@example.com',
@@ -327,7 +327,7 @@ describe('authentication regressions', () => {
         })
       ).statusCode,
     ).toBe(400);
-    const foreign = await post('/api/auth/register-family', { ...registerBody, email: 'foreign@example.com' });
+    const foreign = await post('/api/test/families', { ...registerBody, email: 'foreign@example.com' });
     const foreignId = foreign.json().user.id;
     expect(
       (await app.inject({ method: 'DELETE', url: `/api/members/${foreignId}`, headers: { ...headers, cookie } }))

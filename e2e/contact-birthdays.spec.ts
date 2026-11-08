@@ -4,7 +4,7 @@ import { installNativeTransport } from './nativeTransport.js';
 for (const native of [false, true]) {
   test(`contact birthdays via ${native ? 'Android transport' : 'website'}`, async ({ page, baseURL }, info) => {
     const headers = { Origin: baseURL! };
-    const registration = await page.request.post('/api/auth/register-family', {
+    const registration = await page.request.post('/api/test/families', {
       headers,
       data: {
         familyName: 'Urodziny',

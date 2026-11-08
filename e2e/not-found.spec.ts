@@ -19,7 +19,7 @@ test('public 404 survives reload and returns through calendar authentication', a
 });
 
 test('signed-in 404 keeps the shell and returns to the calendar', async ({ page, baseURL }, info) => {
-  const response = await page.request.post('/api/auth/register-family', {
+  const response = await page.request.post('/api/test/families', {
     headers: { Origin: baseURL! },
     data: {
       familyName: 'Rodzina 404',

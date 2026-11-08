@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { buildApp } from './app.js';
+import { buildFixtureApp as buildApp } from './test-fixtures.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 

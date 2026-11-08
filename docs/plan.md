@@ -45,6 +45,25 @@ Publiczne API zakupów dla eksportu obiadów i reguła granic importów — zwer
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 
+## Potwierdzenie założenia rodziny przez e-mail
+
+Jeden krok na polecenie właściciela z 08.11.2026. Dotyczy wyłącznie nowych
+rodzin; istniejące konta i sesje nie wymagają potwierdzenia. Formularz zapisuje
+tymczasowe zgłoszenie i wysyła jednorazowy link ważny 24 godziny. Rodzina,
+administrator i początkowe grupy kontaktów powstają atomowo po otwarciu linku
+i jawnym potwierdzeniu na stronie. Następnie użytkownik loguje się swoim hasłem.
+Brak SMTP lub błąd wysyłki nie może tworzyć konta. Wygasłe zgłoszenia są usuwane
+przy kolejnych żądaniach. Limity IP/adresu i ochrona przed równoległym użyciem.
+Starsze APK otrzymuje instrukcję potwierdzenia i późniejszego logowania.
+
+Odbiór: API, migracja zachowująca stare konta i sesje, SMTP, komponenty,
+headless WWW i transport Androida przy 390/1280 px, build WWW/Android,
+release:smoke i końcowe CI. Rzeczywista dostawa poczty i fizyczne APK pozostają
+do odbioru według DEVELOPMENT.md. Bez zmiany zaproszeń do istniejącej rodziny,
+ponownej weryfikacji starych kont, nowego crona, wdrożenia ani publikacji APK.
+Status: zweryfikowane lokalnie, oczekuje na CI. Rzeczywista dostawa poczty
+i próby na fizycznym telefonie do potwierdzenia.
+
 ## LP.3 — regulamin i zasady korzystania
 
 Podstrona `/strona/regulamin.html` ze źródłem w `page/`, linkiem w stopce,

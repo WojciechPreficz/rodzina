@@ -2,7 +2,7 @@ import path from 'node:path';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { loadConfig } from '../../apps/api/src/config.js';
 import { createDatabase } from '../../apps/api/src/db/client.js';
-import { buildApp } from '../../apps/api/src/app.js';
+import { buildFixtureApp as buildApp } from '../../apps/api/src/test-fixtures.js';
 
 // Isolated inbox through IPC only; the production server never exposes test messages.
 const config = loadConfig({

@@ -33,12 +33,12 @@ test('recovers the only admin through the test inbox and revokes sessions', asyn
   });
   try {
     const email = 'admin@example.com';
-    await page.goto(`${url}/register`);
-    await page.getByLabel('Nazwa rodziny', { exact: true }).fill('Rodzina testowa');
-    await page.getByLabel('Twoje imię', { exact: true }).fill('Admin');
-    await page.getByLabel('E-mail', { exact: true }).fill(email);
-    await page.getByLabel('Hasło', { exact: true }).fill('password123');
-    await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
+    const seed = await page.request.post(`${url}/api/test/families`, {
+      headers: { Origin: url },
+      data: { familyName: 'Rodzina testowa', displayName: 'Admin', email, password: 'password123' },
+    });
+    expect(seed.status()).toBe(201);
+    await page.goto(`${url}/`);
     await expect(page.locator('.mantine-AppShell-main')).toBeVisible();
     const other = await second.newPage();
     await other.goto(`${url}/login`);

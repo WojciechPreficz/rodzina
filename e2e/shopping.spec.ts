@@ -18,7 +18,7 @@ test('shopping uses the Android native API transport', async ({ page, baseURL },
   const headers = { Origin: baseURL! };
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers,
         data: {
           familyName: 'Zakupy APK',
@@ -49,7 +49,7 @@ test('outbox replays a lost server response with the same ID after restart', asy
   const headers = { Origin: baseURL! };
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers,
         data: {
           familyName: 'Outbox',
@@ -106,7 +106,7 @@ test('outbox conflict survives reload and requires confirmation before discardin
   const headers = { Origin: baseURL! };
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers,
         data: {
           familyName: 'Konflikt',
@@ -155,7 +155,7 @@ test('shopping CRUD, permissions, layout and polling synchronize two household m
 }, testInfo) => {
   test.setTimeout(60000);
   const headers = { Origin: baseURL! };
-  const response = await page.request.post('/api/auth/register-family', {
+  const response = await page.request.post('/api/test/families', {
     headers,
     data: {
       familyName: 'Zakupy',
@@ -256,7 +256,7 @@ test('offline shopping survives restarting the bundled frontend and syncs to ano
   const email = `offline-${testInfo.project.name}@example.com`;
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers,
         data: { familyName: 'Offline', displayName: 'Ania', email, password: 'password123' },
       })
@@ -349,7 +349,7 @@ test('shopping catalog restores focus and scroll, keeps offline edits and distin
   const headers = { Origin: baseURL! };
   expect(
     (
-      await page.request.post('/api/auth/register-family', {
+      await page.request.post('/api/test/families', {
         headers,
         data: {
           familyName: 'Katalog',

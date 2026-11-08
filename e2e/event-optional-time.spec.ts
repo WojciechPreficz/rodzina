@@ -6,7 +6,7 @@ for (const platform of ['web', 'android'] as const) {
     page,
     baseURL,
   }, info) => {
-    const registered = await page.request.post('/api/auth/register-family', {
+    const registered = await page.request.post('/api/test/families', {
       headers: { Origin: baseURL! },
       data: {
         familyName: 'Bez godziny',

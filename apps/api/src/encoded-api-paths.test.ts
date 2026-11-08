@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildApp } from './app.js';
+import { buildFixtureApp as buildApp } from './test-fixtures.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { trustedMutationHeaders } from './test-helpers.js';
@@ -85,7 +85,7 @@ describe('API authentication uses matched routes', () => {
     expect((await app.inject({ url: '/%61pi/health?check=1' })).statusCode).toBe(200);
     const response = await app.inject({
       method: 'POST',
-      url: '/%61pi/auth/register-family?check=1',
+      url: '/%61pi/test/families?check=1',
       headers: trustedMutationHeaders(),
       payload: registration,
     });

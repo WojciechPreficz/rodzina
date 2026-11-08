@@ -28,7 +28,7 @@ afterEach(() => {
 
 it.each([
   { Component: LoginPage, submit: 'Zaloguj się', endpoint: '/api/auth/login' },
-  { Component: RegisterPage, submit: 'Utwórz rodzinę', endpoint: '/api/auth/register-family' },
+  { Component: RegisterPage, submit: 'Utwórz rodzinę', endpoint: '/api/auth/registration-requests' },
 ])('shows pending and API errors without duplicate submissions: $endpoint', async ({ Component, submit, endpoint }) => {
   let rejectRequest!: (error: Error) => void;
   mocks.fetch.mockImplementation((url: string) =>

@@ -50,14 +50,20 @@ export type AppConfig = z.infer<typeof environmentSchema>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
   const config = environmentSchema.parse(environment);
-  if (config.RODZINA_PASSWORD_RESET_EMAIL_ENABLED) {
+  if (
+    config.RODZINA_PASSWORD_RESET_EMAIL_ENABLED ||
+    config.RODZINA_SMTP_HOST ||
+    config.RODZINA_SMTP_USER ||
+    config.RODZINA_SMTP_PASSWORD ||
+    config.RODZINA_MAIL_FROM
+  ) {
     if (
       !config.RODZINA_SMTP_HOST ||
       !config.RODZINA_SMTP_USER ||
       !config.RODZINA_SMTP_PASSWORD ||
       !z.string().email().safeParse(config.RODZINA_MAIL_FROM).success
     ) {
-      throw new Error('Password reset email requires complete SMTP configuration and a sender email address.');
+      throw new Error('Email delivery requires complete SMTP configuration and a sender email address.');
     }
     const url = new URL(config.RODZINA_PUBLIC_URL);
     if (
@@ -68,7 +74,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       url.pathname !== '/' ||
       (config.NODE_ENV === 'production' ? url.protocol !== 'https:' : !['http:', 'https:'].includes(url.protocol))
     ) {
-      throw new Error('Password reset requires a public origin URL (HTTPS in production).');
+      throw new Error('Email delivery requires a public origin URL (HTTPS in production).');
     }
   }
   return config;

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildApp } from '../../app.js';
+import { buildFixtureApp as buildApp } from '../../test-fixtures.js';
 import * as auth from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
@@ -33,7 +33,7 @@ describe('persistent login limits', { timeout: 20000 }, () => {
     database = createDatabase(config);
     migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
     app = await buildApp(config, database);
-    const registration = await post('/api/auth/register-family', {
+    const registration = await post('/api/test/families', {
       ...passwordCredentials,
       familyName: 'Family',
       displayName: 'Admin',

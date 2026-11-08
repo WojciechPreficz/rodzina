@@ -5,7 +5,7 @@ import { openNavigation } from './navigation.js';
 for (const native of [false, true]) {
   test(`documents CRUD and layout via ${native ? 'Android transport' : 'website'}`, async ({ page, baseURL }, info) => {
     const headers = { Origin: baseURL! };
-    const response = await page.request.post('/api/auth/register-family', {
+    const response = await page.request.post('/api/test/families', {
       headers,
       data: {
         familyName: 'Dokumenty',
@@ -156,7 +156,7 @@ for (const native of [false, true]) {
     const headers = { Origin: baseURL! };
     expect(
       (
-        await page.request.post('/api/auth/register-family', {
+        await page.request.post('/api/test/families', {
           headers,
           data: {
             familyName: 'Odnowienie',

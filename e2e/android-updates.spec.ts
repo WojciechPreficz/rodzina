@@ -22,13 +22,16 @@ test('login and More show release availability without broken downloads at both 
   await expect(page.getByText('Wydanie Androida jest obecnie niedostępne.')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('android-download-login.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.goto('/register');
-  await page.getByLabel('Nazwa rodziny', { exact: true }).fill('Aktualizacje');
-  await page.getByLabel('Twoje imię', { exact: true }).fill('Anna');
-  await page.getByLabel('E-mail', { exact: true }).fill(`updates-${testInfo.project.name}@example.com`);
-  await page.getByLabel('Hasło', { exact: true }).fill('password123');
-  await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
-  await expect(page.locator('.mantine-AppShell-main')).toBeVisible();
+  const seed = await page.request.post('/api/test/families', {
+    headers: { Origin: new URL(page.url()).origin },
+    data: {
+      familyName: 'Aktualizacje',
+      displayName: 'Anna',
+      email: `updates-${testInfo.project.name}@example.com`,
+      password: 'password123',
+    },
+  });
+  expect(seed.status()).toBe(201);
   await page.goto('/wiecej');
   await expect(page.getByText('Wydanie Androida jest obecnie niedostępne.')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('android-download-more.png'), fullPage: true });
