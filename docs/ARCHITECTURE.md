@@ -490,9 +490,10 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Poprawny PIN zwalnia własną rezerwację. Zmiana PIN-u przez administratora
   odblokowuje dziecko na wszystkich IP, a zmiana kodu rodziny zachowuje blokadę.
   Limity wyszukiwania i PIN-u są trwałe w auth_rate_limits, a 429 zawiera Retry-After.
-- Nowa rodzina wymaga potwierdzenia e-mail. POST /api/auth/registration-requests
-  zapisuje tylko pending_registrations i zwraca 202 po przyjęciu wiadomości
-  przez SMTP. Nie tworzy rodziny, użytkownika, grup kontaktów ani sesji.
+- Nowa rodzina wymaga akceptacji regulaminu i potwierdzenia e-mail. Formularz
+  WWW i APK linkuje do `/strona/regulamin.html`. POST /api/auth/registration-requests
+  wymaga `acceptedTerms: true`, zapisuje tylko pending_registrations i zwraca 202
+  po przyjęciu wiadomości przez SMTP. Nie tworzy rodziny, użytkownika, grup kontaktów ani sesji.
   Istniejące konta, sesje i zaproszenia do rodziny nie wymagają weryfikacji.
   Dane zgłoszenia zawierają hash hasła Argon2 i hash losowego tokenu 256 bitów.
   Link /potwierdz-rodzine#token=… jest ważny 24 godziny; sekret we fragmencie
@@ -508,9 +509,10 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   z kluczami hash w auth_rate_limits i Retry-After przy 429.
   RODZINA_ALLOW_REGISTRATION=false blokuje zgłoszenia i potwierdzanie; brak
   SMTP oznacza 503, nigdy rejestrację bez poczty. Flaga resetu hasła nie
-  wyłącza potwierdzeń. Stare POST /api/auth/register-family wykonuje tę samą
-  wysyłkę, a następnie zwraca 409 EMAIL_CONFIRMATION_REQUIRED z instrukcją
-  dla starszego APK, które oczekiwałoby sesji przy odpowiedzi sukcesu.
+  wyłącza potwierdzeń. Stare POST /api/auth/register-family również wymaga
+  `acceptedTerms: true`. Starsze APK bez tego pola otrzymuje instrukcję
+  założenia rodziny w przeglądarce. Po akceptacji starszy endpoint wykonuje tę
+  samą wysyłkę i zwraca 409 EMAIL_CONFIRMATION_REQUIRED.
 - GET /api/auth/password-recovery udostępnia wyłącznie dostępność funkcji.
   Formularz /nie-pamietam-hasla wysyła POST /api/auth/forgot-password.
   Domyślnie wysyłka jest wyłączona (503 bez sprawdzania konta). Po włączeniu

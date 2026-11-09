@@ -29,6 +29,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await page.getByLabel('Twoje imię', { exact: true }).fill('Anna');
     await page.getByLabel('E-mail', { exact: true }).fill(`anna-${suffix}@example.com`);
     await page.getByLabel('Hasło', { exact: true }).fill('password123');
+    await page.getByRole('checkbox', { name: 'Akceptuję regulamin' }).check();
     await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
     await confirmRegistrationFromInbox(page, `anna-${suffix}@example.com`);
     await expect(page.locator('.mantine-AppShell-main')).toBeVisible();

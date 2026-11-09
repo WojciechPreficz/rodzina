@@ -78,6 +78,14 @@ Poza zakresem: płatności, zmiany rejestracji, APK i publikacja.
 Odbiór: headless 390/1280 px, klawiatura, kotwice, druk, build i release:smoke.
 Status: zweryfikowane lokalnie, oczekuje na CI; odbiór właściciela do potwierdzenia.
 
+## Akceptacja regulaminu przy zakładaniu rodziny
+
+Formularz WWW i APK wymaga zaznaczenia pola z linkiem do regulaminu przed
+wysłaniem zgłoszenia. API odrzuca zgłoszenie bez jawnej akceptacji. Starsze APK
+bez pola akceptacji kieruje do rejestracji w przeglądarce. Odbiór obejmuje
+walidację API, komponent, Playwright przy 390/1280 px, fizyczne APK i końcowe CI.
+Status: zweryfikowane lokalnie, oczekuje na CI i próbę na fizycznym telefonie.
+
 ## B-8 — polityka prywatności
 
 Projekt pod `/strona/polityka-prywatnosci.html` opisuje przetwarzanie danych w

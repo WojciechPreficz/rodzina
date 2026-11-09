@@ -251,6 +251,7 @@ describe('AppShell', () => {
     fireEvent.change(screen.getByLabelText('Twoje imię'), { target: { value: 'Anna' } });
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'anna@example.com' } });
     fireEvent.change(screen.getByLabelText('Hasło'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Akceptuję regulamin' }));
     fireEvent.click(screen.getByRole('button', { name: 'Utwórz rodzinę' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Konto rodziny jeszcze nie istnieje');
     expect(screen.queryByText('Registered destination')).not.toBeInTheDocument();
@@ -265,6 +266,7 @@ describe('AppShell', () => {
           displayName: 'Anna',
           email: 'anna@example.com',
           password: 'password123',
+          acceptedTerms: true,
         }),
       }),
     );

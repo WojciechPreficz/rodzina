@@ -14,6 +14,29 @@ for (const native of [false, true]) {
     await page.getByLabel('Twoje imię', { exact: true }).fill('Anna');
     await page.getByLabel('E-mail', { exact: true }).fill(email);
     await page.getByLabel('Hasło', { exact: true }).fill('password123');
+    const terms = page.getByRole('checkbox', { name: 'Akceptuję regulamin' });
+    const termsLink = page.getByRole('link', { name: 'regulamin' });
+    await expect(terms).not.toBeChecked();
+    await expect(termsLink).toHaveAttribute(
+      'href',
+      native ? 'https://rodzina.preficze.pl/strona/regulamin.html' : '/strona/regulamin.html',
+    );
+    if (native) {
+      await expect(termsLink).not.toHaveAttribute('target', '_blank');
+    } else {
+      await termsLink.focus();
+      const [termsPage] = await Promise.all([page.waitForEvent('popup'), page.keyboard.press('Enter')]);
+      await expect(termsPage.getByRole('heading', { level: 1 })).toContainText('Regulamin i zasady');
+      await termsPage.close();
+      await expect(terms).not.toBeChecked();
+    }
+    await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
+    await expect(terms).toHaveAccessibleDescription('Zaakceptuj regulamin, aby założyć rodzinę.');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`registration-terms-${native}.png`), fullPage: true });
+    await terms.focus();
+    await page.keyboard.press('Space');
+    await expect(terms).toBeChecked();
     await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
     await expect(page.getByRole('status')).toContainText('Konto rodziny jeszcze nie istnieje');
     await page.screenshot({ path: testInfo.outputPath(`registration-sent-${native}.png`), fullPage: true });

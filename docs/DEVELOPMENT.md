@@ -42,12 +42,12 @@ Pozostaje odbiór fizycznego APK: ekran wejścia, logowanie, kalendarz i Wstecz;
 symulowany transport Androida nie zastępuje telefonu. Wdrożenie jest osobne.
 
 Regulamin: `/strona/regulamin.html` (samodzielny podgląd: `/regulamin.html`),
-odnośnik w stopce. Test `page/tests/legal.pw.mjs` sprawdza nawigację klawiaturą,
+odnośnik w stopce i przy wymaganym polu akceptacji w formularzu założenia rodziny.
+Test `page/tests/legal.pw.mjs` sprawdza nawigację klawiaturą,
 kotwice, powrót, brak przepełnienia i druk bez JavaScriptu przy 390/1280 px.
 Treść pozostaje projektem do uzupełnienia o adres operatora, informację
 o prywatności, właściwe obowiązki konsumenckie i datę wejścia w życie.
-Przed publicznym naborem trzeba udostępnić regulamin także przed rejestracją
-i dołączeniem dorosłego; obecna zmiana obejmuje wyłącznie stronę marketingową.
+Przed publicznym naborem trzeba udostępnić regulamin także przy dołączeniu dorosłego.
 Punkty odniesienia dla zakresu treści: [FamilyWall](https://www.familywall.com/terms.html)
 i [Cozi](https://www.cozi.com/terms-of-use/); własne brzmienie dopasowane do aplikacji.
 Podstawa przeglądu: [ustawa o świadczeniu usług drogą elektroniczną](https://eli.gov.pl/api/acts/DU/2024/1513/text.html)
@@ -70,10 +70,11 @@ npm run build --workspace @rodzina/web -- --mode android.
 
 Pozostaje ręczny odbiór: rzeczywisty e-mail (także Spam, SPF/DKIM/DMARC),
 nowa rodzina założona z fizycznego APK, otwarcie wiadomości w przeglądarce,
-potwierdzenie i powrót do logowania w aplikacji; starsze APK z komunikatem
-potwierdzenia oraz istniejące konto bez dodatkowej weryfikacji. Testowa skrzynka
-i emulowany transport nie zaliczają tych prób. Wdrożenie i publikacja APK
-są osobnymi czynnościami.
+potwierdzenie i powrót do logowania w aplikacji. W fizycznym APK sprawdź też
+otwarcie regulaminu i powrót do wypełnionego formularza, komunikat starszego APK
+kierujący do rejestracji w przeglądarce oraz istniejące konto bez dodatkowej
+weryfikacji. Testowa skrzynka i emulowany transport nie zaliczają tych prób.
+Wdrożenie i publikacja APK są osobnymi czynnościami.
 
 Zakres obowiązkowych kontroli określa [AGENTS.md](../AGENTS.md).
 Komendy: npm run lint, npm run format:check, npm run typecheck, npm test,

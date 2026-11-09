@@ -1,10 +1,11 @@
 import { PageHeader } from './PageHeader.js';
 import type { SessionResponse } from '@rodzina/shared';
-import { Alert, Button, Group, Paper, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Group, Paper, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useNavigate, useSearchParams } from 'react-router';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { apiFetch, sanitizeNextPath } from '../api.js';
 import { useMe } from '../sessionContext.js';
+import { isAndroid } from '../platform.js';
 
 import { labels } from '../i18n/pl.js';
 import { PasswordRecoveryLink } from './PasswordRecovery.js';
@@ -14,11 +15,15 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const [sent, setSent] = useState(false);
   const [form, setForm] = useState({ familyName: '', displayName: '', email: '', password: '' });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const next = sanitizeNextPath(searchParams.get('next'));
+  const termsErrorId = useId();
+  const native = isAndroid();
+  const termsPath = '/strona/regulamin.html';
 
   const onChange = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -34,6 +39,7 @@ export function RegisterPage() {
       displayName: form.displayName.trim().length >= 2 ? '' : labels.displayNameError,
       email: form.email.trim() && /.+@.+\..+/.test(form.email) ? '' : labels.emailError,
       password: form.password.length >= 8 ? '' : labels.passwordError,
+      acceptedTerms: acceptedTerms ? '' : labels.registrationTermsError,
     };
 
     setFieldErrors(nextErrors);
@@ -52,6 +58,7 @@ export function RegisterPage() {
           familyName: form.familyName.trim(),
           displayName: form.displayName.trim(),
           email: form.email.trim(),
+          acceptedTerms,
         }),
       });
       setForm((current) => ({ ...current, password: '' }));
@@ -125,6 +132,37 @@ export function RegisterPage() {
                   value={form.password}
                   onChange={(event) => onChange('password', event.currentTarget.value)}
                   error={fieldErrors.password}
+                  required
+                />
+                <Checkbox
+                  label={
+                    <>
+                      Akceptuję{' '}
+                      <Anchor
+                        href={native ? `https://rodzina.preficze.pl${termsPath}` : termsPath}
+                        target={native ? undefined : '_blank'}
+                        rel={native ? undefined : 'noopener'}
+                        inherit
+                        underline="always"
+                      >
+                        regulamin
+                      </Anchor>
+                    </>
+                  }
+                  checked={acceptedTerms}
+                  onChange={(event) => {
+                    setAcceptedTerms(event.currentTarget.checked);
+                    setFieldErrors((current) => ({ ...current, acceptedTerms: '' }));
+                  }}
+                  aria-invalid={Boolean(fieldErrors.acceptedTerms)}
+                  aria-describedby={fieldErrors.acceptedTerms ? termsErrorId : undefined}
+                  error={
+                    fieldErrors.acceptedTerms ? (
+                      <span id={termsErrorId} role="alert">
+                        {fieldErrors.acceptedTerms}
+                      </span>
+                    ) : undefined
+                  }
                   required
                 />
                 {error ? (

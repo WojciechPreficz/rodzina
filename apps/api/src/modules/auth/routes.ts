@@ -1,6 +1,7 @@
 import { parse } from '../../http/validation.js';
 import {
   registerFamilySchema,
+  registrationTermsSchema,
   loginSchema,
   familyMembersQuerySchema,
   loginChildSchema,
@@ -54,13 +55,17 @@ export function registerAuthRoutes(
       throw error;
     }
   });
+  const registrationUrl = new URL('/register', config.RODZINA_PUBLIC_URL).href;
   for (const url of ['/api/auth/registration-requests', '/api/auth/register-family']) {
     app.post(url, { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
       try {
-        const result = await registration.request(
-          parse(registerFamilySchema, request.body, 'Dane rejestracji są niepoprawne.'),
-          request.ip,
+        const data = parse(registerFamilySchema, request.body, 'Dane rejestracji są niepoprawne.');
+        parse(
+          registrationTermsSchema,
+          request.body,
+          `Zaakceptuj regulamin, aby założyć rodzinę. Jeśli aplikacja nie ma pola akceptacji, otwórz ${registrationUrl} w przeglądarce.`,
         );
+        const result = await registration.request(data, request.ip);
         // Older APKs expect a session on success. Their error UI can display the next step safely.
         if (url === '/api/auth/register-family')
           throw new ApiError(
