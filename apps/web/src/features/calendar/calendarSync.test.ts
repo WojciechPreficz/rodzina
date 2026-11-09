@@ -1,15 +1,11 @@
 import '../../offline/testSetup.js';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import type { CalendarEvent } from '@rodzina/shared';
-import { apiFetch, ApiRequestError } from '../../api.js';
+import { ApiRequestError } from '../../api.js';
 import { calendarStore, readCalendarRange } from './calendarOffline.js';
 import { fetchSavedEvent, fetchSavedMonth, fetchSavedDistant } from './calendarSync.js';
 import { getEvent, listOccurrences, listDistantEvents } from './calendarApi.js';
 
-vi.mock('../../api.js', async (original) => ({
-  ...(await original<typeof import('../../api.js')>()),
-  apiFetch: vi.fn(),
-}));
 vi.mock('./calendarApi.js', () => ({ getEvent: vi.fn(), listOccurrences: vi.fn(), listDistantEvents: vi.fn() }));
 const familyId = '11111111-1111-4111-8111-111111111111';
 const event: CalendarEvent = {
@@ -34,12 +30,16 @@ const event: CalendarEvent = {
 beforeEach(async () => {
   calendarStore.clear();
   await calendarStore.activate(`${familyId}:user`);
-  vi.mocked(apiFetch).mockResolvedValue({ reminders: [] });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ reminders: [] })),
+  );
   vi.mocked(getEvent).mockResolvedValue(event);
   vi.mocked(listDistantEvents).mockResolvedValue([]);
 });
 afterEach(async () => {
   calendarStore.clear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 it('bounds detail concurrency at four and deduplicates IDs and simultaneous ranges', async () => {
@@ -95,14 +95,21 @@ it('removes 404 details and invalidates ranges', async () => {
   expect(calendarStore.snapshot().view?.details[event.id]).toBeUndefined();
   expect(calendarStore.snapshot().view?.ranges[0]?.complete).toBe(false);
 });
-it.each([401, 403])('revokes offline access on %i without falling back to old data', async (status) => {
+it.each([
+  [401, true],
+  [403, false],
+] as const)('propagates HTTP %i and signals session loss only on 401', async (status, sessionLost) => {
   await calendarStore.saveEvent(event, calendarStore.token());
-  const lost = () => calendarStore.clear();
+  const cached = calendarStore.snapshot().view;
+  const lost = vi.fn(() => calendarStore.clear());
   window.addEventListener('rodzina:session-lost', lost);
   try {
-    vi.mocked(getEvent).mockRejectedValueOnce(new ApiRequestError('Brak dostępu', status));
-    await expect(fetchSavedEvent(event.id)).rejects.toThrow('Brak dostępu');
-    expect(calendarStore.snapshot().view).toBeUndefined();
+    const calendarApi = await vi.importActual<typeof import('./calendarApi.js')>('./calendarApi.js');
+    vi.mocked(getEvent).mockImplementationOnce(calendarApi.getEvent);
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: { message: 'Brak dostępu' } }, { status }));
+    await expect(fetchSavedEvent(event.id)).rejects.toMatchObject({ message: 'Brak dostępu', status });
+    expect(lost).toHaveBeenCalledTimes(sessionLost ? 1 : 0);
+    expect(calendarStore.snapshot().view).toEqual(sessionLost ? undefined : cached);
   } finally {
     window.removeEventListener('rodzina:session-lost', lost);
   }
