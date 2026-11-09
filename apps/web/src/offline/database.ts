@@ -283,7 +283,9 @@ export async function readAccountCache(tx: IDBTransaction, module: CacheModule, 
   if (active.accountId !== accountId) throw changed();
   return requestValue<CacheEntry | undefined>(tx.objectStore('cache').get([accountId, module, 'snapshot']));
 }
-export function makeEntry(module: CacheModule, input: unknown): CacheEntry {
+export class SnapshotBudgetError extends Error {}
+
+export function makeEntry(module: CacheModule, input: unknown, maxBytes?: number, budgetError?: string): CacheEntry {
   const adapter = adapters.get(module)!;
   const entry = (payload: unknown): CacheEntry => {
     const value = adapter.parseCache(payload) as { account: string; syncedAt?: number };
@@ -302,10 +304,13 @@ export function makeEntry(module: CacheModule, input: unknown): CacheEntry {
       size = chargedBytes(key, { ...record, chargedBytes: size });
     return { ...record, chargedBytes: size };
   };
-  const trimmed = adapter.trim(input, (payload) => entry(payload).chargedBytes <= adapter.budget);
+  const budget = maxBytes ?? adapter.budget;
+  const trimmed = adapter.trim(input, (payload) => entry(payload).chargedBytes <= budget);
   const result = entry(trimmed);
-  if (result.chargedBytes > adapter.budget)
-    fail('Nie można zapisać danych offline: przekroczono budżet pamięci modułu.');
+  if (result.chargedBytes > budget)
+    throw new SnapshotBudgetError(
+      budgetError ?? 'Nie można zapisać danych offline: przekroczono budżet pamięci modułu.',
+    );
   return result;
 }
 function putEntry(tx: IDBTransaction, entry: CacheEntry) {
@@ -378,13 +383,23 @@ function sameSource(state: ImportState, allowRemoved: boolean) {
       fail('Dane starej karty zmieniły się podczas importu. Zamknij starsze karty i ponów aktualizację.');
   }
 }
-const migrations = new Map<string, (confirmed: boolean) => Promise<void>>();
-export function registerMigration(name: string, migrate: (confirmed: boolean) => Promise<void>) {
-  migrations.set(name, migrate);
+const migrations = new Map<
+  string,
+  {
+    migrate: (confirmed: boolean) => Promise<void>;
+    validatePreviewAccount?: ((account: string) => void) | undefined;
+  }
+>();
+export function registerMigration(
+  name: string,
+  migrate: (confirmed: boolean) => Promise<void>,
+  validatePreviewAccount?: (account: string) => void,
+) {
+  migrations.set(name, { migrate, validatePreviewAccount });
 }
 export async function ensureMigrated(confirmed = false) {
   await migratePreviews(confirmed);
-  for (const migrate of migrations.values()) await migrate(confirmed);
+  for (const { migrate } of migrations.values()) await migrate(confirmed);
 }
 async function migratePreviews(confirmed = false) {
   checkPendingClear();
@@ -426,12 +441,7 @@ async function migratePreviews(confirmed = false) {
       if (accounts.size !== 1)
         fail('Nie można połączyć danych offline różnych kont. Wyloguj się i pobierz dane ponownie.');
       const accountId = entries[0]!.accountId;
-      const shopping = localStorage.getItem('rodzina:shopping:v1');
-      if (shopping) {
-        const saved = JSON.parse(shopping);
-        if (saved.buster && saved.buster !== accountId)
-          fail('Dane offline należą do różnych kont. Wyloguj się i pobierz je ponownie.');
-      }
+      for (const { validatePreviewAccount } of migrations.values()) validatePreviewAccount?.(accountId);
       state = {
         accountId,
         module: 'preview',

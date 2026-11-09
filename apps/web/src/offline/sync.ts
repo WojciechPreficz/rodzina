@@ -15,6 +15,7 @@ import {
   type Lease,
 } from './outbox.js';
 import { publishSyncStatus, reportStorageIssue, storageError } from './status.js';
+import { offlineTransaction, type OfflineTransaction } from './transaction.js';
 import { notifyOutboxChanged, watchOutbox } from './signals.js';
 
 export type SyncRun = { session?: AccountSession };
@@ -24,8 +25,8 @@ export type SyncAdapter = {
   sessionTransport?: (path: string, init?: RequestInit) => Promise<AccountSession>;
   prepare?: (operation: Operation, signal: AbortSignal, run: SyncRun) => Promise<void>;
   send: (operation: Operation, signal: AbortSignal, run?: SyncRun) => Promise<unknown>;
-  reconcile: (tx: IDBTransaction, operation: Operation, response: unknown) => Promise<void>;
-  invalidateAccess: (tx: IDBTransaction, operation: Operation, error: ApiRequestError) => Promise<void>;
+  reconcile: (tx: OfflineTransaction, operation: Operation, response: unknown) => Promise<void>;
+  invalidateAccess: (tx: OfflineTransaction, operation: Operation, error: ApiRequestError) => Promise<void>;
 };
 export function retryAt(attempts: number, retryAfterMs = 0, now = Date.now(), random = Math.random()) {
   return now + Math.max(retryAfterMs, random * Math.min(300000, 3000 * 2 ** Math.min(attempts, 20)));
@@ -247,7 +248,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             await assertLease(tx, accountId, captured, Date.now());
             const operations = await readOperations(tx, accountId);
             if (!operations.some((op) => op.operationId === operation.operationId)) return;
-            await adapter.reconcile(tx, operation, response);
+            await adapter.reconcile(offlineTransaction(tx, accountId), operation, response);
             completeOperation(tx, await readOperations(tx, accountId), operation);
             await recountOutboxBudgets(tx, accountId);
             tx.objectStore('metadata').put({ accountId, key: `last-sync:${operation.module}`, value: Date.now() });
@@ -270,7 +271,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
               expired ||
               (!confirmingSession && error instanceof ApiRequestError && error.status < 500 && error.status !== 429);
             if (!confirmingSession && error instanceof ApiRequestError && [403, 404].includes(error.status)) {
-              await adapter.invalidateAccess(tx, old, error);
+              await adapter.invalidateAccess(offlineTransaction(tx, accountId), old, error);
               old = (await readOperations(tx, accountId)).find((op) => op.operationId === operation.operationId);
               if (!old) return;
             }

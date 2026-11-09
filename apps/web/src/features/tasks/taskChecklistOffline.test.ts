@@ -1,12 +1,18 @@
-import '../../offline/testSetup.js';
+import {
+  offlineTransaction,
+  readOperations,
+  completeOperation,
+  appendOperation,
+  joinSync,
+  closeDatabase,
+  transact,
+  clearDatabase,
+} from '../../offline/testing.js';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { expect, it, vi } from 'vitest';
 import type { Task, TaskChecklistItem, TaskList } from '@rodzina/shared';
 import { OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../../api.js';
-import { closeDatabase, transact, clearDatabase } from '../../offline/database.js';
-import { readOperations, completeOperation, appendOperation } from '../../offline/outbox.js';
-import { joinSync } from '../../offline/sync.js';
 import { createTaskOfflineStore, checklistProgress } from './taskOffline.js';
 import { readTaskData, updateTaskData } from './taskStorage.js';
 import { taskAdapter } from './taskAdapter.js';
@@ -424,7 +430,11 @@ it('aborts checklist reconciliation and queue acknowledgement as one IDB transac
   await expect(
     transact('readwrite', async (tx) => {
       const operations = await readOperations(tx, account);
-      await taskAdapter(account).reconcile(tx, operations[0]!, { ok: true, items: [item()], orderVersion: 1 });
+      await taskAdapter(account).reconcile(offlineTransaction(tx, account), operations[0]!, {
+        ok: true,
+        items: [item()],
+        orderVersion: 1,
+      });
       completeOperation(tx, operations, operations[0]!);
       throw new Error('Interrupted before commit');
     }),

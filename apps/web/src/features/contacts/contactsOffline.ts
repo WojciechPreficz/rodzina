@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import { contactsResponseSchema } from '@rodzina/shared';
-import { cacheSignal, registerOfflineModule } from '../../offline/moduleStore.js';
-import { registerRecordMigration } from '../../offline/recordMigration.js';
-import { makeEntry } from '../../offline/database.js';
+import { cacheSignal, registerOfflineModule, registerRecordMigration } from '../../offline/index.js';
 
 export const CONTACTS_STORAGE_KEY = 'rodzina:contacts:v1';
 const snapshotSchema = z
@@ -52,12 +50,7 @@ registerRecordMigration(
       throw new Error('Nieobsługiwany format pamięci kontaktów.');
     return snapshotSchema.parse(JSON.parse(source[CONTACTS_STORAGE_KEY]!));
   },
-  (tx, value) => {
-    const entry = makeEntry('contacts', value);
-    tx.objectStore('cache').put(entry);
-    tx.objectStore('metadata').put({ accountId: entry.accountId, key: 'engine:contacts', value: 'legacy-idb' });
-    tx.objectStore('metadata').put({ accountId: entry.accountId, key: 'budget:contacts', value: entry.chargedBytes });
-  },
+  (tx, value) => tx.commitSnapshot('contacts', value, { engine: 'legacy-idb' }),
 );
 export const CONTACTS_SIGNAL = cacheSignal('contacts');
 export function createContactsStore() {

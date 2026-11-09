@@ -1,5 +1,5 @@
+import { readOperations, activateOfflineAccount, transact } from '../../offline/testing.js';
 import type { AccountSession } from '../../session.js';
-import '../../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MantineProvider } from '@mantine/core';
@@ -9,8 +9,6 @@ import { MealsPage } from './MealsPage.js';
 import { MealForm } from './MealForm.js';
 import { mealWeekStart, shiftMealDate } from './mealDates.js';
 import { allowNavigation } from '../../nativeNavigation.js';
-import { activateOfflineAccount, transact } from '../../offline/database.js';
-import { readOperations } from '../../offline/outbox.js';
 import { restoreMeals, stopMeals } from './mealOffline.js';
 
 const session = vi.hoisted(() => ({

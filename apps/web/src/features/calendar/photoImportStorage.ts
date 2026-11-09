@@ -7,7 +7,7 @@ import {
   type ImportEventResult,
   type EventDuplicateResolution,
 } from '@rodzina/shared';
-import { assertContext, requestValue, transact } from '../../offline/database.js';
+import { updateAccountRecord } from '../../offline/index.js';
 
 const entrySchema = z.object({
   operationId: z.string().uuid(),
@@ -26,24 +26,18 @@ const key = 'calendar-photo-import:1';
 // Account metadata shares the session fence and logout cleanup with the offline database.
 // Only approved event data is stored here, never the image or OCR source.
 export async function readPhotoImports(): Promise<PhotoImportOperation[]> {
-  return transact('readwrite', async (tx) => {
-    const { accountId } = await assertContext(tx);
-    const store = tx.objectStore('metadata');
-    const record = await requestValue<{ value: unknown } | undefined>(store.get([accountId, key]));
-    const entries = record ? z.array(entrySchema).parse(record.value) : [];
+  return updateAccountRecord(key, (value, save) => {
+    const entries = value === undefined ? [] : z.array(entrySchema).parse(value);
     // Results remain visible during the import, but a new visit restores only unfinished work.
     const unfinished = entries.filter((entry) => !entry.result || entry.result.status === 'error');
-    if (unfinished.length !== entries.length) store.put({ accountId, key, value: unfinished });
+    if (unfinished.length !== entries.length) save(unfinished);
     return unfinished;
   });
 }
 
 export async function writePhotoImports(updates: PhotoImportOperation[], remove: string[] = []) {
-  return transact('readwrite', async (tx) => {
-    const { accountId } = await assertContext(tx);
-    const store = tx.objectStore('metadata');
-    const record = await requestValue<{ value: unknown } | undefined>(store.get([accountId, key]));
-    const entries = record ? z.array(entrySchema).parse(record.value) : [];
+  return updateAccountRecord(key, (value, save) => {
+    const entries = value === undefined ? [] : z.array(entrySchema).parse(value);
     const merged = new Map(
       entries.filter((entry) => !remove.includes(entry.operationId)).map((entry) => [entry.operationId, entry]),
     );
@@ -59,6 +53,6 @@ export async function writePhotoImports(updates: PhotoImportOperation[], remove:
       // Another tab may already have resolved the same operation.
       merged.set(update.operationId, previous?.result ? previous : parsed);
     }
-    store.put({ accountId, key, value: [...merged.values()] });
+    save([...merged.values()]);
   });
 }

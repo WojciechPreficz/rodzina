@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import { mealWeekResponseSchema, mealSuggestionsResponseSchema, mealOfflineChangeSchema } from '@rodzina/shared';
-import { makeEntry, readAccountCache } from '../../offline/database.js';
-import { chargedBytes, type CacheEntry, type OfflineAdapter } from '../../offline/registry.js';
-import { readOperations, type Operation } from '../../offline/outbox.js';
+import {
+  chargedBytes,
+  SnapshotBudgetError,
+  type OfflineAdapter,
+  type OfflineTransaction,
+  type Operation,
+} from '../../offline/index.js';
 import { shiftMealDate } from './mealDates.js';
 
 export const mealCacheSchema = z
@@ -51,26 +55,26 @@ export const mealCache = {
   }),
 } satisfies Omit<OfflineAdapter, 'capabilities'>;
 
-export async function readMeals(tx: IDBTransaction, account: string) {
-  const entry = await readAccountCache(tx, 'meals', account);
+export async function readMeals(tx: OfflineTransaction, account: string) {
+  const entry = await tx.readSnapshot('meals');
   if (entry && entry.schemaVersion !== 1)
     throw new Error('Nieobsługiwana wersja pamięci obiadów. Zaktualizuj aplikację.');
   const cache = entry ? mealCacheSchema.parse(entry.payload) : emptyMeals(account);
   if (cache.account !== account) throw new DOMException('Session changed', 'AbortError');
-  return { cache, operations: await readMealChanges(tx, account) };
+  return { cache, operations: await readMealChanges(tx) };
 }
 
-export async function readMealChanges(tx: IDBTransaction, account: string) {
-  return (await readOperations(tx, account))
+export async function readMealChanges(tx: OfflineTransaction) {
+  return (await tx.readChanges())
     .filter((op) => op.module === 'meals')
     .map((op) => ({
       ...op,
       payload: mealOfflineChangeSchema.parse(op.payload),
     }));
 }
-export async function putMeals(tx: IDBTransaction, cache: MealCache) {
+export async function putMeals(tx: OfflineTransaction, cache: MealCache) {
   mealCacheSchema.parse(cache);
-  const operations = (await readOperations(tx, cache.account)).filter((op) => op.module === 'meals');
+  const operations = (await tx.readChanges()).filter((op) => op.module === 'meals');
   const pinned = new Set(
     operations.map((op) => {
       const change = mealOfflineChangeSchema.parse(op.payload);
@@ -78,14 +82,16 @@ export async function putMeals(tx: IDBTransaction, cache: MealCache) {
     }),
   );
   const queueBytes = operations.reduce((sum, op) => sum + chargedBytes([cache.account, op.operationId], op), 0);
-  let entry: CacheEntry;
   for (;;) {
     try {
-      entry = makeEntry('meals', cache);
-      if (operations.length && entry.chargedBytes + queueBytes > 6 * 1048576)
-        throw new Error('Brak miejsca na zapis obiadów i kolejki zmian.');
-      break;
+      tx.commitSnapshot('meals', cache, {
+        maxBytes: Math.min(mealCache.budget, 6 * 1048576 - queueBytes),
+        queueBytes,
+        ...(queueBytes > 2 * 1048576 ? { budgetError: 'Brak miejsca na zapis obiadów i kolejki zmian.' } : {}),
+      });
+      return;
     } catch (error) {
+      if (!(error instanceof SnapshotBudgetError)) throw error;
       const evict = Object.entries(cache.weeks)
         .filter(([week]) => !pinned.has(week))
         .sort(([, a], [, b]) => a.syncedAt - b.syncedAt)[0];
@@ -93,12 +99,6 @@ export async function putMeals(tx: IDBTransaction, cache: MealCache) {
       delete cache.weeks[evict[0]];
     }
   }
-  tx.objectStore('cache').put(entry);
-  tx.objectStore('metadata').put({
-    accountId: cache.account,
-    key: 'budget:meals',
-    value: entry.chargedBytes + queueBytes,
-  });
 }
 export function projectMeals(cache: MealCache, operations: readonly MealOperation[]) {
   const [familyId, userId] = cache.account.split(':');

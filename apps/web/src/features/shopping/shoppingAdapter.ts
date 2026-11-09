@@ -1,15 +1,16 @@
 import type { ShoppingItem, ShoppingList } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
-import { appendOperation, type Intent, type Operation } from '../../offline/outbox.js';
-import type { SyncAdapter } from '../../offline/sync.js';
+import type { Intent, Operation, OfflineTransaction, SyncAdapter } from '../../offline/index.js';
 import { changeShopping, listShoppingLists, listShoppingItems, type ShoppingChange } from './shoppingApi.js';
-import { applyShoppingChange, shoppingKey, shoppingAccount, type ShoppingDataWriter } from './shoppingOptimistic.js';
+import { applyShoppingChange, shoppingAccount, type ShoppingDataWriter } from './shoppingOptimistic.js';
 import {
   readShoppingTransaction,
   readShoppingData,
   putShoppingTransaction,
   shoppingUsesOutbox,
   shoppingOperation,
+  rangeListId,
+  type ShoppingRange,
   type ShoppingData,
   type StoredShoppingOperation,
   type QueuedShoppingChange,
@@ -27,11 +28,11 @@ export function shoppingIntent(op: QueuedShoppingChange, reviewReason?: string):
     ...(reviewReason ? { reviewReason } : {}),
   };
 }
-export async function takeOverShopping(tx: IDBTransaction, accountId: string, data: ShoppingData) {
-  if (await shoppingUsesOutbox(tx, accountId)) return;
+export async function takeOverShopping(tx: OfflineTransaction, data: ShoppingData) {
+  if (await shoppingUsesOutbox(tx)) return;
   for (const op of data.operations) {
     if (op.change.type === 'mealExport') throw new Error('Eksport wymaga wspólnej kolejki.');
-    await appendOperation(tx, accountId, 'shopping', shoppingIntent({ ...op, change: op.change }, op.review));
+    await tx.appendChange('shopping', shoppingIntent({ ...op, change: op.change }, op.review));
   }
   await putShoppingTransaction(tx, data, true);
 }
@@ -41,34 +42,37 @@ function projected(
   op: Pick<StoredShoppingOperation, 'change' | 'submittedAt'>,
   response: unknown,
 ) {
-  const queries = new Map(data.queries.map((q) => [JSON.stringify(q.queryKey), q]));
+  const ranges = new Map(data.ranges.map((range) => [rangeListId(range), range]));
   const cache: ShoppingDataWriter = {
-    setQueryData<T>(key: readonly string[], update: (old: T | undefined) => T) {
-      const hash = JSON.stringify(key);
-      const old = queries.get(hash);
-      // A missing range is not an empty list. New local lists have a known empty base.
-      const value = update(old?.state.data as T | undefined);
-      const template = old ?? data.queries[0];
-      if (template)
-        queries.set(hash, {
-          ...template,
-          queryKey: [...key],
-          queryHash: hash,
-          state: { ...template.state, data: value, dataUpdatedAt: Date.now() },
+    updateLists(update) {
+      const old = ranges.get(null);
+      if (ranges.size)
+        ranges.set(null, {
+          kind: 'lists',
+          data: update(old?.kind === 'lists' ? old.data : undefined),
+          syncedAt: Date.now(),
+        });
+    },
+    updateItems(listId, update) {
+      const old = ranges.get(listId);
+      if (ranges.size)
+        ranges.set(listId, {
+          kind: 'items',
+          listId,
+          data: update(old?.kind === 'items' ? old.data : undefined),
+          syncedAt: Date.now(),
         });
     },
   };
   applyShoppingChange(cache, account, op.change, op.submittedAt);
   const result = response as { item?: ShoppingItem; list?: ShoppingList };
   if (result?.item)
-    cache.setQueryData<ShoppingItem[]>([...shoppingKey(account), 'items', result.item.listId], (old = []) =>
+    cache.updateItems(result.item.listId, (old = []) =>
       old.map((item) => (item.id === result.item!.id ? result.item! : item)),
     );
   if (result?.list)
-    cache.setQueryData<ShoppingList[]>([...shoppingKey(account), 'lists'], (old = []) =>
-      old.map((list) => (list.id === result.list!.id ? result.list! : list)),
-    );
-  return [...queries.values()];
+    cache.updateLists((old = []) => old.map((list) => (list.id === result.list!.id ? result.list! : list)));
+  return [...ranges.values()];
 }
 
 export function shoppingAdapter(accountId: string): Omit<SyncAdapter, 'module'> {
@@ -81,15 +85,15 @@ export function shoppingAdapter(accountId: string): Omit<SyncAdapter, 'module'> 
       if (data?.legacyCache) {
         const lists = await listShoppingLists(signal);
         const ranges = await Promise.all(
-          data.queries
-            .filter((q) => q.queryKey[3] === 'items' && lists.some((list) => list.id === q.queryKey[4]))
-            .map(async (q) => ({
-              ...q,
-              state: {
-                ...q.state,
-                data: await listShoppingItems(String(q.queryKey[4]), signal),
-                dataUpdatedAt: Date.now(),
-              },
+          data.ranges
+            .filter(
+              (range): range is Extract<ShoppingRange, { kind: 'items' }> =>
+                range.kind === 'items' && lists.some((list) => list.id === range.listId),
+            )
+            .map(async (range) => ({
+              ...range,
+              data: await listShoppingItems(range.listId, signal),
+              syncedAt: Date.now(),
             })),
         );
         // Base refresh is committed by reconciliation, not by an unfenced request.
@@ -114,22 +118,22 @@ export function shoppingAdapter(accountId: string): Omit<SyncAdapter, 'module'> 
       let data = (await readShoppingTransaction(tx, accountId))!;
       const { response, base } = result as {
         response: unknown;
-        base?: { lists: ShoppingList[]; ranges: ShoppingData['queries'] };
+        base?: { lists: ShoppingList[]; ranges: ShoppingData['ranges'] };
       };
       if (base) {
         data = {
           ...data,
           legacyCache: false,
-          queries: data.queries.map((q) =>
-            q.queryKey[3] === 'lists'
-              ? { ...q, state: { ...q.state, data: base.lists, dataUpdatedAt: Date.now() } }
-              : (base.ranges.find((range) => range.queryHash === q.queryHash) ?? q),
+          ranges: data.ranges.map((q) =>
+            q.kind === 'lists'
+              ? { ...q, data: base.lists, syncedAt: Date.now() }
+              : (base.ranges.find((range) => rangeListId(range) === rangeListId(q)) ?? q),
           ),
         };
       }
       await putShoppingTransaction(
         tx,
-        { ...data, queries: projected(data, account, shoppingOperation(operation), response) },
+        { ...data, ranges: projected(data, account, shoppingOperation(operation), response) },
         true,
       );
     },
@@ -144,14 +148,11 @@ export function shoppingAdapter(accountId: string): Omit<SyncAdapter, 'module'> 
           tx,
           {
             ...data,
-            queries: data.queries.map((q) =>
-              q.queryKey[3] === 'items' && q.queryKey[4] === listId
+            ranges: data.ranges.map((q) =>
+              q.kind === 'items' && q.listId === listId
                 ? {
                     ...q,
-                    state: {
-                      ...q.state,
-                      data: (q.state.data as ShoppingItem[]).filter((item) => item.id !== change.id),
-                    },
+                    data: q.data.filter((item) => item.id !== change.id),
                   }
                 : q,
             ),
@@ -165,13 +166,13 @@ export function shoppingAdapter(accountId: string): Omit<SyncAdapter, 'module'> 
         {
           ...data,
           revokedLists: [...new Set([...(data.revokedLists ?? []), listId])],
-          queries: data.queries
-            .filter((q) => q.queryKey[4] !== listId)
+          ranges: data.ranges
+            .filter((q) => rangeListId(q) !== listId)
             .map((q) =>
-              q.queryKey[3] === 'lists'
+              q.kind === 'lists'
                 ? {
                     ...q,
-                    state: { ...q.state, data: (q.state.data as ShoppingList[]).filter((list) => list.id !== listId) },
+                    data: q.data.filter((list) => list.id !== listId),
                   }
                 : q,
             ),

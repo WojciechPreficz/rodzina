@@ -6,7 +6,7 @@ import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
-import { useOfflineSyncStatus } from '../../offline/status.js';
+import { useOfflineSyncStatus } from '../../offline/index.js';
 import { offlineTaskPatch, taskOfflineText, taskOperationBlocksAlarm, taskStore } from './taskOffline.js';
 import { pendingTaskSuccessor } from './taskRecurrenceOffline.js';
 

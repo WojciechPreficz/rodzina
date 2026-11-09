@@ -1,5 +1,5 @@
+import '../../offline/testing.js';
 import { saveAccountSession, type AccountSession } from '../../session.js';
-import '../../offline/testSetup.js';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';

@@ -26,7 +26,7 @@ import { ContactForm } from './ContactForm.js';
 import { contactBirthdayText, contactInitials, contactPhoneHref, matchesContact, sortContacts } from './contactUi.js';
 import './contacts.css';
 import { contactsStore } from './contactsOffline.js';
-import { useOfflineModule } from '../../offline/moduleStore.js';
+import { useOfflineModule } from '../../offline/index.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
 import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
 

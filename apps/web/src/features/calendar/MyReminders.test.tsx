@@ -1,4 +1,4 @@
-import '../../offline/testSetup.js';
+import '../../offline/testing.js';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

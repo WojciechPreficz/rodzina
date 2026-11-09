@@ -3,8 +3,10 @@ import { onlineManager } from '@tanstack/react-query';
 import { expect, it, vi } from 'vitest';
 import type { Task } from '@rodzina/shared';
 import type { AccountSession } from '../session.js';
+import '../features/tasks/taskOffline.js';
 import { taskAdapter } from '../features/tasks/taskAdapter.js';
 import { shoppingAdapter } from '../features/shopping/shoppingAdapter.js';
+import { offlineTransaction } from './transaction.js';
 import { emptyShopping, putShoppingTransaction } from '../features/shopping/shoppingStorage.js';
 import { mealAdapter } from '../features/meals/mealOffline.js';
 import { shiftMealDate } from '../features/meals/mealDates.js';
@@ -75,7 +77,7 @@ it.each([
     try {
       await activateOfflineAccount(account);
       await transact('readwrite', async (tx) => {
-        await putShoppingTransaction(tx, emptyShopping(session), true);
+        await putShoppingTransaction(offlineTransaction(tx, account), emptyShopping(session), true);
         for (let index = 0; index < n; index++) {
           const module = modules[index % modules.length]!;
           await appendOperation(tx, account, module, {

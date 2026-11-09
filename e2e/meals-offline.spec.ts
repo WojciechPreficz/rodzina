@@ -82,17 +82,17 @@ for (const native of [false, true]) {
       .poll(
         async () => {
           const saved = await readOfflineSnapshot<{
-            queries: { queryKey: unknown[]; state: { data: { id?: string; quantity?: string }[] } }[];
+            ranges: { kind: 'lists' | 'items'; listId?: string; data: { id?: string; quantity?: string }[] }[];
           }>(page, 'shopping');
           return {
-            list: saved?.queries.some(
-              (query) => query.queryKey[3] === 'lists' && query.state.data.some((list) => list.id === listId),
+            list: saved?.ranges.some(
+              (range) => range.kind === 'lists' && range.data.some((list) => list.id === listId),
             ),
-            items: saved?.queries.some(
-              (query) =>
-                query.queryKey[3] === 'items' &&
-                query.queryKey[4] === listId &&
-                query.state.data.some((item) => item.quantity === '500 g'),
+            items: saved?.ranges.some(
+              (range) =>
+                range.kind === 'items' &&
+                range.listId === listId &&
+                range.data.some((item) => item.quantity === '500 g'),
             ),
           };
         },

@@ -10,12 +10,13 @@ import {
   type Meal,
 } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
-import { transact, assertContext } from '../../offline/database.js';
-import { registerOfflineModule } from '../../offline/moduleStore.js';
-import { appendOperation, readOperations, recountOutboxBudgets } from '../../offline/outbox.js';
-import type { SyncAdapter } from '../../offline/sync.js';
-import { notifyOutboxChanged } from '../../offline/signals.js';
-import { reportStorageIssue } from '../../offline/status.js';
+import {
+  registerOfflineModule,
+  reportStorageIssue,
+  type OfflineTransaction,
+  type Operation,
+  type SyncAdapter,
+} from '../../offline/index.js';
 import {
   prepareMealExportSync,
   resolveMealExportTargets,
@@ -125,18 +126,8 @@ export const registerMealsStore = () => mealsModule.registerStore({ restore: res
 type MealScope = ReturnType<typeof mealStore.accountScope>;
 const aborted = () => new DOMException('Session changed', 'AbortError');
 
-async function commitMeals<T>(scope: MealScope, write: (tx: IDBTransaction, account: string) => Promise<T>) {
-  const { account, token } = scope;
-  const result = await transact(
-    'readwrite',
-    async (tx) => {
-      if (!scope.current() || (await assertContext(tx)).accountId !== account) throw aborted();
-      const result = await write(tx, account);
-      if (!scope.current()) throw aborted();
-      return result;
-    },
-    token,
-  );
+async function commitMeals<T>(scope: MealScope, write: (tx: OfflineTransaction, account: string) => Promise<T>) {
+  const result = await mealsModule.withAccount('readwrite', scope, (tx) => write(tx, scope.account));
   if (!scope.current()) throw aborted();
   await mealStore.reload();
   if (!scope.current()) throw aborted();
@@ -179,7 +170,7 @@ async function queueMealChange(
   build: (
     cache: MealCache,
     operations: MealOperation[],
-    tx: IDBTransaction,
+    tx: OfflineTransaction,
   ) => Promise<MealOfflineChange> | MealOfflineChange,
 ) {
   const scope = mealStore.accountScope();
@@ -193,9 +184,9 @@ async function queueMealChange(
       change.type === 'export'
         ? [`meals:week:${change.data.weekStart}`, `shopping:list:${change.data.listId}`]
         : [`meals:week:${change.weekStart}`];
-    const operations = await readOperations(tx, account);
+    const operations = await tx.readChanges();
     const operationId = crypto.randomUUID();
-    await appendOperation(tx, account, 'meals', {
+    await tx.appendChange('meals', {
       operationId,
       submittedAt: Date.now(),
       entityId: orderingKeys[0]!,
@@ -282,21 +273,21 @@ export async function queueMealExport(weekStart: string, listId: string, mealIds
     };
   });
 }
+function retryReviewedChange(op: Operation, payload = op.payload): Operation {
+  const pending: Operation = { ...op, status: 'pending', payload };
+  delete pending.reviewReason;
+  delete pending.lastError;
+  return pending;
+}
 export async function confirmMealExport(operationId: string) {
-  await commitMeals(mealStore.accountScope(), async (tx, account) => {
-    const operations = await readOperations(tx, account);
+  await commitMeals(mealStore.accountScope(), async (tx) => {
+    const operations = await tx.readChanges();
     const op = operations.find((op) => op.operationId === operationId && op.module === 'meals');
     if (!op || op.status !== 'needs-review') throw new Error('Ta zmiana wymaga ręcznego sprawdzenia.');
     const change = mealOfflineChangeSchema.parse(op.payload);
     if (change.type !== 'export' || op.reviewReason !== 'MEAL_EXPORT_CONFIRMATION_REQUIRED')
       throw new Error('Nie można potwierdzić tej zmiany.');
-    tx.objectStore('outbox').put({
-      ...op,
-      status: 'pending',
-      reviewReason: undefined,
-      lastError: undefined,
-      payload: { ...change, data: { ...change.data, confirmRepeat: true } },
-    });
+    tx.replaceChange(retryReviewedChange(op, { ...change, data: { ...change.data, confirmRepeat: true } }));
     const blocked = new Set<string>();
     const blockedKeys = new Set<string>();
     for (const child of operations) {
@@ -307,18 +298,17 @@ export async function confirmMealExport(operationId: string) {
         !child.dependsOn.some((id) => blocked.has(id)) &&
         !child.orderingKeys.some((key) => blockedKeys.has(key))
       ) {
-        tx.objectStore('outbox').put({ ...child, status: 'pending', reviewReason: undefined, lastError: undefined });
+        tx.replaceChange(retryReviewedChange(child));
       } else if (child.status === 'needs-review') {
         blocked.add(child.operationId);
         child.orderingKeys.forEach((key) => blockedKeys.add(key));
       }
     }
-    notifyOutboxChanged(tx, account);
   });
 }
 export async function discardMealOperation(operationId: string) {
-  await commitMeals(mealStore.accountScope(), async (tx, account) => {
-    const operations = await readOperations(tx, account);
+  await commitMeals(mealStore.accountScope(), async (tx) => {
+    const operations = await tx.readChanges();
     const selected = operations.find(
       (op) => op.module === 'meals' && op.operationId === operationId && op.status === 'needs-review',
     );
@@ -333,11 +323,9 @@ export async function discardMealOperation(operationId: string) {
       ) {
         removed.add(op.operationId);
         op.orderingKeys.forEach((key) => keys.add(key));
-        tx.objectStore('outbox').delete([account, op.operationId]);
       }
     }
-    await recountOutboxBudgets(tx, account);
-    notifyOutboxChanged(tx, account);
+    await tx.removeChanges(removed);
   });
 }
 export function localMealSuggestions(cache: MealCache, search: string) {

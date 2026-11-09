@@ -1,6 +1,6 @@
 import { taskChecklistResponseSchema, taskSchema, taskSnapshotResponseSchema, type TaskList } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
-import type { SyncAdapter, SyncRun } from '../../offline/sync.js';
+import type { SyncAdapter, SyncRun } from '../../offline/index.js';
 import { readTaskTransaction, putTaskTransaction, putTaskBaseTransaction, taskOperation } from './taskStorage.js';
 
 export type TaskTransport = <T>(path: string, init?: RequestInit) => Promise<T>;

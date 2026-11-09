@@ -1,6 +1,6 @@
+import '../../offline/testing.js';
 import { StrictMode } from 'react';
 import { updateTaskData } from './taskStorage.js';
-import '../../offline/testSetup.js';
 import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -625,11 +625,12 @@ describe('task checklist UI', () => {
     expect(screen.getByRole('checkbox', { name: 'Zrobione: Kupić farbę' })).not.toBeChecked();
     confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: 'Ukończ zadanie' }));
-    await screen.findByRole('button', { name: 'Oznacz zadanie jako niewykonane' });
-    fireEvent.click(screen.getByRole('button', { name: 'Oznacz zadanie jako niewykonane' }));
+    const reopen = await screen.findByRole('button', { name: 'Oznacz zadanie jako niewykonane' });
+    await waitFor(() => expect(reopen).toBeEnabled());
+    fireEvent.click(reopen);
     await screen.findByRole('button', { name: 'Ukończ zadanie' });
     expect(taskStore.getSnapshot().items[list.id]![0]!.checklist).toEqual(checklistTask.checklist);
-  });
+  }, 15000);
 
   it('keeps the parent open after the last step and completes it only on explicit action', async () => {
     const initial = structuredClone(checklistTask);

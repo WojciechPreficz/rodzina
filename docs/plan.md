@@ -42,6 +42,9 @@ Jawna deklaracja idempotencji mutacji API — zweryfikowane lokalnie, oczekuje n
 
 Publiczne API zakupów dla eksportu obiadów i reguła granic importów — zweryfikowane lokalnie, oczekuje na CI.
 
+A-2: publiczny kontrakt modułów offline, migracja zakupów w module i snapshot zakupów w wersji 2.
+Zweryfikowane lokalnie w zakresie offline, oczekuje na CI i próbę na fizycznym APK.
+
 B-3: limiter żądań API, limity rekordów rodzinnych i współbieżności Argon2.
 Zweryfikowane lokalnie, oczekuje na CI.
 

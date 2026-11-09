@@ -1,6 +1,5 @@
 import type { AccountSession } from '../../session.js';
 import { z } from 'zod';
-import type { DehydratedState } from '@tanstack/react-query';
 import {
   createShoppingItemSchema,
   patchShoppingItemSchema,
@@ -13,24 +12,23 @@ import {
 } from '@rodzina/shared';
 import {
   accountToken,
+  hasPendingClear,
   isAccountCurrent,
-  assertContext,
-  requestValue,
-  transact,
-  registerMigration,
-  PROTOCOL_KEY,
-  CLEAR_PENDING_KEY,
-} from '../../offline/database.js';
-import { chargedBytes, type CacheEntry } from '../../offline/registry.js';
-import { requireMigration } from '../../offline/status.js';
-import { freezeParticipants, resumeParticipants } from '../../offline/coordinator.js';
+  withOfflineAccount,
+  readStoredOfflineAccount,
+  registerRecordMigration,
+  chargedBytes,
+  checkSnapshotBudget,
+  SnapshotBudgetError,
+  type OfflineRead,
+  type OfflineTransaction,
+  type Operation,
+} from '../../offline/index.js';
 import type { ShoppingChange, MealShoppingProjection } from './shoppingApi.js';
-import { readOperations, type Operation } from '../../offline/outbox.js';
 
 export const SHOPPING_STORAGE_KEY = 'rodzina:shopping:v1';
 export const JOURNAL_PREFIX = `${SHOPPING_STORAGE_KEY}:operation:`;
 export const SHOPPING_SIGNAL = 'offline-shopping-changed:1';
-const IMPORT_KEY = 'offline-shopping-import:1';
 const error = (message: string): never => {
   throw new Error(message);
 };
@@ -84,11 +82,26 @@ export type StoredShoppingOperation = Omit<QueuedShoppingChange, 'change'> & {
   sequence: number;
   review?: string;
 };
+const shoppingRangeSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('lists'),
+    data: z.array(shoppingListSchema.extend({ id, familyId: id, createdBy: id.nullable() })),
+    syncedAt: z.number().finite().nonnegative(),
+  }),
+  z.object({
+    kind: z.literal('items'),
+    listId: id,
+    data: z.array(shoppingItemSchema.extend({ id, listId: id, createdBy: id.nullable(), checkedBy: id.nullable() })),
+    syncedAt: z.number().finite().nonnegative(),
+  }),
+]);
+export type ShoppingRange = z.infer<typeof shoppingRangeSchema>;
+export const rangeListId = (range: ShoppingRange) => (range.kind === 'items' ? range.listId : null);
 export type ShoppingData = {
-  version: 1;
+  version: 2;
   account: string;
   session: AccountSession;
-  queries: DehydratedState['queries'];
+  ranges: ShoppingRange[];
   operations: StoredShoppingOperation[];
   nextSequence: number;
   legacyCache: boolean;
@@ -103,103 +116,94 @@ const canonical = (value: unknown): string => {
       .join(',')}}`;
   return JSON.stringify(value);
 };
-function parseQueries(input: unknown[], account: string): DehydratedState['queries'] {
-  return input.map((raw) => {
-    const query = raw as DehydratedState['queries'][number];
-    const key = query?.queryKey;
-    if (!Array.isArray(key) || key[0] !== 'shopping' || `${key[1]}:${key[2]}` !== account)
-      return error('Nieprawidłowe konto zapisanej listy zakupów.');
-    if (key[3] === 'lists' && key.length === 4) {
-      const lists = z
-        .array(shoppingListSchema.extend({ id, familyId: id, createdBy: id.nullable() }))
-        .parse(query.state.data);
-      if (lists.some((list) => list.familyId !== key[1])) error('Lista zakupów należy do innej rodziny.');
-    } else if (key[3] === 'items' && key.length === 5 && typeof key[4] === 'string') {
-      const items = z
-        .array(shoppingItemSchema.extend({ id, listId: id, createdBy: id.nullable(), checkedBy: id.nullable() }))
-        .parse(query.state.data);
-      if (items.some((item) => item.listId !== key[4])) error('Produkt należy do innej listy zakupów.');
-    } else return error('Nieobsługiwany zakres pamięci zakupów.');
-    return query;
-  });
+const legacyQuerySchema = z.object({
+  queryKey: z.array(z.unknown()),
+  state: z.object({ data: z.unknown(), dataUpdatedAt: z.number().finite().nonnegative() }),
+});
+
+function parseRange(raw: unknown, account: string) {
+  const range = shoppingRangeSchema.parse(raw);
+  if (range.kind === 'lists' && range.data.some((list) => list.familyId !== account.split(':')[0]))
+    error('Lista zakupów należy do innej rodziny.');
+  if (range.kind === 'items' && range.data.some((item) => item.listId !== range.listId))
+    error('Produkt należy do innej listy zakupów.');
+  return range;
 }
+
+export function shoppingRange(key: readonly unknown[], data: unknown, syncedAt: number, account: string) {
+  if (key[0] !== 'shopping' || `${key[1]}:${key[2]}` !== account)
+    return error('Nieprawidłowe konto zapisanej listy zakupów.');
+  if (key[3] === 'lists' && key.length === 4) return parseRange({ kind: 'lists', data, syncedAt }, account);
+  if (key[3] === 'items' && key.length === 5)
+    return parseRange({ kind: 'items', listId: key[4], data, syncedAt }, account);
+  return error('Nieobsługiwany zakres pamięci zakupów.');
+}
+
+function legacyRanges(input: unknown, account: string) {
+  return z
+    .array(legacyQuerySchema)
+    .parse(input)
+    .map(({ queryKey, state }) => shoppingRange(queryKey, state.data, state.dataUpdatedAt, account));
+}
+
+function parseShoppingCache(value: unknown): ShoppingData {
+  const data = value as Omit<ShoppingData, 'version'> & { version: number; queries?: unknown };
+  if ((data?.version !== 1 && data?.version !== 2) || typeof data.account !== 'string')
+    error('Nieobsługiwany format pamięci zakupów.');
+  const session = snapshotSchema.shape.session.parse(data.session);
+  if (`${session.family.id}:${session.user.id}` !== data.account || session.user.familyId !== session.family.id)
+    error('Zapisane zakupy należą do innego konta.');
+  z.array(operationSchema).parse(data.operations);
+  const { queries, ...rest } = data;
+  const ranges =
+    data.version === 1
+      ? legacyRanges(queries, data.account)
+      : data.ranges.map((range) => parseRange(range, data.account));
+  return { ...rest, version: 2, ranges };
+}
+
 export const shoppingCache = {
   module: 'shopping' as const,
   schemaVersion: 1 as const,
   separateMigration: true,
   legacyKey: SHOPPING_STORAGE_KEY,
   budget: 4 * 1048576,
-  parseCache: (value: unknown) => {
-    const data = value as ShoppingData;
-    if (data?.version !== 1 || typeof data.account !== 'string') error('Nieobsługiwany format pamięci zakupów.');
-    const session = snapshotSchema.shape.session.parse(data.session);
-    if (`${session.family.id}:${session.user.id}` !== data.account || session.user.familyId !== session.family.id)
-      error('Zapisane zakupy należą do innego konta.');
-    parseQueries(data.queries, data.account);
-    z.array(operationSchema).parse(data.operations);
-    return data;
-  },
+  parseCache: parseShoppingCache,
   trim: (value: unknown) => value,
   describe: (value: unknown) => {
-    const data = value as ShoppingData;
+    const data = parseShoppingCache(value);
     return {
-      syncedAt: Math.max(0, ...data.queries.map((q) => q.state.dataUpdatedAt)) || null,
-      coverage: data.queries.length ? ('partial' as const) : ('missing' as const),
+      syncedAt: Math.max(0, ...data.ranges.map((q) => q.syncedAt)) || null,
+      coverage: data.ranges.length ? ('partial' as const) : ('missing' as const),
     };
   },
 };
-function entry(data: ShoppingData, outboxBytes = 0, outbox = false): CacheEntry {
-  const record = {
-    accountId: data.account,
-    module: 'shopping' as const,
-    key: 'snapshot',
-    schemaVersion: 1 as const,
-    payload: outbox ? { ...data, operations: [] } : data,
-    syncedAt: Math.max(0, ...data.queries.map((q) => q.state.dataUpdatedAt)) || null,
-    coverage: data.queries.length ? ('partial' as const) : ('missing' as const),
-    usedAt: Date.now(),
-    chargedBytes: 0,
-  };
-  while (record.chargedBytes !== chargedBytes([data.account, 'shopping', 'snapshot'], record))
-    record.chargedBytes = chargedBytes([data.account, 'shopping', 'snapshot'], record);
-  const bytes = record.chargedBytes + outboxBytes;
-  // Pending work and its base are pinned together. Never trim an operation or manufacture an empty list.
-  const pendingBytes = data.operations.length || outboxBytes ? bytes : 0;
-  if (pendingBytes > 6 * 1048576 || (!pendingBytes && bytes > 4 * 1048576))
-    error('Nie można zapisać zakupów: przekroczono budżet pamięci. Zsynchronizuj zmiany lub zwolnij miejsce.');
-  return record;
-}
-export async function putShoppingTransaction(tx: IDBTransaction, data: ShoppingData, outbox = false) {
+const shoppingBudgetError =
+  'Nie można zapisać zakupów: przekroczono budżet pamięci. Zsynchronizuj zmiany lub zwolnij miejsce.';
+
+export async function putShoppingTransaction(tx: OfflineTransaction, data: ShoppingData, outbox = false) {
   const outboxBytes = outbox
-    ? (await readOperations(tx, data.account))
+    ? (await tx.readChanges())
         .filter((op) => op.module === 'shopping')
         .reduce((sum, op) => sum + chargedBytes([data.account, op.operationId], op), 0)
     : 0;
-  let record: CacheEntry;
   for (;;) {
     try {
-      record = entry(data, outboxBytes, outbox);
-      break;
+      // Pending work and its base are pinned together.
+      tx.commitSnapshot('shopping', outbox ? { ...data, operations: [] } : data, {
+        maxBytes: (data.operations.length || outboxBytes ? 6 * 1048576 : shoppingCache.budget) - outboxBytes,
+        queueBytes: outboxBytes,
+        engine: outbox ? 'outbox-v1' : 'legacy-idb',
+        budgetError: shoppingBudgetError,
+      });
+      return;
     } catch (cause) {
-      if (data.operations.length || outboxBytes) throw cause;
-      const evict = data.queries
-        .filter((q) => q.queryKey[3] === 'items')
-        .sort((a, b) => a.state.dataUpdatedAt - b.state.dataUpdatedAt)[0];
+      if (!(cause instanceof SnapshotBudgetError) || data.operations.length || outboxBytes) throw cause;
+      const evict = data.ranges.filter((q) => q.kind === 'items').sort((a, b) => a.syncedAt - b.syncedAt)[0];
       if (!evict) throw cause;
-      data.queries = data.queries.filter((q) => q !== evict);
+      data.ranges = data.ranges.filter((q) => q !== evict);
     }
   }
-  tx.objectStore('cache').put(record);
-  tx.objectStore('metadata').put({
-    accountId: data.account,
-    key: 'budget:shopping',
-    value: record.chargedBytes + outboxBytes,
-  });
-  tx.objectStore('metadata').put({
-    accountId: data.account,
-    key: 'engine:shopping',
-    value: outbox ? 'outbox-v1' : 'legacy-idb',
-  });
 }
 export const shoppingOperation = (op: Operation): StoredShoppingOperation => ({
   operationId: op.operationId,
@@ -233,17 +237,14 @@ export function mealShoppingOperation(op: Operation): StoredShoppingOperation | 
     ...(op.status === 'needs-review' ? { review: op.reviewReason ?? 'conflict' } : {}),
   };
 }
-export async function shoppingUsesOutbox(tx: IDBTransaction, account: string) {
-  return (
-    (await requestValue<{ value: string } | undefined>(tx.objectStore('metadata').get([account, 'engine:shopping'])))
-      ?.value === 'outbox-v1'
-  );
+export async function shoppingUsesOutbox(tx: OfflineRead) {
+  return (await tx.readEngine('shopping')) === 'outbox-v1';
 }
-export async function readShoppingChanges(tx: IDBTransaction, account: string, data: ShoppingData | undefined) {
+export async function readShoppingChanges(tx: OfflineRead, data: ShoppingData | undefined) {
   if (!data) return [];
-  const outbox = await shoppingUsesOutbox(tx, account);
+  const outbox = await shoppingUsesOutbox(tx);
   const operations = outbox
-    ? (await readOperations(tx, account)).flatMap((op) => {
+    ? (await tx.readChanges()).flatMap((op) => {
         if (op.module === 'shopping') return [shoppingOperation(op)];
         const projection = mealShoppingOperation(op);
         return projection ? [projection] : [];
@@ -260,28 +261,20 @@ export async function readShoppingChanges(tx: IDBTransaction, account: string, d
     error('Nieprawidłowa kolejność zapisanych zmian zakupów.');
   return operations;
 }
-export async function readShoppingTransaction(tx: IDBTransaction, account: string) {
-  const record = await requestValue<CacheEntry | undefined>(
-    tx.objectStore('cache').get([account, 'shopping', 'snapshot']),
-  );
+export async function readShoppingTransaction(tx: OfflineRead, account: string) {
+  const record = await tx.readSnapshot('shopping');
   if (!record) return;
   const data = shoppingCache.parseCache(record.payload);
   if (record.schemaVersion !== 1 || data.account !== account) error('Nieobsługiwana wersja pamięci zakupów.');
-  const operations = await readShoppingChanges(tx, account, data);
+  const operations = await readShoppingChanges(tx, data);
   return { ...data, operations, nextSequence: Math.max(data.nextSequence, ...operations.map((op) => op.sequence + 1)) };
 }
 export async function readShoppingData(account?: string) {
-  return transact('readonly', async (tx) => {
-    const active = account
-      ? await assertContext(tx)
-      : (
-          await requestValue<{ value: { accountId: string } } | undefined>(
-            tx.objectStore('metadata').get(['__origin__', 'active']),
-          )
-        )?.value;
-    if (!active || (account && active.accountId !== account)) return;
-    return readShoppingTransaction(tx, active.accountId);
-  });
+  if (!account) return readStoredOfflineAccount(readShoppingTransaction);
+  const token = accountToken();
+  return withOfflineAccount('readonly', { account, token, current: () => isAccountCurrent(token) }, (tx) =>
+    readShoppingTransaction(tx, account),
+  );
 }
 export async function updateShoppingData(
   account: string,
@@ -289,22 +282,15 @@ export async function updateShoppingData(
   token = accountToken(),
   assertCurrent?: () => void,
 ) {
-  if (localStorage.getItem(CLEAR_PENDING_KEY)) error('Usuwanie danych konta nie zostało zakończone.');
-  return transact(
-    'readwrite',
-    async (tx) => {
-      const active = await assertContext(tx);
-      if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
-      const old = await readShoppingTransaction(tx, account);
-      assertCurrent?.();
-      const value = update(old);
-      if (value.account !== account) throw new DOMException('Session changed', 'AbortError');
-      await putShoppingTransaction(tx, value, await shoppingUsesOutbox(tx, account));
-      assertCurrent?.();
-      return value;
-    },
-    token,
-  );
+  if (hasPendingClear()) error('Usuwanie danych konta nie zostało zakończone.');
+  return withOfflineAccount('readwrite', { account, token, current: () => isAccountCurrent(token) }, async (tx) => {
+    const old = await readShoppingTransaction(tx, account);
+    assertCurrent?.();
+    const value = update(old);
+    await putShoppingTransaction(tx, value, await shoppingUsesOutbox(tx));
+    assertCurrent?.();
+    return value;
+  });
 }
 export function notifyShopping() {
   // The signal contains no account content and is not a sender lock.
@@ -316,46 +302,14 @@ export function notifyShopping() {
 }
 export function emptyShopping(session: AccountSession): ShoppingData {
   return {
-    version: 1,
+    version: 2,
     account: `${session.family.id}:${session.user.id}`,
     session: { user: { ...session.user, email: null }, family: { ...session.family, joinCode: '' } },
-    queries: [],
+    ranges: [],
     operations: [],
     nextSequence: 1,
     legacyCache: false,
   };
-}
-const sources = () =>
-  Object.fromEntries(
-    Object.keys(localStorage)
-      .filter((key) => key === SHOPPING_STORAGE_KEY || key.startsWith(JOURNAL_PREFIX))
-      .sort()
-      .map((key) => [key, localStorage.getItem(key)!]),
-  );
-type ImportState = {
-  accountId: string;
-  module: 'shopping';
-  importId: 'v1';
-  phase: 'staged' | 'committed' | 'verified';
-  source: Record<string, string>;
-  data: ShoppingData;
-  boundary: unknown;
-  sourceDigest: string;
-  targetDigest: string;
-};
-const digest = async (value: unknown) =>
-  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(value)))))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-function assertSource(state: ImportState, removed = false) {
-  const current = sources();
-  if (
-    Object.keys(current).some((key) => !(key in state.source)) ||
-    Object.entries(state.source).some(
-      ([key, value]) => current[key] !== value && !(removed && current[key] === undefined),
-    )
-  )
-    error('Dane zakupów zmieniły się podczas importu. Zamknij starsze karty i ponów aktualizację.');
 }
 export function importShopping(source: Record<string, string>, fallback?: AccountSession): ShoppingData {
   const snapshot = source[SHOPPING_STORAGE_KEY]
@@ -366,7 +320,7 @@ export function importShopping(source: Record<string, string>, fallback?: Accoun
     return error('Nie można potwierdzić konta dziennika zakupów.');
   const data = emptyShopping(session);
   if (snapshot && snapshot.buster !== data.account) error('Snapshot zakupów należy do innego konta.');
-  data.queries = parseQueries(snapshot?.clientState.queries ?? [], data.account);
+  data.ranges = legacyRanges(snapshot?.clientState.queries ?? [], data.account);
   data.legacyCache = true;
   const snapshots = new Map<string, QueuedShoppingChange>();
   const journal = new Map<string, QueuedShoppingChange>();
@@ -415,15 +369,12 @@ export function importShopping(source: Record<string, string>, fallback?: Accoun
     const chain = ordered.filter((other) => resource(other) === resource(op));
     const hasItems =
       !('listId' in op.change) ||
-      data.queries.some((q) => q.queryKey[3] === 'items' && q.queryKey[4] === resource(op)) ||
+      data.ranges.some((q) => q.kind === 'items' && q.listId === resource(op)) ||
       ordered.some((other) => other.change.type === 'createList' && other.change.id === resource(op));
     const hasBase =
       hasItems &&
       (op.change.type === 'createList' ||
-        data.queries.some(
-          (q) =>
-            q.queryKey[3] === 'lists' && (q.state.data as { id: string }[]).some((list) => list.id === resource(op)),
-        ) ||
+        data.ranges.some((q) => q.kind === 'lists' && q.data.some((list) => list.id === resource(op))) ||
         ordered.some((other) => other.change.type === 'createList' && other.change.id === resource(op)));
     const ambiguous =
       !chain.every((other) => snapshots.has(other.operationId)) &&
@@ -439,153 +390,33 @@ export function importShopping(source: Record<string, string>, fallback?: Accoun
             : undefined;
     data.operations.push({ ...op, sequence: data.nextSequence++, ...(review ? { review } : {}) });
   }
-  entry(data);
   return data;
 }
-async function migrateShopping(confirmed: boolean) {
-  const token = accountToken();
-  const work = async () => {
-    if (localStorage.getItem(CLEAR_PENDING_KEY)) error('Usuwanie danych konta nie zostało zakończone.');
-    const states = await transact(
-      'readonly',
-      async (tx) => requestValue<ImportState[]>(tx.objectStore('migration').getAll()),
-      token,
-    );
-    let state = states.find((s) => s.module === 'shopping');
-    const source = sources();
-    if (!state && !Object.keys(source).length) return;
-    if (!state) {
-      const markers = await transact(
-        'readonly',
-        async (tx) => requestValue<{ key: string }[]>(tx.objectStore('metadata').getAll()),
-        token,
-      );
-      if (markers.some((m) => m.key === 'import:shopping:v1' || m.key === 'engine:shopping'))
-        error('Starsza karta ponownie zapisała zakupy po aktualizacji. Zamknij ją i wyloguj się przed dalszą pracą.');
-    }
-    if (!confirmed && localStorage.getItem(IMPORT_KEY) !== 'migrating') {
-      requireMigration(true);
-      error('Dane zakupów wymagają przeniesienia. Zamknij starsze karty aplikacji i potwierdź aktualizację pamięci.');
-    }
-    if (!navigator.locks?.query) error('Przeglądarka nie obsługuje bezpiecznej aktualizacji pamięci zakupów.');
-    localStorage.setItem(IMPORT_KEY, 'migrating');
-    localStorage.setItem(PROTOCOL_KEY, 'migrating');
-    await freezeParticipants();
-    const boundary = async (tx: IDBTransaction) =>
-      requestValue(tx.objectStore('metadata').get(['__origin__', 'boundary']));
-    const check = async (tx: IDBTransaction, s: ImportState) => {
-      if (canonical(await boundary(tx)) !== canonical(s.boundary))
-        throw new DOMException('Session changed', 'AbortError');
-    };
-    if (!state) {
-      const family = await transact(
-        'readonly',
-        async (tx) => requestValue<CacheEntry[]>(tx.objectStore('cache').getAll()),
-        token,
-      );
-      const fallback = (family.find((e) => e.module === 'family')?.payload as { session?: AccountSession } | undefined)
-        ?.session;
-      const data = importShopping(source, fallback);
-      const active = await transact(
-        'readonly',
-        async (tx) =>
-          requestValue<{ value: { accountId: string } } | undefined>(
-            tx.objectStore('metadata').get(['__origin__', 'active']),
-          ),
-        token,
-      );
-      if (active && active.value.accountId !== data.account) error('Dane zakupów należą do innego konta.');
-      state = {
-        accountId: data.account,
-        module: 'shopping',
-        importId: 'v1',
-        phase: 'staged',
-        source,
-        data,
-        boundary: await transact('readonly', boundary, token),
-        sourceDigest: await digest(source),
-        targetDigest: await digest(data),
-      };
-      if (chargedBytes(data.account, state) > 48 * 1048576) error('Brak miejsca na kopię importu zakupów.');
-      const estimate = await navigator.storage?.estimate?.();
-      const needed = 2 * new TextEncoder().encode(JSON.stringify([source, data])).byteLength + 1048576;
-      if (estimate?.quota !== undefined && estimate.usage !== undefined && estimate.quota - estimate.usage < needed)
-        error('Brak miejsca na bezpieczny import zakupów.');
-      assertSource(state);
-      const staged = state;
-      await transact(
-        'readwrite',
-        async (tx) => {
-          await check(tx, staged);
-          tx.objectStore('migration').put(staged);
-        },
-        token,
-      );
-    }
-    if ((await digest(state.source)) !== state.sourceDigest || (await digest(state.data)) !== state.targetDigest)
-      error('Kopia robocza importu zakupów jest uszkodzona. Źródło zostało zachowane.');
-    if (state.phase === 'staged') {
-      assertSource(state);
-      const staged = state;
-      await transact(
-        'readwrite',
-        async (tx) => {
-          await check(tx, staged);
-          const active = await requestValue<{ value: { accountId: string } } | undefined>(
-            tx.objectStore('metadata').get(['__origin__', 'active']),
-          );
-          if (active && active.value.accountId !== staged.accountId)
-            throw new DOMException('Session changed', 'AbortError');
-          await putShoppingTransaction(tx, staged.data);
-          if (!active)
-            tx.objectStore('metadata').put({
-              accountId: '__origin__',
-              key: 'active',
-              value: { accountId: staged.accountId, generation: crypto.randomUUID() },
-            });
-          tx.objectStore('migration').put({ ...staged, phase: 'committed' });
-        },
-        token,
-      );
-      state = { ...state, phase: 'committed' };
-    }
-    const captured = state;
-    if (state.phase === 'committed') {
-      assertSource(state);
-      await transact(
-        'readwrite',
-        async (tx) => {
-          await check(tx, captured);
-          const actual = await requestValue<CacheEntry>(
-            tx.objectStore('cache').get([captured.accountId, 'shopping', 'snapshot']),
-          );
-          if (canonical(actual?.payload) !== canonical(captured.data))
-            error('Weryfikacja importu zakupów nie powiodła się.');
-          tx.objectStore('migration').put({ ...captured, phase: 'verified' });
-        },
-        token,
-      );
-    }
-    if (!isAccountCurrent(token)) throw new DOMException('Session changed', 'AbortError');
-    assertSource(captured, true);
-    for (const key of Object.keys(captured.source)) localStorage.removeItem(key);
-    if (Object.keys(captured.source).some((key) => localStorage.getItem(key) !== null))
-      error('Nie można usunąć starej pamięci zakupów.');
-    await transact(
-      'readwrite',
-      async (tx) => {
-        await check(tx, captured);
-        tx.objectStore('migration').delete([captured.accountId, 'shopping', 'v1']);
-        tx.objectStore('metadata').put({ accountId: captured.accountId, key: 'import:shopping:v1', value: 'active' });
-      },
-      token,
-    );
-    localStorage.setItem(IMPORT_KEY, 'active');
-    localStorage.setItem(PROTOCOL_KEY, 'active');
-    requireMigration(false);
-    resumeParticipants();
-  };
-  if (navigator.locks) await navigator.locks.request(IMPORT_KEY, work);
-  else await work();
-}
-registerMigration('shopping', migrateShopping);
+registerRecordMigration(
+  'shopping',
+  SHOPPING_STORAGE_KEY,
+  (source, _account, preview) => {
+    const data = importShopping(source, (preview as { session?: AccountSession } | undefined)?.session);
+    checkSnapshotBudget('shopping', data, {
+      maxBytes: data.operations.length ? 6 * 1048576 : shoppingCache.budget,
+      budgetError: shoppingBudgetError,
+    });
+    return data;
+  },
+  (tx, value) => putShoppingTransaction(tx, parseShoppingCache(value)),
+  {
+    journalPrefix: JOURNAL_PREFIX,
+    previewFallback: 'family',
+    normalize: parseShoppingCache,
+    // Keep digests and locking compatible with interrupted legacy imports.
+    encode: canonical,
+    lock: 'module',
+    validatePreviewAccount(account) {
+      const shopping = localStorage.getItem(SHOPPING_STORAGE_KEY);
+      if (!shopping) return;
+      const { buster } = JSON.parse(shopping) as { buster?: string };
+      if (buster && buster !== account)
+        error('Dane offline należą do różnych kont. Wyloguj się i pobierz je ponownie.');
+    },
+  },
+);

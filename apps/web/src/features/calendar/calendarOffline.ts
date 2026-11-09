@@ -1,6 +1,6 @@
 import { Temporal } from 'temporal-polyfill';
 import { z } from 'zod';
-import { registerOfflineModule, useOfflineModule } from '../../offline/moduleStore.js';
+import { registerOfflineModule, useOfflineModule } from '../../offline/index.js';
 import { useMe } from '../../sessionContext.js';
 import {
   eventSchema,

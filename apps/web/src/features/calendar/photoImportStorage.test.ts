@@ -1,7 +1,6 @@
-import '../../offline/testSetup.js';
+import { activateOfflineAccount, clearDatabase, closeDatabase } from '../../offline/testing.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDBObjectStore } from 'fake-indexeddb';
-import { activateOfflineAccount, clearDatabase, closeDatabase } from '../../offline/database.js';
 import { readPhotoImports, writePhotoImports, type PhotoImportOperation } from './photoImportStorage.js';
 
 const operation: PhotoImportOperation = {

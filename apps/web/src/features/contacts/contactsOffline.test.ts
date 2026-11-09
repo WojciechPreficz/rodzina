@@ -1,6 +1,5 @@
-import '../../offline/testSetup.js';
+import { readCache, clearDatabase, ensureMigrated, closeDatabase } from '../../offline/testing.js';
 import { IDBObjectStore } from 'fake-indexeddb';
-import { readCache, clearDatabase, ensureMigrated, closeDatabase } from '../../offline/database.js';
 import { describe, expect, it, vi } from 'vitest';
 import { CONTACTS_STORAGE_KEY, createContactsStore } from './contactsOffline.js';
 

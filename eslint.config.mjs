@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const webSource = 'apps/web/src/';
+const offline = resolve(root, webSource, 'offline');
 const features = resolve(root, webSource, 'features');
 const relativePath = (from, to) => relative(from, to).split(sep).join('/');
 // Existing integrations pending their own public entry points. Each exception is one importer/target pair.
@@ -110,6 +111,7 @@ const featureImportExceptions = new Map(
     ],
     'offline/database.test.ts': ['calendar/calendarOffline.js'],
     'offline/syncRequests.test.ts': [
+      'tasks/taskOffline.js',
       'tasks/taskAdapter.js',
       'shopping/shoppingAdapter.js',
       'shopping/shoppingStorage.js',
@@ -121,6 +123,31 @@ const featureImportExceptions = new Map(
     'e2e/offline-migration.spec.ts': ['calendar/calendarOffline.js'],
   }),
 );
+
+const importVisitors = (check) => ({
+  ImportDeclaration: (node) => check(node.source),
+  ExportNamedDeclaration: (node) => check(node.source),
+  ExportAllDeclaration: (node) => check(node.source),
+  ImportExpression: (node) => check(node.source),
+  TSImportType: (node) => check(node.source),
+  TSExternalModuleReference: (node) => check(node.expression),
+});
+
+const publicOfflineImports = {
+  meta: { schema: [] },
+  create(context) {
+    const filename = context.physicalFilename;
+    if (relativePath(features, filename).startsWith('../')) return {};
+    return importVisitors((source) => {
+      if (typeof source?.value !== 'string' || !/^\.\.?\//.test(source.value)) return;
+      const target = relativePath(offline, resolve(dirname(filename), source.value));
+      if (target === '..' || target.startsWith('../') || /^(?:index|OfflineNotice)(?:\.[cm]?[jt]sx?)?$/.test(target))
+        return;
+      if (/\.test\.[jt]sx?$/.test(filename) && /^testing(?:\.[cm]?[jt]sx?)?$/.test(target)) return;
+      context.report({ node: source, message: 'Import offline functionality through the public offline index.' });
+    });
+  },
+};
 
 const publicFeatureImports = {
   meta: { schema: [] },
@@ -138,14 +165,7 @@ const publicFeatureImports = {
       if (featureImportExceptions.get(importer)?.includes(target)) return;
       context.report({ node: source, message: `Import feature "${feature}" through its public index entry point.` });
     }
-    return {
-      ImportDeclaration: (node) => check(node.source),
-      ExportNamedDeclaration: (node) => check(node.source),
-      ExportAllDeclaration: (node) => check(node.source),
-      ImportExpression: (node) => check(node.source),
-      TSImportType: (node) => check(node.source),
-      TSExternalModuleReference: (node) => check(node.expression),
-    };
+    return importVisitors(check);
   },
 };
 
@@ -163,8 +183,18 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    plugins: { architecture: { rules: { 'public-feature-imports': publicFeatureImports } } },
-    rules: { 'architecture/public-feature-imports': 'error' },
+    plugins: {
+      architecture: {
+        rules: {
+          'public-feature-imports': publicFeatureImports,
+          'public-offline-imports': publicOfflineImports,
+        },
+      },
+    },
+    rules: {
+      'architecture/public-feature-imports': 'error',
+      'architecture/public-offline-imports': 'error',
+    },
   },
   {
     files: ['**/*.{ts,tsx}'],

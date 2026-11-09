@@ -1,11 +1,9 @@
-import '../../offline/testSetup.js';
+import { transact, clearDatabase, closeDatabase, readOperations } from '../../offline/testing.js';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { readTaskData, updateTaskData } from './taskStorage.js';
-import { transact, clearDatabase, closeDatabase } from '../../offline/database.js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { onlineManager } from '@tanstack/react-query';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type Task, type TaskList } from '@rodzina/shared';
-import { readOperations } from '../../offline/outbox.js';
 import { ApiRequestError } from '../../api.js';
 import { createTaskOfflineStore, offlineTaskPatch, TASK_STORAGE_KEY } from './taskOffline.js';
 

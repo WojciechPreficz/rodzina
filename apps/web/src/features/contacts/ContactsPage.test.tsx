@@ -1,6 +1,5 @@
+import { readCache, writeCache } from '../../offline/testing.js';
 import { IDBObjectStore } from 'fake-indexeddb';
-import { readCache, writeCache } from '../../offline/database.js';
-import '../../offline/testSetup.js';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MantineProvider } from '@mantine/core';

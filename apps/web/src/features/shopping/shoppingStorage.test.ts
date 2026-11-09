@@ -1,10 +1,10 @@
+import { ensureMigrated, activateOfflineAccount, closeDatabase, readCache, transact } from '../../offline/testing.js';
 import { saveAccountSession, type AccountSession } from '../../session.js';
-import '../../offline/testSetup.js';
+import '../../offline/testing.js';
 import { onlineManager } from '@tanstack/react-query';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { ensureMigrated, activateOfflineAccount, closeDatabase } from '../../offline/database.js';
 import {
   importShopping,
   readShoppingData,
@@ -38,7 +38,17 @@ describe('shopping legacy import', () => {
     const source = original();
     const data = importShopping(source);
     const snapshot = JSON.parse(source[SHOPPING_STORAGE_KEY]!);
-    expect(data.queries).toEqual(snapshot.clientState.queries);
+    expect(data.version).toBe(2);
+    expect(data.ranges).toEqual(
+      snapshot.clientState.queries.map(
+        (query: { queryKey: string[]; state: { data: unknown; dataUpdatedAt: number } }) => ({
+          kind: query.queryKey[3],
+          ...(query.queryKey[4] ? { listId: query.queryKey[4] } : {}),
+          data: query.state.data,
+          syncedAt: query.state.dataUpdatedAt,
+        }),
+      ),
+    );
     expect(
       data.operations.map(({ sequence, review, ...variables }) => {
         expect(sequence).toBeGreaterThan(0);
@@ -79,6 +89,29 @@ describe('shopping legacy import', () => {
       source[key] = JSON.stringify(op);
     }
     expect(importShopping(source).operations.every((op) => op.review === 'ambiguous-order')).toBe(true);
+  });
+  it('reads an IndexedDB v1 snapshot and writes v2 without changing its queued operations', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
+    const old = importShopping(original());
+    const { ranges, ...base } = old;
+    const queries = JSON.parse(original()[SHOPPING_STORAGE_KEY]!).clientState.queries;
+    await activateOfflineAccount(fixture.accountId);
+    await transact('readwrite', async (tx) => {
+      tx.objectStore('cache').put({
+        accountId: fixture.accountId,
+        module: 'shopping',
+        key: 'snapshot',
+        schemaVersion: 1,
+        payload: { ...base, version: 1, queries },
+      });
+    });
+    await closeDatabase();
+    await activateOfflineAccount(fixture.accountId);
+    expect(await readShoppingData(fixture.accountId)).toEqual(old);
+    expect((await readCache('shopping'))?.payload).toMatchObject({ version: 1 });
+    await updateShoppingData(fixture.accountId, (saved) => saved!);
+    expect((await readCache('shopping'))?.payload).toEqual({ ...base, ranges });
+    expect(await readShoppingData(fixture.accountId)).toEqual(old);
   });
   it('requires closure confirmation and resumes cleanup after a process dies after verification', async () => {
     seed();

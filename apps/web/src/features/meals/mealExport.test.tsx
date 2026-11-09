@@ -1,5 +1,5 @@
+import '../../offline/testing.js';
 import { saveAccountSession, type AccountSession } from '../../session.js';
-import '../../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MantineProvider } from '@mantine/core';

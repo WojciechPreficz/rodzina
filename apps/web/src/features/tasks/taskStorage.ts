@@ -7,12 +7,18 @@ import {
   taskOrderingKeys,
   TASK_STORAGE_KEY,
 } from './taskSchemas.js';
-import { chargedBytes, type CacheEntry } from '../../offline/registry.js';
-import { cacheSignal } from '../../offline/moduleStore.js';
-import { registerRecordMigration } from '../../offline/recordMigration.js';
-import { accountToken, readAccountCache, transact, requestValue, CLEAR_PENDING_KEY } from '../../offline/database.js';
-import { appendOperation, readOperations, type Operation } from '../../offline/outbox.js';
-import { notifyOutboxChanged } from '../../offline/signals.js';
+import {
+  accountToken,
+  cacheSignal,
+  chargedBytes,
+  hasPendingClear,
+  isAccountCurrent,
+  registerRecordMigration,
+  withOfflineAccount,
+  checkSnapshotBudget,
+  type OfflineTransaction,
+  type Operation,
+} from '../../offline/index.js';
 const dataSchema = z.object({
   version: z.literal(1),
   account: z.string().min(1),
@@ -53,37 +59,8 @@ function parse(value: unknown): TaskData {
   data.operations = data.operations.filter((op) => !discarded.has(op.id));
   return data;
 }
-function entry(input: unknown): CacheEntry {
-  const data = parse(input);
-  const result: CacheEntry = {
-    accountId: data.account,
-    module: 'tasks',
-    key: 'snapshot',
-    schemaVersion: 1,
-    payload: data,
-    syncedAt: data.snapshot.syncedAt ?? null,
-    coverage: data.snapshot.lists ? 'partial' : 'missing',
-    usedAt: Date.now(),
-    chargedBytes: 0,
-  };
-  const key = [data.account, 'tasks', 'snapshot'];
-  while (result.chargedBytes !== chargedBytes(key, result)) result.chargedBytes = chargedBytes(key, result);
-  // Pending/review operations and refresh tombstones pin the confirmed base.
-  // Refuse oversized changes rather than silently dropping any offline work.
-  if (result.chargedBytes > 6 * 1048576)
-    throw new Error('Nie można zapisać zadań: przekroczono budżet pamięci. Zsynchronizuj zmiany lub zwolnij miejsce.');
-  return result;
-}
-function put(tx: IDBTransaction, value: unknown, outbox = false) {
-  const record = entry(value);
-  tx.objectStore('cache').put(record);
-  tx.objectStore('metadata').put({
-    accountId: record.accountId,
-    key: 'engine:tasks',
-    value: outbox ? 'outbox' : 'legacy-idb',
-  });
-  tx.objectStore('metadata').put({ accountId: record.accountId, key: 'budget:tasks', value: record.chargedBytes });
-}
+const taskBudgetError =
+  'Nie można zapisać zadań: przekroczono budżet pamięci. Zsynchronizuj zmiany lub zwolnij miejsce.';
 export const taskCache = {
   module: 'tasks',
   schemaVersion: 1,
@@ -92,7 +69,13 @@ export const taskCache = {
   budget: 6 * 1048576,
   parseCache: parse,
   trim: (value: unknown) => value,
-  describe: (value: unknown) => ({ syncedAt: parse(value).snapshot.syncedAt ?? null, coverage: 'partial' as const }),
+  describe: (value: unknown) => {
+    const { snapshot } = parse(value);
+    return {
+      syncedAt: snapshot.syncedAt ?? null,
+      coverage: snapshot.lists ? ('partial' as const) : ('missing' as const),
+    };
+  },
 } as const;
 export function importTasks(source: Record<string, string>, active?: string): TaskData {
   const snapshot = source[TASK_STORAGE_KEY] ? snapshotSchema.parse(JSON.parse(source[TASK_STORAGE_KEY]!)) : undefined;
@@ -123,10 +106,18 @@ export function importTasks(source: Record<string, string>, active?: string): Ta
   data.operations.sort((a, b) => a.submittedAt - b.submittedAt || a.id.localeCompare(b.id));
   const validated = parse(data);
   validated.operations = classify(validated.operations);
-  entry(validated);
   return validated;
 }
-registerRecordMigration('tasks', TASK_STORAGE_KEY, importTasks, (tx, value) => put(tx, value));
+registerRecordMigration(
+  'tasks',
+  TASK_STORAGE_KEY,
+  (source, account) => {
+    const data = importTasks(source, account);
+    checkSnapshotBudget('tasks', data, { budgetError: taskBudgetError });
+    return data;
+  },
+  (tx, value) => tx.commitSnapshot('tasks', parse(value), { engine: 'legacy-idb', budgetError: taskBudgetError }),
+);
 export function taskOperation(operation: Operation) {
   return operationSchema.parse({
     ...(operation.payload as object),
@@ -136,8 +127,8 @@ export function taskOperation(operation: Operation) {
     reason: operation.status === 'needs-review' ? operation.reviewReason : undefined,
   });
 }
-async function readTaskBase(tx: IDBTransaction, account: string): Promise<TaskData> {
-  const record = await readAccountCache(tx, 'tasks', account);
+async function readTaskBase(tx: OfflineTransaction, account: string): Promise<TaskData> {
+  const record = await tx.readSnapshot('tasks');
   if (record && record.schemaVersion !== 1) throw new Error('Nieobsługiwana wersja pamięci zadań.');
   const data = record
     ? parse(record.payload)
@@ -151,44 +142,41 @@ async function readTaskBase(tx: IDBTransaction, account: string): Promise<TaskDa
   if (data.account !== account) throw new DOMException('Session changed', 'AbortError');
   return data;
 }
-async function usesOutbox(tx: IDBTransaction, account: string) {
-  const engine = await requestValue<{ value: string } | undefined>(
-    tx.objectStore('metadata').get([account, 'engine:tasks']),
-  );
-  return engine?.value === 'outbox';
+async function usesOutbox(tx: OfflineTransaction) {
+  return (await tx.readEngine('tasks')) === 'outbox';
 }
-export async function readTaskChanges(tx: IDBTransaction, account: string, saved: TaskData | undefined) {
-  if (!(await usesOutbox(tx, account)))
-    return (saved?.operations ?? []).map((operation) => ({ operation, error: undefined }));
-  return (await readOperations(tx, account))
+export async function readTaskChanges(tx: OfflineTransaction, saved: TaskData | undefined) {
+  if (!(await usesOutbox(tx))) return (saved?.operations ?? []).map((operation) => ({ operation, error: undefined }));
+  return (await tx.readChanges())
     .filter((op) => op.module === 'tasks')
     .map((op) => ({ operation: taskOperation(op), error: op.lastError }));
 }
-export async function readTaskTransaction(tx: IDBTransaction, account: string) {
+export async function readTaskTransaction(tx: OfflineTransaction, account: string) {
   const base = await readTaskBase(tx, account);
-  const changes = await readTaskChanges(tx, account, base);
+  const changes = await readTaskChanges(tx, base);
   return { ...base, operations: changes.map(({ operation }) => operation) };
 }
-export async function prepareTaskRead(tx: IDBTransaction, account: string) {
+export async function prepareTaskRead(tx: OfflineTransaction, account: string) {
   const data = await readTaskTransaction(tx, account);
   const operations = classify(data.operations);
   if (
     operations.some(
       (op, index) => op.status !== data.operations[index]?.status || op.reason !== data.operations[index]?.reason,
     ) ||
-    (operations.length && !(await usesOutbox(tx, account)))
+    (operations.length && !(await usesOutbox(tx)))
   )
     await putTaskTransaction(tx, { ...data, operations });
 }
-export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
+export async function putTaskTransaction(tx: OfflineTransaction, input: TaskData) {
   const data = parse(input);
-  entry(data);
-  const existing = (await readOperations(tx, data.account)).filter((op) => op.module === 'tasks');
+  checkSnapshotBudget('tasks', data, { budgetError: taskBudgetError });
+  const existing = (await tx.readChanges()).filter((op) => op.module === 'tasks');
   const classified = classify(data.operations);
-  let queueChanged = existing.length !== classified.length;
-  const store = tx.objectStore('outbox');
-  for (const old of existing)
-    if (!classified.some((op) => op.id === old.operationId)) store.delete([data.account, old.operationId]);
+  await tx.removeChanges(
+    new Set(
+      existing.filter((old) => !classified.some((op) => op.id === old.operationId)).map((old) => old.operationId),
+    ),
+  );
   const previous = new Map<string, string>();
   const parents = new Map<string, string>();
   const previousTask = new Map<string, string>();
@@ -197,17 +185,17 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
     const keys = taskOrderingKeys(op);
     const old = existing.find((entry) => entry.operationId === op.id);
     if (old) {
-      const updated = {
+      const updated: Operation = {
         ...old,
         submittedAt: op.submittedAt,
         payload: { listId: op.listId, taskId: op.taskId, change: op.change, occurrence: op.occurrence },
-        ...(op.status === 'needs-review' ? { status: 'needs-review', reviewReason: op.reason } : {}),
+        ...(op.status === 'needs-review'
+          ? { status: 'needs-review', ...(op.reason ? { reviewReason: op.reason } : {}) }
+          : {}),
       };
-      queueChanged ||= JSON.stringify(old) !== JSON.stringify(updated);
-      store.put(updated);
+      if (JSON.stringify(old) !== JSON.stringify(updated)) tx.replaceChange(updated);
     } else {
-      queueChanged = true;
-      await appendOperation(tx, data.account, 'tasks', {
+      await tx.appendChange('tasks', {
         operationId: op.id,
         submittedAt: op.submittedAt,
         entityId: op.taskId,
@@ -230,27 +218,30 @@ export async function putTaskTransaction(tx: IDBTransaction, input: TaskData) {
   // The outbox is the only durable journal after takeover. Cache holds only the base.
   await putTaskBaseTransaction(tx, data);
   data.operations = classified;
-  if (queueChanged) notifyOutboxChanged(tx, data.account);
   return data;
 }
-export async function putTaskBaseTransaction(tx: IDBTransaction, data: TaskData) {
-  const baseBytes = entry({ ...data, operations: [] }).chargedBytes;
-  const queueBytes = (await readOperations(tx, data.account))
+export async function putTaskBaseTransaction(tx: OfflineTransaction, data: TaskData) {
+  const queueBytes = (await tx.readChanges())
     .filter((op) => op.module === 'tasks')
     .reduce((sum, op) => sum + chargedBytes([data.account, op.operationId], op), 0);
-  if (baseBytes + queueBytes > 6 * 1048576)
-    throw new Error('Przekroczono budżet pamięci zadań. Zsynchronizuj zmiany lub zwolnij miejsce.');
-  put(tx, { ...data, operations: [] }, true);
-  tx.objectStore('metadata').put({ accountId: data.account, key: 'budget:tasks', value: baseBytes + queueBytes });
+  tx.commitSnapshot('tasks', parse({ ...data, operations: [] }), {
+    maxBytes: taskCache.budget - queueBytes,
+    queueBytes,
+    engine: 'outbox',
+    budgetError: 'Przekroczono budżet pamięci zadań. Zsynchronizuj zmiany lub zwolnij miejsce.',
+  });
 }
 export async function readTaskData(account: string, token = accountToken()) {
-  return transact('readonly', (tx) => readTaskTransaction(tx, account), token);
+  return withOfflineAccount('readonly', { account, token, current: () => isAccountCurrent(token) }, (tx) =>
+    readTaskTransaction(tx, account),
+  );
 }
 export async function updateTaskData(account: string, update: (data: TaskData) => void, token = accountToken()) {
-  if (localStorage.getItem(CLEAR_PENDING_KEY)) throw new Error('Usuwanie danych konta nie zostało zakończone.');
+  if (hasPendingClear()) throw new Error('Usuwanie danych konta nie zostało zakończone.');
   let changed = false;
-  const result = await transact(
+  const result = await withOfflineAccount(
     'readwrite',
+    { account, token, current: () => isAccountCurrent(token) },
     async (tx) => {
       const data = await readTaskTransaction(tx, account);
       const before = JSON.stringify(data);
@@ -258,7 +249,6 @@ export async function updateTaskData(account: string, update: (data: TaskData) =
       changed = before !== JSON.stringify(data);
       return putTaskTransaction(tx, data);
     },
-    token,
   );
   try {
     if (changed) localStorage.setItem(TASK_SIGNAL, crypto.randomUUID());

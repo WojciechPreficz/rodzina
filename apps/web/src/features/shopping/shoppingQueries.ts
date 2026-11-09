@@ -1,8 +1,7 @@
 import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import { useMe } from '../../sessionContext.js';
-import { useOfflineSyncStatus } from '../../offline/status.js';
-import { useOfflineModule } from '../../offline/moduleStore.js';
+import { useOfflineModule, useOfflineSyncStatus } from '../../offline/index.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { listShoppingItems, listShoppingLists, type ShoppingChange } from './shoppingApi.js';
 import { shoppingStore } from './shoppingOffline.js';
@@ -47,7 +46,7 @@ export function useShopping(selected: string | null) {
       (!saved?.revokedLists?.includes(listId) && items.data?.scope.current() ? items.data.data : undefined))
     : undefined;
   const syncedAt = (kind: string, id?: string) =>
-    saved?.queries.find((query) => query.queryKey[3] === kind && query.queryKey[4] === id)?.state.dataUpdatedAt;
+    saved?.ranges.find((range) => range.kind === kind && (range.kind === 'lists' || range.listId === id))?.syncedAt;
   return {
     lists: { ...lists, data: visibleLists, isPending: !visibleLists && lists.isPending },
     items: { ...items, data: visibleItems, isPending: !visibleItems && items.isPending },

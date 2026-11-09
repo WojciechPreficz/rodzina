@@ -89,7 +89,7 @@ it('upgrades all five legacy stores directly, measures budgets and restarts with
       "calendar": 4662,
       "contacts": 2386,
       "family": 2148,
-      "shopping": 5302,
+      "shopping": 3396,
       "shopping:outbox": 3338,
       "tasks": 3200,
       "tasks:outbox": 1732,

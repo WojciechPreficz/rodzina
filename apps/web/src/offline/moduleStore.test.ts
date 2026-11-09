@@ -5,7 +5,7 @@ import { clearAccountData, registerAccountStore, restoreAccountStores } from '..
 import type { AccountSession } from '../session.js';
 import { clearDatabase, readCache, transact, writeCache } from './database.js';
 import { cacheSignal, registerOfflineModule } from './moduleStore.js';
-import { appendOperation, readOperations } from './outbox.js';
+import { appendOperation } from './outbox.js';
 
 const account = 'family:user';
 const anotherAccount = 'family:another-user';
@@ -134,8 +134,8 @@ describe('offline module store', () => {
       mode: 'read-write',
       cache: { ...cache, module: 'tasks' },
       readError,
-      readChanges: async (tx, identity) =>
-        (await readOperations(tx, identity)).filter((op) => op.module === 'tasks').map((op) => String(op.payload)),
+      readChanges: async (tx) =>
+        (await tx.readChanges()).filter((op) => op.module === 'tasks').map((op) => String(op.payload)),
       project: (snapshot: Snapshot | undefined, changes: readonly string[]) => [snapshot?.value, ...changes],
       sync,
     }).createStore();

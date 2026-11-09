@@ -5,7 +5,7 @@ import { useMe } from '../../sessionContext.js';
 import { useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { useMealState, saveMealWeek, mealRevision } from './mealOffline.js';
-import { useOfflineSyncStatus } from '../../offline/status.js';
+import { useOfflineSyncStatus } from '../../offline/index.js';
 
 export function useMealWeek(week: string, enabled = true) {
   const { user, family, familyConfirmed } = useMe();

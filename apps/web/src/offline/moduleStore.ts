@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { registerAccountStore } from '../accountStorage.js';
 import {
   accountToken,
+  assertContext,
   activateOfflineAccount,
   ensureMigrated,
   isAccountCurrent,
@@ -10,6 +11,7 @@ import {
   writeCache,
 } from './database.js';
 import { registerAdapter, type CacheModule, type OfflineAdapter } from './registry.js';
+import { offlineTransaction, withOfflineAccount, type OfflineTransaction } from './transaction.js';
 import { watchOutbox } from './signals.js';
 import { storageError } from './status.js';
 import { joinSync, type SyncAdapter } from './sync.js';
@@ -30,9 +32,9 @@ export type OfflineModule<Snapshot extends AccountSnapshot, Change, View, Contex
     }
   | {
       mode: 'read-write';
-      prepareRead?: (tx: IDBTransaction, account: string) => Promise<void>;
+      prepareRead?: (tx: OfflineTransaction, account: string) => Promise<void>;
       // Read in the same transaction as the snapshot, in projection order.
-      readChanges: (tx: IDBTransaction, account: string, snapshot: Snapshot | undefined) => Promise<readonly Change[]>;
+      readChanges: (tx: OfflineTransaction, snapshot: Snapshot | undefined) => Promise<readonly Change[]>;
       project: (snapshot: Snapshot | undefined, changes: readonly Change[]) => View;
       sync: (account: string, context?: Context) => Omit<SyncAdapter, 'module'>;
       deferSync?: boolean;
@@ -53,6 +55,7 @@ export function registerOfflineModule<Snapshot extends AccountSnapshot, Change, 
 ) {
   registerAdapter({ ...definition.cache, capabilities: definition.mode });
   return {
+    withAccount: withOfflineAccount,
     createStore: (context?: Context) => createOfflineStore(definition, context),
     registerStore: (
       store: { clear: () => void } & (
@@ -156,14 +159,16 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
           async (tx) => {
             if (prepareRead) {
               if (!activeScope.current()) throw new DOMException('Session changed', 'AbortError');
-              await prepareRead(tx, account);
+              if ((await assertContext(tx)).accountId !== account)
+                throw new DOMException('Session changed', 'AbortError');
+              await prepareRead(offlineTransaction(tx, account), account);
             }
             const record = await readAccountCache(tx, module, account);
             const saved = record && parseCache(record.payload);
             if (record && (record.schemaVersion !== schemaVersion || saved?.account !== account))
               throw new Error('Nieprawidłowa wersja lub konto danych offline.');
             if (definition.mode === 'read-write') {
-              const changes = await definition.readChanges(tx, account, saved);
+              const changes = await definition.readChanges(offlineTransaction(tx, account), saved);
               return { account, ...(saved ? { saved } : {}), view: definition.project(saved, changes) };
             }
             return saved ? { account, saved, view: definition.project(saved) } : { account };

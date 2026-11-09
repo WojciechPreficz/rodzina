@@ -1,4 +1,4 @@
-import '../../offline/testSetup.js';
+import '../../offline/testing.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expandOccurrences, occurrencesQuerySchema, type CalendarEvent } from '@rodzina/shared';
 import { CALENDAR_STORAGE_KEY, createCalendarStore, monthWindow, readCalendarRange } from './calendarOffline.js';
@@ -165,7 +165,7 @@ describe('durable calendar preview', () => {
     await store.saveRange('2026-10', occurrences(), store.token());
     expect(store.snapshot().issue).toContain('Nie można zapisać');
     expect(read('2026-10-24').data).toHaveLength(1);
-    const { readCache } = await import('../../offline/database.js');
+    const { readCache } = await import('../../offline/testing.js');
     expect(await readCache('calendar', `${familyId}:${userId}`)).toBeUndefined();
   });
 });

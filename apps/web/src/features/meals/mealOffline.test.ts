@@ -1,14 +1,21 @@
+import {
+  appendOperation,
+  readOperations,
+  startSync,
+  type SyncAdapter,
+  activateOfflineAccount,
+  clearDatabase,
+  closeDatabase,
+  transact,
+  offlineTransaction,
+} from '../../offline/testing.js';
 import type { AccountSession } from '../../session.js';
-import '../../offline/testSetup.js';
-import { QueryClient, onlineManager, dehydrate } from '@tanstack/react-query';
+import { QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type Meal, type ShoppingItem } from '@rodzina/shared';
-import { activateOfflineAccount, clearDatabase, closeDatabase, transact } from '../../offline/database.js';
-import { appendOperation, readOperations } from '../../offline/outbox.js';
-import { startSync, type SyncAdapter } from '../../offline/sync.js';
 import { emptyShopping, putShoppingTransaction, readShoppingTransaction } from '../shopping/shoppingStorage.js';
-import { applyShoppingChange, shoppingKey } from '../shopping/shoppingOptimistic.js';
+import { projectShopping } from '../shopping/shoppingOptimistic.js';
 import {
   mealAdapter,
   restoreMeals,
@@ -34,11 +41,10 @@ const listId = '33333333-3333-4333-8333-333333333333';
 const account = `${familyId}:${userId}`;
 const session = { user: { id: userId, familyId, role: 'admin' }, family: { id: familyId } } as AccountSession;
 const week = '2026-10-26';
-const key = shoppingKey({ familyId, userId });
 let client: QueryClient;
 const senders: ReturnType<typeof startSync>[] = [];
 const operations = () => transact('readonly', (tx) => readOperations(tx, account));
-const read = () => transact('readonly', (tx) => readMeals(tx, account));
+const read = () => transact('readonly', (tx) => readMeals(offlineTransaction(tx, account), account));
 const visibleMeals = () => mealStore.snapshot().view?.cache ?? emptyMeals(mealStore.snapshot().account);
 const input = { title: 'Pomidorowa', notes: null, ingredients: [{ name: 'Pomidory', quantity: '1 kg' }] };
 const baseWeek = (start = week, meals: Meal[] = []) => ({
@@ -53,16 +59,13 @@ async function seedWeek(start = week, meals: Meal[] = []) {
   await saveMealWeek(baseWeek(start, meals), mealRevision(start));
 }
 async function seedShopping(items: ShoppingItem[] = [], includeList = true) {
-  client.setQueryData(
-    [...key, 'lists'],
-    includeList
-      ? [{ id: listId, familyId, name: 'Obiadowe', position: 0, createdBy: userId, createdAt: 1, updatedAt: 1 }]
-      : [],
-  );
-  if (includeList) client.setQueryData([...key, 'items', listId], items);
-  await transact('readwrite', async (tx) => {
-    await putShoppingTransaction(tx, { ...emptyShopping(session), queries: dehydrate(client).queries }, true);
-  });
+  const lists = includeList
+    ? [{ id: listId, familyId, name: 'Obiadowe', position: 0, createdBy: userId, createdAt: 1, updatedAt: 1 }]
+    : [];
+  const data = emptyShopping(session);
+  data.ranges.push({ kind: 'lists', data: lists, syncedAt: 1 });
+  if (includeList) data.ranges.push({ kind: 'items', listId, data: items, syncedAt: 1 });
+  await transact('readwrite', (tx) => putShoppingTransaction(offlineTransaction(tx, account), data, true));
 }
 beforeEach(async () => {
   onlineManager.setOnline(false);
@@ -107,13 +110,16 @@ it('freezes export ingredients, projects purchases once and requires a separate 
   const meal = visibleMeals().weeks[week]!.data.days[0]!.meals[0]!;
   await queueMealExport(week, listId, [meal.id], false);
   await queueMeal(week, { ...input, ingredients: [{ name: 'Ryż', quantity: '10 kg' }] }, meal.id);
-  const shopping = (await transact('readonly', (tx) => readShoppingTransaction(tx, account)))!;
+  const shopping = (await transact('readonly', (tx) =>
+    readShoppingTransaction(offlineTransaction(tx, account), account),
+  ))!;
   const exportOperation = shopping.operations.find((op) => op.change.type === 'mealExport')!;
   expect(exportOperation.change).toMatchObject({ ingredients: [{ name: 'Pomidory', quantity: '1 kg' }] });
-  for (const op of shopping.operations) applyShoppingChange(client, { familyId, userId }, op.change, op.submittedAt);
-  expect(client.getQueryData<ShoppingItem[]>([...key, 'items', listId])!.map((item) => item.name)).toEqual([
-    'Pomidory',
-  ]);
+  expect(
+    projectShopping(shopping, shopping.operations)
+      .items(listId)
+      ?.map((item) => item.name),
+  ).toEqual(['Pomidory']);
   expect((await operations()).filter((op) => op.module === 'shopping')).toHaveLength(0);
   await expect(queueMealExport(week, listId, [meal.id], false)).rejects.toMatchObject({
     code: 'MEAL_EXPORT_CONFIRMATION_REQUIRED',
@@ -347,10 +353,16 @@ it('retains a rejected export on access loss and discards dependent work only on
   await transact('readwrite', async (tx) => {
     const op = (await readOperations(tx, account)).find((op) => op.operationId === exported.operationId)!;
     tx.objectStore('outbox').put({ ...op, status: 'needs-review', reviewReason: 'rejected' });
-    await mealAdapter(account).invalidateAccess(tx, op, new ApiRequestError('Brak listy', 404, 'NOT_FOUND'));
+    await mealAdapter(account).invalidateAccess(
+      offlineTransaction(tx, account),
+      op,
+      new ApiRequestError('Brak listy', 404, 'NOT_FOUND'),
+    );
   });
   expect(await operations()).toHaveLength(before.length);
-  const shopping = await transact('readonly', (tx) => readShoppingTransaction(tx, account));
+  const shopping = await transact('readonly', (tx) =>
+    readShoppingTransaction(offlineTransaction(tx, account), account),
+  );
   expect(shopping!.revokedLists).toContain(listId);
   await discardMealOperation(exported.operationId);
   expect((await operations()).map((op) => op.operationId)).toEqual([before[0]!.operationId]);

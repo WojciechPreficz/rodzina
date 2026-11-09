@@ -1,14 +1,13 @@
+import { readOperations, clearDatabase, closeDatabase, transact } from '../../offline/testing.js';
 import { saveAccountSession, type AccountSession } from '../../session.js';
-import '../../offline/testSetup.js';
+import '../../offline/testing.js';
 import { onlineManager } from '@tanstack/react-query';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
 import { createShoppingStore } from './shoppingOffline.js';
 import { readShoppingData, updateShoppingData } from './shoppingStorage.js';
-import { readOperations } from '../../offline/outbox.js';
 import { shoppingKey } from './shoppingOptimistic.js';
-import { clearDatabase, closeDatabase, transact } from '../../offline/database.js';
 
 const session = {
   user: { id: 'user', familyId: 'family', displayName: 'Ania' },

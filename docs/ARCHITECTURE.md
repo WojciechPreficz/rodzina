@@ -78,6 +78,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   adapter cache z parserem, wersją, budżetem, opisem pokrycia i regułą
   przycinania. IndexedDB przechowuje snapshot bazowy i wspólny outbox.
   Moduł deklaruje format danych oraz własne reguły migracji i zapisu.
+  Moduły importują publiczne API z `offline/index`. Rejestr przekazuje
+  operacje na snapshotach i kolejce w granicach transakcji aktywnego konta.
+  Rdzeń zarządza IndexedDB i wysyła sygnały po zatwierdzeniu zapisu.
 - Wspólny magazyn aktywuje konto, wczytuje snapshot i wystawia stabilny stan
   przez `useSyncExternalStore`. Rejestracja w `registerAccountStore` wiąże
   aktywację i czyszczenie pamięci z cyklem życia konta. Trwałe usuwanie obsługuje
@@ -103,12 +106,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   list. Zachowują wersję 1 i migrację z klucza `rodzina:tasks:v1` oraz kluczy
   dziennika. Odpowiedzi odświeżania i zapisy sprawdzają zakres aktywnego konta,
   niezależnie od przeładowania widoku po sygnale outboxa.
-  Zakupy korzystają z tego samego trybu zapisu offline. Snapshot w wersji 1
-  zachowuje format zapisanych zakresów TanStack Query, a odświeżanie zapisuje
-  pobrany zakres w transakcji przed publikacją widoku. Magazyn przejmuje
-  starszy dziennik IndexedDB do wspólnego outboxa po dotychczasowej migracji
-  klucza `rodzina:shopping:v1` i dziennika localStorage. Projekcja łączy
-  operacje zakupów z eksportami obiadów w kolejności outboxa.
+  Zakupy korzystają z tego samego trybu zapisu offline. Snapshot w wersji 2
+  przechowuje listy i zakresy ich zawartości z czasem pobrania. Moduł odczytuje
+  wersję 1 z zakresami TanStack Query i zapisuje wersję 2 przy następnym zapisie
+  snapshotu. Moduł sprawdza zgodność konta podczas migracji klucza
+  `rodzina:shopping:v1` i dziennika localStorage. Magazyn przejmuje starszy
+  dziennik IndexedDB do wspólnego outboxa. Projekcja łączy operacje zakupów
+  z eksportami obiadów w kolejności outboxa.
   Obiady korzystają ze wspólnego magazynu zapisu offline. Projekcja łączy
   snapshot w wersji 1 z operacjami obiadów odczytanymi w tej samej transakcji.
   Rejestracja przez kontrakt przywraca magazyn z sesją i klientem TanStack Query,

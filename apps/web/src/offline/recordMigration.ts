@@ -7,20 +7,16 @@ import {
   PROTOCOL_KEY,
   CLEAR_PENDING_KEY,
 } from './database.js';
-import { chargedBytes, type CacheEntry } from './registry.js';
+import { offlineTransaction, type OfflineTransaction } from './transaction.js';
+import { chargedBytes, type CacheEntry, type CacheModule } from './registry.js';
 import { requireMigration } from './status.js';
 import { freezeParticipants, resumeParticipants } from './coordinator.js';
 const error = (message: string): never => {
   throw new Error(message);
 };
-const canonical = (value: unknown) => JSON.stringify(value);
-const digest = async (value: unknown) =>
-  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(value)))))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
 type ImportState = {
   accountId: string;
-  module: 'tasks' | 'contacts';
+  module: CacheModule;
   importId: 'v1';
   phase: 'staged' | 'committed' | 'verified';
   source: Record<string, string>;
@@ -30,16 +26,29 @@ type ImportState = {
   targetDigest: string;
 };
 export function registerRecordMigration(
-  module: 'tasks' | 'contacts',
+  module: ImportState['module'],
   legacyKey: string,
-  parse: (source: Record<string, string>, account?: string) => { account: string },
-  put: (tx: IDBTransaction, data: unknown) => void,
+  parse: (source: Record<string, string>, account?: string, legacyPreview?: unknown) => { account: string },
+  put: (tx: OfflineTransaction, data: unknown) => void | Promise<void>,
+  options?: {
+    journalPrefix?: string;
+    previewFallback?: CacheModule;
+    normalize?: (data: unknown) => unknown;
+    encode?: (value: unknown) => string;
+    lock?: 'module';
+    validatePreviewAccount?: (account: string) => void;
+  },
 ) {
   const IMPORT_KEY = `offline-${module}-import:1`;
+  const encode = options?.encode ?? JSON.stringify;
+  const digest = async (value: unknown) =>
+    Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encode(value)))))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
   const sources = () =>
     Object.fromEntries(
       Object.keys(localStorage)
-        .filter((key) => key === legacyKey || key.startsWith(`${legacyKey}:`))
+        .filter((key) => key === legacyKey || key.startsWith(options?.journalPrefix ?? `${legacyKey}:`))
         .sort()
         .map((key) => [key, localStorage.getItem(key)!]),
     );
@@ -87,8 +96,7 @@ export function registerRecordMigration(
       const boundary = async (tx: IDBTransaction) =>
         requestValue(tx.objectStore('metadata').get(['__origin__', 'boundary']));
       const check = async (tx: IDBTransaction, s: ImportState) => {
-        if (canonical(await boundary(tx)) !== canonical(s.boundary))
-          throw new DOMException('Session changed', 'AbortError');
+        if (encode(await boundary(tx)) !== encode(s.boundary)) throw new DOMException('Session changed', 'AbortError');
       };
       if (!state) {
         const active = await transact(
@@ -99,7 +107,17 @@ export function registerRecordMigration(
             ),
           token,
         );
-        const data = parse(source, active?.value.accountId);
+        const preview =
+          options?.previewFallback &&
+          (await transact(
+            'readonly',
+            async (tx) => {
+              const entries = await requestValue<CacheEntry[]>(tx.objectStore('cache').getAll());
+              return entries.find((entry) => entry.module === options.previewFallback)?.payload;
+            },
+            token,
+          ));
+        const data = parse(source, active?.value.accountId, preview);
         if (active && active.value.accountId !== data.account) error('Dane offline należą do innego konta.');
         state = {
           accountId: data.account,
@@ -142,7 +160,7 @@ export function registerRecordMigration(
             );
             if (active && active.value.accountId !== staged.accountId)
               throw new DOMException('Session changed', 'AbortError');
-            put(tx, staged.data);
+            await put(offlineTransaction(tx, staged.accountId), staged.data);
             if (!active)
               tx.objectStore('metadata').put({
                 accountId: '__origin__',
@@ -165,7 +183,10 @@ export function registerRecordMigration(
             const actual = await requestValue<CacheEntry>(
               tx.objectStore('cache').get([captured.accountId, module, 'snapshot']),
             );
-            if (canonical(actual?.payload) !== canonical(captured.data))
+            if (
+              encode(actual?.payload) !== encode(captured.data) &&
+              (!options?.normalize || encode(actual?.payload) !== encode(options.normalize(captured.data)))
+            )
               error('Weryfikacja importu offline nie powiodła się.');
             tx.objectStore('migration').put({ ...captured, phase: 'verified' });
           },
@@ -195,9 +216,9 @@ export function registerRecordMigration(
       requireMigration(false);
       resumeParticipants();
     };
-    if (navigator.locks) await navigator.locks.request(PROTOCOL_KEY, work);
+    if (navigator.locks) await navigator.locks.request(options?.lock === 'module' ? IMPORT_KEY : PROTOCOL_KEY, work);
     else await work();
   }
 
-  registerMigration(module, migrate);
+  registerMigration(module, migrate, options?.validatePreviewAccount);
 }

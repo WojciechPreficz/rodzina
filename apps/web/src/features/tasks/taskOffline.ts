@@ -7,7 +7,7 @@ import {
   updateTaskData,
   type TaskData,
 } from './taskStorage.js';
-import { registerOfflineModule } from '../../offline/moduleStore.js';
+import { registerOfflineModule } from '../../offline/index.js';
 import { apiFetch, ApiRequestError } from '../../api.js';
 import { isOffline } from '../../connectivity.js';
 import { taskAdapter, revokedTaskText, type TaskTransport } from './taskAdapter.js';

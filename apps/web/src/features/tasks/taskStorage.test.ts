@@ -1,7 +1,3 @@
-import '../../offline/testSetup.js';
-import { readFileSync } from 'node:fs';
-import { IDBObjectStore } from 'fake-indexeddb';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ensureMigrated,
   activateOfflineAccount,
@@ -10,10 +6,13 @@ import {
   transact,
   requestValue,
   clearDatabase,
-} from '../../offline/database.js';
+  readOperations,
+} from '../../offline/testing.js';
+import { readFileSync } from 'node:fs';
+import { IDBObjectStore } from 'fake-indexeddb';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { importTasks, readTaskData, updateTaskData } from './taskStorage.js';
 import { TASK_STORAGE_KEY } from './taskOffline.js';
-import { readOperations } from '../../offline/outbox.js';
 import { CONTACTS_STORAGE_KEY } from '../contacts/contactsOffline.js';
 import '../contacts/contactsOffline.js';
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {

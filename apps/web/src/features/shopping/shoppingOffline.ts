@@ -1,10 +1,9 @@
-import { hashKey } from '@tanstack/react-query';
-import { readSavedAccountSession } from '../../session.js';
-import { assertContext, transact } from '../../offline/database.js';
-import { registerOfflineModule } from '../../offline/moduleStore.js';
-import { appendOperation, readOperations } from '../../offline/outbox.js';
-import { notifyOutboxChanged } from '../../offline/signals.js';
-import { reportStorageIssue, storageError } from '../../offline/status.js';
+import {
+  registerOfflineModule,
+  reportStorageIssue,
+  storageError,
+  type OfflineTransaction,
+} from '../../offline/index.js';
 import type { ShoppingChange } from './shoppingApi.js';
 import { shoppingAdapter, shoppingIntent, takeOverShopping } from './shoppingAdapter.js';
 import { projectShopping } from './shoppingOptimistic.js';
@@ -15,9 +14,10 @@ import {
   readShoppingChanges,
   readShoppingTransaction,
   shoppingCache,
+  shoppingRange,
+  rangeListId,
   shoppingUsesOutbox,
   updateShoppingData,
-  type ShoppingData,
 } from './shoppingStorage.js';
 
 const aborted = () => new DOMException('Session changed', 'AbortError');
@@ -27,13 +27,12 @@ const shoppingModule = registerOfflineModule({
   cache: shoppingCache,
   readError: (detail) => `Nie można uruchomić pamięci zakupów. ${detail}`,
   prepareRead: async (tx, account) => {
-    if (await shoppingUsesOutbox(tx, account)) return;
-    if ((await assertContext(tx)).accountId !== account) throw aborted();
+    if (await shoppingUsesOutbox(tx)) return;
     const saved = await readShoppingTransaction(tx, account);
     if (saved) {
-      await takeOverShopping(tx, account, saved);
+      await takeOverShopping(tx, saved);
     } else {
-      const session = await readSavedAccountSession(tx, account);
+      const session = await tx.readSession();
       if (session) await putShoppingTransaction(tx, emptyShopping(session), true);
     }
   },
@@ -50,17 +49,9 @@ export function createShoppingStore() {
     if (scope.account !== account || !scope.current()) throw aborted();
     return scope;
   }
-  async function commit(account: string, write: (tx: IDBTransaction) => Promise<void>) {
+  async function commit(account: string, write: (tx: OfflineTransaction) => Promise<void>) {
     const scope = await activeAccount(account);
-    await transact(
-      'readwrite',
-      async (tx) => {
-        if (!scope.current() || (await assertContext(tx)).accountId !== account) throw aborted();
-        await write(tx);
-        if (!scope.current()) throw aborted();
-      },
-      scope.token,
-    );
+    await shoppingModule.withAccount('readwrite', scope, write);
     if (!scope.current()) throw aborted();
     await store.reload();
     if (!scope.current()) throw aborted();
@@ -88,33 +79,15 @@ export function createShoppingStore() {
         if (!scope.current()) throw aborted();
       };
       assertCurrent();
-      const range: ShoppingData['queries'][number] = {
-        queryKey,
-        queryHash: hashKey(queryKey),
-        dehydratedAt: Date.now(),
-        state: {
-          data,
-          dataUpdatedAt: Date.now(),
-          dataUpdateCount: 1,
-          error: null,
-          errorUpdatedAt: 0,
-          errorUpdateCount: 0,
-          fetchFailureCount: 0,
-          fetchFailureReason: null,
-          fetchMeta: null,
-          fetchStatus: 'idle',
-          isInvalidated: false,
-          status: 'success',
-        },
-      };
       try {
+        const range = shoppingRange(queryKey, data, Date.now(), account);
         await updateShoppingData(
           account,
           (old) => {
             const saved = old ?? emptyShopping(session);
             return {
               ...saved,
-              queries: [...saved.queries.filter((query) => hashKey(query.queryKey) !== range.queryHash), range],
+              ranges: [...saved.ranges.filter((old) => rangeListId(old) !== rangeListId(range)), range],
             };
           },
           scope.token,
@@ -137,12 +110,7 @@ export function createShoppingStore() {
       const operationId = change.type === 'add' || change.type === 'createList' ? change.id : crypto.randomUUID();
       try {
         await commit(account, async (tx) => {
-          await appendOperation(
-            tx,
-            account,
-            'shopping',
-            shoppingIntent({ change, operationId, submittedAt: Date.now() }),
-          );
+          await tx.appendChange('shopping', shoppingIntent({ change, operationId, submittedAt: Date.now() }));
           await putShoppingTransaction(tx, (await readShoppingTransaction(tx, account))!, true);
         });
       } catch (error) {
@@ -153,7 +121,7 @@ export function createShoppingStore() {
       await commit(account, async (tx) => {
         const removed = new Set<string>();
         const keys = new Set<string>();
-        for (const op of await readOperations(tx, account)) {
+        for (const op of await tx.readChanges()) {
           if (
             (op.module === 'shopping' && op.status === 'needs-review') ||
             op.dependsOn.some((id) => removed.has(id)) ||
@@ -161,10 +129,9 @@ export function createShoppingStore() {
           ) {
             removed.add(op.operationId);
             op.orderingKeys.forEach((key) => keys.add(key));
-            tx.objectStore('outbox').delete([account, op.operationId]);
           }
         }
-        if (removed.size) notifyOutboxChanged(tx, account);
+        await tx.removeChanges(removed);
         await putShoppingTransaction(tx, (await readShoppingTransaction(tx, account))!, true);
       });
     },

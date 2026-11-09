@@ -1,4 +1,4 @@
-import '../../offline/testSetup.js';
+import '../../offline/testing.js';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import type { CalendarEvent } from '@rodzina/shared';
 import { ApiRequestError } from '../../api.js';

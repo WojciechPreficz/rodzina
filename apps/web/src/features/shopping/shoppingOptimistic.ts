@@ -1,6 +1,6 @@
 import { mergeQuantities, normalizeShoppingName, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
 import type { ShoppingChange, MealShoppingProjection } from './shoppingApi.js';
-import type { ShoppingData, StoredShoppingOperation } from './shoppingStorage.js';
+import { rangeListId, type ShoppingData, type StoredShoppingOperation } from './shoppingStorage.js';
 
 export type ShoppingAccount = { familyId: string; userId: string };
 export function shoppingAccount(account: string): ShoppingAccount {
@@ -8,7 +8,8 @@ export function shoppingAccount(account: string): ShoppingAccount {
   return { familyId: familyId!, userId: userId! };
 }
 export type ShoppingDataWriter = {
-  setQueryData<T>(key: readonly string[], update: (old: T | undefined) => T): void;
+  updateLists(update: (old?: ShoppingList[]) => ShoppingList[]): void;
+  updateItems(listId: string, update: (old?: ShoppingItem[]) => ShoppingItem[]): void;
 };
 export const shoppingKey = (account: ShoppingAccount) => ['shopping', account.familyId, account.userId];
 
@@ -18,23 +19,21 @@ export function applyShoppingChange(
   change: ShoppingChange | MealShoppingProjection,
   submittedAt: number,
 ) {
-  const key = shoppingKey(account);
-  const listsKey = [...key, 'lists'];
   const now = submittedAt;
   const metadata = { createdBy: account.userId, createdAt: now, updatedAt: now };
   if (change.type === 'createList') {
-    client.setQueryData<ShoppingList[]>(listsKey, (old = []) => [
+    client.updateLists((old = []) => [
       ...old.filter((list) => list.id !== change.id),
       { ...metadata, id: change.id, familyId: account.familyId, name: change.name, position: old.length },
     ]);
   } else if (change.type === 'renameList' || change.type === 'deleteList') {
-    client.setQueryData<ShoppingList[]>(listsKey, (old = []) =>
+    client.updateLists((old = []) =>
       change.type === 'deleteList'
         ? old.filter((list) => list.id !== change.id)
         : old.map((list) => (list.id === change.id ? { ...list, name: change.name, updatedAt: now } : list)),
     );
   } else {
-    client.setQueryData<ShoppingItem[]>([...key, 'items', change.listId], (old = []) => {
+    client.updateItems(change.listId, (old = []) => {
       switch (change.type) {
         case 'mealExport': {
           const items = old.map((item) => ({ ...item }));
@@ -103,22 +102,22 @@ export function applyShoppingChange(
 
 export function projectShopping(data: ShoppingData, changes: readonly StoredShoppingOperation[]) {
   const account = shoppingAccount(data.account);
-  const key = shoppingKey(account);
-  const projected = new Map(data.queries.map((query) => [JSON.stringify(query.queryKey), query.state.data]));
+  const projected = new Map(data.ranges.map((range) => [rangeListId(range), range.data]));
   const pending = changes.filter((operation) => !operation.review);
   const localLists = new Set(pending.flatMap(({ change }) => (change.type === 'createList' ? [change.id] : [])));
   const writer: ShoppingDataWriter = {
-    setQueryData<T>(key: readonly string[], update: (old: T | undefined) => T) {
-      const hash = JSON.stringify(key);
-      projected.set(hash, update(projected.get(hash) as T | undefined));
+    updateLists(update) {
+      projected.set(null, update(projected.get(null) as ShoppingList[] | undefined));
+    },
+    updateItems(listId, update) {
+      projected.set(listId, update(projected.get(listId) as ShoppingItem[] | undefined));
     },
   };
   for (const { change, submittedAt } of pending) applyShoppingChange(writer, account, change, submittedAt);
   return {
-    lists: projected.get(JSON.stringify([...key, 'lists'])) as ShoppingList[] | undefined,
+    lists: projected.get(null) as ShoppingList[] | undefined,
     items: (listId: string) =>
-      (projected.get(JSON.stringify([...key, 'items', listId])) as ShoppingItem[] | undefined) ??
-      (localLists.has(listId) ? [] : undefined),
+      (projected.get(listId) as ShoppingItem[] | undefined) ?? (localLists.has(listId) ? [] : undefined),
     localLists,
     pendingCount: pending.length,
   };
