@@ -55,6 +55,17 @@ it.each([
     if (input) fireEvent.change(input, { target: { value } });
   }
   const button = screen.getByRole('button', { name: submit });
+  if (Component === RegisterPage) {
+    const terms = screen.getByRole('checkbox', { name: 'Akceptuję regulamin' });
+    expect(terms).toBeRequired();
+    expect(terms).not.toBeChecked();
+    expect(screen.getByRole('link', { name: 'regulamin' })).toHaveAttribute('href', '/strona/regulamin.html');
+    fireEvent.submit(button.closest('form')!);
+    expect(terms).toHaveAccessibleDescription('Zaakceptuj regulamin, aby założyć rodzinę.');
+    expect(mocks.fetch).not.toHaveBeenCalledWith(endpoint, expect.anything());
+    fireEvent.click(terms);
+    expect(terms).not.toHaveAccessibleDescription();
+  }
   fireEvent.submit(button.closest('form')!);
   expect(button).toBeDisabled();
   fireEvent.submit(button.closest('form')!);

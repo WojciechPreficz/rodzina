@@ -320,6 +320,7 @@ export const labels = {
   resetSuccess: 'Hasło zostało zmienione. Możesz zalogować się nowym hasłem.',
   resetError: 'Nie udało się zmienić hasła.',
   registrationError: 'Nie udało się utworzyć rodziny.',
+  registrationTermsError: 'Zaakceptuj regulamin, aby założyć rodzinę.',
   familyNameError: 'Nazwa rodziny musi mieć co najmniej 2 znaki.',
   loginEmailError: 'E-mail jest wymagany.',
   calendarUi: {

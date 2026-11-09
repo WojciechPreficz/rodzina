@@ -6,6 +6,7 @@ export const registerFamilySchema = z.object({
   email: z.string().trim().email().max(254),
   password: z.string().min(8).max(1024),
 });
+export const registrationTermsSchema = z.object({ acceptedTerms: z.literal(true) });
 export const loginSchema = z.object({ email: z.string().trim().email(), password: z.string().min(8) });
 export const familyMembersQuerySchema = z.object({ joinCode: z.string().trim().min(1) });
 export const loginChildSchema = z.object({

@@ -18,7 +18,13 @@ const environment = {
   RODZINA_SMTP_PASSWORD: 'secret',
   RODZINA_MAIL_FROM: 'sender@example.com',
 };
-const data = { familyName: 'Nowa rodzina', displayName: 'Anna', email: 'anna@example.com', password: 'password123' };
+const data = {
+  familyName: 'Nowa rodzina',
+  displayName: 'Anna',
+  email: 'anna@example.com',
+  password: 'password123',
+  acceptedTerms: true,
+};
 const headers = { origin: 'http://localhost:3000', host: 'localhost:3000' };
 
 describe('email confirmation for new families', () => {
@@ -28,7 +34,7 @@ describe('email confirmation for new families', () => {
   const send = vi.fn<typeof sendRegistrationMail>();
   const post = (url: string, payload: object, ip = '192.0.2.1') =>
     app.inject({ method: 'POST', url, payload, headers, remoteAddress: ip });
-  const request = (payload = data, ip?: string) => post('/api/auth/registration-requests', payload, ip);
+  const request = (payload: object = data, ip?: string) => post('/api/auth/registration-requests', payload, ip);
   const token = (index = 0) =>
     new URLSearchParams(new URL(send.mock.calls[index]![1].link).hash.slice(1)).get('token')!;
   const confirm = (value = token()) => post('/api/auth/confirm-registration', { token: value });
@@ -93,6 +99,23 @@ describe('email confirmation for new families', () => {
     emptyAccounts();
     expect((await confirm()).statusCode).toBe(200);
     expect((await post('/api/auth/login', data)).statusCode).toBe(200);
+  });
+
+  it('requires explicit terms acceptance on both registration endpoints before creating a request', async () => {
+    for (const acceptedTerms of [undefined, false, 'true']) {
+      const payload = { ...data, acceptedTerms };
+      const response = await request(payload);
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toMatchObject({ code: 'VALIDATION_ERROR' });
+      expect(response.json().error.message).toContain('Zaakceptuj regulamin');
+      expect(response.json().error.message).toContain('https://rodzina.example.com/register');
+      const legacy = await post('/api/auth/register-family', payload);
+      expect(legacy.statusCode).toBe(400);
+      expect(legacy.json().error).toEqual(response.json().error);
+    }
+    expect(send).not.toHaveBeenCalled();
+    expect(database.db.select().from(pendingRegistrations).all()).toEqual([]);
+    emptyAccounts();
   });
 
   it('allows only one concurrent confirmation even across different links for one address', async () => {
