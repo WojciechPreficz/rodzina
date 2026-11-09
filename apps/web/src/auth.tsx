@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'rea
 import { sanitizeNextPath } from './api.js';
 import { AuthContext, useMe, type AuthState } from './sessionContext.js';
 import { isAndroid } from './platform.js';
+import { LogoutControl } from './components/LogoutControl.js';
 
 export function AuthProvider({ children, value }: { children?: ReactNode; value: AuthState }) {
   return <AuthContext.Provider value={value}>{children ?? <Outlet />}</AuthContext.Provider>;
@@ -54,17 +55,5 @@ export function PublicOnlyRoute({ children }: { children?: ReactNode }) {
 
 export function LogoutButton() {
   const navigate = useNavigate();
-  const { logout } = useMe();
-
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        await logout();
-        navigate('/login');
-      }}
-    >
-      Wyloguj się
-    </button>
-  );
+  return <LogoutControl onLogout={() => navigate('/login')} />;
 }

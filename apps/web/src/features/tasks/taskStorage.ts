@@ -10,14 +10,7 @@ import {
 import { chargedBytes, type CacheEntry } from '../../offline/registry.js';
 import { cacheSignal } from '../../offline/moduleStore.js';
 import { registerRecordMigration } from '../../offline/recordMigration.js';
-import {
-  accountToken,
-  assertContext,
-  readAccountCache,
-  transact,
-  requestValue,
-  CLEAR_PENDING_KEY,
-} from '../../offline/database.js';
+import { accountToken, readAccountCache, transact, requestValue, CLEAR_PENDING_KEY } from '../../offline/database.js';
 import { appendOperation, readOperations, type Operation } from '../../offline/outbox.js';
 import { notifyOutboxChanged } from '../../offline/signals.js';
 const dataSchema = z.object({
@@ -273,19 +266,4 @@ export async function updateTaskData(account: string, update: (data: TaskData) =
     /* IDB is authoritative. */
   }
   return result;
-}
-export async function clearTaskData(account: string, token: number) {
-  await transact(
-    'readwrite',
-    async (tx) => {
-      const active = await assertContext(tx);
-      if (active.accountId !== account) return;
-      tx.objectStore('cache').delete([account, 'tasks', 'snapshot']);
-      tx.objectStore('metadata').delete([account, 'budget:tasks']);
-      tx.objectStore('metadata').delete([account, 'engine:tasks']);
-      for (const op of await readOperations(tx, account))
-        if (op.module === 'tasks') tx.objectStore('outbox').delete([account, op.operationId]);
-    },
-    token,
-  );
 }

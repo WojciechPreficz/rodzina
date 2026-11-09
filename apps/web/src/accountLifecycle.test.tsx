@@ -5,6 +5,7 @@ import type { AuthUser, Family } from '@rodzina/shared';
 import { useAccountLifecycle, type AccountServices } from './accountLifecycle.js';
 import { SYNC_INTERVAL_MS } from './queryClient.js';
 import { ACCOUNT_SIGNAL_KEY } from './offline/database.js';
+import { clearAccountData } from './accountStorage.js';
 
 vi.mock('./accountStorage.js', () => ({
   clearAccountData: vi.fn(async () => {}),
@@ -41,6 +42,7 @@ const unauthorized = () => new Response('{}', { status: 401 });
 const authorized = () => new Response(JSON.stringify(session));
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.useFakeTimers();
   onlineManager.setOnline(true);
   focusManager.setFocused(true);
@@ -90,6 +92,17 @@ it('retries after transport failure when session status is still unknown', async
   request.mockImplementation(authorized);
   await backgroundRefresh();
   expect(request.mock.calls.length).toBeGreaterThan(1);
+});
+
+it('keeps the current account when checking its session returns 403', async () => {
+  const request = vi.fn().mockImplementation(authorized);
+  vi.stubGlobal('fetch', request);
+  const { result } = renderHook(() => useAccountLifecycle(services));
+  await act(async () => {});
+  request.mockImplementation(() => new Response('{}', { status: 403 }));
+  await act(async () => result.current.value.refresh());
+  expect(result.current.value.user).toEqual(session.user);
+  expect(clearAccountData).not.toHaveBeenCalled();
 });
 
 it('checks again after another tab changes the account', async () => {

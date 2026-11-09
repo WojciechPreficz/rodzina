@@ -1,7 +1,6 @@
 import { Temporal } from 'temporal-polyfill';
 import type { Reminder } from '@rodzina/shared';
 import { apiFetch, ApiRequestError } from '../../api.js';
-import { invalidateSessionRequests } from '../../platform.js';
 import { calendarStore, monthsForRange, monthWindow } from './calendarOffline.js';
 import { getEvent, listDistantEvents, listOccurrences, type CalendarRange } from './calendarApi.js';
 
@@ -24,17 +23,9 @@ async function once<T>(key: string, token: number, action: () => Promise<T>): Pr
   if (pending.has(identity)) return pending.get(identity) as Promise<T>;
   const work = (async () => {
     if (!calendarStore.current(token)) throw new DOMException('Session changed', 'AbortError');
-    try {
-      const result = await action();
-      if (!calendarStore.current(token)) throw new DOMException('Session changed', 'AbortError');
-      return result;
-    } catch (error) {
-      if (calendarStore.current(token) && error instanceof ApiRequestError && [401, 403].includes(error.status)) {
-        invalidateSessionRequests();
-        window.dispatchEvent(new Event('rodzina:session-lost'));
-      }
-      throw error;
-    }
+    const result = await action();
+    if (!calendarStore.current(token)) throw new DOMException('Session changed', 'AbortError');
+    return result;
   })();
   pending.set(identity, work);
   try {

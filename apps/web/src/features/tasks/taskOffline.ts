@@ -1,6 +1,5 @@
 import { taskSnapshotResponseSchema, type TaskSnapshotResponse, type Task, type PatchTask } from '@rodzina/shared';
 import {
-  clearTaskData,
   prepareTaskRead,
   readTaskChanges,
   readTaskData,
@@ -370,12 +369,10 @@ export function createTaskOfflineStore(transport: TaskTransport = apiFetch) {
       store.notify();
       return { snapshot, visible };
     };
-    async function loseSession() {
+    function loseSession() {
       assertCurrent(scope);
       store.clear();
-      const cleared = store.accountScope();
-      await clearTaskData(account, token);
-      if (cleared === store.accountScope()) window.dispatchEvent(new Event('rodzina:session-lost'));
+      window.dispatchEvent(new Event('rodzina:session-lost'));
     }
 
     let sessionConfirmed = false;
@@ -384,7 +381,7 @@ export function createTaskOfflineStore(transport: TaskTransport = apiFetch) {
         const session = await transport<{ user: { id: string }; family: { id: string } }>('/api/auth/me');
         assertCurrent(scope);
         if (`${session.family.id}:${session.user.id}` !== account) {
-          await loseSession();
+          loseSession();
           return;
         }
         sessionConfirmed = true;
@@ -436,7 +433,7 @@ export function createTaskOfflineStore(transport: TaskTransport = apiFetch) {
         await store.reload();
       } catch (error) {
         if (!scope.current()) return;
-        if (error instanceof ApiRequestError && [401, 403].includes(error.status)) await loseSession();
+        if (error instanceof ApiRequestError && error.status === 401) loseSession();
         else if (!sessionConfirmed && error instanceof ApiRequestError && error.status === 404) {
           const next = { account, lists: [], items: {} };
           ui.lists = [];

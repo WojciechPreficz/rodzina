@@ -11,6 +11,7 @@ import {
   ensureMigrated,
   openDatabase,
   readCache,
+  recoverPendingClear,
   requestValue,
   transact,
   writeCache,
@@ -150,6 +151,35 @@ describe('shared IndexedDB previews', () => {
     await clearDatabase();
     expect(await hydrateOfflineData()).toBeUndefined();
   });
+  it.each(['same', 'different', 'logout'])(
+    'recovers a suspended outbox and handles %s account boundary',
+    async (boundary) => {
+      const owner = fixture.accountId;
+      await saveOfflineData(family.session);
+      await transact('readwrite', async (tx) => {
+        tx.objectStore('outbox').put({ accountId: owner, operationId: 'pending' });
+      });
+      const clear = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(() => {
+        throw new Error('Odmowa');
+      });
+      await expect(clearDatabase(true, 'session-lost')).rejects.toThrow('Odmowa');
+      expect(localStorage.getItem(CLEAR_PENDING_KEY)).toBe('session-lost');
+      clear.mockRestore();
+      await closeDatabase();
+      await recoverPendingClear();
+      await clearDatabase(true, 'session-lost');
+      expect(await readCache('family')).toBeUndefined();
+      await expect(activateOfflineAccount(owner)).rejects.toThrow('Session changed');
+      if (boundary === 'logout') await clearDatabase();
+      else {
+        await clearDatabase(true, 'sign-in');
+        await activateOfflineAccount(boundary === 'same' ? owner : 'other:user', true);
+      }
+      const count = await transact('readonly', (tx) => requestValue(tx.objectStore('outbox').count()));
+      expect(count).toBe(boundary === 'same' ? 1 : 0);
+      await clearDatabase();
+    },
+  );
   it('keeps the last valid copy on budget failure and charges UTF8 data and metadata', async () => {
     await saveOfflineData(family.session);
     const before = await readCache('family');

@@ -1,6 +1,6 @@
 import { readAccountSession, saveAccountSession, PENDING_LOGOUT_KEY } from './session.js';
 import { calendarStore, registerCalendarStore } from './features/calendar/calendarOffline.js';
-import { registerTaskStore } from './features/tasks/taskOffline.js';
+import { registerTaskStore, taskStore } from './features/tasks/taskOffline.js';
 import { registerShoppingStore } from './features/shopping/shoppingOffline.js';
 import { forgetOfflineData } from './offlineData.js';
 import { clearDatabase } from './offline/database.js';
@@ -13,6 +13,13 @@ import { listMembers } from './features/family/familyApi.js';
 import { localScheduler } from './features/notifications/localSchedule.js';
 import { isAndroid } from './platform.js';
 import { registerMealsStore } from './features/meals/mealOffline.js';
+import { synchronizeAccountOutbox } from './offline/sync.js';
+
+export async function synchronizeAccountChanges(account: string) {
+  // Tasks verify current list visibility before joining the shared sender.
+  if (taskStore.getSnapshot().account === account) await taskStore.synchronize();
+  await synchronizeAccountOutbox(account);
+}
 
 export const accountServices: AccountServices = {
   accountId,
@@ -58,6 +65,14 @@ export function registerApplicationStores() {
   registerAccountStore({
     name: 'indexed-db',
     phase: 'before-invalidation',
-    clear: ({ removeStored }) => clearDatabase(removeStored),
+    clear: ({ reason, removeStored }) =>
+      clearDatabase(
+        removeStored,
+        reason === 'session-lost' || reason === 'logout-checked'
+          ? 'session-lost'
+          : reason === 'account-changed'
+            ? 'sign-in'
+            : 'yes',
+      ),
   });
 }

@@ -240,10 +240,10 @@ describe('family offline lifecycle through the Android transport', () => {
     expect(readOfflineData()?.session.family.joinCode).toBe('NEW123');
   });
 
-  it.each([401, 403])('removes memory and disk on confirmed HTTP %s', async (status) => {
+  it('removes cached family data and session on HTTP 401', async () => {
     const { client } = mount();
     await synced();
-    fail = status;
+    fail = 401;
     failMembers = true;
     fireEvent.click(screen.getByText('refresh'));
     await screen.findByText('logged out');
@@ -252,11 +252,11 @@ describe('family offline lifecycle through the Android transport', () => {
     await waitFor(() => expect(client.getQueryData(familyMembersKey('family', 'admin'))).toBeUndefined());
   });
 
-  it('preserves cached data and displays an HTTP server error without calling it offline', async () => {
+  it.each([403, 500])('preserves cached data and displays HTTP %s without calling it offline', async (status) => {
     mount();
     await synced();
     const saved = localStorage.getItem(OFFLINE_DATA_KEY);
-    fail = 500;
+    fail = status;
     fireEvent.click(screen.getByText('refresh'));
     expect(await screen.findByText('Błąd serwera')).toBeVisible();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();

@@ -10,6 +10,7 @@ const stores = ['cache', 'outbox', 'metadata', 'migration'] as const;
 let connection: Promise<IDBDatabase> | undefined;
 let epoch = 0;
 let context: { accountId: string; generation: string } | undefined;
+let clearing: Promise<void> | undefined;
 const transactions = new Set<IDBTransaction>();
 const fail = (message: string): never => {
   throw new Error(message);
@@ -107,6 +108,15 @@ export async function transact<T>(
   if (token !== epoch) throw changed();
   const transaction = db.transaction([...stores], mode);
   transactions.add(transaction);
+  try {
+    const result = await runTransaction(transaction, action);
+    if (token !== epoch) throw changed();
+    return result;
+  } finally {
+    transactions.delete(transaction);
+  }
+}
+async function runTransaction<T>(transaction: IDBTransaction, action: (transaction: IDBTransaction) => Promise<T>) {
   const completion = new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();
     transaction.onabort = transaction.onerror = () => reject(transaction.error ?? changed());
@@ -116,7 +126,6 @@ export async function transact<T>(
   try {
     const result = await action(transaction);
     await completion;
-    if (token !== epoch) throw changed();
     return result;
   } catch (error) {
     try {
@@ -126,8 +135,6 @@ export async function transact<T>(
     }
     await completion.catch(() => {});
     throw error;
-  } finally {
-    transactions.delete(transaction);
   }
 }
 type Active = { accountId: '__origin__'; key: 'active'; value: { accountId: string; generation: string } };
@@ -148,7 +155,7 @@ export function hasPendingClear() {
     return true;
   }
 }
-export async function activateOfflineAccount(accountId: string) {
+export async function activateOfflineAccount(accountId: string, confirmed = false) {
   const token = epoch;
   checkPendingClear();
   await participate(invalidateOfflineContext);
@@ -156,10 +163,21 @@ export async function activateOfflineAccount(accountId: string) {
   const active = await transact(
     'readwrite',
     async (tx) => {
+      checkPendingClear();
       const store = tx.objectStore('metadata');
       const old = await requestValue<Active | undefined>(store.get(['__origin__', 'active']));
       if (context && old?.value.generation !== context.generation) throw changed();
       if (old && old.value.accountId !== accountId) throw changed();
+      const suspended = await requestValue<{ value: string } | undefined>(store.get(['__origin__', 'suspended']));
+      if (suspended) {
+        if (!confirmed) throw changed();
+        if (suspended.value !== accountId) {
+          tx.objectStore('outbox').clear();
+          tx.objectStore('cache').clear();
+          for (const key of await requestValue(store.index('accountId').getAllKeys(suspended.value))) store.delete(key);
+        }
+        store.delete(['__origin__', 'suspended']);
+      }
       const value = old?.value ?? { accountId, generation: crypto.randomUUID() };
       store.put({ accountId: '__origin__', key: 'active', value });
       return value;
@@ -173,14 +191,68 @@ export async function activateOfflineAccount(accountId: string) {
 export function announceAccount(accountId: string | null) {
   localStorage.setItem(ACCOUNT_SIGNAL_KEY, JSON.stringify({ accountId, nonce: crypto.randomUUID() }));
 }
-export async function clearDatabase(removeStored = true) {
+type ClearMode = 'yes' | 'session-lost' | 'sign-in';
+
+export async function clearDatabase(removeStored = true, mode: ClearMode = 'yes') {
   invalidateOfflineContext();
   if (!removeStored) return;
-  localStorage.setItem(CLEAR_PENDING_KEY, 'yes');
+  while (clearing) await clearing.catch(() => {});
+  const pending = localStorage.getItem(CLEAR_PENDING_KEY);
+  if (pending === 'yes' || (pending === 'session-lost' && mode === 'sign-in')) mode = pending;
+  const work = clearStoredDatabase(mode);
+  clearing = work;
+  try {
+    await work;
+  } finally {
+    if (clearing === work) clearing = undefined;
+  }
+}
+
+async function clearStoredDatabase(mode: ClearMode) {
+  localStorage.setItem(CLEAR_PENDING_KEY, mode);
   announceAccount(null);
-  await transact('readwrite', async (tx) => {
-    for (const name of stores) tx.objectStore(name).clear();
-    tx.objectStore('metadata').put({ accountId: '__origin__', key: 'boundary', value: crypto.randomUUID() });
+  const db = await openDatabase();
+  await runTransaction(db.transaction([...stores], 'readwrite'), async (tx) => {
+    const metadata = tx.objectStore('metadata');
+    const cache = tx.objectStore('cache');
+    const active = await requestValue<Active | undefined>(metadata.get(['__origin__', 'active']));
+    const suspended = await requestValue<{ value: string } | undefined>(metadata.get(['__origin__', 'suspended']));
+    const outbox = tx.objectStore('outbox');
+    const owner =
+      mode === 'yes'
+        ? undefined
+        : mode === 'session-lost'
+          ? (active?.value.accountId ?? suspended?.value)
+          : suspended?.value;
+    const snapshots = owner
+      ? (await requestValue<CacheEntry[]>(cache.index('accountId').getAll(owner))).filter(
+          (entry) => adapters.get(entry.module)?.capabilities === 'read-write',
+        )
+      : [];
+    const hasLegacyChanges = snapshots.some((entry) => {
+      const operations = (entry.payload as { operations?: unknown[] }).operations;
+      return Array.isArray(operations) && operations.length > 0;
+    });
+    if (!owner || (!(await requestValue(outbox.index('accountId').count(owner))) && !hasLegacyChanges)) {
+      outbox.clear();
+      cache.clear();
+      metadata.clear();
+    } else {
+      for (const key of await requestValue(outbox.getAllKeys())) {
+        if ((key as [string, string])[0] !== owner) outbox.delete(key);
+      }
+      const engine = await Promise.all(
+        snapshots.map(({ module }) => requestValue(metadata.get([owner, `engine:${module}`]))),
+      );
+      cache.clear();
+      metadata.clear();
+      // Replay and legacy takeover may need the base snapshot. Keep it inaccessible without a confirmed login.
+      for (const snapshot of snapshots) cache.put(snapshot);
+      for (const record of engine) if (record) metadata.put(record);
+      metadata.put({ accountId: '__origin__', key: 'suspended', value: owner });
+    }
+    tx.objectStore('migration').clear();
+    metadata.put({ accountId: '__origin__', key: 'boundary', value: crypto.randomUUID() });
   });
   for (const adapter of adapters.values()) {
     for (const key of Object.keys(localStorage))
@@ -190,7 +262,9 @@ export async function clearDatabase(removeStored = true) {
   reportStorageIssue();
 }
 export async function recoverPendingClear() {
-  if (localStorage.getItem(CLEAR_PENDING_KEY)) await clearDatabase();
+  while (clearing) await clearing.catch(() => {});
+  const mode = localStorage.getItem(CLEAR_PENDING_KEY);
+  if (mode) await clearDatabase(true, mode === 'session-lost' || mode === 'sign-in' ? mode : 'yes');
 }
 export async function readCache(module: CacheModule, accountId?: string) {
   checkPendingClear();
@@ -401,6 +475,7 @@ async function migratePreviews(confirmed = false) {
         async (tx) => {
           await assertImportBoundary(tx, captured);
           const old = await requestValue<Active | undefined>(tx.objectStore('metadata').get(['__origin__', 'active']));
+          if (await requestValue(tx.objectStore('metadata').get(['__origin__', 'suspended']))) throw changed();
           if (old && old.value.accountId !== accountId) throw changed();
           for (const entry of captured.entries) putEntry(tx, entry);
           tx.objectStore('migration').put({ ...captured, phase: 'committed' });

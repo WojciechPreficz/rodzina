@@ -3,7 +3,6 @@ import {
   Avatar,
   Badge,
   Burger,
-  Button,
   Divider,
   Drawer,
   Group,
@@ -21,6 +20,7 @@ import { allowNavigation } from '../nativeNavigation.js';
 import { isAndroid } from '../platform.js';
 import { AndroidUpdateNotice } from '../features/updates/AndroidUpdates.js';
 import { AppBrand } from './AppBrand.js';
+import { LogoutControl } from './LogoutControl.js';
 import { useDocumentAttentionCount } from '../features/documents/documentQueries.js';
 
 const navigation = [
@@ -84,13 +84,12 @@ function DocumentAttentionBadge() {
 }
 
 export function AppShell({ children }: { children?: ReactNode }) {
-  const { user, family, familyConfirmed, logout } = useMe();
+  const { user, family, familyConfirmed } = useMe();
   const location = useLocation();
   const wide = useMediaQuery('(min-width: 48em)');
   const native = isAndroid();
   const desktop = wide && !native;
   const [opened, setOpened] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
   useEffect(() => setOpened(false), [location.key, desktop]);
   const active = (to: string) =>
     to === '/kalendarz'
@@ -140,24 +139,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
             </div>
           </Group>
         )}
-        <Button
-          variant="subtle"
-          fullWidth
-          justify="flex-start"
-          mih={44}
-          loading={loggingOut}
-          onClick={async () => {
-            if (!allowNavigation()) return;
-            setLoggingOut(true);
-            try {
-              await logout();
-            } finally {
-              setLoggingOut(false);
-            }
-          }}
-        >
-          {labels.logout}
-        </Button>
+        <LogoutControl variant="subtle" fullWidth justify="flex-start" mih={44} beforeLogout={allowNavigation} />
       </Stack>
     </Stack>
   );

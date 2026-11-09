@@ -2,6 +2,7 @@ import '../offline/testSetup.js';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { sanitizeNextPath } from '../api.js';
@@ -10,6 +11,7 @@ import { AppShell } from './AppShell.js';
 import { AppSession as AuthProvider } from '../AppSession.js';
 import { addNavigationGuard } from '../nativeNavigation.js';
 import { theme, cssVariablesResolver } from '../theme.js';
+import { clearDatabase, transact } from '../offline/database.js';
 
 function mockViewport(desktop: boolean) {
   vi.stubGlobal(
@@ -135,6 +137,40 @@ describe('AppShell', () => {
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' })),
     );
+  });
+
+  it('shows the queued change count and allows canceling offline logout', async () => {
+    const account = 'family:adult';
+    await clearDatabase();
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      input === '/api/members'
+        ? new Response('{}', { status: 403 })
+        : new Response(
+            JSON.stringify({
+              user: { id: 'adult', familyId: 'family', displayName: 'Anna', role: 'admin' },
+              family: { id: 'family', name: 'Test' },
+            }),
+          ),
+    );
+    try {
+      renderShell();
+      await screen.findByText('Anna');
+      await transact('readwrite', async (tx) => {
+        tx.objectStore('outbox').put({ accountId: account, operationId: 'pending' });
+      });
+      onlineManager.setOnline(false);
+      fireEvent.click(screen.getByRole('button', { name: 'Wyloguj się' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Niewysłane zmiany' });
+      expect(within(dialog).getByText('Liczba niewysłanych zmian: 1')).toBeVisible();
+      expect(within(dialog).queryByRole('button', { name: 'Wyślij i wyloguj' })).not.toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Anuluj' }));
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      expect(fetch).not.toHaveBeenCalledWith('/api/auth/logout', expect.anything());
+    } finally {
+      cleanup();
+      onlineManager.setOnline(true);
+      await clearDatabase();
+    }
   });
 
   it('rejects invalid next values and validates login and registration forms', async () => {

@@ -220,9 +220,11 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
           }).catch(() => request.abort());
         }, 5000);
         const timeout = window.setTimeout(() => request.abort(), 60000);
+        let confirmingSession = false;
         try {
           assertRequestCurrent();
           if (adapter.sessionTransport && !context.session) {
+            confirmingSession = true;
             const session = await abortable(
               adapter.sessionTransport('/api/auth/me', { signal: request.signal }),
               request.signal,
@@ -231,6 +233,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             if (`${session.family.id}:${session.user.id}` !== accountId)
               throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
             context.session = session;
+            confirmingSession = false;
           }
           if (adapter.prepare) await abortable(adapter.prepare(operation, request.signal, context), request.signal);
           if (!current()) break;
@@ -263,8 +266,10 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             let old = (await readOperations(tx, accountId)).find((op) => op.operationId === operation.operationId);
             if (!old) return;
             const expired = error instanceof OfflineOperationExpiredError;
-            const review = expired || (error instanceof ApiRequestError && error.status < 500 && error.status !== 429);
-            if (error instanceof ApiRequestError && [403, 404].includes(error.status)) {
+            const review =
+              expired ||
+              (!confirmingSession && error instanceof ApiRequestError && error.status < 500 && error.status !== 429);
+            if (!confirmingSession && error instanceof ApiRequestError && [403, 404].includes(error.status)) {
               await adapter.invalidateAccess(tx, old, error);
               old = (await readOperations(tx, accountId)).find((op) => op.operationId === operation.operationId);
               if (!old) return;
@@ -391,6 +396,10 @@ const accountSenders = new Map<
     sender: ReturnType<typeof startSync>;
   }
 >();
+export function synchronizeAccountOutbox(accountId: string) {
+  return accountSenders.get(accountId)?.sender.synchronize();
+}
+
 export function joinSync(accountId: string, adapter: SyncAdapter, changed: () => Promise<void> | void) {
   let entry = accountSenders.get(accountId);
   if (entry && !entry.sender.isActive()) {

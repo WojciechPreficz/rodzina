@@ -44,14 +44,25 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   zapisie; kolejne odczyty korzystają z metadanych. Stare pola sesji i format
   zakupów w wersji 1 pozostają dla zgodności. Migracja sprawdza tożsamość konta;
   zapis i odczyt korzystają z bariery oraz generacji IndexedDB. Wylogowanie,
-  zmiana konta i utrata sesji czyszczą również ten rekord, a spóźnione operacje
-  poprzedniego konta nie mogą go odtworzyć. Lokalna kopia nie zastępuje
+  zmiana konta i utrata sesji czyszczą ten rekord, a spóźnione operacje
+  poprzedniego konta nie mogą go odtworzyć. Po 401 kolejka i zapisane podstawy
+  modułów zapisu pozostają zawieszone pod identyfikatorem rodziny i użytkownika.
+  Dopiero potwierdzone logowanie na to samo konto pozwala wznowić wysyłkę.
+  Logowanie na inne konto usuwa zawieszone dane przed aktywacją jego magazynu.
+  Przy wylogowaniu z niewysłanymi zmianami aplikacja pokazuje ich liczbę i
+  pozwala je wysłać przy dostępnym połączeniu lub odrzucić. Jeśli po próbie
+  wysyłki kolejka nadal zawiera zmiany, wylogowanie wymaga ich odrzucenia.
+  Potwierdzone usunięcie własnego konta lub rodziny czyści również kolejkę.
+  Lokalna kopia nie zastępuje
   sprawdzenia uprawnień przez API. Klucz `rodzina:pending-logout` zachowuje wartość.
 - Wspólny nadawca outboxa potwierdza użytkownika i rodzinę przez `/api/auth/me`
   przed pierwszą gotową operacją zadań, zakupów lub obiadów. Potwierdzenie
   współdzielą moduły w obrębie jednego przebiegu i dzierżawy. Zmiana konta lub
   generacji, utrata dzierżawy, przerwa transportu i koniec przebiegu je wygaszają.
-  Po `403` kolejna operacja wymaga ponownego potwierdzenia; `401` i
+  `GET /api/auth/me` zwraca `401 UNAUTHORIZED` dla nieważnej sesji.
+  `403 INVALID_CREDENTIALS` dotyczy błędnych danych logowania.
+  Błąd `403` przy potwierdzaniu sesji nie czyści danych i pozwala ponowić
+  próbę. Po `403` przy mutacji kolejna operacja wymaga potwierdzenia; `401` i
   `SESSION_CHANGED` zatrzymują nadawcę i uruchamiają obsługę utraty sesji.
   Każda mutacja nadal podlega autoryzacji po stronie API.
 - Produkcja: cPanel vh.pl, Node 24, HTTPS i Phusion Passenger.
@@ -154,8 +165,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   sprawdzenia sesji lub obecności domownika przed kolejną próbą. Hasło nie jest
   utrwalane w magazynach ani historii mutacji. Usunięcie siebie lub rodziny
   uruchamia istniejące wylogowanie i czyszczenie danych, niewysłanych zmian
-  oraz alarmów, także w innych kartach. Inne urządzenia wykrywają usunięcie
-  przy kontakcie z API; offline mogą do tego czasu zachować dane i alarmy.
+  oraz alarmów, także w innych kartach. Na innym urządzeniu API zgłasza utratę
+  sesji tym samym kodem 401 co przy wygaśnięciu. Urządzenie czyści sesję i
+  alarmy, a zawieszoną kolejkę usunie po zalogowaniu na inne konto.
 - Checklisty zadań: `task_checklist_items` dziedziczą dostęp przez listę rodzica,
   również dla dziecka. Usunięcie rodzica/listy usuwa kroki kaskadowo. Ukończenie
   lub ponowne otwarcie rodzica nie zmienia kroków i odwrotnie. Limit to 100

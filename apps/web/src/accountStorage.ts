@@ -2,8 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { accountToken, isAccountCurrent } from './offline/database.js';
 import { reportStorageIssue, storageError } from './offline/status.js';
 import type { AccountSession } from './session.js';
-type ClearReason = 'logout' | 'session-lost' | 'account-changed' | 'storage-changed';
-type ClearOptions = { removeStored: boolean; queryClient: QueryClient | undefined };
+type ClearReason = 'logout' | 'logout-checked' | 'session-lost' | 'account-changed' | 'storage-changed';
+type ClearOptions = { reason: ClearReason; removeStored: boolean; queryClient: QueryClient | undefined };
 type AccountStore = {
   activate?: (account: string) => void | Promise<void>;
   restore?: (client: QueryClient, session: AccountSession) => void | Promise<void>;
@@ -33,7 +33,7 @@ export function clearAccountData(
   } = {},
 ): Promise<void> {
   // A storage event belongs to another tab: never delete its newly saved account.
-  const options = { removeStored: reason !== 'storage-changed', queryClient };
+  const options = { reason, removeStored: reason !== 'storage-changed', queryClient };
   const clearing: Promise<void>[] = [];
   const clear = (store: AccountStore) => {
     try {

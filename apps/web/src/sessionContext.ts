@@ -7,7 +7,7 @@ export type AuthState = {
   isLoading: boolean;
   refresh: () => Promise<void>;
   setSession: (user: AuthUser, family: Family) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (mode?: 'queue-checked') => Promise<void>;
   familySyncedAt: number | undefined;
   familySyncError: string | undefined;
   familyConfirmed: boolean;

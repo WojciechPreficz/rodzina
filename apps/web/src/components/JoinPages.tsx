@@ -1,4 +1,5 @@
 import { PageHeader } from './PageHeader.js';
+import { LogoutControl } from './LogoutControl.js';
 import { JOIN_CODE_LENGTH, joinCodeSchema } from '@rodzina/shared';
 import type { SessionResponse, ChildProfile, FamilyMembersResponse, InvitationResponse } from '@rodzina/shared';
 import {
@@ -205,7 +206,7 @@ export function ChildLoginPage() {
 export function InvitationPage() {
   const { token = '' } = useParams();
   const navigate = useNavigate();
-  const { user, isLoading, setSession, logout } = useMe();
+  const { user, isLoading, setSession } = useMe();
   const queryClient = useQueryClient();
   const preview = useQuery({
     queryKey: ['invitation', token],
@@ -262,18 +263,7 @@ export function InvitationPage() {
             {user ? (
               <>
                 <Text>{labels.alreadyLoggedIn}</Text>
-                <Button
-                  onClick={async () => {
-                    try {
-                      await logout();
-                      queryClient.clear();
-                    } catch (requestError) {
-                      setError(errorMessage(requestError, labels.saveError));
-                    }
-                  }}
-                >
-                  {labels.logout}
-                </Button>
+                <LogoutControl />
               </>
             ) : (
               <form onSubmit={accept} noValidate>

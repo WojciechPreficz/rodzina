@@ -107,6 +107,12 @@ export function useAccountLifecycle(services: AccountServices) {
       sessionRejected.current = false;
       await recoverPendingClear();
       if (!current()) return;
+      try {
+        await activateOfflineAccount(accountId(response), true);
+      } catch (error) {
+        reportStorageIssue(storageError(error));
+      }
+      if (!current()) return;
       await saveSession(response);
       if (!current()) return;
       await restoreAccountStores(response, queryClient, current);
@@ -143,19 +149,7 @@ export function useAccountLifecycle(services: AccountServices) {
     } catch (error) {
       if (!current()) return;
       setFamilyConfirmed(false);
-      if (error instanceof ApiRequestError && [401, 403].includes(error.status)) {
-        sessionRejected.current = true;
-        generation.current += 1;
-        const cleanupGeneration = generation.current;
-        invalidateSessionRequests();
-        const clearing = clearAccountData('session-lost', { queryClient });
-        currentSession.current = undefined;
-        setUser(null);
-        setFamily(null);
-        setFamilySyncedAt(undefined);
-        await clearing.catch(() => {});
-        if (generation.current === cleanupGeneration) setIsLoading(false);
-      } else if (error instanceof ApiRequestError) {
+      if (error instanceof ApiRequestError) {
         reportTransportFailure(false);
         setFamilySyncError(error.message);
       }
@@ -203,12 +197,14 @@ export function useAccountLifecycle(services: AccountServices) {
   const identity = user && family ? `${family.id}:${user.id}` : undefined;
   useEffect(() => {
     const loseSession = (removeStored: boolean) => {
+      if (removeStored && sessionRejected.current) return;
       sessionRejected.current = removeStored;
       const clearing = clearAccountData(removeStored ? 'session-lost' : 'storage-changed', {
         queryClient,
         invalidateSession: () => {
           services.invalidateAlarms();
           generation.current += 1;
+          invalidateSessionRequests();
         },
       });
       const cleanupGeneration = generation.current;
@@ -249,10 +245,11 @@ export function useAccountLifecycle(services: AccountServices) {
     };
   }, [queryClient, identity, refresh, services]);
 
-  const logout = async () => {
+  const logout = async (mode?: 'queue-checked') => {
     sessionRejected.current = true;
     let cleanupError: unknown;
-    await clearAccountData('logout', {
+    // A concurrent tab may queue a change between the UI check and this transaction.
+    await clearAccountData(mode === 'queue-checked' ? 'logout-checked' : 'logout', {
       queryClient,
       invalidateSession: () => {
         services.invalidateAlarms();
@@ -304,7 +301,7 @@ export function useAccountLifecycle(services: AccountServices) {
       await clearing;
       if (!current()) return;
       try {
-        await activateOfflineAccount(`${nextFamily.id}:${nextUser.id}`);
+        await activateOfflineAccount(accountId({ user: nextUser, family: nextFamily }), true);
       } catch (error) {
         reportStorageIssue(storageError(error));
       }
