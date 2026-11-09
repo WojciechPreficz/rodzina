@@ -1,8 +1,7 @@
 import { PENDING_LOGOUT_KEY } from './session.js';
 import { registerApplicationStores } from './accountAdapters.js';
 import { readTaskData } from './features/tasks/taskStorage.js';
-import { invalidateOfflineContext } from './offline/database.js';
-import { readCache } from './offline/database.js';
+import { invalidateOfflineContext, readCache, requestValue, transact } from './offline/database.js';
 import './offline/testSetup.js';
 import { onlineManager, QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -129,9 +128,14 @@ afterEach(async () => {
 });
 
 describe('account storage cleanup', () => {
-  it.each(['logout', 'session-lost', 'account-changed'] as const)(
-    'removes every declared account key and durable journal on %s',
-    async (reason) => {
+  it.each([
+    ['logout', 0],
+    ['session-lost', 2],
+    ['account-changed', 0],
+    ['logout-checked', 2],
+  ] as const)(
+    'clears account data and applies the outbox retention policy on %s',
+    async (reason, expectedOutboxCount) => {
       const queryClient = newClient();
       await seedAccount(queryClient);
       const holidayLayers = { publicHoliday: false, observance: true };
@@ -170,6 +174,10 @@ describe('account storage cleanup', () => {
       expect(calendarStore.current(token)).toBe(false);
       expect(taskStore.getSnapshot()).toMatchObject({ account: '', items: {}, pending: [] });
       expect(contactsStore.snapshot()).toEqual({ account: '' });
+      expect(await readCache('contacts')).toBeUndefined();
+      expect(await transact('readonly', (tx) => requestValue(tx.objectStore('outbox').count()))).toBe(
+        expectedOutboxCount,
+      );
       expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
       expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
     },
@@ -219,14 +227,18 @@ describe('account storage cleanup', () => {
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
   });
 
-  it('includes newly registered stores and passes the storage ownership option', async () => {
+  it('includes newly registered stores and passes the reason and storage ownership option', async () => {
     const clear = vi.fn();
     const unregister = registerAccountStore({ name: 'future-module', clear });
     try {
       await clearAccountData('storage-changed');
-      expect(clear).toHaveBeenLastCalledWith({ removeStored: false, queryClient: undefined });
+      expect(clear).toHaveBeenLastCalledWith({
+        reason: 'storage-changed',
+        removeStored: false,
+        queryClient: undefined,
+      });
       await clearAccountData('logout');
-      expect(clear).toHaveBeenLastCalledWith({ removeStored: true, queryClient: undefined });
+      expect(clear).toHaveBeenLastCalledWith({ reason: 'logout', removeStored: true, queryClient: undefined });
       expect(() => registerAccountStore({ name: 'future-module', clear })).toThrow('already registered');
     } finally {
       unregister();
