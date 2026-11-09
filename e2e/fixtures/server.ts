@@ -8,6 +8,8 @@ const config = {
   ...loadConfig({
     ...process.env,
     NODE_ENV: 'test',
+    // All Playwright scenarios share one server and one loopback IP.
+    RODZINA_API_RATE_LIMIT_MAX: '10000',
     RODZINA_SMTP_HOST: 'unused.example.com',
     RODZINA_SMTP_USER: 'test',
     RODZINA_SMTP_PASSWORD: 'test-only',

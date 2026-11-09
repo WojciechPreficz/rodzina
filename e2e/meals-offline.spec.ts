@@ -110,10 +110,8 @@ for (const native of [false, true]) {
       localStorage.setItem('test:offline', 'yes');
       window.dispatchEvent(new Event('offline'));
     });
-    const soup = page
-      .getByRole('article')
-      .filter({ has: page.getByRole('heading', { name: 'Zupa testowa', exact: true }) });
-    await soup.getByRole('button', { name: /Edytuj obiad:/ }).click();
+    const editSoup = page.getByRole('button', { name: 'Edytuj obiad: Zupa testowa', exact: true });
+    await editSoup.click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'Ilość 1', exact: true }).fill('2 kg');
     await dialog.getByRole('button', { name: 'Zapisz', exact: true }).click();
@@ -146,7 +144,7 @@ for (const native of [false, true]) {
     await dialog.getByRole('button', { name: 'Dodaj składniki', exact: true }).click();
     await expect(dialog.getByText(/Eksport zapisany na urządzeniu/)).toBeVisible();
     await dialog.getByRole('button', { name: 'Gotowe' }).click();
-    await soup.getByRole('button', { name: /Edytuj obiad:/ }).click();
+    await editSoup.click();
     await dialog.getByRole('textbox', { name: 'Ilość 1', exact: true }).fill('10 kg');
     await dialog.getByRole('button', { name: 'Zapisz', exact: true }).click();
     await expect(dialog).toHaveCount(0);
