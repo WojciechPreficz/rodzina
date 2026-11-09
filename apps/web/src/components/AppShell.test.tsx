@@ -31,7 +31,7 @@ function mockViewport(desktop: boolean) {
 
 function renderShell(path = '/') {
   return render(
-    <MantineProvider theme={theme} cssVariablesResolver={cssVariablesResolver} forceColorScheme="light">
+    <MantineProvider env="test" theme={theme} cssVariablesResolver={cssVariablesResolver} forceColorScheme="light">
       <MemoryRouter initialEntries={[path]}>
         <AuthProvider>
           <Routes>
