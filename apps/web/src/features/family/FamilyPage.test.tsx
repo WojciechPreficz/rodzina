@@ -1,5 +1,5 @@
 import '../../offline/testSetup.js';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -159,15 +159,21 @@ describe('FamilyPage', () => {
   });
 
   it('creates an invitation link that can be copied', async () => {
-    mockApi(admin);
+    const fetchMock = mockApi(admin);
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderFamilyPage();
 
-    const createInvitation = await screen.findByRole('button', { name: 'Utwórz zaproszenie' });
-    await waitFor(() => expect(createInvitation).toBeEnabled());
-    fireEvent.click(createInvitation);
-    expect(await screen.findByDisplayValue(INVITE_LINK)).toBeInTheDocument();
+    const createInvitation = await waitFor(() => {
+      const button = screen.getByRole('button', { name: 'Utwórz zaproszenie' });
+      expect(button).toBeEnabled();
+      return button;
+    });
+    await act(async () => {
+      fireEvent.click(createInvitation);
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/invitations', expect.objectContaining({ method: 'POST' }));
+    expect(await screen.findByRole('textbox', { name: 'Link' }, { timeout: 3000 })).toHaveValue(INVITE_LINK);
 
     fireEvent.click(screen.getByRole('button', { name: 'Kopiuj' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(INVITE_LINK));
