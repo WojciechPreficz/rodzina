@@ -53,6 +53,44 @@ test('signed-in visitors keep their calendar and can still view the public landi
   await expect(page).toHaveURL(`${baseURL}/`);
 });
 
+test.describe('privacy policy', () => {
+  test.use({ javaScriptEnabled: false });
+
+  test('opens from the landing and terms, with keyboard navigation and a print layout', async ({ page }, info) => {
+    const privacyUrl = /\/strona\/polityka-prywatnosci\.html$/;
+    await page.goto('/strona/');
+    await page.getByRole('contentinfo').getByRole('link', { name: 'Polityka prywatności' }).click();
+    await expect(page).toHaveURL(privacyUrl);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Polityka prywatności.');
+    await expect(page.getByLabel('Status dokumentu')).toContainText('Projekt do zatwierdzenia przez właściciela');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath('privacy.png'), fullPage: true });
+
+    const contents = page.getByRole('navigation', { name: 'Spis treści polityki prywatności' });
+    for (const href of await contents
+      .getByRole('link')
+      .evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''))) {
+      await expect(page.locator(href)).toHaveCount(1);
+    }
+    await contents.getByRole('link', { name: 'Dane osób z kontaktów' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/#kontakty$/);
+    await expect(page.getByRole('heading', { name: '4. Dane osób z kontaktów' })).toBeInViewport();
+
+    await page.emulateMedia({ media: 'print' });
+    await expect(contents).toBeHidden();
+    await expect(page.getByRole('contentinfo')).toBeHidden();
+    await expect(page.getByLabel('Status dokumentu')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '9. Twoje prawa i skarga' })).toBeVisible();
+    await page.emulateMedia({ media: 'screen' });
+
+    await page.getByRole('contentinfo').getByRole('link', { name: 'Regulamin i zasady korzystania' }).click();
+    await expect(page).toHaveURL(/\/strona\/regulamin\.html$/);
+    await page.getByRole('contentinfo').getByRole('link', { name: 'Polityka prywatności' }).click();
+    await expect(page).toHaveURL(privacyUrl);
+  });
+});
+
 test('Android keeps its existing welcome screen and login', async ({ page }) => {
   await page.addInitScript(() => {
     Object.assign(window, {

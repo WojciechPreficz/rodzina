@@ -78,6 +78,16 @@ Poza zakresem: płatności, zmiany rejestracji, APK i publikacja.
 Odbiór: headless 390/1280 px, klawiatura, kotwice, druk, build i release:smoke.
 Status: zweryfikowane lokalnie, oczekuje na CI; odbiór właściciela do potwierdzenia.
 
+## B-8 — polityka prywatności
+
+Projekt pod `/strona/polityka-prywatnosci.html` opisuje przetwarzanie danych w
+WWW i APK, w tym dane dzieci oraz osób bez konta. Właściciel zatwierdza
+podstawy prawne, sposób realizacji art. 14 RODO i pozostałe oznaczone miejsca
+przed publikacją. Odbiór techniczny obejmuje linki w stopkach, Playwright
+przy 390/1280 px, druk, build WWW i release:smoke. Link w aplikacji należy
+do B-9, a funkcja eksportu danych do B-10.
+Status: zweryfikowane lokalnie, oczekuje na CI i zatwierdzenie treści.
+
 ## LP.1 — prototyp strony prezentującej aplikację
 
 Osobny statyczny prototyp w `page/`, przeznaczony dla przyszłej strony

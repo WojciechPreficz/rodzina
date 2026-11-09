@@ -219,6 +219,7 @@ try {
   for (const [name, type] of [
     ['index.html', 'text/html'],
     ['regulamin.html', 'text/html'],
+    ['polityka-prywatnosci.html', 'text/html'],
     ['legal.css', 'text/css'],
     ['styles.css', 'text/css'],
     ['app.js', 'javascript'],
