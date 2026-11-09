@@ -93,19 +93,25 @@ export function createTaskListRepository(database: DatabaseConnection) {
     return list ? serialize(list) : undefined;
   }
   function ensureDefault(familyId: string, actorId: string) {
-    const now = Date.now();
-    db.insert(taskLists)
-      .values({
-        id: crypto.randomUUID(),
-        familyId,
-        ownerId: actorId,
-        name: 'Moje zadania',
-        isDefault: true,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoNothing()
-      .run();
+    db.transaction(
+      () => {
+        if (!database.familyRecordLimits.hasCapacity('taskLists', familyId)) return;
+        const now = Date.now();
+        db.insert(taskLists)
+          .values({
+            id: crypto.randomUUID(),
+            familyId,
+            ownerId: actorId,
+            name: 'Moje zadania',
+            isDefault: true,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing()
+          .run();
+      },
+      { behavior: 'immediate' },
+    );
   }
   function listLists(familyId: string, actorId: string) {
     return db
@@ -209,6 +215,7 @@ export function createTaskListRepository(database: DatabaseConnection) {
         .run();
   }
   function createList(familyId: string, ownerId: string, name: string, memberIds: string[]) {
+    database.familyRecordLimits.requireCapacity('taskLists', familyId);
     const now = Date.now();
     const position = Math.min(
       (db
@@ -299,7 +306,14 @@ export function createTaskListRepository(database: DatabaseConnection) {
       .where(and(eq(tasks.id, id), accessFilter(familyId, actorId)))
       .get()?.task;
   }
-  function createTask(listId: string, actorId: string, data: CreateTask, id: string = crypto.randomUUID()) {
+  function createTask(
+    familyId: string,
+    listId: string,
+    actorId: string,
+    data: CreateTask,
+    id: string = crypto.randomUUID(),
+  ) {
+    database.familyRecordLimits.requireCapacity('tasks', familyId);
     const now = Date.now();
     const position = Math.min(
       (db

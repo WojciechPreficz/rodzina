@@ -4,11 +4,13 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { AppConfig } from '../config.js';
+import { createFamilyRecordLimits } from './family-record-limits.js';
 import * as schema from './schema.js';
 
 export interface DatabaseConnection {
   sqlite: Database.Database;
   db: BetterSQLite3Database<typeof schema>;
+  familyRecordLimits: ReturnType<typeof createFamilyRecordLimits>;
 }
 
 export function createDatabase(config: AppConfig): DatabaseConnection {
@@ -22,8 +24,6 @@ export function createDatabase(config: AppConfig): DatabaseConnection {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('busy_timeout = 5000');
 
-  return {
-    sqlite,
-    db: drizzle(sqlite, { schema }),
-  };
+  const db = drizzle(sqlite, { schema });
+  return { sqlite, db, familyRecordLimits: createFamilyRecordLimits(db, config) };
 }

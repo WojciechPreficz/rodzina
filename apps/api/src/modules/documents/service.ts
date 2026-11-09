@@ -47,19 +47,23 @@ export function createDocumentService(database: DatabaseConnection, now = () => 
     create(familyId: string, actorId: string, role: FamilyRole, data: CreateDocument) {
       requireAdult(role);
       validateHolder(familyId, data);
-      return database.db.transaction(() => {
-        const { reminders: input, ...fields } = data;
-        const document = repository.create(familyId, actorId, fields);
-        reminders.saveDocument(
-          familyId,
-          document,
-          actorId,
-          input ?? getDefaultDocumentReminders(data.type),
-          repository.timezone(familyId),
-          now(),
-        );
-        return withStatus(familyId, document);
-      });
+      return database.db.transaction(
+        () => {
+          database.familyRecordLimits.requireCapacity('documents', familyId);
+          const { reminders: input, ...fields } = data;
+          const document = repository.create(familyId, actorId, fields);
+          reminders.saveDocument(
+            familyId,
+            document,
+            actorId,
+            input ?? getDefaultDocumentReminders(data.type),
+            repository.timezone(familyId),
+            now(),
+          );
+          return withStatus(familyId, document);
+        },
+        { behavior: 'immediate' },
+      );
     },
     update(familyId: string, id: string, actorId: string, role: FamilyRole, data: PatchDocument) {
       requireAdult(role);

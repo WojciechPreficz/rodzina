@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
+import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import type { AppConfig } from './config.js';
 import type { DatabaseConnection } from './db/client.js';
@@ -49,6 +50,28 @@ export async function buildApp(
   registerApiErrorHandler(app);
   registerSecurityHeaders(app, config);
   const registerProfiles = registerIdempotency(app, database);
+
+  await app.register(fastifyRateLimit, {
+    global: false,
+    max: config.RODZINA_API_RATE_LIMIT_MAX,
+    timeWindow: config.RODZINA_API_RATE_LIMIT_WINDOW_MS,
+    ipv6Subnet: 128,
+  });
+  const limitApiRequest = app.rateLimit();
+  app.addHook('onRequest', async (request, reply) => {
+    const route = request.routeOptions.url;
+    let pathname = request.url.split('?', 1)[0]!;
+    if (pathname.includes('%')) {
+      try {
+        pathname = decodeURIComponent(pathname);
+      } catch {
+        // Keep the raw path for malformed requests.
+      }
+    }
+    if (route === '/api' || route?.startsWith('/api/') || pathname === '/api' || pathname.startsWith('/api/')) {
+      await limitApiRequest.call(app, request, reply);
+    }
+  });
 
   await app.register(fastifyCookie);
 

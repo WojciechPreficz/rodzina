@@ -47,12 +47,14 @@ export function createMealRepository(database: DatabaseConnection) {
           .all(),
       );
     },
-    put(familyId: string, actorId: string, date: string, data: PutMeal, id: string = randomUUID()) {
+    put(familyId: string, actorId: string, date: string, data: PutMeal, id?: string) {
+      const existing = id && db.select({ id: meals.id }).from(meals).where(eq(meals.id, id)).get();
+      if (!existing) database.familyRecordLimits.requireCapacity('meals', familyId);
       const now = Date.now();
       const row = db
         .insert(meals)
         .values({
-          id,
+          id: id ?? randomUUID(),
           familyId,
           date,
           slot: 'dinner',

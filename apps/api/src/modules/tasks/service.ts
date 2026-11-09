@@ -45,7 +45,7 @@ export function createTaskListService(database: DatabaseConnection) {
         if (data.reminders?.length && !data.dueDate)
           throw new ApiError(400, 'VALIDATION_ERROR', 'Przypomnienie wymaga daty terminu zadania.');
         const { reminders: shared, ...fields } = data;
-        const task = repository.createTask(listId, actorId, fields, id);
+        const task = repository.createTask(familyId, listId, actorId, fields, id);
         reminders.saveTask(familyId, task, actorId, shared, repository.timezone(familyId), Date.now());
         return { ...task, recurrence: null, checklist: [], reminders: reminders.listTask(familyId, task.id) };
       });

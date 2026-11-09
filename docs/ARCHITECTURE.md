@@ -441,6 +441,20 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 - RODZINA_TRUSTED_PROXIES wskazuje zaufane IP/CIDR pośredników. Pusta lista
   ignoruje X-Forwarded-For; zaufanie do całego łańcucha nie jest domyślne.
   Konfiguracja hostingu wymaga potwierdzenia; patrz DEPLOY.
+- Żądania `/api` mają wspólny licznik według adresu IP klienta.
+  Limiter trzyma dane w pamięci osobno w każdym procesie Passengera. Restart
+  zeruje liczniki. Po przekroczeniu limitu API zwraca `429 RATE_LIMITED`
+  z `Retry-After`. Logowanie zachowuje dodatkowe trwałe limity w SQLite.
+- Haszowanie i weryfikacja haseł i PIN-ów korzystają ze wspólnej kolejki
+  Argon2. Jeden proces wykonuje równolegle najwyżej dwie operacje.
+- Limity rekordów rodzinnych obejmują wydarzenia, kontakty, grupy kontaktów,
+  listy i pozycje zakupów, listy i zadania, serie zadań, dokumenty, obiady i domowników.
+  Sprawdzenie wolnego miejsca i dodanie rekordu odbywają się pod tą samą blokadą
+  zapisu SQLite. Seria w kalendarzu zajmuje jedno miejsce, a każde zapisane wystąpienie
+  cyklicznego zadania liczy się jako zadanie. Po wyczerpaniu miejsca zapis nowego
+  rekordu zwraca `409 FAMILY_RECORD_LIMIT`. Import wydarzeń zgłasza ten kod przy
+  konkretnej pozycji w wyniku zbiorczym. Domyślna lista zadań powstaje, gdy jest
+  wolne miejsce. Wartości konfiguracyjne opisuje DEPLOY.
 - Błędny e-mail, hasło lub PIN zwraca 403 `INVALID_CREDENTIALS`, bez sygnału
   utraty sesji. Brak lub wygaśnięcie sesji zwraca 401 `UNAUTHORIZED`
   i uruchamia czyszczenie danych konta.

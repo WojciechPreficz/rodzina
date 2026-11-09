@@ -56,16 +56,20 @@ export function createEventRepository(database: DatabaseConnection) {
     const id = crypto.randomUUID();
     const now = Date.now();
     const { participantIds, reminders: sharedReminders, ...fields } = data;
-    db.transaction((tx) => {
-      tx.insert(events)
-        .values({ ...fields, id, familyId, createdBy, createdAt: now, updatedAt: now })
-        .run();
-      if (participantIds.length)
-        tx.insert(eventParticipants)
-          .values(participantIds.map((userId) => ({ eventId: id, userId })))
+    db.transaction(
+      (tx) => {
+        database.familyRecordLimits.requireCapacity('events', familyId);
+        tx.insert(events)
+          .values({ ...fields, id, familyId, createdBy, createdAt: now, updatedAt: now })
           .run();
-      reminderRepository.saveEvent(familyId, { ...fields, id }, createdBy, sharedReminders, timezone(familyId), now);
-    });
+        if (participantIds.length)
+          tx.insert(eventParticipants)
+            .values(participantIds.map((userId) => ({ eventId: id, userId })))
+            .run();
+        reminderRepository.saveEvent(familyId, { ...fields, id }, createdBy, sharedReminders, timezone(familyId), now);
+      },
+      { behavior: 'immediate' },
+    );
     return find(familyId, id)!;
   }
   function update(familyId: string, id: string, data: EventData, actorId: string): CalendarEvent {

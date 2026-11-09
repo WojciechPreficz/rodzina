@@ -42,6 +42,9 @@ Jawna deklaracja idempotencji mutacji API — zweryfikowane lokalnie, oczekuje n
 
 Publiczne API zakupów dla eksportu obiadów i reguła granic importów — zweryfikowane lokalnie, oczekuje na CI.
 
+B-3: limiter żądań API, limity rekordów rodzinnych i współbieżności Argon2.
+Zweryfikowane lokalnie, oczekuje na CI.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

@@ -37,29 +37,32 @@ export function createMealService(database: DatabaseConnection) {
     offline(familyId: string, actorId: string, role: FamilyRole, change: MealOfflineChange) {
       requireAdult(role);
       if (change.type !== 'write') throw new ApiError(400, 'VALIDATION_ERROR', 'Nieprawidłowa zmiana obiadów.');
-      return database.db.transaction(() => {
-        const lastDate = day(change.weekStart, 6);
-        const current = repository.week(familyId, change.weekStart, lastDate);
-        const conflict = () =>
-          new ApiError(409, 'MEAL_CONFLICT', 'Plan zmienił się na innym urządzeniu. Sprawdź oczekującą zmianę.');
-        for (const date of [...change.writes.map((write) => write.date), ...Object.keys(change.expectedDays ?? {})]) {
-          if (date < change.weekStart || date > lastDate)
-            throw new ApiError(400, 'VALIDATION_ERROR', 'Data nie należy do zapisanego tygodnia.');
-        }
-        for (const [date, expected] of Object.entries(change.expectedDays ?? {})) {
-          const ids = current.filter((meal) => meal.date === date).map((meal) => meal.id);
-          if (ids.length !== expected.length || ids.some((id, index) => id !== expected[index])) throw conflict();
-        }
-        for (const write of change.writes) {
-          const existing = current.find((meal) => meal.date === write.date && (!change.byId || meal.id === write.id));
-          if ((existing?.id ?? null) !== write.expectedId || (existing && write.id !== existing.id)) throw conflict();
-          if (!existing && database.db.select().from(meals).where(eq(meals.id, write.id)).get())
-            throw new ApiError(409, 'MEAL_CONFLICT', 'Identyfikator obiadu jest już używany.');
-          if (write.data) repository.put(familyId, actorId, write.date, write.data, write.id);
-          else if (existing) repository.remove(familyId, existing.id);
-        }
-        return { ok: true, week: { ok: true, ...this.week(familyId, change.weekStart, change.byId) } };
-      });
+      return database.db.transaction(
+        () => {
+          const lastDate = day(change.weekStart, 6);
+          const current = repository.week(familyId, change.weekStart, lastDate);
+          const conflict = () =>
+            new ApiError(409, 'MEAL_CONFLICT', 'Plan zmienił się na innym urządzeniu. Sprawdź oczekującą zmianę.');
+          for (const date of [...change.writes.map((write) => write.date), ...Object.keys(change.expectedDays ?? {})]) {
+            if (date < change.weekStart || date > lastDate)
+              throw new ApiError(400, 'VALIDATION_ERROR', 'Data nie należy do zapisanego tygodnia.');
+          }
+          for (const [date, expected] of Object.entries(change.expectedDays ?? {})) {
+            const ids = current.filter((meal) => meal.date === date).map((meal) => meal.id);
+            if (ids.length !== expected.length || ids.some((id, index) => id !== expected[index])) throw conflict();
+          }
+          for (const write of change.writes) {
+            const existing = current.find((meal) => meal.date === write.date && (!change.byId || meal.id === write.id));
+            if ((existing?.id ?? null) !== write.expectedId || (existing && write.id !== existing.id)) throw conflict();
+            if (!existing && database.db.select().from(meals).where(eq(meals.id, write.id)).get())
+              throw new ApiError(409, 'MEAL_CONFLICT', 'Identyfikator obiadu jest już używany.');
+            if (write.data) repository.put(familyId, actorId, write.date, write.data, write.id);
+            else if (existing) repository.remove(familyId, existing.id);
+          }
+          return { ok: true, week: { ok: true, ...this.week(familyId, change.weekStart, change.byId) } };
+        },
+        { behavior: 'immediate' },
+      );
     },
     toShoppingList(familyId: string, actorId: string, role: FamilyRole, data: MealsToShoppingList) {
       return database.db.transaction(

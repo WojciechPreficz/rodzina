@@ -28,11 +28,15 @@ export function createContactService(database: DatabaseConnection) {
     snapshot: repository.snapshot,
     create(familyId: string, actorId: string, role: FamilyRole, data: CreateContact) {
       requireAdult(role);
-      return database.db.transaction(() => {
-        const groupId = data.groupId ?? defaultGroup(familyId).id;
-        findGroup(familyId, groupId);
-        return repository.create(familyId, actorId, { ...data, groupId });
-      });
+      return database.db.transaction(
+        () => {
+          const groupId = data.groupId ?? defaultGroup(familyId).id;
+          findGroup(familyId, groupId);
+          database.familyRecordLimits.requireCapacity('contacts', familyId);
+          return repository.create(familyId, actorId, { ...data, groupId });
+        },
+        { behavior: 'immediate' },
+      );
     },
     update(familyId: string, id: string, role: FamilyRole, data: PatchContact) {
       requireAdult(role);
@@ -53,7 +57,13 @@ export function createContactService(database: DatabaseConnection) {
     },
     createGroup(familyId: string, actorId: string, role: FamilyRole, name: string) {
       requireAdult(role);
-      return repository.createGroup(familyId, actorId, name);
+      return database.db.transaction(
+        () => {
+          database.familyRecordLimits.requireCapacity('contactGroups', familyId);
+          return repository.createGroup(familyId, actorId, name);
+        },
+        { behavior: 'immediate' },
+      );
     },
     updateGroup(familyId: string, id: string, role: FamilyRole, name: string) {
       requireAdult(role);

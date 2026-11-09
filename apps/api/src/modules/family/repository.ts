@@ -30,7 +30,14 @@ export function createFamilyRepository(database: DatabaseConnection) {
     findFamily: (id: string) => database.db.select().from(schema.families).where(eq(schema.families.id, id)).get(),
     findInvitation: (tokenHash: string) =>
       database.db.select().from(schema.invitations).where(eq(schema.invitations.tokenHash, tokenHash)).get(),
-    insertUser: (values: typeof schema.users.$inferInsert) => database.db.insert(schema.users).values(values).run(),
+    insertUser: (values: typeof schema.users.$inferInsert) =>
+      database.db.transaction(
+        (tx) => {
+          database.familyRecordLimits.requireCapacity('members', values.familyId);
+          return tx.insert(schema.users).values(values).run();
+        },
+        { behavior: 'immediate' },
+      ),
     insertInvitation: (values: typeof schema.invitations.$inferInsert) =>
       database.db.insert(schema.invitations).values(values).run(),
     insertPasswordReset: (values: typeof schema.passwordResets.$inferInsert) =>
@@ -69,6 +76,7 @@ export function createFamilyRepository(database: DatabaseConnection) {
           )
           .run();
         if (claimed.changes !== 1) return false;
+        database.familyRecordLimits.requireCapacity('members', values.familyId);
         tx.insert(schema.users).values(values).run();
         return true;
       });

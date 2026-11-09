@@ -147,7 +147,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
           assigneeId && (assigneeId === list.ownerId || list.memberIds.includes(assigneeId)) ? assigneeId : null,
       };
       const { reminders: shared, checklist = [], ...fields } = template;
-      const successor = repository.createTask(series.listId, actorId, {
+      const successor = repository.createTask(familyId, series.listId, actorId, {
         ...fields,
         dueDate: next.nextDate,
         dueTime: series.rule.time,
@@ -273,7 +273,8 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
             .set({ rule: data.rule, template, version: existing.version + 1, updatedAt: now })
             .where(eq(taskSeries.id, id))
             .run();
-        else
+        else {
+          database.familyRecordLimits.requireCapacity('taskSeries', familyId);
           db.insert(taskSeries)
             .values({
               id: seriesId,
@@ -285,6 +286,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
               updatedAt: now,
             })
             .run();
+        }
         const series = getSeries(familyId, actorId, seriesId);
         if (active)
           db.update(taskOccurrences)

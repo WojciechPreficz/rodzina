@@ -17,6 +17,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
   function createList(familyId: string, actorId: string, data: CreateShoppingList, id?: string) {
     return db.transaction(
       () => {
+        database.familyRecordLimits.requireCapacity('shoppingLists', familyId);
         const position = Math.min(
           (db
             .select({ value: max(shoppingLists.position) })
@@ -92,6 +93,7 @@ export function createShoppingRepository(database: DatabaseConnection) {
       () => {
         // Guard the parent inside the same transaction as the insert and history update.
         if (!findList(familyId, listId)) return undefined;
+        database.familyRecordLimits.requireCapacity('shoppingItems', familyId);
         const nameNormalized = normalizeShoppingName(data.name);
         const previous = db
           .select()

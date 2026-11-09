@@ -24,6 +24,8 @@ RODZINA_ALLOW_REGISTRATION=false
 RODZINA_ANDROID_DOWNLOAD_DIR=/home/<user>/rodzina-android
 RODZINA_ANDROID_SHA256_CERT_FINGERPRINTS=
 RODZINA_TRUSTED_PROXIES=
+RODZINA_API_RATE_LIMIT_MAX=600
+RODZINA_API_RATE_LIMIT_WINDOW_MS=60000
 RODZINA_PASSWORD_RESET_EMAIL_ENABLED=false
 RODZINA_SMTP_HOST=
 RODZINA_SMTP_PORT=587
@@ -47,6 +49,32 @@ Przed włączeniem wysyłki ustal z operatorem faktyczne adresy i łańcuch prox
 nadpisywanie X-Forwarded-* oraz brak bezpośredniego dostępu do portu API.
 Nie wpisuj wszystkich adresów ani niepotwierdzonych zakresów. Kontrolowana próba
 z własnym X-Forwarded-For nie może zmienić IP używanego przez limity.
+
+`RODZINA_API_RATE_LIMIT_MAX` to maksymalna liczba żądań `/api` z jednego
+adresu IP w procesie Passengera, domyślnie 600.
+`RODZINA_API_RATE_LIMIT_WINDOW_MS` ustala długość okna w milisekundach
+(domyślnie 60000, minimum 1000). Obie wartości są liczbami całkowitymi.
+
+Limity rekordów dotyczą całej rodziny. Wartości to dodatnie liczby całkowite.
+Minimalny limit grup kontaktów to 4 ze względu na grupy tworzone przy rejestracji.
+
+| Zmienna                             | Dane                                                                | Domyślnie |
+| ----------------------------------- | ------------------------------------------------------------------- | --------: |
+| `RODZINA_MAX_FAMILY_EVENTS`         | Wydarzenia                                                          |      5000 |
+| `RODZINA_MAX_FAMILY_CONTACTS`       | Kontakty                                                            |      1000 |
+| `RODZINA_MAX_FAMILY_CONTACT_GROUPS` | Grupy kontaktów                                                     |       100 |
+| `RODZINA_MAX_FAMILY_SHOPPING_LISTS` | Listy zakupów                                                       |       100 |
+| `RODZINA_MAX_FAMILY_SHOPPING_ITEMS` | Pozycje na wszystkich listach zakupów                               |     10000 |
+| `RODZINA_MAX_FAMILY_TASK_LISTS`     | Listy zadań, w tym domyślne                                         |       100 |
+| `RODZINA_MAX_FAMILY_TASKS`          | Zadania na wszystkich listach, w tym zapisane wystąpienia cykliczne |     10000 |
+| `RODZINA_MAX_FAMILY_TASK_SERIES`    | Serie zadań                                                         |       500 |
+| `RODZINA_MAX_FAMILY_DOCUMENTS`      | Dokumenty                                                           |      1000 |
+| `RODZINA_MAX_FAMILY_MEALS`          | Obiady                                                              |      5000 |
+| `RODZINA_MAX_FAMILY_MEMBERS`        | Domownicy, w tym administrator                                      |        50 |
+
+Po obniżeniu limitu można nadal odczytywać, edytować i usuwać zapisane rekordy.
+Dodawanie wznawia się po zejściu poniżej limitu. Zmiany wartości stosuje się
+po restarcie procesów aplikacji w cPanel.
 
 ### Rejestracja i reset hasła przez e-mail
 
