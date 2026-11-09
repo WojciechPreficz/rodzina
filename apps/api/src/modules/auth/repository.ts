@@ -4,34 +4,39 @@ import type { DatabaseConnection } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { createInitialContactGroups } from '../contacts/repository.js';
 
+export type SessionCredential = { passwordHash: string } | { pinHash: string; joinCode: string };
+
 export function createAuthRepository(database: DatabaseConnection) {
+  const findChild = (code: string, id: string) =>
+    database.db
+      .select({ user: schema.users, family: schema.families })
+      .from(schema.users)
+      .innerJoin(schema.families, eq(schema.users.familyId, schema.families.id))
+      .where(and(eq(schema.users.id, id), eq(schema.users.role, 'child'), eq(schema.families.joinCode, code)))
+      .get();
   return {
     findUserByEmail: (email: string) =>
       database.db.select().from(schema.users).where(eq(schema.users.email, email)).get(),
     findUser: (id: string) => database.db.select().from(schema.users).where(eq(schema.users.id, id)).get(),
     findFamily: (id: string) => database.db.select().from(schema.families).where(eq(schema.families.id, id)).get(),
-    findFamilyByCode: (code: string) =>
-      database.db.select().from(schema.families).where(eq(schema.families.joinCode, code)).get(),
-    findChild: (familyId: string, id: string) =>
-      database.db
-        .select()
-        .from(schema.users)
-        .where(and(eq(schema.users.id, id), eq(schema.users.familyId, familyId), eq(schema.users.role, 'child')))
-        .get(),
-    listChildren: (familyId: string) =>
+    findChild,
+    listChildren: (code: string) =>
       database.db
         .select({ id: schema.users.id, displayName: schema.users.displayName, color: schema.users.color })
         .from(schema.users)
-        .where(and(eq(schema.users.familyId, familyId), eq(schema.users.role, 'child')))
+        .innerJoin(schema.families, eq(schema.users.familyId, schema.families.id))
+        .where(and(eq(schema.families.joinCode, code), eq(schema.users.role, 'child')))
         .orderBy(asc(schema.users.createdAt))
         .all(),
-    insertSession(values: typeof schema.sessions.$inferInsert, expectedPasswordHash?: string) {
+    insertSession(values: typeof schema.sessions.$inferInsert, credential?: SessionCredential) {
       return database.sqlite
         .transaction(() => {
           if (
-            expectedPasswordHash &&
-            database.db.select().from(schema.users).where(eq(schema.users.id, values.userId)).get()?.passwordHash !==
-              expectedPasswordHash
+            credential &&
+            ('pinHash' in credential
+              ? findChild(credential.joinCode, values.userId)?.user.pinHash !== credential.pinHash
+              : database.db.select().from(schema.users).where(eq(schema.users.id, values.userId)).get()
+                  ?.passwordHash !== credential.passwordHash)
           )
             return false;
           database.db.insert(schema.sessions).values(values).run();
@@ -65,38 +70,44 @@ export function createAuthRepository(database: DatabaseConnection) {
       passwordHash: string;
       now: number;
     }) {
-      return database.db.transaction((tx) => {
-        let joinCode = generateJoinCode();
+      return database.db.transaction(
+        (tx) => {
+          const joinCode = generateJoinCode(
+            (code) =>
+              !!tx
+                .select({ id: schema.families.id })
+                .from(schema.families)
+                .where(eq(schema.families.joinCode, code))
+                .get(),
+          );
 
-        while (tx.select().from(schema.families).where(eq(schema.families.joinCode, joinCode)).get()) {
-          joinCode = generateJoinCode();
-        }
+          tx.insert(schema.families)
+            .values({
+              id: familyId,
+              name: familyName,
+              timezone: 'Europe/Warsaw',
+              joinCode,
+              createdAt: now,
+            })
+            .run();
 
-        tx.insert(schema.families)
-          .values({
-            id: familyId,
-            name: familyName,
-            timezone: 'Europe/Warsaw',
-            joinCode,
-            createdAt: now,
-          })
-          .run();
-
-        tx.insert(schema.users)
-          .values({
-            id: userId,
-            familyId,
-            displayName,
-            email: normalizedEmail,
-            passwordHash,
-            role: 'admin',
-            color: '#5C7CFA',
-            createdAt: now,
-            updatedAt: now,
-          })
-          .run();
-        createInitialContactGroups(database, familyId, userId, now);
-      });
+          tx.insert(schema.users)
+            .values({
+              id: userId,
+              familyId,
+              displayName,
+              email: normalizedEmail,
+              passwordHash,
+              role: 'admin',
+              color: '#5C7CFA',
+              createdAt: now,
+              updatedAt: now,
+            })
+            .run();
+          createInitialContactGroups(database, familyId, userId, now);
+        },
+        { behavior: 'immediate' },
+      );
     },
     resetPassword(resetRequest: typeof schema.passwordResets.$inferSelect, passwordHash: string, now: number) {
       return database.db.transaction((tx) => {

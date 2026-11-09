@@ -29,6 +29,7 @@ import type { sendResetMail } from './reset-mail.js';
 import type { sendRegistrationMail } from './registration-mail.js';
 import { createRegistration, RegistrationRateLimitError } from './registration.js';
 import { ApiError } from '../../http/errors.js';
+import { AuthRateLimitError } from './rate-limit-service.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -83,25 +84,37 @@ export function registerAuthRoutes(
       await service.login(
         parse(loginSchema, request.body, 'Dane logowania są niepoprawne.'),
         request.ip ?? 'unknown',
-        (id, now, expectedPasswordHash) => createSession(reply, request, id, now, expectedPasswordHash),
+        (id, now, credential) => createSession(reply, request, id, now, credential),
       ),
     );
   });
-  app.get('/api/auth/family-members', { config: { auth: 'public' } }, async (request) => {
-    return familyMembersResponseSchema.parse(
-      await service.familyMembers(
-        parse(familyMembersQuerySchema, request.query, 'Kod rodziny jest wymagany.').joinCode,
-      ),
-    );
+  app.get('/api/auth/family-members', { config: { auth: 'public' } }, async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      return familyMembersResponseSchema.parse(
+        service.familyMembers(
+          parse(familyMembersQuerySchema, request.query, 'Kod rodziny jest wymagany.').joinCode,
+          request.ip,
+        ),
+      );
+    } catch (error) {
+      if (error instanceof AuthRateLimitError) reply.header('Retry-After', error.retryAfter);
+      throw error;
+    }
   });
   app.post('/api/auth/login-child', { config: { auth: 'public', idempotency: false } }, async (request, reply) => {
-    return loginChildResponseSchema.parse(
-      await service.loginChild(
-        parse(loginChildSchema, request.body, 'Dane logowania dziecka są niepoprawne.'),
-        request.ip ?? 'unknown',
-        (id) => createSession(reply, request, id),
-      ),
-    );
+    try {
+      return loginChildResponseSchema.parse(
+        await service.loginChild(
+          parse(loginChildSchema, request.body, 'Dane logowania dziecka są niepoprawne.'),
+          request.ip,
+          (id, now, credential) => createSession(reply, request, id, now, credential),
+        ),
+      );
+    } catch (error) {
+      if (error instanceof AuthRateLimitError) reply.header('Retry-After', error.retryAfter);
+      throw error;
+    }
   });
   app.post('/api/auth/logout', { config: { idempotency: false } }, async (request, reply) => {
     const result = authOkResponseSchema.parse(await service.logout(request.cookies?.sid));

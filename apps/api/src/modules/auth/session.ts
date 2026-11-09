@@ -2,7 +2,7 @@ import type { FastifyReply } from 'fastify';
 import { hashToken, randomToken, SESSION_TTL_MS } from '../../auth.js';
 import type { AppConfig } from '../../config.js';
 import type { DatabaseConnection } from '../../db/client.js';
-import { createAuthRepository } from './repository.js';
+import { createAuthRepository, type SessionCredential } from './repository.js';
 import { ApiError } from '../../http/errors.js';
 
 export function createSessionFactory(database: DatabaseConnection, config: AppConfig) {
@@ -12,7 +12,7 @@ export function createSessionFactory(database: DatabaseConnection, config: AppCo
     request: { headers: Record<string, string | string[] | undefined> },
     userId: string,
     createdAt?: number,
-    expectedPasswordHash?: string,
+    credential?: SessionCredential,
   ): Promise<void> {
     const sessionToken = randomToken();
     const sessionHash = hashToken(sessionToken);
@@ -29,9 +29,15 @@ export function createSessionFactory(database: DatabaseConnection, config: AppCo
         createdAt: now,
         userAgent: userAgent ?? null,
       },
-      expectedPasswordHash,
+      credential,
     );
-    if (!inserted) throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy e-mail lub hasło.');
+    if (!inserted) {
+      const message =
+        credential && 'pinHash' in credential
+          ? 'Nieprawidłowy kod rodziny, użytkownik lub PIN.'
+          : 'Nieprawidłowy e-mail lub hasło.';
+      throw new ApiError(403, 'INVALID_CREDENTIALS', message);
+    }
 
     reply.setCookie('sid', sessionToken, {
       path: '/',

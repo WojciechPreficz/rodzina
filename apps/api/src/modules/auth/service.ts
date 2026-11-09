@@ -4,10 +4,10 @@ import { hashPassword, hashToken, isValidPassword, normalizeEmail, verifyPasswor
 import type { DatabaseConnection } from '../../db/client.js';
 import { ApiError } from '../../http/errors.js';
 import { serializeUser, type PublicAuthUser } from '../../http/user.js';
-import { createAuthRepository } from './repository.js';
+import { createAuthRepository, type SessionCredential } from './repository.js';
 import { createAuthRateLimitService, createLoginRateLimitKey } from './rate-limit-service.js';
 
-export type StartSession = (userId: string, createdAt?: number, expectedPasswordHash?: string) => Promise<void>;
+export type StartSession = (userId: string, createdAt?: number, credential?: SessionCredential) => Promise<void>;
 export function createAuthService(database: DatabaseConnection) {
   const repository = createAuthRepository(database);
   const rateLimits = createAuthRateLimitService(database);
@@ -29,7 +29,7 @@ export function createAuthService(database: DatabaseConnection) {
 
     rateLimits.clear(loginKey);
 
-    await startSession(user.id, Date.now(), user.passwordHash);
+    await startSession(user.id, Date.now(), { passwordHash: user.passwordHash });
 
     const family = repository.findFamily(user.familyId);
     if (!family) {
@@ -43,13 +43,11 @@ export function createAuthService(database: DatabaseConnection) {
     };
   }
 
-  async function familyMembers(joinCode: string) {
-    const family = repository.findFamilyByCode(joinCode);
-    if (!family) {
-      throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
+  function familyMembers(joinCode: string, ip: string) {
+    const children = rateLimits.lookupFamily(ip, () => repository.listChildren(joinCode));
+    if (!children.length) {
+      throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono profili dzieci dla podanego kodu.');
     }
-
-    const children = repository.listChildren(family.id);
 
     return {
       ok: true,
@@ -60,27 +58,25 @@ export function createAuthService(database: DatabaseConnection) {
 
   async function loginChild(data: LoginChildInput, ip: string, startSession: StartSession) {
     const { joinCode, userId, pin } = data;
-    const family = repository.findFamilyByCode(joinCode);
-    if (!family) {
-      throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono rodziny dla podanego kodu.');
-    }
-
-    const user = repository.findChild(family.id, userId);
-
-    if (!user || !user.pinHash) {
+    const child = repository.findChild(joinCode, userId);
+    if (!child?.user.pinHash) {
       throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
     }
 
-    const loginKey = createLoginRateLimitKey('child', ip, family.id, userId);
-    rateLimits.consume(loginKey);
-
-    const isValid = await verifyPin(user.pinHash, pin);
+    const { user, family } = child;
+    const pinHash = child.user.pinHash;
+    const attempt = rateLimits.reserveChildPin(ip, userId, pinHash);
+    const isValid = await verifyPin(pinHash, pin).catch((error: unknown) => {
+      attempt.release();
+      throw error;
+    });
     if (!isValid) {
       throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy kod rodziny, użytkownik lub PIN.');
     }
 
-    rateLimits.clear(loginKey);
-    await startSession(user.id);
+    attempt.release();
+    await startSession(user.id, Date.now(), { pinHash, joinCode });
+    attempt.clearIp();
 
     return {
       ok: true,

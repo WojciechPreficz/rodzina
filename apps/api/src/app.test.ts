@@ -331,7 +331,7 @@ describe('auth API', () => {
     });
 
     expect(rotateResponse.statusCode).toBe(200);
-    expect(rotateResponse.json().joinCode).toHaveLength(6);
+    expect(rotateResponse.json().joinCode).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$/);
 
     const lastAdminDeleteResponse = await app.inject({
       method: 'DELETE',

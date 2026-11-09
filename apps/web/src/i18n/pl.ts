@@ -290,7 +290,7 @@ export const labels = {
   childLogin: 'Jestem dzieckiem',
   chooseProfile: 'Wybierz swój profil',
   findFamily: 'Pokaż profile',
-  joinCodeError: 'Kod rodziny musi mieć 6 znaków.',
+  joinCodeError: 'Wpisz 6- lub 10-znakowy kod rodziny.',
   noChildren: 'W tej rodzinie nie ma jeszcze profili dzieci.',
   loginError: 'Nie udało się zalogować.',
   profileError: 'Nie udało się pobrać profili.',

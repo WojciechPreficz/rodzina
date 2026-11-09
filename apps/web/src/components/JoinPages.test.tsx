@@ -63,35 +63,38 @@ describe('joining and child authentication', () => {
     vi.restoreAllMocks();
   });
 
-  it('selects a child, uses the PIN keyboard and returns to next after a failed attempt', async () => {
-    let attempts = 0;
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url.startsWith('/api/auth/family-members'))
-        return response({ members: [{ id: 'c1', displayName: 'Zosia', color: '#7BC6B9' }] });
-      if (url === '/api/auth/login-child')
-        return ++attempts === 1
-          ? response({ error: { code: 'INVALID_CREDENTIALS', message: 'Błędny PIN.' } }, 403)
-          : response(session);
-      return response({ error: { message: 'Brak sesji.' } }, 401);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    await renderPage('/login-child?next=%2Fzakupy');
-    fireEvent.change(screen.getByRole('textbox', { name: /Kod rodziny/ }), { target: { value: 'abc234' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Pokaż profile' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Zosia' }));
-    for (const digit of '1234') fireEvent.click(screen.getByRole('button', { name: `Cyfra ${digit}` }));
-    fireEvent.click(screen.getByRole('button', { name: 'Zaloguj się' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Błędny PIN.');
-    expect(screen.getByLabelText('PIN')).toHaveValue('');
-    for (const digit of '12345') fireEvent.click(screen.getByRole('button', { name: `Cyfra ${digit}` }));
-    fireEvent.click(screen.getByRole('button', { name: 'Usuń ostatnią cyfrę' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Zaloguj się' }));
-    expect(await screen.findByText('Child destination')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/auth/login-child',
-      expect.objectContaining({ body: JSON.stringify({ joinCode: 'ABC234', userId: 'c1', pin: '1234' }) }),
-    );
-  });
+  it.each(['abc234', 'abc234defg'])(
+    'logs in with code %s, the PIN keyboard and a retry after a failed attempt',
+    async (code) => {
+      let attempts = 0;
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url.startsWith('/api/auth/family-members'))
+          return response({ members: [{ id: 'c1', displayName: 'Zosia', color: '#7BC6B9' }] });
+        if (url === '/api/auth/login-child')
+          return ++attempts === 1
+            ? response({ error: { code: 'INVALID_CREDENTIALS', message: 'Błędny PIN.' } }, 403)
+            : response(session);
+        return response({ error: { message: 'Brak sesji.' } }, 401);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      await renderPage('/login-child?next=%2Fzakupy');
+      fireEvent.change(screen.getByRole('textbox', { name: /Kod rodziny/ }), { target: { value: code } });
+      fireEvent.click(screen.getByRole('button', { name: 'Pokaż profile' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Zosia' }));
+      for (const digit of '1234') fireEvent.click(screen.getByRole('button', { name: `Cyfra ${digit}` }));
+      fireEvent.click(screen.getByRole('button', { name: 'Zaloguj się' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Błędny PIN.');
+      expect(screen.getByLabelText('PIN')).toHaveValue('');
+      for (const digit of '12345') fireEvent.click(screen.getByRole('button', { name: `Cyfra ${digit}` }));
+      fireEvent.click(screen.getByRole('button', { name: 'Usuń ostatnią cyfrę' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Zaloguj się' }));
+      expect(await screen.findByText('Child destination')).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/auth/login-child',
+        expect.objectContaining({ body: JSON.stringify({ joinCode: code.toUpperCase(), userId: 'c1', pin: '1234' }) }),
+      );
+    },
+  );
 
   it('shows the API error for an invalid family code', async () => {
     vi.stubGlobal(

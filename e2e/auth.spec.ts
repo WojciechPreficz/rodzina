@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { installNativeTransport } from './nativeTransport.js';
 import { openNavigation } from './navigation.js';
 import { confirmRegistrationFromInbox } from './registration.js';
 
@@ -61,6 +62,7 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await expect(dialog).not.toBeVisible();
     const me = await page.request.get('/api/auth/me');
     const joinCode = (await me.json()).family.joinCode;
+    expect(joinCode).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$/);
     const childPage = await childContext.newPage();
     await childPage.goto('/login-child?next=%2Fzakupy');
     await childPage.getByRole('textbox', { name: /Kod rodziny/ }).fill(joinCode);
@@ -100,4 +102,34 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await second.close();
     await childContext.close();
   }
+});
+
+test('logs in a child with a new family code through Android transport', async ({
+  page,
+  request,
+  baseURL,
+}, testInfo) => {
+  const headers = { Origin: baseURL! };
+  const registration = await request.post('/api/test/families', {
+    headers,
+    data: {
+      familyName: 'Rodzina Android',
+      displayName: 'Anna',
+      email: `child-android-${testInfo.project.name}@example.com`,
+      password: 'password123',
+    },
+  });
+  expect(registration.status()).toBe(201);
+  const { joinCode } = (await registration.json()).family;
+  const child = await request.post('/api/members/child', { headers, data: { displayName: 'Zosia', pin: '1234' } });
+  expect(child.status()).toBe(201);
+  await installNativeTransport(page);
+  await page.goto('/login-child?next=%2Fzakupy');
+  await page.getByRole('textbox', { name: /Kod rodziny/ }).fill(joinCode);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Pokaż profile' }).click();
+  await page.getByRole('button', { name: 'Zosia' }).click();
+  await page.getByLabel('PIN', { exact: true }).fill('1234');
+  await page.getByRole('button', { name: 'Zaloguj się', exact: true }).click();
+  await expect(page).toHaveURL(/\/zakupy$/);
 });

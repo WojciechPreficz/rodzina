@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const JOIN_CODE_LENGTH = 10;
+export const joinCodeSchema = z
+  .string()
+  .regex(new RegExp(`^(?:[A-Z2-9]{6}|[${JOIN_CODE_ALPHABET}]{${JOIN_CODE_LENGTH}})$`));
+
 export const roleSchema = z.enum(['admin', 'member', 'child']);
 export const publicUserSchema = z.object({
   id: z.string(),

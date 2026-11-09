@@ -3,10 +3,12 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { authRateLimits } from '../../db/schema.js';
 
 export function createAuthRateLimitRepository(database: DatabaseConnection) {
-  const consume = database.sqlite.transaction((scopeKey: string, now: number, limit: number, windowMs: number) => {
-    const existing = database.db.select().from(authRateLimits).where(eq(authRateLimits.scopeKey, scopeKey)).get();
+  const find = (scopeKey: string) =>
+    database.db.select().from(authRateLimits).where(eq(authRateLimits.scopeKey, scopeKey)).get();
+  const reserve = database.sqlite.transaction((scopeKey: string, now: number, limit: number, windowMs: number) => {
+    const existing = find(scopeKey);
     const active = existing && existing.expiresAt > now;
-    if (active && existing.count >= limit) return false;
+    if (active && existing.count >= limit) return undefined;
 
     const values = {
       scopeKey,
@@ -18,13 +20,34 @@ export function createAuthRateLimitRepository(database: DatabaseConnection) {
       .values(values)
       .onConflictDoUpdate({ target: authRateLimits.scopeKey, set: values })
       .run();
-    return true;
+    return values.expiresAt;
   });
 
   return {
     consume(scopeKey: string, now: number, limit: number, windowMs: number) {
       // Reserve the attempt before asynchronous credential verification, across all connections.
-      return consume.immediate(scopeKey, now, limit, windowMs);
+      return reserve.immediate(scopeKey, now, limit, windowMs) !== undefined;
+    },
+    reserve: reserve.immediate,
+    retryAfter(scopeKey: string, now: number, limit: number) {
+      const row = find(scopeKey);
+      return row && row.count >= limit && row.expiresAt > now ? Math.ceil((row.expiresAt - now) / 1000) : 0;
+    },
+    release(scopeKey: string, expiresAt: number) {
+      database.sqlite
+        .transaction(() => {
+          const row = find(scopeKey);
+          if (!row || row.expiresAt !== expiresAt) return;
+          const key = eq(authRateLimits.scopeKey, scopeKey);
+          if (row.count === 1) database.db.delete(authRateLimits).where(key).run();
+          else
+            database.db
+              .update(authRateLimits)
+              .set({ count: row.count - 1 })
+              .where(key)
+              .run();
+        })
+        .immediate();
     },
     clear(scopeKey: string) {
       database.db.delete(authRateLimits).where(eq(authRateLimits.scopeKey, scopeKey)).run();

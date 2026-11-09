@@ -7,15 +7,7 @@ import type {
   UpdateMemberInput,
   UpdateFamilyInput,
 } from './schemas.js';
-import {
-  generateJoinCode,
-  hashPassword,
-  hashPin,
-  hashToken,
-  isValidPin,
-  normalizeEmail,
-  randomToken,
-} from '../../auth.js';
+import { hashPassword, hashPin, hashToken, isValidPin, normalizeEmail, randomToken } from '../../auth.js';
 import type { AppConfig } from '../../config.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import type * as schema from '../../db/schema.js';
@@ -362,16 +354,9 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       throw new ApiError(403, 'FORBIDDEN', 'Tylko administrator może odświeżyć kod rodziny.');
     }
 
-    let nextJoinCode = generateJoinCode();
-    while (repository.findFamilyByCode(nextJoinCode)) {
-      nextJoinCode = generateJoinCode();
-    }
-
-    repository.updateFamily(user.familyId, { joinCode: nextJoinCode });
-
     return {
       ok: true,
-      joinCode: nextJoinCode,
+      joinCode: repository.rotateJoinCode(user.familyId),
     };
   }
   return {

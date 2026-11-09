@@ -1,4 +1,5 @@
 import { PageHeader } from './PageHeader.js';
+import { JOIN_CODE_LENGTH, joinCodeSchema } from '@rodzina/shared';
 import type { SessionResponse, ChildProfile, FamilyMembersResponse, InvitationResponse } from '@rodzina/shared';
 import {
   Alert,
@@ -35,7 +36,7 @@ export function ChildLoginPage() {
 
   const findFamily = async (event: FormEvent) => {
     event.preventDefault();
-    if (!/^[A-Z2-9]{6}$/.test(joinCode)) {
+    if (!joinCodeSchema.safeParse(joinCode).success) {
       setError(labels.joinCodeError);
       return;
     }
@@ -92,7 +93,7 @@ export function ChildLoginPage() {
               <TextInput
                 label={labels.joinCode}
                 autoComplete="off"
-                maxLength={6}
+                maxLength={JOIN_CODE_LENGTH}
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.currentTarget.value.trim().toUpperCase())}
                 required

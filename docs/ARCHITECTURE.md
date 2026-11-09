@@ -448,7 +448,22 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   /api/auth/me przez timer, powrót do karty i odzyskanie sieci. Logowanie
   przywraca sprawdzanie; zmiana konta w drugiej karcie pozwala wykryć nową sesję.
 - Limity logowania: 10 prób/15 minut dla IP–konto, osobno hasło i PIN,
-  trwałe w SQLite. Poprawne logowanie usuwa własny licznik.
+  trwałe w SQLite. Poprawne logowanie usuwa licznik IP–konto.
+- Nowe kody rodzin mają 10 znaków z alfabetu 32 znaków losowanych przez
+  `crypto.randomInt`. Administrator może wygenerować nowy kod w ustawieniach
+  rodziny. Stare kody 6-znakowe działają do dobrowolnej zmiany. Starsze APK
+  przyjmuje w formularzu tylko 6 znaków. Wpisanie nowego kodu wymaga aktualizacji
+  APK. Już zalogowane urządzenia zachowują sesje po zmianie kodu.
+- Publiczne GET /api/auth/family-members pozwala na 10 wyszukiwań na IP w 15 minut
+  i 100 nieudanych wyszukiwań łącznie w 15 minut. Kod nieistniejący i kod rodziny
+  bez dzieci zwracają to samo 404. Po wyczerpaniu globalnego limitu wyszukiwanie
+  zwraca 429 także dla poprawnego kodu. Odpowiedzi mają Cache-Control: no-store.
+- Logowanie dziecka zwraca to samo 403 dla nieznanego kodu, profilu lub błędnego
+  PIN-u. Dodatkowy limit to 20 nieudanych prób na dziecko w godzinę ze wszystkich
+  adresów IP. Próby równoległe rezerwują miejsce przed sprawdzeniem PIN-u.
+  Poprawny PIN zwalnia własną rezerwację. Zmiana PIN-u przez administratora
+  odblokowuje dziecko na wszystkich IP, a zmiana kodu rodziny zachowuje blokadę.
+  Limity wyszukiwania i PIN-u są trwałe w auth_rate_limits, a 429 zawiera Retry-After.
 - Nowa rodzina wymaga potwierdzenia e-mail. POST /api/auth/registration-requests
   zapisuje tylko pending_registrations i zwraca 202 po przyjęciu wiadomości
   przez SMTP. Nie tworzy rodziny, użytkownika, grup kontaktów ani sesji.

@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { generateJoinCode } from '../../auth.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 
@@ -27,8 +28,6 @@ export function createFamilyRepository(database: DatabaseConnection) {
     findUserByEmail: (email: string) =>
       database.db.select().from(schema.users).where(eq(schema.users.email, email)).get(),
     findFamily: (id: string) => database.db.select().from(schema.families).where(eq(schema.families.id, id)).get(),
-    findFamilyByCode: (code: string) =>
-      database.db.select().from(schema.families).where(eq(schema.families.joinCode, code)).get(),
     findInvitation: (tokenHash: string) =>
       database.db.select().from(schema.invitations).where(eq(schema.invitations.tokenHash, tokenHash)).get(),
     insertUser: (values: typeof schema.users.$inferInsert) => database.db.insert(schema.users).values(values).run(),
@@ -40,6 +39,22 @@ export function createFamilyRepository(database: DatabaseConnection) {
       database.db.update(schema.users).set(values).where(eq(schema.users.id, id)).run(),
     updateFamily: (id: string, values: Partial<typeof schema.families.$inferInsert>) =>
       database.db.update(schema.families).set(values).where(eq(schema.families.id, id)).run(),
+    rotateJoinCode(id: string) {
+      return database.sqlite
+        .transaction(() => {
+          const joinCode = generateJoinCode(
+            (code) =>
+              !!database.db
+                .select({ id: schema.families.id })
+                .from(schema.families)
+                .where(eq(schema.families.joinCode, code))
+                .get(),
+          );
+          database.db.update(schema.families).set({ joinCode }).where(eq(schema.families.id, id)).run();
+          return joinCode;
+        })
+        .immediate();
+    },
     acceptInvitation(invitationId: string, values: typeof schema.users.$inferInsert, now: number) {
       return database.db.transaction((tx) => {
         const claimed = tx

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { IncomingHttpHeaders } from 'node:http';
 import { hash as hashArgon2, verify as verifyArgon2 } from '@node-rs/argon2';
+import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH } from '@rodzina/shared';
 
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 60;
 export const SESSION_REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 24;
@@ -17,10 +18,15 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export function generateJoinCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-  return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+export function generateJoinCode(isTaken: (code: string) => boolean): string {
+  let code: string;
+  do {
+    code = Array.from(
+      { length: JOIN_CODE_LENGTH },
+      () => JOIN_CODE_ALPHABET[crypto.randomInt(JOIN_CODE_ALPHABET.length)],
+    ).join('');
+  } while (isTaken(code));
+  return code;
 }
 
 export async function hashPassword(value: string): Promise<string> {

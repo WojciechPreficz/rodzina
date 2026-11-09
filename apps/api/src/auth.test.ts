@@ -1,7 +1,23 @@
 // @vitest-environment node
 import type { IncomingHttpHeaders } from 'node:http';
-import { describe, expect, it } from 'vitest';
-import { isTrustedMutationSource } from './auth.js';
+import crypto from 'node:crypto';
+import { describe, expect, it, vi } from 'vitest';
+import { generateJoinCode, isTrustedMutationSource } from './auth.js';
+
+it('uses randomInt to select ten symbols and retries collisions', () => {
+  const random = vi
+    .spyOn(crypto, 'randomInt')
+    .mockImplementationOnce(() => 0)
+    .mockImplementation(() => 31);
+  const isTaken = vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false);
+  try {
+    expect(generateJoinCode(isTaken)).toBe('9999999999');
+    expect(isTaken.mock.calls).toEqual([['A999999999'], ['9999999999']]);
+    expect(random.mock.calls).toEqual(Array.from({ length: 20 }, () => [32]));
+  } finally {
+    random.mockRestore();
+  }
+});
 
 describe('isTrustedMutationSource', () => {
   it.each<{ name: string; headers: IncomingHttpHeaders; trusted: boolean }>([
