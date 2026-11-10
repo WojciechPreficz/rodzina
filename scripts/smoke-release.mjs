@@ -158,6 +158,7 @@ try {
     displayName: 'Admin',
     email: 'smoke@example.com',
     password: 'smoke-password',
+    acceptedTerms: true,
   };
   for (const endpoint of ['registration-requests', 'register-family', 'confirm-registration']) {
     const response = await fetch(`http://127.0.0.1:${port}/api/auth/${endpoint}`, {
@@ -165,7 +166,8 @@ try {
       headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${port}` },
       body: JSON.stringify(endpoint === 'confirm-registration' ? { token: 'a'.repeat(64) } : registrationData),
     });
-    if (response.status !== 403) fail('wyłączona rejestracja pozwala zgłosić lub potwierdzić rodzinę.');
+    if (response.status !== 403)
+      fail(`POST /api/auth/${endpoint} przy wyłączonej rejestracji zwrócił HTTP ${response.status}, oczekiwano 403.`);
   }
   const fixtureResponse = await fetch(`http://127.0.0.1:${port}/api/test/families`, {
     method: 'POST',
