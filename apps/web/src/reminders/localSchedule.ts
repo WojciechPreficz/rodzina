@@ -1,9 +1,9 @@
 import { registerPlugin } from '@capacitor/core';
 import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/local-notifications';
 import { reminderScheduleSchema, type ReminderSchedule } from '@rodzina/shared';
-import { apiFetch } from '../../api.js';
-import { labels } from '../../i18n/pl.js';
-import { taskStore } from '../tasks/index.js';
+import { apiFetch } from '../api.js';
+import { labels } from '../i18n/pl.js';
+import { taskStore } from '../features/tasks/index.js';
 
 const text = labels.localAlarms;
 export const alarmStore = registerPlugin<{

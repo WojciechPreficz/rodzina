@@ -26,7 +26,7 @@ import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput, type ReminderInput, type ReminderItem } from '../../components/reminderFields.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 import { labels } from '../../i18n/pl.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
 import { taskOfflineText } from './taskOffline.js';

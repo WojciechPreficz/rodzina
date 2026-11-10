@@ -11,8 +11,8 @@ vi.mock('@capacitor/core', () => ({
   Capacitor: { getPlatform: () => 'android' },
   registerPlugin: () => ({ request, clearSession }),
 }));
-vi.mock('../notifications/scheduleSync.js', () => ({ ScheduleSync: () => null }));
-vi.mock('../notifications/localSchedule.js', () => ({
+vi.mock('../../reminders/scheduleSync.js', () => ({ ScheduleSync: () => null }));
+vi.mock('../../reminders/localSchedule.js', () => ({
   localScheduler: { invalidate: vi.fn(), clear: vi.fn(async () => {}) },
 }));
 import type { AuthUser } from '@rodzina/shared';

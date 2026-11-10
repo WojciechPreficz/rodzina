@@ -3,7 +3,7 @@ import { AppShell } from '../../components/AppShell.js';
 import { ProtectedRoute } from '../../auth.js';
 import { useMe } from '../../sessionContext.js';
 import { isAndroid } from '../../platform.js';
-import { OfflineReminder } from '../notifications/OfflineReminder.js';
+import { OfflineReminder } from '../notifications/index.js';
 import { EventDetailsPage } from './EventDetailsPage.js';
 import { AndroidUpdateNotice } from '../updates/AndroidUpdates.js';
 

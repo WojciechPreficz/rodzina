@@ -7,7 +7,7 @@ import { useAccountLifecycle } from './accountLifecycle.js';
 import { accountServices, registerApplicationStores } from './accountAdapters.js';
 import { TaskPrefetch } from './features/tasks/index.js';
 import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
-import { ScheduleSync } from './features/notifications/scheduleSync.js';
+import { ScheduleSync } from './reminders/scheduleSync.js';
 import { MigrationNotice } from './offline/MigrationNotice.js';
 import { useOfflineStorageIssue, useMigrationRequired } from './offline/status.js';
 import { isAndroid } from './platform.js';

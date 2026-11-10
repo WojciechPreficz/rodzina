@@ -26,7 +26,7 @@ vi.mock('../../sessionContext.js', () => ({
 vi.mock('../family/familyQueries.js', () => ({
   useMembersQuery: () => ({ data: [{ id: state.userId, displayName: 'Ania', color: '#123456' }] }),
 }));
-vi.mock('../notifications/NotificationBanner.js', () => ({ NotificationBanner: () => null }));
+vi.mock('../notifications/index.js', () => ({ NotificationBanner: () => null }));
 vi.mock('@schedule-x/react', () => ({ useCalendarApp: () => ({}), ScheduleXCalendar: () => <div /> }));
 const date = todayInTimezone('Europe/Warsaw');
 const event: CalendarEvent = {

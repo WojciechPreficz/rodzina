@@ -3,8 +3,8 @@ import { App } from '@capacitor/app';
 import { Network } from '@capacitor/network';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { focusManager, onlineManager, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { isAndroid } from '../../platform.js';
-import { SYNC_INTERVAL_MS } from '../../queryClient.js';
+import { isAndroid } from '../platform.js';
+import { SYNC_INTERVAL_MS } from '../queryClient.js';
 import { localScheduler } from './localSchedule.js';
 
 export const scheduleKey = ['local-schedule'];

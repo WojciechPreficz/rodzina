@@ -7,7 +7,7 @@ import { useMe } from '../../sessionContext.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 
 export function RenewDocument({ document, onClose }: { document: FamilyDocument; onClose: () => void }) {
   const { user, family, familyConfirmed } = useMe();

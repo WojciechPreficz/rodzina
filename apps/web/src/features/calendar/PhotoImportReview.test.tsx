@@ -22,7 +22,7 @@ vi.mock('../../platform.js', () => ({ getSessionGeneration: () => session.genera
 vi.mock('../../connectivity.js', () => ({ isOffline: () => network.offline, useOffline: () => network.offline }));
 vi.mock('./calendarQueries.js', () => ({ useCalendarReadOnly: () => network.offline }));
 vi.mock('./calendarOffline.js', () => ({ calendarStore: { markStale: stale } }));
-vi.mock('../notifications/scheduleSync.js', () => ({ refreshLocalSchedule: refresh }));
+vi.mock('../../reminders/scheduleSync.js', () => ({ refreshLocalSchedule: refresh }));
 vi.mock('./photoImportStorage.js', () => ({ readPhotoImports: read, writePhotoImports: write }));
 
 const result = parseOcrEvents({

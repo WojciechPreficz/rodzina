@@ -4,8 +4,8 @@ import { Alert, Button, Card, Stack, Text } from '@mantine/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
-import { alarmStore, localScheduler } from './localSchedule.js';
-import { useLocalSchedule } from './scheduleSync.js';
+import { alarmStore, localScheduler } from '../../reminders/localSchedule.js';
+import { useLocalSchedule } from '../../reminders/scheduleSync.js';
 
 const text = labels.localAlarms;
 const date = (value: number) =>

@@ -3,7 +3,7 @@ import { Alert, Button, Loader, Stack, Text, Title } from '@mantine/core';
 import { Link, useLocation } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { reminderScheduleSchema, type ReminderSchedule } from '@rodzina/shared';
-import { alarmStore } from './localSchedule.js';
+import { alarmStore } from '../../reminders/localSchedule.js';
 import { useMe } from '../../sessionContext.js';
 import { isAndroid } from '../../platform.js';
 import { notificationPath } from '../../nativeNavigation.js';

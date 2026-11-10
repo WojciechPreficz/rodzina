@@ -10,7 +10,7 @@ import { isOffline, useOffline } from '../../connectivity.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { useMembersQuery } from '../family/familyQueries.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 import { useDocumentDates, useDocumentsQuery } from './documentQueries.js';
 import { RenewDocument } from './RenewDocument.js';
 import { DocumentForm, DocumentWarning } from './DocumentForm.js';

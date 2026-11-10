@@ -5,7 +5,7 @@ import { useMe } from '../../sessionContext.js';
 import { ApiRequestError } from '../../api.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 import { createEvent, deleteEvent, updateEvent, type CalendarRange } from './calendarApi.js';
 import { calendarStore, readCalendarRange, useCalendarOffline } from './calendarOffline.js';
 import { fetchSavedDistant, fetchSavedEvent, fetchSavedRange } from './calendarSync.js';

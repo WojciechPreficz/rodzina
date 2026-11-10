@@ -11,7 +11,7 @@ vi.mock('../../connectivity.js', () => ({ useOffline: () => state.offline }));
 vi.mock('../../components/AppShell.js', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../notifications/OfflineReminder.js', () => ({ OfflineReminder: () => <div>Zapisany alarm</div> }));
+vi.mock('../notifications/index.js', () => ({ OfflineReminder: () => <div>Zapisany alarm</div> }));
 vi.mock('./DocumentDetailsPage.js', () => ({ DocumentDetailsPage: () => <div>Aktualny dokument</div> }));
 import { DocumentRoute } from './DocumentRoute.js';
 afterEach(() => {

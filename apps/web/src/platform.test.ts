@@ -9,9 +9,9 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => ({ request, clearSession }),
 }));
 import { apiFetch, ApiRequestError } from './api.js';
-import { localScheduler } from './features/notifications/localSchedule.js';
+import { localScheduler } from './reminders/localSchedule.js';
 import { clearNativeSession, getSessionGeneration, invalidateSessionRequests } from './platform.js';
-vi.mock('./features/notifications/localSchedule.js', () => ({
+vi.mock('./reminders/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined) },
 }));
 

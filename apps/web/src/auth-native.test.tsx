@@ -12,7 +12,7 @@ vi.mock('@capacitor/core', () => ({
 import type { AuthUser, Family } from '@rodzina/shared';
 import { AppSession as AuthProvider } from './AppSession.js';
 import { useMe } from './sessionContext.js';
-import { localScheduler } from './features/notifications/localSchedule.js';
+import { localScheduler } from './reminders/localSchedule.js';
 import { ACCOUNT_SIGNAL_KEY, clearDatabase } from './offline/database.js';
 import {
   readShoppingData,
@@ -22,10 +22,10 @@ import {
 } from './features/shopping/shoppingStorage.js';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 import { createShoppingStore } from './features/shopping/shoppingOffline.js';
-vi.mock('./features/notifications/localSchedule.js', () => ({
+vi.mock('./reminders/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined), invalidate: vi.fn() },
 }));
-vi.mock('./features/notifications/scheduleSync.js', () => ({ ScheduleSync: () => null }));
+vi.mock('./reminders/scheduleSync.js', () => ({ ScheduleSync: () => null }));
 
 const session = {
   user: { id: 'adult', familyId: 'family', displayName: 'Anna' } as AuthUser,

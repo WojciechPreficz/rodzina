@@ -20,7 +20,7 @@ import { allowNavigation } from '../../nativeNavigation.js';
 import { isOffline } from '../../connectivity.js';
 import { useCalendarReadOnly } from './calendarQueries.js';
 import { calendarStore } from './calendarOffline.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 import { EventForm } from './EventForm.js';
 import { readPhotoImports, writePhotoImports, type PhotoImportOperation } from './photoImportStorage.js';
 import { EventDuplicateDialog } from './EventDuplicateDialog.js';

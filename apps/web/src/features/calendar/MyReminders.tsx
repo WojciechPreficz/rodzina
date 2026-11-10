@@ -7,7 +7,7 @@ import { labels } from '../../i18n/pl.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 import { calendarOnlineHint, useCalendarOnlineMutation, useCalendarReadOnly } from './calendarQueries.js';
 import { isOffline, useOffline } from '../../connectivity.js';
 import { fetchPersonal } from './calendarSync.js';

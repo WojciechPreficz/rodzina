@@ -28,7 +28,7 @@ import { useRef, useState } from 'react';
 import { apiFetch } from '../../api.js';
 import { isOffline } from '../../connectivity.js';
 import { useMe } from '../../sessionContext.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 import { taskStore } from './taskOffline.js';
 import { skippedTaskDates } from './taskRecurrencePreview.js';
 

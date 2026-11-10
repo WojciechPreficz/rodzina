@@ -15,7 +15,7 @@ export const nativeApi = registerPlugin<{
 
 export async function clearNativeSession() {
   if (isAndroid()) {
-    const { localScheduler } = await import('./features/notifications/localSchedule.js');
+    const { localScheduler } = await import('./reminders/localSchedule.js');
     try {
       await localScheduler.clear();
     } finally {
@@ -36,7 +36,7 @@ export async function nativeRequest(input: string, init: RequestInit) {
     ['/api/auth/login', '/api/auth/login-child', '/api/auth/register-family'].includes(url.pathname) ||
     /^\/api\/invitations\/[^/]+\/accept$/.test(url.pathname)
   ) {
-    const { localScheduler } = await import('./features/notifications/localSchedule.js');
+    const { localScheduler } = await import('./reminders/localSchedule.js');
     await localScheduler.clear();
   }
   const result = await nativeApi.request({
@@ -46,7 +46,7 @@ export async function nativeRequest(input: string, init: RequestInit) {
   });
   if (generation !== sessionGeneration) throw new DOMException('Session changed', 'AbortError');
   if (result.status === 401 || (result.status === 403 && url.pathname === '/api/reminders/schedule')) {
-    const { localScheduler } = await import('./features/notifications/localSchedule.js');
+    const { localScheduler } = await import('./reminders/localSchedule.js');
     // Do not await: this request can itself be inside the scheduler queue.
     void localScheduler.clear().catch(() => undefined);
   }

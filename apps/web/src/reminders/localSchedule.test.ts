@@ -1,5 +1,5 @@
-import '../../offline/testing.js';
-import { updateTaskData, createTaskOfflineStore } from '../tasks/index.js';
+import '../offline/testing.js';
+import { updateTaskData, createTaskOfflineStore } from '../features/tasks/index.js';
 import { expect, it, vi } from 'vitest';
 import type { LocalNotificationSchema } from '@capacitor/local-notifications';
 import type { ReminderSchedule, ScheduledReminder } from '@rodzina/shared';

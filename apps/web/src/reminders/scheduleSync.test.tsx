@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, focusManager, onlineManager } from '@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ScheduleSync, refreshLocalSchedule, useLocalSchedule } from './scheduleSync.js';
-import { reportTransportFailure } from '../../connectivity.js';
+import { reportTransportFailure } from '../connectivity.js';
 
 const mocks = vi.hoisted(() => ({
   app: undefined as undefined | ((value: { isActive: boolean }) => void),
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   invalidate: vi.fn(),
 }));
-vi.mock('../../platform.js', () => ({ isAndroid: () => true }));
+vi.mock('../platform.js', () => ({ isAndroid: () => true }));
 vi.mock('./localSchedule.js', () => ({ localScheduler: mocks }));
 vi.mock('@capacitor/app', () => ({
   App: {

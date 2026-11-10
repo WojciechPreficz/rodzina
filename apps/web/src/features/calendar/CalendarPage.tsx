@@ -26,7 +26,7 @@ import { useOffline } from '../../connectivity.js';
 import { memberCalendars, monthRange, todayInTimezone, toScheduleX } from './toScheduleX.js';
 import { CreateEventView } from './CreateEventView.js';
 import { DistantEvents } from './DistantEvents.js';
-import { NotificationBanner } from '../notifications/NotificationBanner.js';
+import { NotificationBanner } from '../notifications/index.js';
 import { TodayTasks } from '../tasks/index.js';
 import { TodayMeal } from '../meals/TodayMeal.js';
 import { createCalendarSwipePlugin } from './calendarSwipe.js';

@@ -28,7 +28,7 @@ import './contacts.css';
 import { contactsStore } from './contactsOffline.js';
 import { useOfflineModule } from '../../offline/index.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 
 type Editor = { kind: 'contact'; contact?: Contact } | { kind: 'group'; group?: ContactGroup };
 type Removal = { kind: 'contact'; item: Contact } | { kind: 'group'; item: ContactGroup };

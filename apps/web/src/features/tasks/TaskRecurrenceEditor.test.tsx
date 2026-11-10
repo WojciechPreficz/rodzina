@@ -16,7 +16,7 @@ vi.mock('../../sessionContext.js', () => ({
   }),
 }));
 vi.mock('./taskOffline.js', () => ({ taskStore: { synchronize: mocks.sync } }));
-vi.mock('../notifications/scheduleSync.js', () => ({ refreshLocalSchedule: mocks.schedule }));
+vi.mock('../../reminders/scheduleSync.js', () => ({ refreshLocalSchedule: mocks.schedule }));
 const task = {
   id: '10000000-0000-4000-8000-000000000003',
   title: 'Kwiaty',

@@ -7,7 +7,7 @@ import { isOffline, useOffline } from '../../connectivity.js';
 import { ReminderList, ReminderPicker } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';
 import { SYNC_INTERVAL_MS } from '../../queryClient.js';
-import { refreshLocalSchedule } from '../notifications/scheduleSync.js';
+import { refreshLocalSchedule } from '../../reminders/scheduleSync.js';
 
 export function DocumentReminders({ documentId, timezone }: { documentId: string; timezone: string }) {
   const { user, family, familyConfirmed } = useMe();

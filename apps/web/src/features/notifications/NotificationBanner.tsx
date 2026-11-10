@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { labels } from '../../i18n/pl.js';
 import { isAndroid } from '../../platform.js';
 import { useMe } from '../../sessionContext.js';
-import { useLocalSchedule } from './scheduleSync.js';
+import { useLocalSchedule } from '../../reminders/scheduleSync.js';
 
 function AndroidBanner() {
   const { user } = useMe();

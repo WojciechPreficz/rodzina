@@ -11,7 +11,7 @@ import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/
 import { AuthLayout } from './components/AuthLayout.js';
 import { CalendarPage } from './features/calendar/CalendarPage.js';
 import { EventRoute } from './features/calendar/EventRoute.js';
-import { NotificationsPage } from './features/notifications/NotificationsPage.js';
+import { NotificationsPage } from './features/notifications/index.js';
 import { NativeNavigation } from './nativeNavigation.js';
 import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
 import { ShoppingPage } from './features/shopping/ShoppingPage.js';

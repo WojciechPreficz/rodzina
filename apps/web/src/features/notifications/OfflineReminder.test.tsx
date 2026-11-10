@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 const f = vi.hoisted(() => ({ preview: vi.fn() }));
-vi.mock('./localSchedule.js', () => ({ alarmStore: { preview: f.preview } }));
+vi.mock('../../reminders/localSchedule.js', () => ({ alarmStore: { preview: f.preview } }));
 vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ refresh: vi.fn() }) }));
 vi.mock('../../platform.js', () => ({ isAndroid: () => true }));
 import { OfflineReminder } from './OfflineReminder.js';

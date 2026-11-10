@@ -10,7 +10,7 @@ import type { AccountServices } from './accountLifecycle.js';
 import { registerAccountStore } from './accountStorage.js';
 import { accountId, familyMembersKey, hydrateOfflineData, restoreOfflineData, saveOfflineData } from './offlineData.js';
 import { listMembers } from './features/family/familyApi.js';
-import { localScheduler } from './features/notifications/localSchedule.js';
+import { localScheduler } from './reminders/localSchedule.js';
 import { isAndroid } from './platform.js';
 import { registerMealsStore } from './features/meals/mealOffline.js';
 import { synchronizeAccountOutbox } from './offline/sync.js';

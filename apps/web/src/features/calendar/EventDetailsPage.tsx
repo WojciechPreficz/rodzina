@@ -24,7 +24,7 @@ import { reminderInput } from '../../components/reminderFields.js';
 import { MyReminders } from './MyReminders.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { isAndroid } from '../../platform.js';
-import { OfflineReminder } from '../notifications/OfflineReminder.js';
+import { OfflineReminder } from '../notifications/index.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { EventSection } from './EventSection.js';
 import './event.css';
