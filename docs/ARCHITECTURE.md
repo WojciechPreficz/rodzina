@@ -94,13 +94,11 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Sygnał między kartami inicjuje ponowny odczyt IndexedDB.
 - Moduł z odczytem offline wyprowadza widok ze snapshotu. Odświeżenie
   online waliduje dane, zapisuje je przez adapter cache i publikuje widok.
-  Kontakty korzystają z tego trybu, z formatem wersji 1 i dotychczasową
-  migracją z klucza `rodzina:contacts:v1`.
+  Kontakty korzystają z tego trybu i formatu snapshotu w wersji 1.
   Kalendarz korzysta z tego samego trybu. Pobrane zakresy miesięczne,
   szczegóły wydarzeń, przypomnienia osobiste i wydarzenia odległe uzupełniają
   snapshot kolejno przez `updateSnapshot`, z kontrolą bieżącej rewizji
-  i generacji konta. Zachowuje format wersji 1 i migrację z klucza
-  `rodzina:calendar:v1`.
+  i generacji konta. Zachowuje format snapshotu w wersji 1.
 - Moduł z zapisem offline odczytuje snapshot i uporządkowane zmiany w jednej
   transakcji, a następnie czysta funkcja wyprowadza z nich widok. Sygnały
   outboxa odświeżają tę projekcję po zatwierdzeniu transakcji. Reguły zapisu
@@ -109,20 +107,29 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Zadania korzystają z tego trybu. Przed odczytem magazyn może przenieść starszy
   dziennik IndexedDB do outboxa i utrwalić zmiany wymagające sprawdzenia.
   Zadania dołączają do nadawcy po potwierdzeniu sesji i odświeżeniu dostępu do
-  list. Zachowują wersję 1 i migrację z klucza `rodzina:tasks:v1` oraz kluczy
-  dziennika. Odpowiedzi odświeżania i zapisy sprawdzają zakres aktywnego konta,
+  list. Zachowują format snapshotu w wersji 1. Odpowiedzi odświeżania i zapisy
+  sprawdzają zakres aktywnego konta,
   niezależnie od przeładowania widoku po sygnale outboxa.
   Zakupy korzystają z tego samego trybu zapisu offline. Snapshot w wersji 2
   przechowuje listy i zakresy ich zawartości z czasem pobrania. Moduł odczytuje
   wersję 1 z zakresami TanStack Query i zapisuje wersję 2 przy następnym zapisie
-  snapshotu. Moduł sprawdza zgodność konta podczas migracji klucza
-  `rodzina:shopping:v1` i dziennika localStorage. Magazyn przejmuje starszy
-  dziennik IndexedDB do wspólnego outboxa. Projekcja łączy operacje zakupów
+  snapshotu. Magazyn przejmuje starszy dziennik IndexedDB do wspólnego outboxa. Projekcja łączy operacje zakupów
   z eksportami obiadów w kolejności outboxa.
   Obiady korzystają ze wspólnego magazynu zapisu offline. Projekcja łączy
   snapshot w wersji 1 z operacjami obiadów odczytanymi w tej samej transakcji.
   Rejestracja przez kontrakt przywraca magazyn z sesją i klientem TanStack Query,
   którego nadawca używa do anulowania odczytów zakupów przed eksportem.
+
+### Odzyskiwanie pamięci ze starszej wersji
+
+Zwykły start odczytuje sesję, snapshoty i kolejkę z IndexedDB. Jeżeli wykryje
+stare snapshoty lub dzienniki w `localStorage` albo niedokończony import
+w IndexedDB, zatrzymuje uruchomienie sesji i wyświetla odnośnik do odzyskiwania.
+Wejście z parametrem `odzyskaj-dane-offline=1` działa pod tym samym originem WWW
+lub w tej samej instalacji APK. Dopiero po potwierdzeniu zamknięcia starszych
+kart aplikacja ładuje kod importu. Procedura sprawdza zgodność konta i danych,
+koordynuje dostęp z innymi kartami i usuwa źródła dopiero po weryfikacji zapisu.
+Po powrocie do aplikacji kolejkę należy zsynchronizować na tym samym koncie.
 
 ## Dane, czas i uprawnienia
 

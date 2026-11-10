@@ -1,3 +1,4 @@
+import { recoverLegacyData } from './offline/legacyRecovery.js';
 import './offline/testSetup.js';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
@@ -11,7 +12,6 @@ import {
   requestValue,
   transact,
   CLEAR_PENDING_KEY,
-  ensureMigrated,
 } from './offline/database.js';
 
 const session = {
@@ -60,7 +60,7 @@ it.each(['shopping', 'family'] as const)('migrates %s only once and leaves its f
 it('imports the unchanged legacy fixture through the existing migration protocol', async () => {
   const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8'));
   for (const entry of fixture.entries) localStorage.setItem(entry.key, JSON.stringify(entry.value));
-  await ensureMigrated(true);
+  await recoverLegacyData();
   const expected = fixture.entries.find((entry: { key: string }) => entry.key === 'rodzina:offline-data:v1').value
     .session;
   expect((await readAccountSession())?.user.id).toBe(expected.user.id);

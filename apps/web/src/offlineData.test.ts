@@ -62,10 +62,11 @@ describe('shared offline data', () => {
   });
 
   it.each(['{bad json', '{"version":2}', JSON.stringify({ version: 1, account: 'other', session })])(
-    'rejects corrupt or incompatible records: %s',
+    'leaves legacy records untouched during hydration: %s',
     async (raw) => {
       localStorage.setItem(OFFLINE_DATA_KEY, raw);
       expect(await hydrateOfflineData()).toBeUndefined();
+      expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBe(raw);
     },
   );
 

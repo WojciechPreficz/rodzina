@@ -1,5 +1,5 @@
 import { readAccountSession, saveAccountSession, PENDING_LOGOUT_KEY } from './session.js';
-import { calendarStore, registerCalendarStore } from './features/calendar/index.js';
+import { registerCalendarStore } from './features/calendar/index.js';
 import { registerTaskStore, taskStore } from './features/tasks/index.js';
 import { registerShoppingStore } from './features/shopping/index.js';
 import { forgetOfflineData } from './offlineData.js';
@@ -34,7 +34,6 @@ export const accountServices: AccountServices = {
   invalidateAlarms: () => {
     if (isAndroid()) localScheduler.invalidate();
   },
-  migrationCompleted: calendarStore.clear,
   foreignStorage: (event: StorageEvent, identity: string | undefined) => {
     if (event.key !== CONTACTS_STORAGE_KEY) return false;
     try {

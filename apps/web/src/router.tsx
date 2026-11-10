@@ -1,3 +1,4 @@
+import { LegacyRecoveryGate } from './offline/LegacyRecoveryGate.js';
 import { AppSession } from './AppSession.js';
 import { createBrowserRouter } from 'react-router';
 import { ProtectedRoute, PublicOnlyRoute } from './auth.js';
@@ -25,11 +26,11 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: (
-      <>
+      <LegacyRecoveryGate>
         <NativeNavigation />
         <AndroidUpdateMonitor />
         <AppSession />
-      </>
+      </LegacyRecoveryGate>
     ),
     children: [
       {

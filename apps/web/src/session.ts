@@ -4,7 +4,6 @@ import {
   accountToken,
   activateOfflineAccount,
   assertContext,
-  ensureMigrated,
   hasPendingClear,
   isAccountCurrent,
   requestValue,
@@ -56,8 +55,7 @@ async function readStored(token: number, migrate: boolean) {
       const current = await assertContext(tx);
       if (current.generation !== active.value.generation) throw new DOMException('Session changed', 'AbortError');
       const saved = await readSavedAccountSession(tx, current.accountId);
-      if (saved) return saved;
-      if (!migrate) return;
+      if (saved || !migrate) return saved;
       // Only the legacy session envelope is needed; module data and outboxes are independent.
       for (const module of ['family', 'shopping']) {
         const legacy = await requestValue<Legacy | undefined>(
@@ -86,9 +84,8 @@ export async function readAccountSession(): Promise<AccountSession | undefined> 
   try {
     if (hasPendingClear()) throw new Error('Pamięć konta jest niedostępna lub jej czyszczenie nie zostało zakończone.');
     const saved = await readStored(token, false);
-    if (saved) return saved;
-    await ensureMigrated();
     if (!isAccountCurrent(token)) return;
+    if (saved) return saved;
     return await readStored(token, true);
   } catch (error) {
     if (isAccountCurrent(token)) reportStorageIssue(`Nie można odczytać sesji offline. ${storageError(error)}`);

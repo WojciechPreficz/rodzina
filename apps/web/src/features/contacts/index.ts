@@ -6,3 +6,4 @@ export {
   registerContactsStore,
 } from './contactsOffline.js';
 export { ContactsPage } from './ContactsPage.js';
+export const loadContactsRecovery = () => import('./contactsRecovery.js');

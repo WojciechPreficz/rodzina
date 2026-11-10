@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 import { readOfflineSnapshot } from './offlineDatabase.js';
@@ -36,8 +37,11 @@ test('recovers a dormant WWW profile after a legacy tab writes during migration'
   await context.route('**/api/**', (route) => route.abort('internetdisconnected'));
   await page.goto('/wiecej/rodzina');
   const confirm = page.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' });
-  await expect(confirm).toBeVisible();
+  await expect(confirm).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Otwórz odzyskiwanie danych offline' })).toBeVisible();
   expect(await readOfflineSnapshot(page, 'family')).toBeUndefined();
+  await page.getByRole('link', { name: 'Otwórz odzyskiwanie danych offline' }).click();
+  await expect(confirm).toBeVisible();
   await page.evaluate(() => {
     const estimate = navigator.storage.estimate.bind(navigator.storage);
     const { writeFromLegacyTab } = window as Window & { writeFromLegacyTab?: () => Promise<void> };
@@ -97,6 +101,7 @@ for (const native of [false, true]) {
     }, fixture.entries);
     await page.route('**/api/**', (route) => route.abort('internetdisconnected'));
     await page.goto('/wiecej/rodzina');
+    await page.getByRole('link', { name: 'Otwórz odzyskiwanie danych offline' }).click();
     await page.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' }).click();
     await expect(page.getByText('TEST-CODE', { exact: true })).toBeVisible();
     await page.evaluate(async () => {
@@ -131,7 +136,7 @@ for (const native of [false, true]) {
   });
 }
 
-test('migrates all legacy modules only after confirmation and restores them after an offline restart', async ({
+test('recovers all legacy modules only after opening recovery and confirming and restores them after an offline restart', async ({
   page,
 }, info) => {
   await installNativeTransport(page);
@@ -145,9 +150,13 @@ test('migrates all legacy modules only after confirmation and restores them afte
   await page.route('**/api/**', (route) => route.abort('internetdisconnected'));
   await page.goto('/wiecej/rodzina');
   const confirm = page.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' });
-  await expect(confirm).toBeVisible();
+  await expect(confirm).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Otwórz odzyskiwanie danych offline' })).toBeVisible();
   expect(await readOfflineSnapshot(page, 'family')).toBeUndefined();
   expect(await page.evaluate(() => localStorage.getItem('rodzina:offline-data:v1'))).not.toBeNull();
+  await page.getByRole('link', { name: 'Otwórz odzyskiwanie danych offline' }).click();
+  await expect(confirm).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('migration-confirmation.png'), fullPage: true });
   await confirm.click();
   await expect(page.getByText('TEST-CODE', { exact: true })).toBeVisible();
@@ -202,6 +211,127 @@ test('migrates all legacy modules only after confirmation and restores them afte
       ),
     ),
   ).toEqual([]);
+});
+
+test('replays a pre-upgrade IndexedDB shopping journal after an offline restart', async ({
+  page,
+  context,
+  baseURL,
+}, info) => {
+  const headers = { Origin: baseURL! };
+  const registration = await page.request.post('/api/test/families', {
+    headers,
+    data: {
+      familyName: 'Aktualizacja pamięci',
+      displayName: 'Ania',
+      email: `pre-upgrade-${info.project.name}@example.com`,
+      password: 'password123',
+    },
+  });
+  expect(registration.ok()).toBe(true);
+  const { lists } = await (await page.request.get('/api/shopping/lists')).json();
+  const listId = lists[0].id as string;
+  const operationId = randomUUID();
+  await page.goto('/zakupy');
+  if (info.project.name === 'phone') await page.getByRole('button', { name: 'Zakupy', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Dodaj produkt' })).toBeEnabled();
+
+  // Close the running app before replacing the cache with a pre-upgrade snapshot and its embedded journal.
+  await page.route('**/before-upgrade', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<title>Previous build storage fixture</title>' }),
+  );
+  await page.goto('/before-upgrade');
+  await page.evaluate(
+    async ({ listId, operationId }) => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const open = indexedDB.open('rodzina-offline');
+        open.onsuccess = () => resolve(open.result);
+        open.onerror = () => reject(open.error);
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(['cache', 'metadata'], 'readwrite');
+          const cache = tx.objectStore('cache');
+          const read = cache.getAll();
+          read.onsuccess = () => {
+            const record = read.result.find((entry) => entry.module === 'shopping');
+            if (!record) return tx.abort();
+            const { ranges, ...saved } = record.payload;
+            const prefix = ['shopping', ...saved.account.split(':')];
+            const queries = ranges.map(
+              (range: { kind: 'lists' | 'items'; listId?: string; data: unknown; syncedAt: number }) => ({
+                queryKey: range.kind === 'lists' ? [...prefix, 'lists'] : [...prefix, 'items', range.listId],
+                state: { data: range.data, dataUpdatedAt: range.syncedAt },
+              }),
+            );
+            cache.put({
+              ...record,
+              payload: {
+                ...saved,
+                version: 1,
+                queries,
+                operations: [
+                  {
+                    operationId,
+                    submittedAt: Date.now(),
+                    sequence: 1,
+                    change: { type: 'add', id: operationId, listId, data: { name: 'Ryż sprzed aktualizacji' } },
+                  },
+                ],
+                nextSequence: 2,
+              },
+            });
+            tx.objectStore('metadata').put({
+              accountId: saved.account,
+              key: 'engine:shopping',
+              value: 'legacy-idb',
+            });
+          };
+          tx.oncomplete = () => resolve();
+          tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('Could not seed the pre-upgrade journal'));
+        });
+      } finally {
+        db.close();
+      }
+      localStorage.setItem('test:offline', 'yes');
+    },
+    { listId, operationId },
+  );
+  await page.close();
+
+  // Assets remain reachable, as in an APK cold start. Only API access is unavailable.
+  const reopened = await context.newPage();
+  await installNativeTransport(reopened);
+  await reopened.route('**/api/**', (route) => route.abort('internetdisconnected'));
+  await reopened.goto('/zakupy');
+  if (info.project.name === 'phone') await reopened.getByRole('button', { name: 'Zakupy', exact: true }).click();
+  await expect(reopened.getByRole('article', { name: 'Ryż sprzed aktualizacji', exact: true })).toBeVisible();
+  await expect(reopened.getByRole('heading', { name: 'Odzyskiwanie danych offline' })).toHaveCount(0);
+  const shopping = await readOfflineSnapshot<{ version: number; operations: { operationId: string }[] }>(
+    reopened,
+    'shopping',
+  );
+  expect(shopping?.version).toBe(2);
+  expect(shopping?.operations.map((operation) => operation.operationId)).toEqual([operationId]);
+  expect(await reopened.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await reopened.screenshot({ path: info.outputPath('pre-upgrade-journal-offline.png'), fullPage: true });
+
+  await reopened.unroute('**/api/**');
+  const mutation = reopened.waitForRequest(
+    (request) => request.method() === 'POST' && new URL(request.url()).searchParams.get('operationId') === operationId,
+  );
+  await reopened.evaluate(() => {
+    localStorage.removeItem('test:offline');
+    window.dispatchEvent(new Event('online'));
+  });
+  await mutation;
+  await expect
+    .poll(async () => (await readOfflineSnapshot<{ operations: unknown[] }>(reopened, 'shopping'))?.operations)
+    .toEqual([]);
+  const { items } = await (await reopened.request.get(`/api/shopping/lists/${listId}/items`)).json();
+  expect(items.map((item: { id: string; name: string }) => [item.id, item.name])).toEqual([
+    [operationId, 'Ryż sprzed aktualizacji'],
+  ]);
 });
 
 test('shows a storage denial while keeping the online family view usable', async ({ page, baseURL }, info) => {

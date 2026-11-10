@@ -1,18 +1,18 @@
-import { ensureMigrated, activateOfflineAccount, closeDatabase, readCache, transact } from '../../offline/testing.js';
-import { saveAccountSession, type AccountSession } from '../../session.js';
+import { importShopping, JOURNAL_PREFIX, recoverShopping } from './shoppingRecovery.js';
+import {
+  activateOfflineAccount,
+  closeDatabase,
+  readCache,
+  transact,
+  needsLegacyRecovery,
+} from '../../offline/testing.js';
+import { readAccountSession, saveAccountSession, type AccountSession } from '../../session.js';
 import '../../offline/testing.js';
 import { onlineManager } from '@tanstack/react-query';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import {
-  importShopping,
-  readShoppingData,
-  SHOPPING_STORAGE_KEY,
-  JOURNAL_PREFIX,
-  updateShoppingData,
-  emptyShopping,
-} from './shoppingStorage.js';
+import { readShoppingData, SHOPPING_STORAGE_KEY, updateShoppingData, emptyShopping } from './shoppingStorage.js';
 import { createShoppingStore } from './shoppingOffline.js';
 import '../../offlineData.js';
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
@@ -61,7 +61,7 @@ describe('shopping legacy import', () => {
   it('blocks corrupt journals and conflicting intentions without changing their raw source', async () => {
     seed();
     localStorage.setItem(journalKey(), '{broken');
-    await expect(ensureMigrated(true)).rejects.toThrow();
+    await expect(recoverShopping()).rejects.toThrow();
     expect(localStorage.getItem(journalKey())).toBe('{broken');
     expect(await readShoppingData()).toBeUndefined();
     const source = original();
@@ -115,34 +115,35 @@ describe('shopping legacy import', () => {
   });
   it('requires closure confirmation and resumes cleanup after a process dies after verification', async () => {
     seed();
-    await expect(ensureMigrated()).rejects.toThrow('Zamknij starsze karty');
+    expect(await needsLegacyRecovery()).toBe(true);
     const remove = Storage.prototype.removeItem;
     vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (this: Storage, key: string) {
       if (key === SHOPPING_STORAGE_KEY) throw new Error('Interrupted cleanup');
       remove.call(this, key);
     });
-    await expect(ensureMigrated(true)).rejects.toThrow('Interrupted cleanup');
+    await expect(recoverShopping()).rejects.toThrow('Interrupted cleanup');
     expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).not.toBeNull();
     vi.restoreAllMocks();
     await closeDatabase();
-    await ensureMigrated();
+    await recoverShopping();
     await activateOfflineAccount(fixture.accountId);
     expect((await readShoppingData(fixture.accountId))?.operations).toHaveLength(2);
     expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).toBeNull();
-    await ensureMigrated();
+    await recoverShopping();
     expect((await readShoppingData(fixture.accountId))?.operations).toHaveLength(2);
   });
-  it('retries activation for the same account after confirming the migration', async () => {
+  it('restores shopping after explicit recovery without importing during session startup', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
     onlineManager.setOnline(false);
     const store = createShoppingStore();
     try {
       seed();
       await saveAccountSession(session);
-      await store.activate(fixture.accountId);
-      expect(store.snapshot().issue).toMatch(/Zamknij starsze karty/);
+      expect((await readAccountSession())?.user.id).toBe(session.user.id);
+      expect(await readCache('shopping')).toBeUndefined();
+      expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).not.toBeNull();
 
-      await ensureMigrated(true);
+      await recoverShopping();
       await store.activate(fixture.accountId);
       expect(store.snapshot().issue).toBeUndefined();
       expect(store.snapshot().view?.pendingCount).toBe(2);
@@ -161,18 +162,18 @@ describe('shopping legacy import', () => {
       if (this.name === 'cache') throw new DOMException('Full', 'QuotaExceededError');
       return put.apply(this, args);
     });
-    await expect(ensureMigrated(true)).rejects.toThrow('Full');
+    await expect(recoverShopping()).rejects.toThrow('Full');
     expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).toBe(original()[SHOPPING_STORAGE_KEY]);
     expect(await readShoppingData()).toBeUndefined();
     vi.restoreAllMocks();
-    await ensureMigrated();
+    await recoverShopping();
     expect((await readShoppingData())?.operations).toHaveLength(2);
   });
   it('never overwrites new IDB work when an unsupported old tab writes a legacy source', async () => {
     await activateOfflineAccount(fixture.accountId);
     await updateShoppingData(fixture.accountId, () => emptyShopping(session));
     seed();
-    await expect(ensureMigrated(true)).rejects.toThrow('Starsza karta ponownie zapisała');
+    await expect(recoverShopping()).rejects.toThrow('Starsza karta ponownie zapisała');
     expect((await readShoppingData())?.legacyCache).toBe(false);
     expect(localStorage.getItem(SHOPPING_STORAGE_KEY)).not.toBeNull();
   });

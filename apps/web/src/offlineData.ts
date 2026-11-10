@@ -5,7 +5,6 @@ import {
   activateOfflineAccount,
   accountToken,
   clearDatabase,
-  ensureMigrated,
   isAccountCurrent,
   readCache,
   writeCache,
@@ -64,8 +63,6 @@ export function readOfflineData(): OfflineData | undefined {
 export async function hydrateOfflineData(): Promise<OfflineData | undefined> {
   const token = accountToken();
   try {
-    await ensureMigrated();
-    if (!isAccountCurrent(token)) return;
     const record = await readCache('family');
     if (!isAccountCurrent(token)) return;
     if (!record) return;
@@ -86,8 +83,6 @@ export async function hydrateOfflineData(): Promise<OfflineData | undefined> {
 export async function saveOfflineData(session: AccountSession, members?: AuthUser[], syncedAt?: number) {
   const token = accountToken();
   try {
-    await ensureMigrated();
-    if (!isAccountCurrent(token)) return false;
     await activateOfflineAccount(accountId(session));
     if (!isAccountCurrent(token)) return false;
     const value = offlineDataSchema.parse({

@@ -4,7 +4,6 @@ export {
   activateOfflineAccount,
   clearDatabase,
   closeDatabase,
-  ensureMigrated,
   readCache,
   requestValue,
   transact,
@@ -13,3 +12,8 @@ export {
 export { appendOperation, completeOperation, readOperations } from './outbox.js';
 export { joinSync, startSync, type SyncAdapter } from './sync.js';
 export { offlineTransaction } from './transaction.js';
+export { needsLegacyRecovery } from './legacySources.js';
+export async function recoverLegacyData() {
+  const recovery = await import('./legacyRecovery.js');
+  await recovery.recoverLegacyData();
+}

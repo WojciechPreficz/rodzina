@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { contactsResponseSchema } from '@rodzina/shared';
-import { cacheSignal, registerOfflineModule, registerRecordMigration } from '../../offline/index.js';
+import { cacheSignal, registerOfflineModule } from '../../offline/index.js';
 
 export const CONTACTS_STORAGE_KEY = 'rodzina:contacts:v1';
 const snapshotSchema = z
@@ -42,16 +42,6 @@ const contactsModule = registerOfflineModule({
   writeError: (detail) =>
     `Nie można zapisać kontaktów na urządzeniu. ${detail} Kontakty mogą być niedostępne po zamknięciu aplikacji.`,
 });
-registerRecordMigration(
-  'contacts',
-  CONTACTS_STORAGE_KEY,
-  (source) => {
-    if (Object.keys(source).length !== 1 || !(CONTACTS_STORAGE_KEY in source))
-      throw new Error('Nieobsługiwany format pamięci kontaktów.');
-    return snapshotSchema.parse(JSON.parse(source[CONTACTS_STORAGE_KEY]!));
-  },
-  (tx, value) => tx.commitSnapshot('contacts', value, { engine: 'legacy-idb' }),
-);
 export const CONTACTS_SIGNAL = cacheSignal('contacts');
 export function createContactsStore() {
   const store = contactsModule.createStore();

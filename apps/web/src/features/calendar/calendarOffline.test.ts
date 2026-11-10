@@ -1,4 +1,4 @@
-import '../../offline/testing.js';
+import { readCache, transact } from '../../offline/testing.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expandOccurrences, occurrencesQuerySchema, type CalendarEvent } from '@rodzina/shared';
 import { CALENDAR_STORAGE_KEY, createCalendarStore, monthWindow, readCalendarRange } from './calendarOffline.js';
@@ -150,14 +150,22 @@ describe('durable calendar preview', () => {
     expect(store.snapshot().view).toBeUndefined();
     expect(localStorage.getItem(CALENDAR_STORAGE_KEY)).toBeNull();
   });
-  it('reports corrupt, inaccessible and full storage without claiming persistence', async () => {
-    localStorage.setItem(CALENDAR_STORAGE_KEY, '{bad');
-    store = createCalendarStore();
-    await store.activate(`${familyId}:${userId}`);
-    expect(store.snapshot().issue).toContain('odczytać');
-    localStorage.removeItem(CALENDAR_STORAGE_KEY);
+  it('reports a corrupt IndexedDB snapshot without changing the saved record', async () => {
+    const accountId = `${familyId}:${userId}`;
+    await store.saveRange('2026-10', occurrences(), store.token());
+    const snapshot = (await readCache('calendar', accountId))!;
+    await transact('readwrite', async (tx) => {
+      tx.objectStore('cache').put({ ...snapshot, payload: { version: 99, account: accountId } });
+    });
     store.clear();
-    await store.activate(`${familyId}:${userId}`);
+    store = createCalendarStore();
+    await store.activate(accountId);
+    expect(store.snapshot().issue).toContain('odczytać');
+    expect(store.snapshot().view).toBeUndefined();
+    expect((await readCache('calendar', accountId))?.payload).toEqual({ version: 99, account: accountId });
+  });
+
+  it('reports full storage without claiming persistence', async () => {
     const { IDBObjectStore } = await import('fake-indexeddb');
     vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
       throw new Error('QuotaExceededError');
@@ -165,7 +173,6 @@ describe('durable calendar preview', () => {
     await store.saveRange('2026-10', occurrences(), store.token());
     expect(store.snapshot().issue).toContain('Nie można zapisać');
     expect(read('2026-10-24').data).toHaveLength(1);
-    const { readCache } = await import('../../offline/testing.js');
     expect(await readCache('calendar', `${familyId}:${userId}`)).toBeUndefined();
   });
 });

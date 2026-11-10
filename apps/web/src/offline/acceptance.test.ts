@@ -1,3 +1,4 @@
+import { recoverLegacyData } from './legacyRecovery.js';
 import { registerApplicationStores } from '../accountAdapters.js';
 import './testSetup.js';
 import { readFileSync } from 'node:fs';
@@ -10,14 +11,7 @@ import { createCalendarStore } from '../features/calendar/index.js';
 import { createContactsStore } from '../features/contacts/index.js';
 import { readTaskData, updateTaskData, taskOperationBlocksAlarm } from '../features/tasks/index.js';
 import { createShoppingStore, readShoppingData } from '../features/shopping/index.js';
-import {
-  activateOfflineAccount,
-  closeDatabase,
-  ensureMigrated,
-  recoverPendingClear,
-  requestValue,
-  transact,
-} from './database.js';
+import { activateOfflineAccount, closeDatabase, recoverPendingClear, requestValue, transact } from './database.js';
 import { readOperations } from './outbox.js';
 import { startSync, type SyncAdapter } from './sync.js';
 import { adapters, chargedBytes, type CacheEntry } from './registry.js';
@@ -36,7 +30,7 @@ async function takeOverShopping() {
   store.clear();
 }
 async function upgrade() {
-  await ensureMigrated(true);
+  await recoverLegacyData();
   await activateOfflineAccount(account);
   await takeOverShopping();
   await updateTaskData(account, () => {});
@@ -194,7 +188,7 @@ it('clears all modules, pending work, staged imports and legacy sources through 
 
 it('resumes a failed task handover without losing the already migrated shopping queue', async () => {
   seed();
-  await ensureMigrated(true);
+  await recoverLegacyData();
   await activateOfflineAccount(account);
   await takeOverShopping();
   const before = await transact('readonly', (tx) => readOperations(tx, account));

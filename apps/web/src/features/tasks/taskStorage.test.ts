@@ -1,5 +1,4 @@
 import {
-  ensureMigrated,
   activateOfflineAccount,
   closeDatabase,
   readCache,
@@ -7,11 +6,14 @@ import {
   requestValue,
   clearDatabase,
   readOperations,
+  needsLegacyRecovery,
+  recoverLegacyData,
 } from '../../offline/testing.js';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { importTasks, readTaskData, updateTaskData } from './taskStorage.js';
+import { readTaskData, updateTaskData } from './taskStorage.js';
+import { importTasks } from './taskRecovery.js';
 import { TASK_STORAGE_KEY } from './taskOffline.js';
 import { CONTACTS_STORAGE_KEY } from '../contacts/index.js';
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
@@ -36,7 +38,7 @@ describe('O.4 legacy import', () => {
   it('atomically takes over O.4, preserves review, times and discards, and keeps only the confirmed base in cache', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
     seed();
-    await ensureMigrated(true);
+    await recoverLegacyData();
     await activateOfflineAccount(fixture.accountId);
     const original = (await readTaskData(fixture.accountId))!;
     const put = IDBObjectStore.prototype.put;
@@ -73,16 +75,16 @@ describe('O.4 legacy import', () => {
   it('requires explicit exclusivity, preserves raw sources until import can run, and keeps IDs, timestamps, discards and contacts time', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(fixture.referenceTime);
     seed();
-    await expect(ensureMigrated()).rejects.toThrow(/Zamknij starsze karty/);
+    expect(await needsLegacyRecovery()).toBe(true);
     expect(localStorage.getItem(journalKey())).toBe(source()[journalKey()]);
-    await ensureMigrated(true);
+    await recoverLegacyData();
     await activateOfflineAccount(fixture.accountId);
     const expected = importTasks(source(), fixture.accountId);
     expect(await readTaskData(fixture.accountId)).toEqual(expected);
     expect((await readCache('contacts', fixture.accountId))?.payload).toEqual(contact.value);
     for (const key of [...Object.keys(source()), contact.key]) expect(localStorage.getItem(key)).toBeNull();
     await closeDatabase();
-    await ensureMigrated();
+    await recoverLegacyData();
     await activateOfflineAccount(fixture.accountId);
     expect(await readTaskData(fixture.accountId)).toEqual(expected);
   });
@@ -104,12 +106,12 @@ describe('O.4 legacy import', () => {
         }
         return original.call(this, value, ...args);
       });
-      await expect(ensureMigrated(true)).rejects.toThrow();
+      await expect(recoverLegacyData()).rejects.toThrow();
       failure.mockRestore();
       expect(fired).toBe(true);
       expect(localStorage.getItem(journalKey())).not.toBeNull();
       await closeDatabase();
-      await ensureMigrated(true);
+      await recoverLegacyData();
       await activateOfflineAccount(fixture.accountId);
       expect(await readTaskData(fixture.accountId)).toEqual(importTasks(source(), fixture.accountId));
       expect(await transact('readonly', async (tx) => requestValue(tx.objectStore('migration').getAll()))).toEqual([]);
@@ -124,10 +126,10 @@ describe('O.4 legacy import', () => {
       if (key.startsWith(TASK_STORAGE_KEY) && ++removed === 2) throw new Error('Interrupted');
       return remove.call(this, key);
     });
-    await expect(ensureMigrated(true)).rejects.toThrow('Interrupted');
+    await expect(recoverLegacyData()).rejects.toThrow('Interrupted');
     failure.mockRestore();
     await closeDatabase();
-    await ensureMigrated(true);
+    await recoverLegacyData();
     await activateOfflineAccount(fixture.accountId);
     expect(await readTaskData(fixture.accountId)).toEqual(importTasks(source(), fixture.accountId));
   });
@@ -136,17 +138,17 @@ describe('O.4 legacy import', () => {
     const failure = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
       throw new DOMException('Quota', 'QuotaExceededError');
     });
-    await expect(ensureMigrated(true)).rejects.toThrow();
+    await expect(recoverLegacyData()).rejects.toThrow();
     failure.mockRestore();
     expect(localStorage.getItem(journalKey())).toBe(source()[journalKey()]);
-    await ensureMigrated(true);
+    await recoverLegacyData();
     await activateOfflineAccount(fixture.accountId);
     expect(await readTaskData(fixture.accountId)).toBeDefined();
   });
   it('does not silently skip a corrupt journal or an account/key mismatch', async () => {
     seed();
     localStorage.setItem(journalKey(), '{broken');
-    await expect(ensureMigrated(true)).rejects.toThrow();
+    await expect(recoverLegacyData()).rejects.toThrow();
     expect(localStorage.getItem(journalKey())).toBe('{broken');
     const foreign = source();
     const raw = foreign[journalKey()]!;
@@ -156,14 +158,14 @@ describe('O.4 legacy import', () => {
   });
   it('rejects reintroduced legacy data after a completed migration', async () => {
     seed();
-    await ensureMigrated(true);
+    await recoverLegacyData();
     localStorage.setItem(journalKey(), source()[journalKey()]!);
-    await expect(ensureMigrated(true)).rejects.toThrow('Starsza karta');
+    await expect(recoverLegacyData()).rejects.toThrow('Starsza karta');
     expect(localStorage.getItem(journalKey())).not.toBeNull();
   });
   it('keeps the last valid data and pending work at the budget boundary', async () => {
     seed();
-    await ensureMigrated(true);
+    await recoverLegacyData();
     await activateOfflineAccount(fixture.accountId);
     const before = await readTaskData(fixture.accountId);
     await expect(
@@ -180,7 +182,7 @@ describe('O.4 legacy import', () => {
   });
   it('removes all imported account content, work and migration copies on logout', async () => {
     seed();
-    await ensureMigrated(true);
+    await recoverLegacyData();
     await clearDatabase();
     const records = await transact('readonly', async (tx) =>
       Promise.all(['cache', 'outbox', 'migration'].map((name) => requestValue(tx.objectStore(name).getAll()))),

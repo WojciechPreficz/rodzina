@@ -347,20 +347,22 @@ describe('family offline lifecycle through the Android transport', () => {
     expect(readOfflineData()?.session.user.id).toBe('child');
   });
 
-  it.each(['corrupt', 'unavailable'])('reports %s storage when no account can be restored', async (failure) => {
-    if (failure === 'corrupt') localStorage.setItem(OFFLINE_DATA_KEY, '{broken');
-    else
-      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-        throw new Error('Disabled');
-      });
+  it('leaves corrupt legacy data untouched during session startup', async () => {
+    localStorage.setItem(OFFLINE_DATA_KEY, '{broken');
     fail = 'transport';
     mount();
     expect(await screen.findByText('logged out')).toBeVisible();
-    if (failure === 'corrupt') {
-      fireEvent.click(screen.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' }));
-      expect(await screen.findByText(/Nie udało się przenieść danych offline/)).toBeVisible();
-      expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBe('{broken');
-    } else expect(screen.getByText(/Nie można odczytać sesji offline/)).toBeVisible();
+    expect(localStorage.getItem(OFFLINE_DATA_KEY)).toBe('{broken');
+  });
+
+  it('reports unavailable storage when no account can be restored', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('Disabled');
+    });
+    fail = 'transport';
+    mount();
+    expect(await screen.findByText('logged out')).toBeVisible();
+    expect(screen.getByText(/Nie można odczytać sesji offline/)).toBeVisible();
   });
 
   it('isolates a changed account and ignores its predecessor’s delayed member response', async () => {

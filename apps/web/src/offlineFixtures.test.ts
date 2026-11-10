@@ -1,4 +1,4 @@
-import { importTasks, readTaskData, classify, createTaskOfflineStore } from './features/tasks/index.js';
+import { loadTaskRecovery, readTaskData, classify, createTaskOfflineStore } from './features/tasks/index.js';
 import { parseContactsSnapshot, createContactsStore } from './features/contacts/index.js';
 import './offline/testSetup.js';
 import { readFileSync } from 'node:fs';
@@ -177,6 +177,7 @@ describe('O.1 legacy storage fixtures', () => {
       seed();
       for (const name of [key('taskEdit'), key('taskDiscarded'), key('discard')]) localStorage.removeItem(name);
       localStorage.setItem(entry.key, JSON.stringify(entry.value));
+      const { importTasks } = await loadTaskRecovery();
       const operation = importTasks(taskSources(), fixture.accountId).operations[0]!;
       expect(entry.key).toBe(`rodzina:tasks:v1:operation:${fixture.accountId}:${operation.id}`);
       types.push(operation.change.type);
@@ -185,8 +186,8 @@ describe('O.1 legacy storage fixtures', () => {
   });
 
   it('restores the five current formats, including calendar details and discard precedence', async () => {
-    const { ensureMigrated } = await import('./offline/database.js');
-    await ensureMigrated(true);
+    const { recoverLegacyData } = await import('./offline/legacyRecovery.js');
+    await recoverLegacyData();
     const saved = await hydrateOfflineData();
     expect(saved?.session.user.id).toBe(id('user'));
     expect(saved?.session.family.joinCode).toBe('TEST-CODE');
@@ -274,6 +275,7 @@ describe('O.1 legacy storage fixtures', () => {
       case 'task-tie':
       case 'task-pending':
       case 'task-expired': {
+        const { importTasks } = await loadTaskRecovery();
         const imported = importTasks(taskSources(), fixture.accountId);
         const pending = imported.operations;
         if (scenario.readerCheck === 'task-missing') {

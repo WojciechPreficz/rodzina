@@ -2,7 +2,6 @@ import { useSyncExternalStore } from 'react';
 import { onlineManager } from '@tanstack/react-query';
 
 let issue: string | undefined;
-let migrationRequired = false;
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -12,12 +11,7 @@ export function reportStorageIssue(message?: string) {
   issue = message;
   listeners.forEach((listener) => listener());
 }
-export function requireMigration(required: boolean) {
-  migrationRequired = required;
-  listeners.forEach((listener) => listener());
-}
 export const useOfflineStorageIssue = () => useSyncExternalStore(subscribe, () => issue);
-export const useMigrationRequired = () => useSyncExternalStore(subscribe, () => migrationRequired);
 type SyncStatus = {
   pendingCount: number;
   reviewCount: number;
@@ -38,8 +32,7 @@ export function useOfflineSyncStatus(accountId: string, module: string) {
   const status = useSyncExternalStore(subscribe, () => syncStatuses.get(`${accountId}/${module}`) ?? emptySync);
   const storageIssue = useOfflineStorageIssue();
   const online = useSyncExternalStore(onlineManager.subscribe, () => onlineManager.isOnline());
-  const migrating = useMigrationRequired();
-  return { ...status, storageIssue, offline: !online, migrating, hydrating: status === emptySync };
+  return { ...status, storageIssue, offline: !online, hydrating: status === emptySync };
 }
 export function storageError(error: unknown) {
   if (error instanceof SyntaxError || (error instanceof Error && error.name === 'ZodError'))

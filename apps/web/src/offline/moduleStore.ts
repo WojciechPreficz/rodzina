@@ -4,7 +4,6 @@ import {
   accountToken,
   assertContext,
   activateOfflineAccount,
-  ensureMigrated,
   isAccountCurrent,
   readAccountCache,
   transact,
@@ -149,8 +148,6 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
       try {
         const prepareRead = definition.mode === 'read-write' && prepare ? definition.prepareRead : undefined;
         if (!stopWatching) {
-          await ensureMigrated();
-          if (!current()) return;
           await activateOfflineAccount(account);
           if (!current()) return;
         }

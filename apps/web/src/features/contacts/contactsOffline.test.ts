@@ -1,4 +1,5 @@
-import { readCache, clearDatabase, ensureMigrated, closeDatabase } from '../../offline/testing.js';
+import { recoverContacts } from './contactsRecovery.js';
+import { readCache, clearDatabase, closeDatabase } from '../../offline/testing.js';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { describe, expect, it, vi } from 'vitest';
 import { CONTACTS_STORAGE_KEY, createContactsStore } from './contactsOffline.js';
@@ -177,7 +178,7 @@ describe('contacts IndexedDB snapshot', () => {
     'preserves unsupported legacy source %s',
     async (raw) => {
       localStorage.setItem(CONTACTS_STORAGE_KEY, raw);
-      await expect(ensureMigrated(true)).rejects.toThrow();
+      await expect(recoverContacts()).rejects.toThrow();
       expect(localStorage.getItem(CONTACTS_STORAGE_KEY)).toBe(raw);
     },
   );

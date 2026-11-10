@@ -27,7 +27,6 @@ export type AccountServices = {
   saveSession: (session: AccountSession) => Promise<boolean>;
   pendingLogoutKey: string;
   invalidateAlarms: () => void;
-  migrationCompleted: () => void;
   foreignStorage: (event: StorageEvent, identity: string | undefined) => boolean;
 };
 function pendingWebLogout(key: string, value?: boolean) {
@@ -337,12 +336,5 @@ export function useAccountLifecycle(services: AccountServices) {
     familyConfirmed,
   };
 
-  return {
-    value,
-    migrationCompleted: async () => {
-      services.migrationCompleted();
-      currentSession.current = undefined;
-      await refresh();
-    },
-  };
+  return { value };
 }

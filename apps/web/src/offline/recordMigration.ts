@@ -1,15 +1,6 @@
-import {
-  accountToken,
-  isAccountCurrent,
-  transact,
-  requestValue,
-  registerMigration,
-  PROTOCOL_KEY,
-  CLEAR_PENDING_KEY,
-} from './database.js';
+import { accountToken, isAccountCurrent, transact, requestValue, PROTOCOL_KEY, CLEAR_PENDING_KEY } from './database.js';
 import { offlineTransaction, type OfflineTransaction } from './transaction.js';
 import { chargedBytes, type CacheEntry, type CacheModule } from './registry.js';
-import { requireMigration } from './status.js';
 import { freezeParticipants, resumeParticipants } from './coordinator.js';
 const error = (message: string): never => {
   throw new Error(message);
@@ -25,7 +16,7 @@ type ImportState = {
   sourceDigest: string;
   targetDigest: string;
 };
-export function registerRecordMigration(
+export function createRecordRecovery(
   module: ImportState['module'],
   legacyKey: string,
   parse: (source: Record<string, string>, account?: string, legacyPreview?: unknown) => { account: string },
@@ -36,7 +27,6 @@ export function registerRecordMigration(
     normalize?: (data: unknown) => unknown;
     encode?: (value: unknown) => string;
     lock?: 'module';
-    validatePreviewAccount?: (account: string) => void;
   },
 ) {
   const IMPORT_KEY = `offline-${module}-import:1`;
@@ -62,7 +52,7 @@ export function registerRecordMigration(
     )
       error('Dane starej karty zmieniły się podczas importu. Zamknij starsze karty i ponów aktualizację.');
   };
-  async function migrate(confirmed: boolean) {
+  return async function recover() {
     const token = accountToken();
     const work = async () => {
       if (localStorage.getItem(CLEAR_PENDING_KEY)) error('Usuwanie danych konta nie zostało zakończone.');
@@ -84,10 +74,6 @@ export function registerRecordMigration(
           error(
             'Starsza karta ponownie zapisała dane offline po aktualizacji. Zamknij ją i wyloguj się przed dalszą pracą.',
           );
-      }
-      if (!confirmed && localStorage.getItem(IMPORT_KEY) !== 'migrating') {
-        requireMigration(true);
-        error('Dane offline wymagają przeniesienia. Zamknij starsze karty aplikacji i potwierdź aktualizację pamięci.');
       }
       if (!navigator.locks?.query) error('Przeglądarka nie obsługuje bezpiecznej aktualizacji pamięci offline.');
       localStorage.setItem(IMPORT_KEY, 'migrating');
@@ -213,12 +199,9 @@ export function registerRecordMigration(
       );
       localStorage.setItem(IMPORT_KEY, 'active');
       localStorage.setItem(PROTOCOL_KEY, 'active');
-      requireMigration(false);
       resumeParticipants();
     };
     if (navigator.locks) await navigator.locks.request(options?.lock === 'module' ? IMPORT_KEY : PROTOCOL_KEY, work);
     else await work();
-  }
-
-  registerMigration(module, migrate, options?.validatePreviewAccount);
+  };
 }

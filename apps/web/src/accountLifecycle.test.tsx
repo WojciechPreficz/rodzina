@@ -35,7 +35,6 @@ const services: AccountServices = {
   saveSession: async () => true,
   pendingLogoutKey: 'pending-logout',
   invalidateAlarms: vi.fn(),
-  migrationCompleted: vi.fn(),
   foreignStorage: () => false,
 };
 const unauthorized = () => new Response('{}', { status: 401 });

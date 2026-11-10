@@ -18,3 +18,4 @@ export {
   SHOPPING_STORAGE_KEY,
   updateShoppingData,
 } from './shoppingStorage.js';
+export const loadShoppingRecovery = () => import('./shoppingRecovery.js');

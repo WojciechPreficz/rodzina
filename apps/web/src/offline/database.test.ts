@@ -1,3 +1,5 @@
+import { recoverPreviewData } from './previewRecovery.js';
+import { needsLegacyRecovery } from './legacySources.js';
 import './testSetup.js';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
@@ -8,7 +10,6 @@ import {
   activateOfflineAccount,
   clearDatabase,
   closeDatabase,
-  ensureMigrated,
   openDatabase,
   readCache,
   recoverPendingClear,
@@ -45,16 +46,16 @@ afterEach(() => {
 });
 
 describe('shared IndexedDB previews', () => {
-  it('requires the maintenance confirmation even if a legacy tab is silent', async () => {
+  it('detects legacy sources without starting a recovery', async () => {
     seed();
-    await expect(ensureMigrated()).rejects.toThrow('Zamknij starsze karty');
+    expect(await needsLegacyRecovery()).toBe(true);
     expect(await readCache('family')).toBeUndefined();
     expect(localStorage.getItem('rodzina:offline-data:v1')).not.toBeNull();
   });
   it('atomically imports both previews, keeps unmigrated modules, and restores after a cold start', async () => {
     seed();
     const shopping = localStorage.getItem('rodzina:shopping:v1');
-    await ensureMigrated(true);
+    await recoverPreviewData();
     expect(localStorage.getItem('rodzina:offline-data:v1')).toBeNull();
     expect(localStorage.getItem('rodzina:calendar:v1')).toBeNull();
     expect(localStorage.getItem('rodzina:shopping:v1')).toBe(shopping);
@@ -81,7 +82,7 @@ describe('shared IndexedDB previews', () => {
         throw new DOMException('Brak miejsca', 'QuotaExceededError');
       return put.apply(this, args);
     });
-    await expect(ensureMigrated(true)).rejects.toThrow('Brak miejsca');
+    await expect(recoverPreviewData()).rejects.toThrow('Brak miejsca');
     expect(keys.map((key) => localStorage.getItem(key))).toEqual(sources);
     expect(await transact('readonly', (tx) => requestValue(tx.objectStore('cache').count()))).toBe(0);
     const staged = await transact('readonly', (tx) => requestValue(tx.objectStore('migration').getAll()));
@@ -89,7 +90,7 @@ describe('shared IndexedDB previews', () => {
 
     spy.mockRestore();
     await closeDatabase();
-    await ensureMigrated();
+    await recoverPreviewData();
     expect((await readCache('family'))?.payload).toMatchObject(family);
     expect((await readCache('calendar'))?.payload).toEqual(calendar);
     expect(keys.map((key) => localStorage.getItem(key))).toEqual([null, null]);
@@ -99,16 +100,19 @@ describe('shared IndexedDB previews', () => {
     seed();
     const remove = Storage.prototype.removeItem;
     vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (this: Storage, key: string) {
-      if (key === 'rodzina:calendar:v1') throw new Error('Przerwano sprzątanie');
       remove.call(this, key);
+      if (key === 'rodzina:calendar:v1') throw new Error('Przerwano sprzątanie');
     });
-    await expect(ensureMigrated(true)).rejects.toThrow('Przerwano');
+    await expect(recoverPreviewData()).rejects.toThrow('Przerwano');
     expect(localStorage.getItem('rodzina:offline-data:v1')).toBeNull();
+    expect(localStorage.getItem('rodzina:calendar:v1')).toBeNull();
+    expect(await needsLegacyRecovery()).toBe(true);
     vi.restoreAllMocks();
     await closeDatabase();
-    await ensureMigrated();
+    await recoverPreviewData();
     expect((await hydrateOfflineData())?.members).toHaveLength(1);
     expect(localStorage.getItem(PROTOCOL_KEY)).toBe('active');
+    expect(await needsLegacyRecovery()).toBe(false);
   });
   it.each(['corrupt', 'foreign', 'future'])('blocks invalid %s sources without deleting them', async (kind) => {
     seed();
@@ -118,7 +122,7 @@ describe('shared IndexedDB previews', () => {
         ? '{bad'
         : JSON.stringify({ ...family, ...(kind === 'foreign' ? { account: 'foreign:user' } : { version: 8 }) }),
     );
-    await expect(ensureMigrated(true)).rejects.toThrow();
+    await expect(recoverPreviewData()).rejects.toThrow();
     expect(localStorage.getItem('rodzina:calendar:v1')).not.toBeNull();
     expect(await readCache('family')).toBeUndefined();
   });
@@ -133,15 +137,15 @@ describe('shared IndexedDB previews', () => {
         },
       },
     });
-    await expect(ensureMigrated(true)).rejects.toThrow('starej karty');
+    await expect(recoverPreviewData()).rejects.toThrow('starej karty');
     expect(await readCache('family')).toBeUndefined();
     Object.defineProperty(navigator, 'storage', { configurable: true, value: undefined });
   });
   it('rejects a previously unknown old writer after the switch', async () => {
     seed();
-    await ensureMigrated(true);
+    await recoverPreviewData();
     localStorage.setItem('rodzina:calendar:v1', JSON.stringify(calendar));
-    await expect(ensureMigrated(true)).rejects.toThrow('Starsza karta');
+    await expect(recoverPreviewData()).rejects.toThrow('Starsza karta');
     expect(localStorage.getItem('rodzina:calendar:v1')).not.toBeNull();
   });
   it('invalidates a pending write before clearing all stores and never resurrects the session', async () => {
@@ -239,7 +243,7 @@ describe('shared IndexedDB previews', () => {
       held: [{ name: 'offline-client:1:unresponsive', mode: 'exclusive', clientId: 'test' }],
       pending: [],
     });
-    await expect(ensureMigrated(true)).rejects.toThrow('Inna karta');
+    await expect(recoverPreviewData()).rejects.toThrow('Inna karta');
     expect(await readCache('family')).toBeUndefined();
     expect(localStorage.getItem('rodzina:calendar:v1')).not.toBeNull();
   });
@@ -286,7 +290,7 @@ describe('shared IndexedDB previews', () => {
         },
       },
     });
-    const importing = ensureMigrated(true);
+    const importing = recoverPreviewData();
     await waiting;
     await clearDatabase();
     release();
@@ -308,7 +312,7 @@ describe('shared IndexedDB previews', () => {
       },
     });
     try {
-      await expect(ensureMigrated(true)).rejects.toThrow('Session changed');
+      await expect(recoverPreviewData()).rejects.toThrow('Session changed');
       expect(await readCache('family')).toBeUndefined();
       expect(localStorage.getItem('rodzina:offline-data:v1')).not.toBeNull();
     } finally {
