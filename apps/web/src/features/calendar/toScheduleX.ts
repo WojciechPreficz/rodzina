@@ -7,10 +7,6 @@ import type { CalendarOccurrence, CalendarRange } from './calendarApi.js';
 
 export const FAMILY_CALENDAR = 'family';
 
-export function todayInTimezone(timezone: string): string {
-  return Temporal.Now.plainDateISO(timezone).toString();
-}
-
 export function monthRange(date: string): CalendarRange {
   const first = Temporal.PlainDate.from(date).with({ day: 1 });
   return { from: first.subtract({ days: 7 }).toString(), to: first.add({ months: 1, days: 7 }).toString() };

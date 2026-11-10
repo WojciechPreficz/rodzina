@@ -3,7 +3,7 @@ import { Alert, Anchor, Button, Loader, Paper, Stack, Text, Title } from '@manti
 import { Link } from 'react-router';
 import { useMe } from '../../sessionContext.js';
 import { useOffline } from '../../connectivity.js';
-import { todayInTimezone } from '../calendar/toScheduleX.js';
+import { todayInTimezone } from '../../todayInTimezone.js';
 import { mealWeekStart } from './mealDates.js';
 import { useMealWeek } from './mealQueries.js';
 

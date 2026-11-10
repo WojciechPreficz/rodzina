@@ -8,7 +8,7 @@ import { OfflineNotice } from '../../offline/OfflineNotice.js';
 import { queueMeal, queueMealCopy, useMealState, confirmMealExport, discardMealOperation } from './mealOffline.js';
 import { allowNavigation } from '../../nativeNavigation.js';
 import { PageHeader } from '../../components/PageHeader.js';
-import { todayInTimezone } from '../calendar/toScheduleX.js';
+import { todayInTimezone } from '../../todayInTimezone.js';
 import { MealForm } from './MealForm.js';
 import { MealShoppingDialog } from './MealShoppingDialog.js';
 import { useMealWeek } from './mealQueries.js';

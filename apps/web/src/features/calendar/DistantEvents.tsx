@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { eventUrl } from '@rodzina/shared';
 import { labels } from '../../i18n/pl.js';
 import { useDistantEvents } from './calendarQueries.js';
-import { todayInTimezone } from './toScheduleX.js';
+import { todayInTimezone } from '../../todayInTimezone.js';
 import { distantCountdown } from './distantCountdown.js';
 import { useOffline } from '../../connectivity.js';
 

@@ -26,7 +26,7 @@ vi.mock('../../api.js', async (original) => ({
   ...(await original<typeof import('../../api.js')>()),
   apiFetch: vi.fn(),
 }));
-vi.mock('../calendar/toScheduleX.js', () => ({
+vi.mock('../../todayInTimezone.js', () => ({
   todayInTimezone: (zone: string) => (zone === 'Pacific/Kiritimati' ? '2026-10-29' : '2026-10-28'),
 }));
 const listId = '11111111-1111-4111-8111-111111111111';

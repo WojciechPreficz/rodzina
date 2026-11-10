@@ -1,5 +1,5 @@
 import { readAccountSession, saveAccountSession, PENDING_LOGOUT_KEY } from './session.js';
-import { calendarStore, registerCalendarStore } from './features/calendar/calendarOffline.js';
+import { calendarStore, registerCalendarStore } from './features/calendar/index.js';
 import { registerTaskStore, taskStore } from './features/tasks/index.js';
 import { registerShoppingStore } from './features/shopping/index.js';
 import { forgetOfflineData } from './offlineData.js';

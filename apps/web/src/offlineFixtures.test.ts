@@ -19,7 +19,7 @@ import {
   taskSchema,
 } from '@rodzina/shared';
 import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
-import { createCalendarStore, readCalendarRange } from './features/calendar/calendarOffline.js';
+import { createCalendarStore, readCalendarRange } from './features/calendar/index.js';
 import { createShoppingStore, readShoppingData } from './features/shopping/index.js';
 
 const fixture = z

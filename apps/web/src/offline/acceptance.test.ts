@@ -6,7 +6,7 @@ import { QueryClient, onlineManager } from '@tanstack/react-query';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { clearAccountData } from '../accountStorage.js';
 import { hydrateOfflineData } from '../offlineData.js';
-import { createCalendarStore } from '../features/calendar/calendarOffline.js';
+import { createCalendarStore } from '../features/calendar/index.js';
 import { createContactsStore } from '../features/contacts/index.js';
 import { readTaskData, updateTaskData, taskOperationBlocksAlarm } from '../features/tasks/index.js';
 import { createShoppingStore, readShoppingData } from '../features/shopping/index.js';

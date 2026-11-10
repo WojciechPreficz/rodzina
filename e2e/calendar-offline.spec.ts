@@ -1,5 +1,5 @@
 import { readOfflineSnapshot } from './offlineDatabase.js';
-import type { Snapshot } from '../apps/web/src/features/calendar/calendarOffline.js';
+import type { Snapshot } from '../apps/web/src/features/calendar/index.js';
 import { expect, test, type Page } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 

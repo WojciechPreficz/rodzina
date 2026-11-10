@@ -20,7 +20,7 @@ vi.mock('./calendarQueries.js', () => ({
     error: null,
   }),
 }));
-vi.mock('./toScheduleX.js', () => ({ todayInTimezone: () => '2026-10-12' }));
+vi.mock('../../todayInTimezone.js', () => ({ todayInTimezone: () => '2026-10-12' }));
 beforeEach(() => {
   vi.stubGlobal(
     'matchMedia',

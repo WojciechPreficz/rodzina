@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Temporal } from 'temporal-polyfill';
 import { calendarStore } from './calendarOffline.js';
 import { fetchSavedDistant, fetchSavedMonth } from './calendarSync.js';
-import { todayInTimezone } from './toScheduleX.js';
+import { todayInTimezone } from '../../todayInTimezone.js';
 
 export function CalendarPrefetch({ confirmedAt, timezone }: { confirmedAt: number; timezone: string }) {
   const client = useQueryClient();

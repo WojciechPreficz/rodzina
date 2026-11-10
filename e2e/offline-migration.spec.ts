@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 import { readOfflineSnapshot } from './offlineDatabase.js';
-import type { Snapshot } from '../apps/web/src/features/calendar/calendarOffline.js';
+import type { Snapshot } from '../apps/web/src/features/calendar/index.js';
 
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   entries: { key: string; value: unknown }[];

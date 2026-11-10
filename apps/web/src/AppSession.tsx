@@ -6,7 +6,7 @@ import { useMe } from './sessionContext.js';
 import { useAccountLifecycle } from './accountLifecycle.js';
 import { accountServices, registerApplicationStores } from './accountAdapters.js';
 import { TaskPrefetch } from './features/tasks/index.js';
-import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
+import { CalendarPrefetch } from './features/calendar/index.js';
 import { ScheduleSync } from './reminders/scheduleSync.js';
 import { MigrationNotice } from './offline/MigrationNotice.js';
 import { useOfflineStorageIssue, useMigrationRequired } from './offline/status.js';

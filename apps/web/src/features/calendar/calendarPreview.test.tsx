@@ -10,7 +10,7 @@ import { CalendarPage } from './CalendarPage.js';
 import { EventDetailsPage } from './EventDetailsPage.js';
 import { calendarStore } from './calendarOffline.js';
 import { reportTransportFailure } from '../../connectivity.js';
-import { todayInTimezone } from './toScheduleX.js';
+import { todayInTimezone } from '../../todayInTimezone.js';
 
 const state = vi.hoisted(() => ({
   familyId: '11111111-1111-4111-8111-111111111111',

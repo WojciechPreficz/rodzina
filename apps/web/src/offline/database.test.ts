@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { accountId, hydrateOfflineData, saveOfflineData, readOfflineData, forgetOfflineData } from '../offlineData.js';
-import { createCalendarStore } from '../features/calendar/calendarOffline.js';
+import { createCalendarStore } from '../features/calendar/index.js';
 import {
   activateOfflineAccount,
   clearDatabase,
@@ -19,6 +19,11 @@ import {
   CLEAR_PENDING_KEY,
 } from './database.js';
 import { adapters, chargedBytes } from './registry.js';
+
+// Keep other feature migrations unregistered while testing the family and calendar previews.
+vi.mock('../features/contacts/index.js', () => ({}));
+vi.mock('../features/shopping/index.js', () => ({}));
+vi.mock('../features/tasks/index.js', () => ({}));
 
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;

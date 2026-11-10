@@ -15,22 +15,13 @@ const relativePath = (from, to) => relative(from, to).split(sep).join('/');
 const featureImportExceptions = new Map(
   Object.entries({
     // Application wiring: routes, account stores, prefetch and the native scheduler.
-    'router.tsx': ['meals/MealsPage.js', 'calendar/CalendarPage.js', 'calendar/EventRoute.js'],
-    'accountAdapters.ts': ['calendar/calendarOffline.js', 'meals/mealOffline.js'],
-    'AppSession.tsx': ['calendar/CalendarPrefetch.js'],
+    'router.tsx': ['meals/MealsPage.js'],
+    'accountAdapters.ts': ['meals/mealOffline.js'],
     // Shared UI: shell notices, family validation and document count.
     // Feature integrations: member lookups, reminders, daily cards and family-local dates.
     'features/calendar/CalendarPage.tsx': ['meals/TodayMeal.js'],
-    'features/meals/MealsPage.tsx': ['calendar/toScheduleX.js'],
-    'features/meals/TodayMeal.tsx': ['calendar/toScheduleX.js'],
     // Tests that set up or inspect offline stores, scheduling, and migration snapshots.
-    'accountStorage.test.ts': ['calendar/calendarOffline.js', 'calendar/holidayLayers.js'],
-    'offlineFixtures.test.ts': ['calendar/calendarOffline.js'],
-    'offline/acceptance.test.ts': ['calendar/calendarOffline.js'],
-    'offline/database.test.ts': ['calendar/calendarOffline.js'],
     'offline/syncRequests.test.ts': ['meals/mealOffline.js', 'meals/mealDates.js'],
-    'e2e/calendar-offline.spec.ts': ['calendar/calendarOffline.js'],
-    'e2e/offline-migration.spec.ts': ['calendar/calendarOffline.js'],
   }),
 );
 
