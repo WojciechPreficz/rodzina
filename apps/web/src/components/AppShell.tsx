@@ -21,7 +21,7 @@ import { isAndroid } from '../platform.js';
 import { AndroidUpdateNotice } from '../features/updates/index.js';
 import { AppBrand } from './AppBrand.js';
 import { LogoutControl } from './LogoutControl.js';
-import { useDocumentAttentionCount } from '../features/documents/documentQueries.js';
+import { useDocumentAttentionCount } from '../features/documents/index.js';
 
 const navigation = [
   { label: labels.calendar, to: '/kalendarz', icon: 'M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z' },

@@ -15,17 +15,10 @@ const relativePath = (from, to) => relative(from, to).split(sep).join('/');
 const featureImportExceptions = new Map(
   Object.entries({
     // Application wiring: routes, account stores, prefetch and the native scheduler.
-    'router.tsx': [
-      'meals/MealsPage.js',
-      'calendar/CalendarPage.js',
-      'calendar/EventRoute.js',
-      'documents/DocumentsPage.js',
-      'documents/DocumentRoute.js',
-    ],
+    'router.tsx': ['meals/MealsPage.js', 'calendar/CalendarPage.js', 'calendar/EventRoute.js'],
     'accountAdapters.ts': ['calendar/calendarOffline.js', 'meals/mealOffline.js'],
     'AppSession.tsx': ['calendar/CalendarPrefetch.js'],
     // Shared UI: shell notices, family validation and document count.
-    'components/AppShell.tsx': ['documents/documentQueries.js'],
     // Feature integrations: member lookups, reminders, daily cards and family-local dates.
     'features/calendar/CalendarPage.tsx': ['meals/TodayMeal.js'],
     'features/meals/MealsPage.tsx': ['calendar/toScheduleX.js'],
