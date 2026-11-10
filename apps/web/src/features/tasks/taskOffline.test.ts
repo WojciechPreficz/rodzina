@@ -190,23 +190,30 @@ it('retains unseen changes from another tab when rejecting a stale discard decis
   expect((await readTaskData(account))?.operations).toHaveLength(2);
 });
 
-it('reuses the same operation ID after a lost response without duplicating a created task', async () => {
+it('reuses the same operation ID after a lost response without duplicating a created task', async ({
+  onTestFinished,
+}) => {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  const jitter = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  onTestFinished(() => {
+    jitter.mockRestore();
+    vi.useRealTimers();
+  });
   const f = await fixture();
   await f.store.synchronize();
-  await f.store.enqueue(listId, crypto.randomUUID(), { type: 'create', data: { title: 'Paczka' } });
   f.lose();
+  await f.store.enqueue(listId, crypto.randomUUID(), { type: 'create', data: { title: 'Paczka' } });
   await f.store.synchronize();
   expect(f.store.getSnapshot().pending).toHaveLength(1);
   const waiting = await transact('readonly', (tx) => readOperations(tx, account));
-  expect(waiting[0]?.status).toBe('retry-wait');
-  await transact('readwrite', async (tx) => {
-    tx.objectStore('outbox').put({ ...waiting[0], nextAttemptAt: 0 });
-  });
+  expect(waiting).toMatchObject([{ status: 'retry-wait', attempts: 1 }]);
+  vi.setSystemTime(waiting[0]!.nextAttemptAt);
   await f.store.synchronize();
   expect(f.store.getSnapshot().pending).toEqual([]);
   expect(f.tasks()).toHaveLength(2);
   const posts = f.request.mock.calls.filter(([, init]) => init?.method === 'POST');
-  expect(posts[0]?.[0]).toBe(posts[1]?.[0]);
+  expect(posts).toHaveLength(2);
+  expect(posts[0]![0]).toBe(posts[1]![0]);
 });
 
 it.each([429, 500])('retains ordered work on HTTP %s', async (status) => {
