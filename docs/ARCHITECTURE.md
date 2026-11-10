@@ -415,8 +415,9 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   i zależności w kolejce.
   Reguła ESLint `architecture/public-feature-imports` wymaga, aby importy
   spoza danego modułu `features/<moduł>` przechodziły przez jego publiczny
-  `index.ts`. Istniejące wyjątki są zapisane w `eslint.config.mjs` jako
-  konkretne pary pliku importującego i pliku docelowego.
+  `index.ts`. Moduły jawnie eksportują używane przez aplikację komponenty,
+  funkcje i typy. Wspólna synchronizacja harmonogramu i obsługa lokalnych
+  alarmów Androida znajdują się w `apps/web/src/reminders/`.
   Karta „Dziś na obiad” na górze kalendarza pokazuje nazwy i notatki dań
   według strefy rodziny, niezależnie od oglądanej daty kalendarza. Współdzieli
   odczyt tygodnia z zakładką Obiady; zapis, usunięcie lub kopiowanie odświeża

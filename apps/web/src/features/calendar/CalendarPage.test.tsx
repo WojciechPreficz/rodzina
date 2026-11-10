@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { CalendarPage } from './CalendarPage.js';
 vi.mock('../notifications/index.js', () => ({ NotificationBanner: () => null }));
-vi.mock('../meals/TodayMeal.js', () => ({ TodayMeal: () => null }));
+vi.mock('../meals/index.js', () => ({ TodayMeal: () => null }));
 
 vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ family: { timezone: 'Europe/Warsaw' } }) }));
 vi.mock('../family/index.js', () => ({

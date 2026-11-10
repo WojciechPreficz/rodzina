@@ -12,7 +12,7 @@ import { accountId, familyMembersKey, hydrateOfflineData, restoreOfflineData, sa
 import { listMembers } from './features/family/index.js';
 import { localScheduler } from './reminders/localSchedule.js';
 import { isAndroid } from './platform.js';
-import { registerMealsStore } from './features/meals/mealOffline.js';
+import { registerMealsStore } from './features/meals/index.js';
 import { synchronizeAccountOutbox } from './offline/sync.js';
 
 export async function synchronizeAccountChanges(account: string) {

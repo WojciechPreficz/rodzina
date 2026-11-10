@@ -5,7 +5,7 @@ import { AppShell } from './components/AppShell.js';
 import { LoginPage, RegisterPage } from './components/AuthPages.js';
 import { MorePage } from './components/MorePage.js';
 import { WelcomePage } from './components/WelcomePage.js';
-import { MealsPage } from './features/meals/MealsPage.js';
+import { MealsPage } from './features/meals/index.js';
 import { FamilyPage } from './features/family/index.js';
 import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/JoinPages.js';
 import { AuthLayout } from './components/AuthLayout.js';

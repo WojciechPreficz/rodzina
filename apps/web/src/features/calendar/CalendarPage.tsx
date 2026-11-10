@@ -29,7 +29,7 @@ import { CreateEventView } from './CreateEventView.js';
 import { DistantEvents } from './DistantEvents.js';
 import { NotificationBanner } from '../notifications/index.js';
 import { TodayTasks } from '../tasks/index.js';
-import { TodayMeal } from '../meals/TodayMeal.js';
+import { TodayMeal } from '../meals/index.js';
 import { createCalendarSwipePlugin } from './calendarSwipe.js';
 import { CalendarHeader } from './CalendarHeader.js';
 import { CalendarAgendaEvent } from './CalendarAgendaEvent.js';

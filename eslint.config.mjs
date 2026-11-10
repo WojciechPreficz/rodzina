@@ -11,20 +11,6 @@ const webSource = 'apps/web/src/';
 const offline = resolve(root, webSource, 'offline');
 const features = resolve(root, webSource, 'features');
 const relativePath = (from, to) => relative(from, to).split(sep).join('/');
-// Existing integrations pending their own public entry points. Each exception is one importer/target pair.
-const featureImportExceptions = new Map(
-  Object.entries({
-    // Application wiring: routes, account stores, prefetch and the native scheduler.
-    'router.tsx': ['meals/MealsPage.js'],
-    'accountAdapters.ts': ['meals/mealOffline.js'],
-    // Shared UI: shell notices, family validation and document count.
-    // Feature integrations: member lookups, reminders, daily cards and family-local dates.
-    'features/calendar/CalendarPage.tsx': ['meals/TodayMeal.js'],
-    // Tests that set up or inspect offline stores, scheduling, and migration snapshots.
-    'offline/syncRequests.test.ts': ['meals/mealOffline.js', 'meals/mealDates.js'],
-  }),
-);
-
 const importVisitors = (check) => ({
   ImportDeclaration: (node) => check(node.source),
   ExportNamedDeclaration: (node) => check(node.source),
@@ -54,8 +40,6 @@ const publicFeatureImports = {
   meta: { schema: [] },
   create(context) {
     const filename = context.physicalFilename;
-    const path = relativePath(root, filename);
-    const importer = path.startsWith(webSource) ? path.slice(webSource.length) : path;
     const ownFeature = relativePath(features, filename).split('/')[0];
     function check(source) {
       if (typeof source?.value !== 'string' || !/^\.\.?\//.test(source.value)) return;
@@ -63,7 +47,6 @@ const publicFeatureImports = {
       const [feature, ...parts] = target.split('/');
       if (feature === '..' || feature === ownFeature || !parts.length) return;
       if (/^index(?:\.[cm]?[jt]sx?)?$/.test(parts.join('/'))) return;
-      if (featureImportExceptions.get(importer)?.includes(target)) return;
       context.report({ node: source, message: `Import feature "${feature}" through its public index entry point.` });
     }
     return importVisitors(check);
