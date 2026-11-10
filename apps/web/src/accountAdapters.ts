@@ -4,7 +4,7 @@ import { registerTaskStore, taskStore } from './features/tasks/index.js';
 import { registerShoppingStore } from './features/shopping/index.js';
 import { forgetOfflineData } from './offlineData.js';
 import { clearDatabase } from './offline/database.js';
-import { CONTACTS_STORAGE_KEY, registerContactsStore } from './features/contacts/contactsOffline.js';
+import { CONTACTS_STORAGE_KEY, registerContactsStore } from './features/contacts/index.js';
 
 import type { AccountServices } from './accountLifecycle.js';
 import { registerAccountStore } from './accountStorage.js';

@@ -17,7 +17,7 @@ import { AndroidUpdateMonitor } from './features/updates/index.js';
 import { ShoppingPage } from './features/shopping/index.js';
 import { TasksPage } from './features/tasks/index.js';
 import { DocumentsPage } from './features/documents/DocumentsPage.js';
-import { ContactsPage } from './features/contacts/ContactsPage.js';
+import { ContactsPage } from './features/contacts/index.js';
 import { DocumentRoute } from './features/documents/DocumentRoute.js';
 import { NotFoundLayout, NotFoundPage } from './components/NotFoundPage.js';
 import { ForgotPasswordPage } from './components/PasswordRecovery.js';

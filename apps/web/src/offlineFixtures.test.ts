@@ -1,5 +1,5 @@
 import { importTasks, readTaskData, classify, createTaskOfflineStore } from './features/tasks/index.js';
-import { parseContactsSnapshot } from './features/contacts/contactsOffline.js';
+import { parseContactsSnapshot, createContactsStore } from './features/contacts/index.js';
 import './offline/testSetup.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -20,7 +20,6 @@ import {
 } from '@rodzina/shared';
 import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
 import { createCalendarStore, readCalendarRange } from './features/calendar/calendarOffline.js';
-import { createContactsStore } from './features/contacts/contactsOffline.js';
 import { createShoppingStore, readShoppingData } from './features/shopping/index.js';
 
 const fixture = z

@@ -13,8 +13,7 @@ import { IDBObjectStore } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { importTasks, readTaskData, updateTaskData } from './taskStorage.js';
 import { TASK_STORAGE_KEY } from './taskOffline.js';
-import { CONTACTS_STORAGE_KEY } from '../contacts/contactsOffline.js';
-import '../contacts/contactsOffline.js';
+import { CONTACTS_STORAGE_KEY } from '../contacts/index.js';
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
   referenceTime: number;

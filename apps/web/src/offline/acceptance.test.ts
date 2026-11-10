@@ -7,7 +7,7 @@ import { IDBObjectStore } from 'fake-indexeddb';
 import { clearAccountData } from '../accountStorage.js';
 import { hydrateOfflineData } from '../offlineData.js';
 import { createCalendarStore } from '../features/calendar/calendarOffline.js';
-import { createContactsStore } from '../features/contacts/contactsOffline.js';
+import { createContactsStore } from '../features/contacts/index.js';
 import { readTaskData, updateTaskData, taskOperationBlocksAlarm } from '../features/tasks/index.js';
 import { createShoppingStore, readShoppingData } from '../features/shopping/index.js';
 import {
