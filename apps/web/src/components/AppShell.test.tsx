@@ -127,16 +127,35 @@ describe('AppShell', () => {
   });
 
   it('protects dirty forms before logging out and calls logout after approval', async () => {
+    const session = {
+      user: { id: 'adult', familyId: 'family', displayName: 'Anna', role: 'admin' },
+      family: { id: 'family', name: 'Test' },
+    };
+    const fetchMock = vi.mocked(fetch).mockImplementation(async (path) => {
+      if (path === '/api/auth/me') return new Response(JSON.stringify(session));
+      if (path === '/api/members') return new Response('{}', { status: 403 });
+      return new Response(JSON.stringify({ ok: true }));
+    });
     renderShell();
     await screen.findByText('Anna');
-    const remove = addNavigationGuard(() => false);
-    fireEvent.click(screen.getByRole('button', { name: 'Wyloguj się' }));
-    expect(fetch).not.toHaveBeenCalledWith('/api/auth/logout', expect.anything());
-    remove();
-    fireEvent.click(screen.getByRole('button', { name: 'Wyloguj się' }));
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' })),
-    );
+    const logout = screen.getByRole('button', { name: 'Wyloguj się' });
+    const guard = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const remove = addNavigationGuard(guard);
+    try {
+      fireEvent.click(logout);
+      expect(guard).toHaveBeenCalledTimes(1);
+      expect(logout).toBeEnabled();
+      expect(fetchMock).not.toHaveBeenCalledWith('/api/auth/logout', expect.anything());
+
+      fireEvent.click(logout);
+      expect(guard).toHaveBeenCalledTimes(2);
+      await waitFor(
+        () => expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' })),
+        { timeout: 3000 },
+      );
+    } finally {
+      remove();
+    }
   });
 
   it('shows the queued change count and allows canceling offline logout', async () => {
