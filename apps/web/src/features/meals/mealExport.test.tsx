@@ -11,7 +11,7 @@ import { ApiRequestError, apiFetch } from '../../api.js';
 import { MealShoppingDialog } from './MealShoppingDialog.js';
 import { TodayMeal } from './TodayMeal.js';
 import { shiftMealDate } from './mealDates.js';
-import { shoppingStore } from '../shopping/shoppingOffline.js';
+import { shoppingStore } from '../shopping/index.js';
 import { restoreMeals, stopMeals, saveMealWeek, mealRevision } from './mealOffline.js';
 
 const session = vi.hoisted(() => ({

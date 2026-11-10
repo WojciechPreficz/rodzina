@@ -14,8 +14,7 @@ import { QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { OFFLINE_REPLAY_MAX_AGE_MS, type Meal, type ShoppingItem } from '@rodzina/shared';
-import { emptyShopping, putShoppingTransaction, readShoppingTransaction } from '../shopping/shoppingStorage.js';
-import { projectShopping } from '../shopping/shoppingOptimistic.js';
+import { emptyShopping, putShoppingTransaction, readShoppingTransaction, projectShopping } from '../shopping/index.js';
 import {
   mealAdapter,
   restoreMeals,

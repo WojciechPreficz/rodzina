@@ -9,8 +9,7 @@ import { hydrateOfflineData } from '../offlineData.js';
 import { createCalendarStore } from '../features/calendar/calendarOffline.js';
 import { createContactsStore } from '../features/contacts/contactsOffline.js';
 import { readTaskData, updateTaskData, taskOperationBlocksAlarm } from '../features/tasks/index.js';
-import { createShoppingStore } from '../features/shopping/shoppingOffline.js';
-import { readShoppingData } from '../features/shopping/shoppingStorage.js';
+import { createShoppingStore, readShoppingData } from '../features/shopping/index.js';
 import {
   activateOfflineAccount,
   closeDatabase,

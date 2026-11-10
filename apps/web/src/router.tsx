@@ -14,7 +14,7 @@ import { EventRoute } from './features/calendar/EventRoute.js';
 import { NotificationsPage } from './features/notifications/index.js';
 import { NativeNavigation } from './nativeNavigation.js';
 import { AndroidUpdateMonitor } from './features/updates/index.js';
-import { ShoppingPage } from './features/shopping/ShoppingPage.js';
+import { ShoppingPage } from './features/shopping/index.js';
 import { TasksPage } from './features/tasks/index.js';
 import { DocumentsPage } from './features/documents/DocumentsPage.js';
 import { ContactsPage } from './features/contacts/ContactsPage.js';

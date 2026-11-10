@@ -26,8 +26,7 @@ import {
   readOfflineData,
   saveOfflineData,
 } from '../../offlineData.js';
-import { createShoppingStore, shoppingStore } from '../shopping/shoppingOffline.js';
-import { readShoppingData, SHOPPING_STORAGE_KEY } from '../shopping/shoppingStorage.js';
+import { createShoppingStore, shoppingStore, readShoppingData, SHOPPING_STORAGE_KEY } from '../shopping/index.js';
 import { FamilyPage } from './FamilyPage.js';
 
 const admin: AuthUser = {

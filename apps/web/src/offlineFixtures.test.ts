@@ -21,8 +21,7 @@ import {
 import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
 import { createCalendarStore, readCalendarRange } from './features/calendar/calendarOffline.js';
 import { createContactsStore } from './features/contacts/contactsOffline.js';
-import { createShoppingStore } from './features/shopping/shoppingOffline.js';
-import { readShoppingData } from './features/shopping/shoppingStorage.js';
+import { createShoppingStore, readShoppingData } from './features/shopping/index.js';
 
 const fixture = z
   .object({

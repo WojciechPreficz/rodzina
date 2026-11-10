@@ -9,8 +9,7 @@ import type { AuthUser, TaskList } from '@rodzina/shared';
 import { clearAccountData, registerAccountStore } from './accountStorage.js';
 import { calendarStore, CALENDAR_STORAGE_KEY } from './features/calendar/calendarOffline.js';
 import { holidayLayersStorageKey, readHolidayLayers, saveHolidayLayers } from './features/calendar/holidayLayers.js';
-import { shoppingStore } from './features/shopping/shoppingOffline.js';
-import { readShoppingData, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingStorage.js';
+import { shoppingStore, readShoppingData, SHOPPING_STORAGE_KEY } from './features/shopping/index.js';
 import { accountId, OFFLINE_DATA_KEY, saveOfflineData } from './offlineData.js';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
 

@@ -19,9 +19,9 @@ import {
   SHOPPING_STORAGE_KEY,
   emptyShopping,
   updateShoppingData,
-} from './features/shopping/shoppingStorage.js';
+  createShoppingStore,
+} from './features/shopping/index.js';
 import { CONTACTS_STORAGE_KEY, contactsStore } from './features/contacts/contactsOffline.js';
-import { createShoppingStore } from './features/shopping/shoppingOffline.js';
 vi.mock('./reminders/localSchedule.js', () => ({
   localScheduler: { clear: vi.fn(async () => undefined), invalidate: vi.fn() },
 }));
