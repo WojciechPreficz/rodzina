@@ -8,8 +8,7 @@ import { clearAccountData } from '../accountStorage.js';
 import { hydrateOfflineData } from '../offlineData.js';
 import { createCalendarStore } from '../features/calendar/calendarOffline.js';
 import { createContactsStore } from '../features/contacts/contactsOffline.js';
-import { readTaskData, updateTaskData } from '../features/tasks/taskStorage.js';
-import { taskOperationBlocksAlarm } from '../features/tasks/taskOffline.js';
+import { readTaskData, updateTaskData, taskOperationBlocksAlarm } from '../features/tasks/index.js';
 import { createShoppingStore } from '../features/shopping/shoppingOffline.js';
 import { readShoppingData } from '../features/shopping/shoppingStorage.js';
 import {

@@ -15,7 +15,7 @@ import { NotificationsPage } from './features/notifications/NotificationsPage.js
 import { NativeNavigation } from './nativeNavigation.js';
 import { AndroidUpdateMonitor } from './features/updates/AndroidUpdates.js';
 import { ShoppingPage } from './features/shopping/ShoppingPage.js';
-import { TasksPage } from './features/tasks/TasksPage.js';
+import { TasksPage } from './features/tasks/index.js';
 import { DocumentsPage } from './features/documents/DocumentsPage.js';
 import { ContactsPage } from './features/contacts/ContactsPage.js';
 import { DocumentRoute } from './features/documents/DocumentRoute.js';

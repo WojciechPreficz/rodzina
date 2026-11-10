@@ -27,7 +27,7 @@ import { memberCalendars, monthRange, todayInTimezone, toScheduleX } from './toS
 import { CreateEventView } from './CreateEventView.js';
 import { DistantEvents } from './DistantEvents.js';
 import { NotificationBanner } from '../notifications/NotificationBanner.js';
-import { TodayTasks } from '../tasks/TodayTasks.js';
+import { TodayTasks } from '../tasks/index.js';
 import { TodayMeal } from '../meals/TodayMeal.js';
 import { createCalendarSwipePlugin } from './calendarSwipe.js';
 import { CalendarHeader } from './CalendarHeader.js';

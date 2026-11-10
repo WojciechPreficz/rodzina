@@ -1,6 +1,6 @@
 import { PENDING_LOGOUT_KEY } from './session.js';
 import { registerApplicationStores } from './accountAdapters.js';
-import { readTaskData } from './features/tasks/taskStorage.js';
+import { readTaskData, taskStore, TASK_STORAGE_KEY } from './features/tasks/index.js';
 import { invalidateOfflineContext, readCache, requestValue, transact } from './offline/database.js';
 import './offline/testSetup.js';
 import { onlineManager, QueryClient } from '@tanstack/react-query';
@@ -9,7 +9,6 @@ import type { AuthUser, TaskList } from '@rodzina/shared';
 import { clearAccountData, registerAccountStore } from './accountStorage.js';
 import { calendarStore, CALENDAR_STORAGE_KEY } from './features/calendar/calendarOffline.js';
 import { holidayLayersStorageKey, readHolidayLayers, saveHolidayLayers } from './features/calendar/holidayLayers.js';
-import { taskStore, TASK_STORAGE_KEY } from './features/tasks/taskOffline.js';
 import { shoppingStore } from './features/shopping/shoppingOffline.js';
 import { readShoppingData, SHOPPING_STORAGE_KEY } from './features/shopping/shoppingStorage.js';
 import { accountId, OFFLINE_DATA_KEY, saveOfflineData } from './offlineData.js';

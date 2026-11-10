@@ -3,7 +3,7 @@ import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/loc
 import { reminderScheduleSchema, type ReminderSchedule } from '@rodzina/shared';
 import { apiFetch } from '../../api.js';
 import { labels } from '../../i18n/pl.js';
-import { taskStore } from '../tasks/taskOffline.js';
+import { taskStore } from '../tasks/index.js';
 
 const text = labels.localAlarms;
 export const alarmStore = registerPlugin<{

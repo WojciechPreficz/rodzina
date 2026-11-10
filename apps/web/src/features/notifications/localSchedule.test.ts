@@ -1,10 +1,9 @@
 import '../../offline/testing.js';
-import { updateTaskData } from '../tasks/taskStorage.js';
+import { updateTaskData, createTaskOfflineStore } from '../tasks/index.js';
 import { expect, it, vi } from 'vitest';
 import type { LocalNotificationSchema } from '@capacitor/local-notifications';
 import type { ReminderSchedule, ScheduledReminder } from '@rodzina/shared';
 import { alarmLimit, buildAlarms, createLocalScheduler } from './localSchedule.js';
-import { createTaskOfflineStore } from '../tasks/taskOffline.js';
 
 const now = Date.UTC(2026, 9, 16, 12);
 function reminder(key: string, fireAt = now + 60_000): ScheduledReminder {

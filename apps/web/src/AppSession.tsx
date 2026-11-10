@@ -5,7 +5,7 @@ import { AuthProvider } from './auth.js';
 import { useMe } from './sessionContext.js';
 import { useAccountLifecycle } from './accountLifecycle.js';
 import { accountServices, registerApplicationStores } from './accountAdapters.js';
-import { TaskPrefetch } from './features/tasks/taskQueries.js';
+import { TaskPrefetch } from './features/tasks/index.js';
 import { CalendarPrefetch } from './features/calendar/CalendarPrefetch.js';
 import { ScheduleSync } from './features/notifications/scheduleSync.js';
 import { MigrationNotice } from './offline/MigrationNotice.js';

@@ -1,5 +1,4 @@
-import { importTasks, readTaskData } from './features/tasks/taskStorage.js';
-import { classify } from './features/tasks/taskSchemas.js';
+import { importTasks, readTaskData, classify, createTaskOfflineStore } from './features/tasks/index.js';
 import { parseContactsSnapshot } from './features/contacts/contactsOffline.js';
 import './offline/testSetup.js';
 import { readFileSync } from 'node:fs';
@@ -22,7 +21,6 @@ import {
 import { hydrateOfflineData, offlineDataSchema } from './offlineData.js';
 import { createCalendarStore, readCalendarRange } from './features/calendar/calendarOffline.js';
 import { createContactsStore } from './features/contacts/contactsOffline.js';
-import { createTaskOfflineStore } from './features/tasks/taskOffline.js';
 import { createShoppingStore } from './features/shopping/shoppingOffline.js';
 import { readShoppingData } from './features/shopping/shoppingStorage.js';
 
