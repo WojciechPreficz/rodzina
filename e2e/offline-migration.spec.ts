@@ -6,7 +6,82 @@ import type { Snapshot } from '../apps/web/src/features/calendar/index.js';
 
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   entries: { key: string; value: unknown }[];
+  ids: { bread: string; shoppingEdit: string };
 };
+
+test('recovers a dormant WWW profile after a legacy tab writes during migration', async ({ context, page }) => {
+  const legacyTab = await context.newPage();
+  await legacyTab.route('**/legacy-tab', (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<title>Legacy client</title>' }),
+  );
+  await legacyTab.goto('/legacy-tab');
+  const legacySources = await legacyTab.evaluate((entries) => {
+    for (const { key, value } of entries) localStorage.setItem(key, JSON.stringify(value));
+    return Object.fromEntries(Object.entries(localStorage));
+  }, fixture.entries);
+  expect(await legacyTab.evaluate(() => indexedDB.databases())).toEqual([]);
+
+  const familyKey = 'rodzina:offline-data:v1';
+  const family = JSON.parse(legacySources[familyKey]!) as { session: { family: { joinCode: string } } };
+  family.session.family.joinCode = 'TEST-NEW';
+  const updatedFamily = JSON.stringify(family);
+  await page.exposeFunction('writeFromLegacyTab', async () => {
+    await legacyTab.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+      key: familyKey,
+      value: updatedFamily,
+    });
+  });
+  // Simulate loss of API access while serving the updated WWW shell.
+  await context.addInitScript(() => Object.defineProperty(navigator, 'onLine', { get: () => false }));
+  await context.route('**/api/**', (route) => route.abort('internetdisconnected'));
+  await page.goto('/wiecej/rodzina');
+  const confirm = page.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' });
+  await expect(confirm).toBeVisible();
+  expect(await readOfflineSnapshot(page, 'family')).toBeUndefined();
+  await page.evaluate(() => {
+    const estimate = navigator.storage.estimate.bind(navigator.storage);
+    const { writeFromLegacyTab } = window as Window & { writeFromLegacyTab?: () => Promise<void> };
+    navigator.storage.estimate = async () => {
+      navigator.storage.estimate = estimate;
+      await writeFromLegacyTab!();
+      return estimate();
+    };
+  });
+  await confirm.click();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Dane starej karty zmieniły się podczas importu' }),
+  ).toBeVisible();
+  expect(await readOfflineSnapshot(page, 'family')).toBeUndefined();
+  expect(await readOfflineSnapshot(page, 'shopping')).toBeUndefined();
+  const expectedSources = { ...legacySources, [familyKey]: updatedFamily };
+  expect(
+    await page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), Object.keys(expectedSources)),
+  ).toEqual(Object.values(expectedSources));
+
+  await legacyTab.close();
+  await confirm.click();
+  await expect(page.getByText('TEST-NEW', { exact: true })).toBeVisible();
+  await page.goto('/zakupy');
+  await expect(page.getByRole('status').filter({ hasText: 'Jesteś offline' })).toBeVisible();
+  type ShoppingQueue = { operations: { operationId: string }[] };
+  const shopping = await readOfflineSnapshot<ShoppingQueue>(page, 'shopping');
+  expect(shopping?.operations.map(({ operationId }) => operationId).sort()).toEqual([
+    fixture.ids.bread,
+    fixture.ids.shoppingEdit,
+  ]);
+  await page.close();
+
+  const reopened = await context.newPage();
+  await reopened.goto('/zakupy');
+  await expect(reopened.getByRole('status').filter({ hasText: 'Jesteś offline' })).toBeVisible();
+  expect((await readOfflineSnapshot<ShoppingQueue>(reopened, 'shopping'))?.operations).toEqual(shopping?.operations);
+  expect(
+    await reopened.evaluate(
+      (keys) => keys.every((key) => localStorage.getItem(key) === null),
+      Object.keys(legacySources),
+    ),
+  ).toBe(true);
+});
 
 for (const native of [false, true]) {
   test(`restores the migrated session without family or shopping cache through ${native ? 'Android transport' : 'WWW'}`, async ({

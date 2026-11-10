@@ -54,6 +54,70 @@ rodziny w zapisach. Zweryfikowane lokalnie, oczekuje na CI.
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 
+## A-1.1 — wersja przejściowa i regresje silnika offline
+
+Pierwsze opublikowane APK z pełnym importem `localStorage` do IndexedDB to
+`1.0.0-deploy.16` (`versionCode=16`), z 28.10.2026. Wydanie zbudowano z
+`23a902e`, zawierającego migracje rodziny i kalendarza (`01ded24`), zakupów
+(`d448197`) oraz zadań i kontaktów (`48f9a43`). Poprzednie opublikowane APK
+`1.0.0-deploy.15` z `0a9b7d9` powstało przed tymi zmianami. Według
+produkcyjnego `latest.json` z 10.11.2026 dostępne jest `1.0.0-deploy.28`
+(`versionCode=28`), które również zawiera migrator. `android/version.properties`
+zawiera bazowe `1.0.0` i `versionCode=1`. Deploy nadaje numer przy budowie APK.
+Pobrane APK 15, 16 i 28 mają ten sam identyfikator pakietu i certyfikat
+podpisujący. Migrator jest obecny w paczkach 16 i 28. Suma SHA-256 paczki 28
+zgadza się z metadanymi produkcyjnymi.
+[Deploy 15](https://github.com/WojciechPreficz/rodzina/actions/runs/40302584193),
+[Deploy 16](https://github.com/WojciechPreficz/rodzina/actions/runs/40673727797),
+[Deploy 28](https://github.com/WojciechPreficz/rodzina/actions/runs/42367441291),
+[metadane produkcyjne](https://rodzina.preficze.pl/downloads/android/latest.json).
+
+WWW aktualizuje się niezależnie od APK. Profil może wrócić po dowolnie długiej
+przerwie z danymi wyłącznie w `localStorage`. Na tym samym profilu i adresie
+trzeba otworzyć wersję z migratorem, zamknąć starsze karty i potwierdzić import.
+Jeśli przeglądarka wciąż podaje powłokę dawnej PWA, najpierw musi zaktualizować
+wycofywany service worker i ponownie załadować stronę. Mechanizm wycofania
+usuwa stare zasoby aplikacji z cache i zachowuje `localStorage`. Regresje
+sprawdzają osobno powrót z dawnej powłoki oraz import na profilu WWW. Zapis ze
+starszej karty w trakcie importu zatrzymuje próbę i zachowuje dane źródłowe.
+Po zamknięciu tej karty ponowienie przejmuje nowsze dane, a po ponownym otwarciu
+WWW bez dostępu do API kolejka zakupów zachowuje identyfikatory i treść operacji.
+
+Propozycja do zatwierdzenia przez właściciela przed A-1.2:
+
+- **Minimum APK: `1.0.0-deploy.16` (`versionCode=16`).** To pierwsza
+  opublikowana wersja zdolna przenieść wszystkie historyczne dane offline.
+  Próg zakłada sprawdzenie aktualizacji na urządzeniu i utrzymanie zgodności
+  API z wydaniem przejściowym.
+- **Wycofanie migratora ze standardowego startu: najwcześniej 31.03.2027.**
+  Wymagane co najmniej 90 dni od komunikatu dla użytkowników, zaliczona próba
+  podpisanego APK na telefonie i zweryfikowane ścieżki odzyskania obu platform.
+  Profil WWW może wrócić po upływie tego terminu, więc dostęp do odzyskiwania
+  musi pozostać.
+- **Odzyskanie APK z kodem poniżej 16.** Zachować dostęp do podpisanej paczki
+  przejściowej. Zainstalować ją jako aktualizację z wyższym `versionCode`,
+  tym samym identyfikatorem aplikacji i podpisem, bez reinstalacji i czyszczenia
+  danych. Otworzyć ją, zakończyć import i na tym samym koncie zsynchronizować
+  kolejkę przed przejściem do aktualnego wydania. Jeśli migrator jest nadal
+  w aktualnym APK, wystarczy bezpośrednia aktualizacja z zachowaniem danych.
+  Jeżeli urządzenie ma już nowsze wydanie i wciąż ma dane tylko w `localStorage`,
+  paczka ratunkowa musi mieć kod wyższy od zainstalowanego.
+- **Odzyskanie WWW z samym `localStorage`.** Przed wycofaniem przygotować i
+  sprawdzić dedykowane wejście do migratora na `https://rodzina.preficze.pl`,
+  pod tym samym originem co zapisane dane. Użytkownik otwiera je w tym samym
+  profilu, zamyka starsze karty, potwierdza import i sprawdza synchronizację na
+  tym samym koncie przed powrotem do zwykłego wejścia. Nie czyści pamięci
+  witryny. Serwer może odtworzyć wyłącznie dane już zsynchronizowane.
+
+Na obu platformach zmiany starsze niż 30 dni wymagają sprawdzenia stanu
+serwera i ręcznego odtworzenia brakujących zmian po imporcie.
+
+Podpisana aktualizacja APK bez reinstalacji na fizycznym telefonie: niewykonana.
+Do odbioru pozostaje aktualizacja z APK 15 do 16 z oczekującą zmianą,
+import, ponowne uruchomienie offline i synchronizacja po odzyskaniu sieci.
+Status regresji: zweryfikowane lokalnie w Vitest i Playwright headless przy
+390 i 1280 px, oczekuje na CI.
+
 ## Potwierdzenie założenia rodziny przez e-mail
 
 Jeden krok na polecenie właściciela z 08.11.2026. Dotyczy wyłącznie nowych

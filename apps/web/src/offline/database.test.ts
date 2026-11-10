@@ -68,22 +68,32 @@ describe('shared IndexedDB previews', () => {
     expect(Object.keys(store.snapshot().view?.personal ?? {})).toHaveLength(1);
     expect(await transact('readonly', async (tx) => requestValue(tx.objectStore('migration').count()))).toBe(0);
   });
-  it('retains both sources and rolls back every target when a transaction runs out of space', async () => {
+  it('resumes a staged import after the commit runs out of space and rolls back every target', async () => {
     seed();
+    const keys = ['rodzina:offline-data:v1', 'rodzina:calendar:v1'];
+    const sources = keys.map((key) => localStorage.getItem(key));
     const put = IDBObjectStore.prototype.put;
-    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
       this: IDBObjectStore,
       ...args: Parameters<IDBObjectStore['put']>
     ) {
-      if (this.name === 'migration') throw new DOMException('Brak miejsca', 'QuotaExceededError');
+      if (this.name === 'migration' && args[0].phase === 'committed')
+        throw new DOMException('Brak miejsca', 'QuotaExceededError');
       return put.apply(this, args);
     });
     await expect(ensureMigrated(true)).rejects.toThrow('Brak miejsca');
-    expect(localStorage.getItem('rodzina:calendar:v1')).not.toBeNull();
-    expect(await readCache('family')).toBeUndefined();
-    vi.restoreAllMocks();
+    expect(keys.map((key) => localStorage.getItem(key))).toEqual(sources);
+    expect(await transact('readonly', (tx) => requestValue(tx.objectStore('cache').count()))).toBe(0);
+    const staged = await transact('readonly', (tx) => requestValue(tx.objectStore('migration').getAll()));
+    expect(staged).toMatchObject([{ phase: 'staged' }]);
+
+    spy.mockRestore();
+    await closeDatabase();
     await ensureMigrated();
-    expect((await readCache('family'))?.accountId).toBe(fixture.accountId);
+    expect((await readCache('family'))?.payload).toMatchObject(family);
+    expect((await readCache('calendar'))?.payload).toEqual(calendar);
+    expect(keys.map((key) => localStorage.getItem(key))).toEqual([null, null]);
+    expect(await transact('readonly', (tx) => requestValue(tx.objectStore('migration').count()))).toBe(0);
   });
   it('resumes verified cleanup after process loss without reimporting a partially removed source', async () => {
     seed();
