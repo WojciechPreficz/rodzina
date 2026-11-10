@@ -6,7 +6,7 @@ import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import { authRateLimits, contactGroups, families, pendingRegistrations, sessions, users } from '../../db/schema.js';
 import { hashToken, verifyPassword } from '../../auth.js';
-import { createAuthRepository } from './repository.js';
+import { registerFamily } from './registration.js';
 import type { sendRegistrationMail } from './registration-mail.js';
 
 const environment = {
@@ -178,7 +178,7 @@ describe('email confirmation for new families', () => {
   it('keeps existing accounts and sessions unchanged and handles a competing invitation', async () => {
     await request();
     const pending = database.db.select().from(pendingRegistrations).get()!;
-    createAuthRepository(database).registerFamily({
+    registerFamily(database, {
       familyId: 'existing-family',
       userId: 'existing-user',
       familyName: 'Existing',

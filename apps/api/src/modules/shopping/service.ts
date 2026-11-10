@@ -1,3 +1,4 @@
+import { requireAdult } from '../../http/require-adult.js';
 import { ApiError } from '../../http/errors.js';
 import type { CreateShoppingItem, CreateShoppingList, PatchShoppingItem, PatchShoppingList } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
@@ -16,14 +17,12 @@ export function createShoppingService(database: DatabaseConnection) {
     if (!item) throw new ApiError(404, 'NOT_FOUND', 'Pozycja zakupów nie istnieje.');
     return item;
   }
-  function requireAdult(role: FamilyRole) {
-    if (role === 'child') throw new ApiError(403, 'FORBIDDEN', 'Ta czynność jest dostępna tylko dla dorosłych.');
-  }
   function requireItemEdit(role: FamilyRole, actorId: string, createdBy: string | null) {
     if (role === 'child' && actorId !== createdBy)
       throw new ApiError(403, 'FORBIDDEN', 'Możesz edytować i usuwać tylko własne pozycje.');
   }
   return {
+    itemIdIsTaken: repository.itemIdIsTaken,
     listLists: repository.listLists,
     createList(familyId: string, actorId: string, role: FamilyRole, data: CreateShoppingList, id?: string) {
       requireAdult(role);

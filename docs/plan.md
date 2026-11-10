@@ -48,6 +48,9 @@ Zweryfikowane lokalnie w zakresie offline, oczekuje na CI i próbę na fizycznym
 B-3: limiter żądań API, limity rekordów rodzinnych i współbieżności Argon2.
 Zweryfikowane lokalnie, oczekuje na CI.
 
+A-4: granice repozytoriów i serwisów API, wspólne reguły oraz warunki
+rodziny w zapisach. Zweryfikowane lokalnie, oczekuje na CI.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

@@ -12,7 +12,7 @@ import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as s from '../../db/schema.js';
-import { createEventRepository } from '../events/repository.js';
+import { createEventService } from '../events/service.js';
 import { createReminderRepository } from '../reminders/repository.js';
 
 let database: ReturnType<typeof createDatabase>;
@@ -145,7 +145,7 @@ it.each([1, 10, 401])('batches event relations for %i events and preserves the l
       .values({ id: crypto.randomUUID(), eventId: id, originalDate: '2028-01-01', isCancelled: true })
       .run();
   }
-  const repository = createEventRepository(database);
+  const events = createEventService(database);
   const reminderRepository = createReminderRepository(database);
   // The former list implementation: one base SELECT, three relation SELECTs per event.
   const legacy = () =>
@@ -177,7 +177,7 @@ it.each([1, 10, 401])('batches event relations for %i events and preserves the l
   for (const mode of ['legacy', 'batched'] as const) {
     const spy = vi.spyOn(database.sqlite, 'prepare');
     const start = performance.now();
-    const result = mode === 'legacy' ? legacy() : repository.list(familyId);
+    const result = mode === 'legacy' ? legacy() : events.list(familyId);
     const elapsed = performance.now() - start;
     const sql = spy.mock.calls.filter(([query]) => /^select/i.test(query)).length;
     spy.mockRestore();

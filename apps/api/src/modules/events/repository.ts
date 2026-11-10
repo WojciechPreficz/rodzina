@@ -2,12 +2,22 @@ import crypto from 'node:crypto';
 import { and, asc, eq, gte, inArray } from 'drizzle-orm';
 import type { CalendarEvent, EventData } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { events, eventParticipants, eventExceptions, families, users, reminders } from '../../db/schema.js';
-import { createReminderRepository } from '../reminders/repository.js';
+import { events, eventParticipants, eventExceptions, users, eventImportOperations } from '../../db/schema.js';
+import type { createReminderSourcePort } from '../reminders/source-port.js';
 
-export function createEventRepository(database: DatabaseConnection) {
+type EventReminderPort = Pick<
+  ReturnType<typeof createReminderSourcePort>,
+  'list' | 'listMany' | 'saveEvent' | 'transferEventReminders'
+>;
+
+export function createEventRepository(
+  database: DatabaseConnection,
+  reminders: EventReminderPort,
+  timezone: (familyId: string) => string,
+) {
   const db = database.db;
-  const reminderRepository = createReminderRepository(database);
+  const familyEvents = (familyId: string) =>
+    db.select({ id: events.id }).from(events).where(eq(events.familyId, familyId));
   function exceptions(familyId: string, eventId: string) {
     return db
       .select({ exception: eventExceptions })
@@ -37,7 +47,7 @@ export function createEventRepository(database: DatabaseConnection) {
       ? {
           ...event,
           participants: participants(familyId, id),
-          reminders: reminderRepository.list(familyId, id),
+          reminders: reminders.list(familyId, id),
           exceptions: exceptions(familyId, id),
         }
       : undefined;
@@ -66,7 +76,7 @@ export function createEventRepository(database: DatabaseConnection) {
           tx.insert(eventParticipants)
             .values(participantIds.map((userId) => ({ eventId: id, userId })))
             .run();
-        reminderRepository.saveEvent(familyId, { ...fields, id }, createdBy, sharedReminders, timezone(familyId), now);
+        reminders.saveEvent(familyId, { ...fields, id }, createdBy, sharedReminders, timezone(familyId), now);
       },
       { behavior: 'immediate' },
     );
@@ -80,12 +90,14 @@ export function createEventRepository(database: DatabaseConnection) {
         .set({ ...fields, updatedAt: now })
         .where(and(eq(events.familyId, familyId), eq(events.id, id)))
         .run();
-      tx.delete(eventParticipants).where(eq(eventParticipants.eventId, id)).run();
+      tx.delete(eventParticipants)
+        .where(and(eq(eventParticipants.eventId, id), inArray(eventParticipants.eventId, familyEvents(familyId))))
+        .run();
       if (participantIds.length)
         tx.insert(eventParticipants)
           .values(participantIds.map((userId) => ({ eventId: id, userId })))
           .run();
-      reminderRepository.saveEvent(familyId, find(familyId, id)!, actorId, sharedReminders, timezone(familyId), now);
+      reminders.saveEvent(familyId, find(familyId, id)!, actorId, sharedReminders, timezone(familyId), now);
     });
     return find(familyId, id)!;
   }
@@ -107,7 +119,7 @@ export function createEventRepository(database: DatabaseConnection) {
     return hydrate(familyId, rows);
   }
   function hydrate(familyId: string, rows: (typeof events.$inferSelect)[]): CalendarEvent[] {
-    const shared = reminderRepository.listMany(
+    const shared = reminders.listMany(
       familyId,
       'eventId',
       rows.map((event) => event.id),
@@ -166,9 +178,6 @@ export function createEventRepository(database: DatabaseConnection) {
         .filter((event) => event.datePrecision === 'month' || event.startDate >= today),
     );
   }
-  function timezone(familyId: string): string {
-    return db.select({ timezone: families.timezone }).from(families).where(eq(families.id, familyId)).get()!.timezone;
-  }
   function saveException(familyId: string, event: CalendarEvent, originalDate: string, data?: EventData) {
     db.transaction(() => {
       const row = {
@@ -184,8 +193,11 @@ export function createEventRepository(database: DatabaseConnection) {
         .values({ id: crypto.randomUUID(), ...row })
         .onConflictDoUpdate({ target: [eventExceptions.eventId, eventExceptions.originalDate], set: row })
         .run();
-      db.update(events).set({ updatedAt: Date.now() }).where(eq(events.id, event.id)).run();
-      reminderRepository.saveEvent(familyId, find(familyId, event.id)!, '', undefined, timezone(familyId), Date.now());
+      db.update(events)
+        .set({ updatedAt: Date.now() })
+        .where(and(eq(events.familyId, familyId), eq(events.id, event.id)))
+        .run();
+      reminders.saveEvent(familyId, find(familyId, event.id)!, '', undefined, timezone(familyId), Date.now());
     });
     return find(familyId, event.id)!;
   }
@@ -205,27 +217,23 @@ export function createEventRepository(database: DatabaseConnection) {
         .where(and(eq(events.familyId, familyId), eq(events.id, event.id)))
         .run();
       db.delete(eventExceptions)
-        .where(and(eq(eventExceptions.eventId, event.id), gte(eventExceptions.originalDate, date)))
+        .where(
+          and(
+            eq(eventExceptions.eventId, event.id),
+            inArray(eventExceptions.eventId, familyEvents(familyId)),
+            gte(eventExceptions.originalDate, date),
+          ),
+        )
         .run();
       let next: CalendarEvent | undefined;
       if (data) {
         // Create without new reminders, then copy shared rows and transfer personal rows.
         next = create(familyId, actorId, { ...data, reminders: undefined });
-        db.update(events).set({ createdBy: event.createdBy }).where(eq(events.id, next.id)).run();
-        const rows = db
-          .select()
-          .from(reminders)
-          .where(and(eq(reminders.familyId, familyId), eq(reminders.eventId, event.id)))
-          .all();
-        for (const row of rows) {
-          if (row.audience === 'user') {
-            db.update(reminders).set({ eventId: next.id }).where(eq(reminders.id, row.id)).run();
-          } else {
-            db.insert(reminders)
-              .values({ ...row, id: crypto.randomUUID(), eventId: next.id })
-              .run();
-          }
-        }
+        db.update(events)
+          .set({ createdBy: event.createdBy })
+          .where(and(eq(events.familyId, familyId), eq(events.id, next.id)))
+          .run();
+        reminders.transferEventReminders(familyId, event.id, next.id);
         // Existing exceptions retain their original-date identity if the future schedule is unchanged.
         const schedule = (rule: string | null) =>
           rule
@@ -240,19 +248,45 @@ export function createEventRepository(database: DatabaseConnection) {
               .run();
           }
         }
-        reminderRepository.saveEvent(
-          familyId,
-          find(familyId, next.id)!,
-          actorId,
-          data.reminders,
-          timezone(familyId),
-          now,
-        );
+        reminders.saveEvent(familyId, find(familyId, next.id)!, actorId, data.reminders, timezone(familyId), now);
         next = find(familyId, next.id)!;
       }
-      reminderRepository.saveEvent(familyId, find(familyId, event.id)!, actorId, undefined, timezone(familyId), now);
+      reminders.saveEvent(familyId, find(familyId, event.id)!, actorId, undefined, timezone(familyId), now);
       return next;
     });
   }
-  return { find, validParticipants, create, update, remove, list, upcomingDistant, timezone, saveException, split };
+  return {
+    find,
+    validParticipants,
+    create,
+    update,
+    remove,
+    list,
+    upcomingDistant,
+    saveException,
+    split,
+    findImportActor(familyId: string, userId: string) {
+      return db
+        .select({ id: users.id, role: users.role })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.familyId, familyId)))
+        .get();
+    },
+    findImportOperation(familyId: string, userId: string, id: string) {
+      return db
+        .select()
+        .from(eventImportOperations)
+        .where(
+          and(
+            eq(eventImportOperations.familyId, familyId),
+            eq(eventImportOperations.userId, userId),
+            eq(eventImportOperations.id, id),
+          ),
+        )
+        .get();
+    },
+    recordImportOperation(values: typeof eventImportOperations.$inferInsert) {
+      db.insert(eventImportOperations).values(values).run();
+    },
+  };
 }

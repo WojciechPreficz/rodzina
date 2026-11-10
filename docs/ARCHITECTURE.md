@@ -26,6 +26,12 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
 - API jest modularnym monolitem: modules/<moduł>/ zawiera routes,
   service, repository i testy. Połączenia z bazą centralizuje db/client.ts.
   better-sqlite3 działa synchronicznie z WAL i busy_timeout=5000.
+- Zapytania modułów są w repozytoriach. Moduły współpracują przez serwisy
+  lub jawne porty. Serwis może objąć operacje kilku modułów jedną transakcją
+  SQLite, np. zapis zadania wraz z przypomnieniami. ESLint blokuje import
+  repozytoriów innych modułów w kodzie produkcyjnym modułów.
+- Aktualizacje i usunięcia danych rodziny zawężamy również w repozytorium
+  po identyfikatorze rodziny lub przez powiązany rekord nadrzędny.
 - Migracje i transakcje, idempotencja, VACUUM INTO i gotowe binaria zależą
   od tego sterownika. Zmiana na klienta asynchronicznego wymaga osobnego
   projektu; sam interfejs adaptera nie zapewnia zgodności.

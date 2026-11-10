@@ -1,3 +1,4 @@
+import { requireAdult } from '../../http/require-adult.js';
 import {
   mergeQuantities,
   normalizeShoppingName,
@@ -6,13 +7,11 @@ import {
   type MealsToShoppingList,
   type MealOfflineChange,
 } from '@rodzina/shared';
-import { and, eq, inArray } from 'drizzle-orm';
 import type { DatabaseConnection } from '../../db/client.js';
 import type { FamilyRole } from '../../permissions.js';
 import { ApiError } from '../../http/errors.js';
 import { createMealRepository } from './repository.js';
 import { createShoppingService } from '../shopping/service.js';
-import { mealShoppingExports, meals, shoppingItems } from '../../db/schema.js';
 
 // Calendar dates are floating days, so DST must not affect week offsets.
 function day(start: string, offset: number) {
@@ -23,9 +22,6 @@ function day(start: string, offset: number) {
 export function createMealService(database: DatabaseConnection) {
   const repository = createMealRepository(database);
   const shopping = createShoppingService(database);
-  function requireAdult(role: FamilyRole) {
-    if (role === 'child') throw new ApiError(403, 'FORBIDDEN', 'Ta czynność jest dostępna tylko dla dorosłych.');
-  }
   function requireExportAccess(familyId: string, role: FamilyRole, listId: string) {
     requireAdult(role);
     // This also runs before replaying a saved response, even if the list has been deleted.
@@ -33,7 +29,6 @@ export function createMealService(database: DatabaseConnection) {
   }
   return {
     requireExportAccess,
-    requireAdult,
     offline(familyId: string, actorId: string, role: FamilyRole, change: MealOfflineChange) {
       requireAdult(role);
       if (change.type !== 'write') throw new ApiError(400, 'VALIDATION_ERROR', 'Nieprawidłowa zmiana obiadów.');
@@ -54,7 +49,7 @@ export function createMealService(database: DatabaseConnection) {
           for (const write of change.writes) {
             const existing = current.find((meal) => meal.date === write.date && (!change.byId || meal.id === write.id));
             if ((existing?.id ?? null) !== write.expectedId || (existing && write.id !== existing.id)) throw conflict();
-            if (!existing && database.db.select().from(meals).where(eq(meals.id, write.id)).get())
+            if (!existing && repository.idIsTaken(write.id))
               throw new ApiError(409, 'MEAL_CONFLICT', 'Identyfikator obiadu jest już używany.');
             if (write.data) repository.put(familyId, actorId, write.date, write.data, write.id);
             else if (existing) repository.remove(familyId, existing.id);
@@ -83,13 +78,7 @@ export function createMealService(database: DatabaseConnection) {
               })
             : available.filter((meal) => !data.mealIds || data.mealIds.includes(meal.id));
           const ids = selected.map((meal) => meal.id);
-          const previous = ids.length
-            ? database.db
-                .select()
-                .from(mealShoppingExports)
-                .where(and(eq(mealShoppingExports.listId, data.listId), inArray(mealShoppingExports.mealId, ids)))
-                .get()
-            : undefined;
+          const previous = repository.hasExports(familyId, data.listId, ids);
           if (previous && !data.confirmRepeat)
             throw new ApiError(
               409,
@@ -123,8 +112,7 @@ export function createMealService(database: DatabaseConnection) {
               const target = data.targets?.find((target) => normalizeShoppingName(target.name) === key);
               // A locally merged item may have been bought or removed in the meantime.
               // Keep that purchase intact and return an alias for the new need.
-              const reserved =
-                target && database.db.select().from(shoppingItems).where(eq(shoppingItems.id, target.id)).get();
+              const reserved = target && shopping.itemIdIsTaken(target.id);
               const item = shopping.createItem(
                 familyId,
                 data.listId,
@@ -136,18 +124,7 @@ export function createMealService(database: DatabaseConnection) {
               added++;
             }
           }
-          if (ids.length)
-            database.db
-              .insert(mealShoppingExports)
-              .values(
-                ids.map((mealId) => ({
-                  mealId,
-                  listId: data.listId,
-                  createdAt: Date.now(),
-                })),
-              )
-              .onConflictDoNothing()
-              .run();
+          repository.recordExports(data.listId, ids, Date.now());
           return {
             added,
             updated,

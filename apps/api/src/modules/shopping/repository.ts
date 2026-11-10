@@ -195,6 +195,8 @@ export function createShoppingRepository(database: DatabaseConnection) {
     updateList,
     removeList,
     findItem,
+    itemIdIsTaken: (id: string) =>
+      !!db.select({ id: shoppingItems.id }).from(shoppingItems).where(eq(shoppingItems.id, id)).get(),
     listItems,
     createItem,
     updateItem,

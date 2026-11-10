@@ -5,7 +5,6 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ApiError } from '../../http/errors.js';
 import type { RegisterIdempotencyProfiles } from '../../http/idempotency.js';
-import { createTaskListRepository } from './repository.js';
 import { createTaskRecurrenceService } from './recurrence.js';
 import {
   createTaskChecklistItemSchema,
@@ -46,7 +45,6 @@ export function registerTaskListRoutes(
     routes.addHook('onRoute', (route) => {
       route.config = { ...route.config, primaryKeyConflictMessage: 'Identyfikator zadania jest już używany.' };
     });
-    const repository = createTaskListRepository(database);
     const recurrence = createTaskRecurrenceService(database);
     const checkAccess = (request: FastifyRequest, listId: string) => {
       if (!service.canAccessList(requireUser(request).familyId, requireUser(request).id, listId))
@@ -71,7 +69,7 @@ export function registerTaskListRoutes(
     const occurrenceScope = (request: FastifyRequest) => {
       const user = requireUser(request);
       const { id } = parse(idSchema, request.params);
-      const task = repository.findTask(user.familyId, user.id, id);
+      const task = service.findTask(user.familyId, user.id, id);
       if (!task) throw new ApiError(404, 'NOT_FOUND', 'Zadanie nie istnieje.');
       return task.listId;
     };
@@ -107,7 +105,7 @@ export function registerTaskListRoutes(
           const listId =
             request.method === 'POST'
               ? id
-              : repository.findTask(requireUser(request).familyId, requireUser(request).id, id)?.listId;
+              : service.findTask(requireUser(request).familyId, requireUser(request).id, id)?.listId;
           if (!listId) throw new ApiError(404, 'NOT_FOUND', 'Lista zadań nie istnieje.');
           checkAccess(request, listId);
           return listId;
@@ -196,8 +194,8 @@ export function registerTaskListRoutes(
     });
     routes.get('/api/tasks/snapshot', (request) => {
       const user = requireUser(request);
-      repository.ensureDefault(user.familyId, user.id);
-      return taskSnapshotResponseSchema.parse(repository.snapshot(user.familyId, user.id));
+      service.ensureDefault(user.familyId, user.id);
+      return taskSnapshotResponseSchema.parse(service.snapshot(user.familyId, user.id));
     });
     routes.get('/api/tasks/lists/:id/tasks', (request) => {
       const { id } = parse(idSchema, request.params);

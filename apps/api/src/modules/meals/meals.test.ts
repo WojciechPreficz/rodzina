@@ -16,6 +16,7 @@ import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 import { OPERATION_RETENTION_MS } from '../../http/idempotency.js';
+import { createMealRepository } from './repository.js';
 
 describe('meals API', () => {
   let database: ReturnType<typeof createDatabase>;
@@ -114,6 +115,26 @@ describe('meals API', () => {
   function offline(change: unknown, operationId = randomUUID(), user = admin) {
     return request('POST', `/api/meals/offline?operationId=${operationId}&actorId=${user.id}`, change, user);
   }
+  it('rejects a foreign meal ID at the repository boundary without changing its ingredients', async () => {
+    const foreignMeal = await put(start, meal, outsider);
+    const repository = createMealRepository(database);
+
+    expect(() =>
+      repository.put(
+        familyId,
+        admin.id,
+        start,
+        {
+          title: 'Inny obiad',
+          ingredients: [{ name: 'Sól' }],
+        },
+        foreignMeal.id,
+      ),
+    ).toThrow(expect.objectContaining({ code: 'MEAL_CONFLICT' }));
+
+    expect((await week(start, outsider)).days[0]?.meals).toEqual([foreignMeal]);
+  });
+
   it('keeps same-day dishes independent and exposes them to the new client and shopping export', async () => {
     const first = await put();
     const writes = Array.from({ length: 7 }, (_, index) => ({

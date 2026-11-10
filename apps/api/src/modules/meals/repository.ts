@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { ApiError } from '../../http/errors.js';
 import type { Meal, PutMeal } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { mealIngredients, meals } from '../../db/schema.js';
+import { mealIngredients, meals, mealShoppingExports } from '../../db/schema.js';
 
 export function createMealRepository(database: DatabaseConnection) {
   const db = database.db;
@@ -28,7 +29,33 @@ export function createMealRepository(database: DatabaseConnection) {
     }
     return rows.map((row) => ({ ...row, ingredients: grouped.get(row.id) ?? [] }));
   }
+  const familyMeals = (familyId: string) => db.select({ id: meals.id }).from(meals).where(eq(meals.familyId, familyId));
   return {
+    idIsTaken: (id: string) => !!db.select({ id: meals.id }).from(meals).where(eq(meals.id, id)).get(),
+    hasExports(familyId: string, listId: string, ids: string[]) {
+      return (
+        ids.length > 0 &&
+        !!db
+          .select({ mealId: mealShoppingExports.mealId })
+          .from(mealShoppingExports)
+          .innerJoin(meals, eq(meals.id, mealShoppingExports.mealId))
+          .where(
+            and(
+              eq(meals.familyId, familyId),
+              eq(mealShoppingExports.listId, listId),
+              inArray(mealShoppingExports.mealId, ids),
+            ),
+          )
+          .get()
+      );
+    },
+    recordExports(listId: string, ids: string[], createdAt: number) {
+      if (ids.length)
+        db.insert(mealShoppingExports)
+          .values(ids.map((mealId) => ({ mealId, listId, createdAt })))
+          .onConflictDoNothing()
+          .run();
+    },
     firstId(familyId: string, date: string) {
       return db
         .select({ id: meals.id })
@@ -48,7 +75,13 @@ export function createMealRepository(database: DatabaseConnection) {
       );
     },
     put(familyId: string, actorId: string, date: string, data: PutMeal, id?: string) {
-      const existing = id && db.select({ id: meals.id }).from(meals).where(eq(meals.id, id)).get();
+      const existing =
+        id &&
+        db
+          .select({ id: meals.id })
+          .from(meals)
+          .where(and(eq(meals.id, id), eq(meals.familyId, familyId)))
+          .get();
       if (!existing) database.familyRecordLimits.requireCapacity('meals', familyId);
       const now = Date.now();
       const row = db
@@ -66,11 +99,15 @@ export function createMealRepository(database: DatabaseConnection) {
         })
         .onConflictDoUpdate({
           target: meals.id,
+          setWhere: eq(meals.familyId, familyId),
           set: { title: data.title, notes: data.notes || null, updatedAt: now },
         })
         .returning()
         .get();
-      db.delete(mealIngredients).where(eq(mealIngredients.mealId, row.id)).run();
+      if (!row) throw new ApiError(409, 'MEAL_CONFLICT', 'Identyfikator obiadu jest już używany.');
+      db.delete(mealIngredients)
+        .where(and(eq(mealIngredients.mealId, row.id), inArray(mealIngredients.mealId, familyMeals(familyId))))
+        .run();
       if (data.ingredients.length)
         db.insert(mealIngredients)
           .values(

@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm';
+import { createFamilyReader } from '../family/reader.js';
+import { createContactService } from '../contacts/service.js';
 import {
   computeNextFireAt,
   localDateTimeToUtc,
@@ -10,12 +11,11 @@ import {
   type TimeReminder,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { users, contacts } from '../../db/schema.js';
-import { createEventRepository } from '../events/repository.js';
+import { createEventService } from '../events/service.js';
 import { resolveRecipients } from './delivery.js';
 import { createReminderRepository } from './repository.js';
-import { createTaskListRepository } from '../tasks/repository.js';
-import { createDocumentRepository } from '../documents/repository.js';
+import { createTaskListService } from '../tasks/service.js';
+import { createDocumentService } from '../documents/service.js';
 
 /** A consistent SQLite read snapshot, independent of the cron's reservation state. */
 export function readReminderSchedule(
@@ -30,12 +30,13 @@ export function readReminderSchedule(
   return database.db.transaction(() => {
     const generatedAt = now();
     const validUntil = generatedAt + 90 * 86400000;
-    const repository = createEventRepository(database);
+    const eventService = createEventService(database);
+    const family = createFamilyReader(database);
     const reminderRepository = createReminderRepository(database);
-    const tz = repository.timezone(familyId);
-    const members = database.db.select().from(users).where(eq(users.familyId, familyId)).all();
+    const tz = family.timezone(familyId);
+    const members = family.listMembers(familyId);
     const reminders: ReminderSchedule['reminders'] = [];
-    const events = repository.list(familyId);
+    const events = eventService.list(familyId);
     const personalEvents = reminderRepository.listMany(
       familyId,
       'eventId',
@@ -72,10 +73,10 @@ export function readReminderSchedule(
         }
       }
     }
-    const taskRepository = createTaskListRepository(database);
+    const taskService = createTaskListService(database);
     const taskSnapshot = includeTasks
-      ? taskRepository.snapshot(familyId, userId)
-      : { lists: [], items: {} as ReturnType<typeof taskRepository.snapshot>['items'] };
+      ? taskService.snapshot(familyId, userId)
+      : { lists: [], items: {} as ReturnType<typeof taskService.snapshot>['items'] };
     const personalTasks = reminderRepository.listMany(
       familyId,
       'taskId',
@@ -110,7 +111,7 @@ export function readReminderSchedule(
         }
       }
     }
-    const documents = includeDocuments ? createDocumentRepository(database).list(familyId) : [];
+    const documents = includeDocuments ? createDocumentService(database).listSources(familyId) : [];
     const sharedDocuments = reminderRepository.listMany(
       familyId,
       'documentId',
@@ -149,7 +150,7 @@ export function readReminderSchedule(
     }
     if (includeContacts && members.some((member) => member.id === userId)) {
       const year = Number(new Intl.DateTimeFormat('en', { timeZone: tz, year: 'numeric' }).format(generatedAt));
-      const birthdays = database.db.select().from(contacts).where(eq(contacts.familyId, familyId)).all();
+      const birthdays = createContactService(database).listBirthdays(familyId);
       for (const contact of birthdays) {
         const monthDay = contact.birthday?.slice(5) ?? contact.birthdayMonthDay;
         if (!monthDay) continue;

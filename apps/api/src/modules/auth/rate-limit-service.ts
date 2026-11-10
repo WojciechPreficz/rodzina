@@ -38,6 +38,21 @@ export function createAuthRateLimitService(database: DatabaseConnection) {
         throw new ApiError(429, 'RATE_LIMITED', loginMessage);
       }
     },
+    consumeEmailAttempt(scope: 'registration' | 'reset', ip: string, email: string, now: number) {
+      return repository.consumeAll(
+        [
+          { key: rateLimitKey(scope + '-ip', ip), max: 10, windowMs: 15 * 60_000 },
+          { key: rateLimitKey(scope + '-email', email), max: 3, windowMs: 60 * 60_000 },
+        ],
+        now,
+      );
+    },
+    consumeDeletionAttempt(userId: string, now: number) {
+      const key = rateLimitKey('account-deletion', userId);
+      return repository.consumeAll([{ key, max: 10, windowMs: 15 * 60_000 }], now);
+    },
+    clearDeletionAttempts: (userId: string) => repository.clear(rateLimitKey('account-deletion', userId)),
+    deleteExpired: repository.deleteExpired,
     clear: repository.clear,
     lookupFamily<T>(ip: string, lookup: () => T[]) {
       return database.sqlite

@@ -1,5 +1,7 @@
+import { createFamilyReader } from '../family/reader.js';
+import { createReminderSourcePort } from '../reminders/source-port.js';
+import { formatLocalDate } from '../../http/local-date.js';
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
 import { ApiError } from '../../http/errors.js';
 import {
   expandOccurrences,
@@ -13,7 +15,6 @@ import {
   type EventDuplicateResolution,
 } from '@rodzina/shared';
 import { eventDataSchema, importEventSchema, type ImportEvents, type ImportEventResult } from '@rodzina/shared';
-import { eventImportOperations, users } from '../../db/schema.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import { canEditEvent, type FamilyRole } from '../../permissions.js';
 import { createEventRepository } from './repository.js';
@@ -31,7 +32,8 @@ const normalizeTitle = (title: string) =>
 const eventVersion = (event: CalendarEvent) => createHash('sha256').update(JSON.stringify(event)).digest('hex');
 
 export function createEventService(database: DatabaseConnection) {
-  const repository = createEventRepository(database);
+  const { timezone } = createFamilyReader(database);
+  const repository = createEventRepository(database, createReminderSourcePort(database), timezone);
   function get(familyId: string, id: string): CalendarEvent {
     const event = repository.find(familyId, id);
     if (!event) throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono wydarzenia.');
@@ -57,15 +59,10 @@ export function createEventService(database: DatabaseConnection) {
     startDate: string,
     kind: EventData['kind'],
   ) {
-    const tz = repository.timezone(familyId);
+    const tz = timezone(familyId);
     return repository.list(familyId).flatMap((event): EventDuplicate[] => {
       const occurrence = expandOccurrences(event, event.exceptions, startDate, startDate, tz).find((item) => {
-        const localDate = new Intl.DateTimeFormat('en-CA', {
-          timeZone: tz,
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }).format(item.startUtc);
+        const localDate = formatLocalDate(item.startUtc, tz);
         const actualTitle =
           event.exceptions.find((exception) => exception.originalDate === item.occurrenceDate)?.overrideTitle ??
           event.title;
@@ -149,25 +146,11 @@ export function createEventService(database: DatabaseConnection) {
         .digest('hex');
       try {
         return database.db.transaction(
-          (tx): ImportEventResult => {
-            const actor = tx
-              .select({ id: users.id, role: users.role })
-              .from(users)
-              .where(and(eq(users.id, actorId), eq(users.familyId, familyId)))
-              .get();
+          (): ImportEventResult => {
+            const actor = repository.findImportActor(familyId, actorId);
             if (!actor) throw new ApiError(403, 'FORBIDDEN', 'Brak dostępu do tej rodziny.');
             checkParticipants(familyId, parsed.data.participantIds);
-            const previous = tx
-              .select()
-              .from(eventImportOperations)
-              .where(
-                and(
-                  eq(eventImportOperations.familyId, familyId),
-                  eq(eventImportOperations.userId, actorId),
-                  eq(eventImportOperations.id, operationId),
-                ),
-              )
-              .get();
+            const previous = repository.findImportOperation(familyId, actorId, operationId);
             if (previous) {
               if (previous.fingerprint !== fingerprint)
                 throw new ApiError(409, 'OPERATION_CONFLICT', 'Ta operacja została już użyta z innymi danymi.');
@@ -178,9 +161,13 @@ export function createEventService(database: DatabaseConnection) {
               return { operationId, status: 'already_created', eventId: previous.eventId };
             }
             const created = saveResolved(familyId, actorId, actor.role, parsed.data, duplicateResolution);
-            tx.insert(eventImportOperations)
-              .values({ familyId, userId: actorId, id: operationId, fingerprint, eventId: created.id })
-              .run();
+            repository.recordImportOperation({
+              familyId,
+              userId: actorId,
+              id: operationId,
+              fingerprint,
+              eventId: created.id,
+            });
             return { operationId, status: 'created', eventId: created.id };
           },
           { behavior: 'immediate' },
@@ -274,7 +261,7 @@ export function createEventService(database: DatabaseConnection) {
     repository.remove(familyId, id);
   }
   function occurrences(familyId: string, from: string, to: string, userId?: string) {
-    const tz = repository.timezone(familyId);
+    const tz = timezone(familyId);
     return repository
       .list(familyId, userId)
       .flatMap((event) =>
@@ -292,13 +279,20 @@ export function createEventService(database: DatabaseConnection) {
       .sort((a, b) => a.startUtc - b.startUtc || a.eventId.localeCompare(b.eventId));
   }
   function upcomingDistant(familyId: string) {
-    const today = new Intl.DateTimeFormat('en-CA', {
-      timeZone: repository.timezone(familyId),
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(Date.now());
+    const today = formatLocalDate(Date.now(), timezone(familyId));
     return repository.upcomingDistant(familyId, today);
   }
-  return { get, create, createResolved, duplicates, importEvents, update, remove, occurrences, upcomingDistant };
+  return {
+    get,
+    find: repository.find,
+    list: repository.list,
+    create,
+    createResolved,
+    duplicates,
+    importEvents,
+    update,
+    remove,
+    occurrences,
+    upcomingDistant,
+  };
 }

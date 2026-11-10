@@ -5,6 +5,11 @@ import type { DatabaseConnection } from '../../db/client.js';
 import { createAuthRepository, type SessionCredential } from './repository.js';
 import { ApiError } from '../../http/errors.js';
 
+export function createSessionService(database: DatabaseConnection) {
+  const repository = createAuthRepository(database);
+  return { sessionBelongsTo: repository.sessionBelongsTo };
+}
+
 export function createSessionFactory(database: DatabaseConnection, config: AppConfig) {
   const repository = createAuthRepository(database);
   return async function createSession(

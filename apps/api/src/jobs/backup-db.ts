@@ -6,7 +6,7 @@ import { lte } from 'drizzle-orm';
 import { loadConfig } from '../config.js';
 import { createDatabase, type DatabaseConnection } from '../db/client.js';
 import { sessions } from '../db/schema.js';
-import { createAuthRateLimitRepository } from '../modules/auth/rate-limit-repository.js';
+import { createAuthRateLimitService } from '../modules/auth/rate-limit-service.js';
 
 export function deleteExpiredSessions(database: DatabaseConnection, nowMs: number): number {
   return database.db.delete(sessions).where(lte(sessions.expiresAt, nowMs)).run().changes;
@@ -53,7 +53,7 @@ export function runBackup(config = loadConfig()): void {
       );
     }
     try {
-      const removed = createAuthRateLimitRepository(database).deleteExpired(Date.now());
+      const removed = createAuthRateLimitService(database).deleteExpired(Date.now());
       console.log(JSON.stringify({ event: 'expired_auth_rate_limits_deleted', removed }));
     } catch {
       console.error(

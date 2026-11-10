@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
 import type { CreateDocument, PatchDocument } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { documents, families, users } from '../../db/schema.js';
+import { documents, users } from '../../db/schema.js';
 
 export function createDocumentRepository(database: DatabaseConnection) {
   const db = database.db;
@@ -16,7 +16,6 @@ export function createDocumentRepository(database: DatabaseConnection) {
         .orderBy(asc(documents.expiresOn), asc(documents.id))
         .all(),
     find: (familyId: string, id: string) => db.select().from(documents).where(scope(familyId, id)).get(),
-    timezone: (familyId: string) => db.select().from(families).where(eq(families.id, familyId)).get()!.timezone,
     hasHolder: (familyId: string, id: string) =>
       !!db
         .select({ id: users.id })

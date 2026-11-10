@@ -117,8 +117,27 @@ export function createReminderRepository(database: DatabaseConnection) {
           : { type: 'absolute', remindAt: row.remindAt! };
       db.update(reminders)
         .set({ nextFireAt: computeNextFireAt(data, event, now, tz) })
-        .where(eq(reminders.id, row.id))
+        .where(and(eq(reminders.familyId, familyId), eq(reminders.id, row.id)))
         .run();
+    }
+  }
+  function transferEventReminders(familyId: string, sourceId: string, targetId: string) {
+    const rows = db
+      .select()
+      .from(reminders)
+      .where(and(eq(reminders.familyId, familyId), eq(reminders.eventId, sourceId)))
+      .all();
+    for (const row of rows) {
+      if (row.audience === 'user') {
+        db.update(reminders)
+          .set({ eventId: targetId })
+          .where(and(eq(reminders.familyId, familyId), eq(reminders.id, row.id)))
+          .run();
+      } else {
+        db.insert(reminders)
+          .values({ ...row, id: crypto.randomUUID(), eventId: targetId })
+          .run();
+      }
     }
   }
   function removeMine(familyId: string, userId: string, id: string) {
@@ -209,7 +228,7 @@ export function createReminderRepository(database: DatabaseConnection) {
           : { type: 'absolute', remindAt: row.remindAt! };
       db.update(reminders)
         .set({ nextFireAt: task.dueDate ? computeNextFireAt(data, taskTime(task), now, tz) : null })
-        .where(eq(reminders.id, row.id))
+        .where(and(eq(reminders.familyId, familyId), eq(reminders.id, row.id)))
         .run();
     }
   }
@@ -280,11 +299,22 @@ export function createReminderRepository(database: DatabaseConnection) {
           : { type: 'absolute', remindAt: row.remindAt! };
       db.update(reminders)
         .set({ nextFireAt: computeNextFireAt(data, { date: document.expiresOn }, now, tz) })
-        .where(eq(reminders.id, row.id))
+        .where(and(eq(reminders.familyId, familyId), eq(reminders.id, row.id)))
         .run();
     }
   }
   return {
+    findTaskId: (id: string) =>
+      db.select({ taskId: reminders.taskId }).from(reminders).where(eq(reminders.id, id)).get()?.taskId,
+    listAllTask(familyId: string, taskId: string) {
+      return db
+        .select()
+        .from(reminders)
+        .where(and(eq(reminders.familyId, familyId), eq(reminders.taskId, taskId)))
+        .orderBy(asc(reminders.id))
+        .all();
+    },
+    transferEventReminders,
     listMany,
     list,
     insert,

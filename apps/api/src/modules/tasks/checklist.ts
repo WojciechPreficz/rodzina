@@ -1,4 +1,3 @@
-import { and, eq, sql } from 'drizzle-orm';
 import type {
   CreateTaskChecklistItem,
   PatchTaskChecklistItem,
@@ -6,10 +5,9 @@ import type {
   ReorderTaskChecklist,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import { taskChecklistItems, tasks } from '../../db/schema.js';
 import { ApiError } from '../../http/errors.js';
 import { createTaskListRepository } from './repository.js';
-import { bumpTaskOccurrence } from './recurrence-data.js';
+import { bumpTaskOccurrence } from './recurrence-repository.js';
 
 export function createTaskChecklistService(database: DatabaseConnection) {
   const repository = createTaskListRepository(database);
@@ -34,12 +32,6 @@ export function createTaskChecklistService(database: DatabaseConnection) {
       'Checklista została zmieniona. Pobierz aktualne dane i sprawdź zmianę.',
     );
   }
-  function bumpOrder(taskId: string) {
-    db.update(tasks)
-      .set({ checklistOrderVersion: sql`${tasks.checklistOrderVersion} + 1` })
-      .where(eq(tasks.id, taskId))
-      .run();
-  }
   return {
     parent,
     read,
@@ -50,18 +42,16 @@ export function createTaskChecklistService(database: DatabaseConnection) {
           if (current.items.length >= 100)
             throw new ApiError(400, 'CHECKLIST_LIMIT', 'Zadanie może mieć najwyżej 100 kroków.');
           const now = Date.now();
-          db.insert(taskChecklistItems)
-            .values({
-              ...data,
-              taskId,
-              position: current.items.length,
-              createdBy: actorId,
-              createdAt: now,
-              updatedAt: now,
-            })
-            .run();
-          bumpOrder(taskId);
-          bumpTaskOccurrence(database, taskId);
+          repository.insertChecklistItem({
+            ...data,
+            taskId,
+            position: current.items.length,
+            createdBy: actorId,
+            createdAt: now,
+            updatedAt: now,
+          });
+          repository.bumpChecklistOrder(familyId, taskId);
+          bumpTaskOccurrence(database, familyId, taskId);
           return read(familyId, actorId, taskId);
         },
         { behavior: 'immediate' },
@@ -82,32 +72,31 @@ export function createTaskChecklistService(database: DatabaseConnection) {
           if (!item) throw new ApiError(404, 'NOT_FOUND', 'Krok zadania nie istnieje.');
           if ('version' in data && data.version !== item.version) conflict();
           if ('doneVersion' in data && data.doneVersion !== item.doneVersion) conflict();
-          const filter = and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId));
           if (remove) {
-            db.delete(taskChecklistItems).where(filter).run();
+            repository.removeChecklistItem(familyId, taskId, itemId);
             for (const row of current.items.filter((row) => row.position > item.position))
-              db.update(taskChecklistItems)
-                .set({ position: row.position - 1 })
-                .where(eq(taskChecklistItems.id, row.id))
-                .run();
-            bumpOrder(taskId);
+              repository.updateChecklistItem(familyId, taskId, row.id, { position: row.position - 1 });
+            repository.bumpChecklistOrder(familyId, taskId);
           } else if ('title' in data) {
-            db.update(taskChecklistItems)
-              .set({ title: data.title, version: item.version + 1, updatedAt: Date.now() })
-              .where(filter)
-              .run();
+            repository.updateChecklistItem(familyId, taskId, itemId, {
+              title: data.title,
+              version: item.version + 1,
+              updatedAt: Date.now(),
+            });
           } else if ('isDone' in data) {
             const now = Date.now();
             const completion =
               data.isDone === item.isDone
                 ? {}
                 : { doneBy: data.isDone ? actorId : null, doneAt: data.isDone ? now : null };
-            db.update(taskChecklistItems)
-              .set({ isDone: data.isDone, ...completion, doneVersion: item.doneVersion + 1, updatedAt: now })
-              .where(filter)
-              .run();
+            repository.updateChecklistItem(familyId, taskId, itemId, {
+              isDone: data.isDone,
+              ...completion,
+              doneVersion: item.doneVersion + 1,
+              updatedAt: now,
+            });
           }
-          bumpTaskOccurrence(database, taskId);
+          bumpTaskOccurrence(database, familyId, taskId);
           return read(familyId, actorId, taskId);
         },
         { behavior: 'immediate' },
@@ -127,15 +116,9 @@ export function createTaskChecklistService(database: DatabaseConnection) {
               'VALIDATION_ERROR',
               'Kolejność musi zawierać wszystkie aktualne kroki tego zadania.',
             );
-          data.itemIds.forEach((id, position) =>
-            db
-              .update(taskChecklistItems)
-              .set({ position })
-              .where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, id)))
-              .run(),
-          );
-          bumpOrder(taskId);
-          bumpTaskOccurrence(database, taskId);
+          data.itemIds.forEach((id, position) => repository.updateChecklistItem(familyId, taskId, id, { position }));
+          repository.bumpChecklistOrder(familyId, taskId);
+          bumpTaskOccurrence(database, familyId, taskId);
           return read(familyId, actorId, taskId);
         },
         { behavior: 'immediate' },

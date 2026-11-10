@@ -1,11 +1,11 @@
+import { createAuthRepository } from './repository.js';
+import { createAuthRateLimitService } from './rate-limit-service.js';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { eq, lte } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppConfig } from '../../config.js';
 import type { DatabaseConnection } from '../../db/client.js';
-import { authRateLimits, passwordResets, users } from '../../db/schema.js';
 import { hashToken, normalizeEmail, randomToken } from '../../auth.js';
 import { ApiError } from '../../http/errors.js';
 import { sendResetMail, SMTP_TIMEOUT_MS } from './reset-mail.js';
@@ -23,43 +23,24 @@ export function createPasswordRecovery(
   logger: FastifyBaseLogger,
   sendMail = sendResetMail,
 ) {
-  const consume = database.sqlite.transaction((ip: string, email: string, now: number) => {
-    database.db.delete(authRateLimits).where(lte(authRateLimits.expiresAt, now)).run();
-    const limits = [
-      { key: hashToken(JSON.stringify(['reset-ip', ip])), max: 10, window: 15 * 60_000 },
-      { key: hashToken(JSON.stringify(['reset-email', email])), max: 3, window: 60 * 60_000 },
-    ].map((limit) => ({
-      ...limit,
-      record: database.db.select().from(authRateLimits).where(eq(authRateLimits.scopeKey, limit.key)).get(),
-    }));
-    const blocked = limits.filter(({ record, max }) => record && record.count >= max);
-    if (blocked.length) return Math.max(...blocked.map(({ record }) => Math.ceil((record!.expiresAt - now) / 1000)));
-    for (const { key, record, window } of limits) {
-      const values = { scopeKey: key, count: (record?.count ?? 0) + 1, expiresAt: record?.expiresAt ?? now + window };
-      database.db
-        .insert(authRateLimits)
-        .values(values)
-        .onConflictDoUpdate({ target: authRateLimits.scopeKey, set: values })
-        .run();
-    }
-    return 0;
-  });
+  const repository = createAuthRepository(database);
+  const limits = createAuthRateLimitService(database);
 
   return async (rawEmail: string, ip: string) => {
     if (!config.RODZINA_PASSWORD_RESET_EMAIL_ENABLED)
       throw new ApiError(503, 'UNAVAILABLE', 'Odzyskiwanie hasła przez e-mail jest niedostępne.');
     const email = normalizeEmail(rawEmail);
-    const retryAfter = consume.immediate(ip, email, Date.now());
+    const retryAfter = limits.consumeEmailAttempt('reset', ip, email, Date.now());
     if (retryAfter) throw new RecoveryRateLimitError(retryAfter);
     const started = performance.now();
     let tokenHash: string | undefined;
     try {
-      const user = database.db.select().from(users).where(eq(users.email, email)).get();
+      const user = repository.findUserByEmail(email);
       if (user?.passwordHash && user.role !== 'child') {
         const token = randomToken();
         tokenHash = hashToken(token);
         const expiresAt = Date.now() + 30 * 60_000;
-        database.db.insert(passwordResets).values({ id: randomUUID(), userId: user.id, tokenHash, expiresAt }).run();
+        repository.insertPasswordReset({ id: randomUUID(), userId: user.id, tokenHash, expiresAt });
         await sendMail(config, {
           to: user.email!,
           link: new URL(`/reset-hasla/${token}`, config.RODZINA_PUBLIC_URL).href,
@@ -67,12 +48,7 @@ export function createPasswordRecovery(
         });
       }
     } catch {
-      if (tokenHash)
-        database.db
-          .update(passwordResets)
-          .set({ usedAt: Date.now() })
-          .where(eq(passwordResets.tokenHash, tokenHash))
-          .run();
+      if (tokenHash) repository.invalidatePasswordReset(tokenHash, Date.now());
       // SMTP error messages can contain credentials, recipients or the message itself.
       logger.error(
         { code: 'PASSWORD_RESET_DELIVERY_FAILED' },

@@ -1,21 +1,20 @@
+import { createFamilyReader } from '../family/reader.js';
 import { ApiError } from '../../http/errors.js';
 import type { CreateMyReminder, MyReminderSource } from '@rodzina/shared';
-import { eq } from 'drizzle-orm';
-import { reminders } from '../../db/schema.js';
 import type { DatabaseConnection } from '../../db/client.js';
-import { createEventRepository } from '../events/repository.js';
+import { createEventService } from '../events/service.js';
 import { createReminderRepository } from './repository.js';
-import { createTaskListRepository } from '../tasks/repository.js';
-import { bumpTaskOccurrence } from '../tasks/recurrence-data.js';
-import { createDocumentRepository } from '../documents/repository.js';
+import { createTaskListService } from '../tasks/service.js';
+import { createDocumentService } from '../documents/service.js';
 
 export function createReminderService(database: DatabaseConnection) {
   const repository = createReminderRepository(database);
-  const events = createEventRepository(database);
-  const tasks = createTaskListRepository(database);
-  const documents = createDocumentRepository(database);
+  const { timezone } = createFamilyReader(database);
+  const events = createEventService(database);
+  const tasks = createTaskListService(database);
+  const documents = createDocumentService(database);
   function getDocument(familyId: string, documentId: string) {
-    const document = documents.find(familyId, documentId);
+    const document = documents.findSource(familyId, documentId);
     if (!document) throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono dokumentu.');
     return document;
   }
@@ -50,7 +49,7 @@ export function createReminderService(database: DatabaseConnection) {
         userId,
         data,
         'user',
-        documents.timezone(familyId),
+        timezone(familyId),
         Date.now(),
         userId,
       );
@@ -66,27 +65,27 @@ export function createReminderService(database: DatabaseConnection) {
             userId,
             data,
             'user',
-            events.timezone(familyId),
+            timezone(familyId),
             Date.now(),
             userId,
           );
-          bumpTaskOccurrence(database, task.id);
+          tasks.bumpOccurrenceVersion(familyId, task.id);
           return result;
         },
         { behavior: 'immediate' },
       );
     }
     const event = getSource(familyId, data.eventId!);
-    return repository.insert(familyId, event, userId, data, 'user', events.timezone(familyId), Date.now(), userId);
+    return repository.insert(familyId, event, userId, data, 'user', timezone(familyId), Date.now(), userId);
   }
   function removeMine(familyId: string, userId: string, id: string) {
     database.db.transaction(
       () => {
-        const row = database.db.select().from(reminders).where(eq(reminders.id, id)).get();
-        if (row?.taskId) getTask(familyId, userId, row.taskId);
+        const taskId = repository.findTaskId(id);
+        if (taskId) getTask(familyId, userId, taskId);
         if (!repository.removeMine(familyId, userId, id))
           throw new ApiError(404, 'NOT_FOUND', 'Nie znaleziono przypomnienia.');
-        if (row?.taskId) bumpTaskOccurrence(database, row.taskId);
+        if (taskId) tasks.bumpOccurrenceVersion(familyId, taskId);
       },
       { behavior: 'immediate' },
     );

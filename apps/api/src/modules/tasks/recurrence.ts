@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import {
   firstTaskOccurrence,
   nextTaskOccurrence,
@@ -8,18 +7,11 @@ import {
   type TaskSeriesTemplate,
 } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
-import {
-  taskChecklistItems,
-  taskOccurrences,
-  taskSeries,
-  taskSeriesHistory,
-  tasks,
-  reminders as reminderRows,
-} from '../../db/schema.js';
+import type { taskOccurrences, taskSeries, tasks } from '../../db/schema.js';
 import { ApiError } from '../../http/errors.js';
 import { createTaskListRepository } from './repository.js';
-import { createReminderRepository } from '../reminders/repository.js';
-import { bumpTaskOccurrence, taskRecurrenceMany } from './recurrence-data.js';
+import { createReminderSourcePort } from '../reminders/source-port.js';
+import { bumpTaskOccurrence, taskRecurrenceMany, createTaskRecurrenceRepository } from './recurrence-repository.js';
 
 type TaskRow = typeof tasks.$inferSelect;
 type SeriesRow = typeof taskSeries.$inferSelect;
@@ -28,7 +20,8 @@ type Versions = { expectedVersion: number; expectedOccurrenceVersion: number };
 export function createTaskRecurrenceService(database: DatabaseConnection) {
   const db = database.db;
   const repository = createTaskListRepository(database);
-  const reminders = createReminderRepository(database);
+  const seriesRepository = createTaskRecurrenceRepository(database);
+  const reminders = createReminderSourcePort(database);
   const transaction = <T>(operation: () => T) => db.transaction(operation, { behavior: 'immediate' });
   function conflict(): never {
     throw new ApiError(
@@ -41,18 +34,14 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
     return taskRecurrenceMany(database, [taskId]).get(taskId);
   }
   function getSeries(familyId: string, actorId: string, id: string) {
-    const series = db.select().from(taskSeries).where(eq(taskSeries.id, id)).get();
+    const series = seriesRepository.findSeries(familyId, id);
     if (!series || !repository.findAccessibleList(familyId, actorId, series.listId))
       throw new ApiError(404, 'NOT_FOUND', 'Seria zadań nie istnieje.');
     return series;
   }
   function read(familyId: string, actorId: string, id: string) {
     const series = getSeries(familyId, actorId, id);
-    const active = db
-      .select()
-      .from(taskOccurrences)
-      .where(and(eq(taskOccurrences.seriesId, id), eq(taskOccurrences.state, 'active')))
-      .get();
+    const active = seriesRepository.findActive(id);
     return {
       ok: true as const,
       series,
@@ -65,16 +54,12 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
     if (template.assigneeId && template.assigneeId !== list.ownerId && !list.memberIds.includes(template.assigneeId))
       throw new ApiError(400, 'VALIDATION_ERROR', 'Zadanie można przypisać tylko właścicielowi lub członkowi listy.');
   }
-  function fingerprint(taskId: string) {
-    const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
+  function fingerprint(familyId: string, taskId: string) {
+    const task = seriesRepository.findTask(familyId, taskId);
     if (!task) return null;
     // Delivery bookkeeping does not constitute a user edit of the successor.
-    const reminderData = db
-      .select()
-      .from(reminderRows)
-      .where(eq(reminderRows.taskId, taskId))
-      .orderBy(asc(reminderRows.id))
-      .all()
+    const reminderData = reminders
+      .listAllTask(familyId, taskId)
       .map((row) => ({ ...row, nextFireAt: null, lastSentAt: null }));
     return crypto
       .createHash('sha256')
@@ -89,16 +74,14 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
       .digest('hex');
   }
   function insertOccurrence(series: SeriesRow, taskId: string, sequence: number, date: string) {
-    db.insert(taskOccurrences)
-      .values({
-        taskId,
-        listId: series.listId,
-        seriesId: series.id,
-        sequence,
-        plannedDate: date,
-        plannedTime: series.rule.time,
-      })
-      .run();
+    seriesRepository.insertOccurrence({
+      taskId,
+      listId: series.listId,
+      seriesId: series.id,
+      sequence,
+      plannedDate: date,
+      plannedTime: series.rule.time,
+    });
   }
   function checkVersions(series: SeriesRow, current: typeof taskOccurrences.$inferSelect, versions: Versions) {
     if (series.version !== versions.expectedVersion || current.version !== versions.expectedOccurrenceVersion)
@@ -109,12 +92,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
     if (!current || current.state !== 'active') return;
     const series = getSeries(familyId, actorId, current.seriesId);
     if (series.state !== 'active') conflict();
-    const previous = db
-      .select()
-      .from(taskSeriesHistory)
-      .where(and(eq(taskSeriesHistory.seriesId, series.id), isNull(taskSeriesHistory.undoneAt)))
-      .orderBy(desc(taskSeriesHistory.sequence))
-      .get();
+    const previous = seriesRepository.lastClosure(series.id);
     const now = Date.now();
     const next = nextTaskOccurrence(series.rule, current.plannedDate, {
       actualAt,
@@ -124,19 +102,24 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
     });
     if (next.status === 'review' || now < series.updatedAt)
       throw new ApiError(409, 'TASK_CLOSURE_TIME_REVIEW', 'Czas zamknięcia zadania wymaga sprawdzenia.');
-    db.update(taskOccurrences)
-      .set({ state, closedAt: actualAt, closedBy: actorId, version: current.version + 1 })
-      .where(eq(taskOccurrences.taskId, task.id))
-      .run();
-    db.update(tasks)
-      .set({ isDone: true, doneAt: state === 'done' ? actualAt : null, doneBy: state === 'done' ? actorId : null })
-      .where(eq(tasks.id, task.id))
-      .run();
+    seriesRepository.updateOccurrence(familyId, task.id, {
+      state,
+      closedAt: actualAt,
+      closedBy: actorId,
+      version: current.version + 1,
+    });
+    seriesRepository.completeTask(
+      familyId,
+      task.id,
+      state === 'done' ? actualAt : null,
+      state === 'done' ? actorId : null,
+    );
     const version = series.version + 1;
-    db.update(taskSeries)
-      .set({ version, state: next.nextDate ? 'active' : 'ended', updatedAt: now })
-      .where(eq(taskSeries.id, series.id))
-      .run();
+    seriesRepository.updateSeries(familyId, series.id, {
+      version,
+      state: next.nextDate ? 'active' : 'ended',
+      updatedAt: now,
+    });
     let successorId: string | null = null;
     if (next.nextDate) {
       const list = repository.findAccessibleList(familyId, actorId, series.listId)!;
@@ -155,70 +138,56 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
       successorId = successor.id;
       insertOccurrence(series, successor.id, current.sequence + 1, next.nextDate);
       checklist.forEach((title, position) => {
-        db.insert(taskChecklistItems)
-          .values({
-            id: crypto.randomUUID(),
-            taskId: successor.id,
-            title,
-            position,
-            createdBy: actorId,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .run();
+        repository.insertChecklistItem({
+          id: crypto.randomUUID(),
+          taskId: successor.id,
+          title,
+          position,
+          createdBy: actorId,
+          createdAt: now,
+          updatedAt: now,
+        });
       });
       reminders.saveTask(familyId, successor, actorId, shared, series.rule.timezone, now);
     }
-    db.insert(taskSeriesHistory)
-      .values({
-        id: crypto.randomUUID(),
-        seriesId: series.id,
-        taskId: task.id,
-        sequence: current.sequence,
-        title: task.title,
-        plannedDate: current.plannedDate,
-        plannedTime: current.plannedTime,
-        state,
-        closedAt: actualAt,
-        closedBy: actorId,
-        seriesVersion: version,
-        successorId,
-        successorFingerprint: successorId ? fingerprint(successorId) : null,
-      })
-      .run();
+    seriesRepository.insertClosure({
+      id: crypto.randomUUID(),
+      seriesId: series.id,
+      taskId: task.id,
+      sequence: current.sequence,
+      title: task.title,
+      plannedDate: current.plannedDate,
+      plannedTime: current.plannedTime,
+      state,
+      closedAt: actualAt,
+      closedBy: actorId,
+      seriesVersion: version,
+      successorId,
+      successorFingerprint: successorId ? fingerprint(familyId, successorId) : null,
+    });
   }
   function undo(familyId: string, actorId: string, task: TaskRow) {
     const current = occurrence(task.id)!;
     const series = getSeries(familyId, actorId, current.seriesId);
-    const history = db
-      .select()
-      .from(taskSeriesHistory)
-      .where(
-        and(
-          eq(taskSeriesHistory.seriesId, series.id),
-          eq(taskSeriesHistory.sequence, current.sequence),
-          isNull(taskSeriesHistory.undoneAt),
-        ),
-      )
-      .get();
+    const history = seriesRepository.findClosure(series.id, current.sequence);
     if (!history || series.state === 'stopped' || history.seriesVersion !== series.version) conflict();
     if (history.successorId) {
-      if (fingerprint(history.successorId) !== history.successorFingerprint) conflict();
-      repository.removeTask(history.successorId);
+      if (fingerprint(familyId, history.successorId) !== history.successorFingerprint) conflict();
+      repository.removeTask(familyId, history.successorId);
     }
     const now = Date.now();
-    db.update(taskSeriesHistory)
-      .set({ undoneAt: now, undoneBy: actorId })
-      .where(eq(taskSeriesHistory.id, history.id))
-      .run();
-    db.update(taskOccurrences)
-      .set({ state: 'active', closedAt: null, closedBy: null, version: current.version + 1 })
-      .where(eq(taskOccurrences.taskId, task.id))
-      .run();
-    db.update(taskSeries)
-      .set({ state: 'active', version: series.version + 1, updatedAt: now })
-      .where(eq(taskSeries.id, series.id))
-      .run();
+    seriesRepository.undoClosure(familyId, series.id, history.id, now, actorId);
+    seriesRepository.updateOccurrence(familyId, task.id, {
+      state: 'active',
+      closedAt: null,
+      closedBy: null,
+      version: current.version + 1,
+    });
+    seriesRepository.updateSeries(familyId, series.id, {
+      state: 'active',
+      version: series.version + 1,
+      updatedAt: now,
+    });
   }
   return {
     occurrence,
@@ -228,12 +197,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
       getSeries(familyId, actorId, id);
       return {
         ok: true as const,
-        history: db
-          .select()
-          .from(taskSeriesHistory)
-          .where(eq(taskSeriesHistory.seriesId, id))
-          .orderBy(asc(taskSeriesHistory.sequence), asc(taskSeriesHistory.closedAt))
-          .all(),
+        history: seriesRepository.listHistory(id),
       };
     },
     configure(familyId: string, actorId: string, id: string, data: ConfigureTaskSeries, create: boolean) {
@@ -241,13 +205,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
         const task = create ? repository.findTask(familyId, actorId, id) : undefined;
         if (create && !task) throw new ApiError(404, 'NOT_FOUND', 'Zadanie nie istnieje.');
         const existing = create ? undefined : getSeries(familyId, actorId, id);
-        const active = existing
-          ? db
-              .select()
-              .from(taskOccurrences)
-              .where(and(eq(taskOccurrences.seriesId, id), eq(taskOccurrences.state, 'active')))
-              .get()
-          : undefined;
+        const active = existing ? seriesRepository.findActive(id) : undefined;
         const target = task ?? (active ? repository.findTask(familyId, actorId, active.taskId) : undefined);
         if (!target || target.isDone || (create && occurrence(target.id))) conflict();
         if (existing) {
@@ -269,33 +227,34 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
         const now = Date.now();
         const seriesId = existing?.id ?? crypto.randomUUID();
         if (existing)
-          db.update(taskSeries)
-            .set({ rule: data.rule, template, version: existing.version + 1, updatedAt: now })
-            .where(eq(taskSeries.id, id))
-            .run();
+          seriesRepository.updateSeries(familyId, id, {
+            rule: data.rule,
+            template,
+            version: existing.version + 1,
+            updatedAt: now,
+          });
         else {
           database.familyRecordLimits.requireCapacity('taskSeries', familyId);
-          db.insert(taskSeries)
-            .values({
-              id: seriesId,
-              listId: target.listId,
-              rule: data.rule,
-              template,
-              createdBy: actorId,
-              createdAt: now,
-              updatedAt: now,
-            })
-            .run();
+          seriesRepository.insertSeries({
+            id: seriesId,
+            listId: target.listId,
+            rule: data.rule,
+            template,
+            createdBy: actorId,
+            createdAt: now,
+            updatedAt: now,
+          });
         }
         const series = getSeries(familyId, actorId, seriesId);
         if (active)
-          db.update(taskOccurrences)
-            .set({ plannedDate: date, plannedTime: data.rule.time, version: active.version + 1 })
-            .where(eq(taskOccurrences.taskId, target.id))
-            .run();
+          seriesRepository.updateOccurrence(familyId, target.id, {
+            plannedDate: date,
+            plannedTime: data.rule.time,
+            version: active.version + 1,
+          });
         else insertOccurrence(series, target.id, 0, date);
         const { reminders: shared, title, notes, assigneeId } = template;
-        const updated = repository.updateTask(target, actorId, {
+        const updated = repository.updateTask(familyId, target, actorId, {
           title,
           notes,
           assigneeId,
@@ -312,11 +271,12 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
         if (!result.activeTaskId || result.series.state !== 'active') conflict();
         const current = occurrence(result.activeTaskId)!;
         checkVersions(result.series, current, versions);
-        db.delete(taskOccurrences).where(eq(taskOccurrences.taskId, current.taskId)).run();
-        db.update(taskSeries)
-          .set({ state: 'stopped', version: result.series.version + 1, updatedAt: Date.now() })
-          .where(eq(taskSeries.id, id))
-          .run();
+        seriesRepository.removeOccurrence(familyId, current.taskId);
+        seriesRepository.updateSeries(familyId, id, {
+          state: 'stopped',
+          version: result.series.version + 1,
+          updatedAt: Date.now(),
+        });
         return read(familyId, actorId, id);
       });
     },
@@ -380,7 +340,7 @@ export function createTaskRecurrenceService(database: DatabaseConnection) {
             ),
         )
       )
-        bumpTaskOccurrence(database, previous.id);
+        bumpTaskOccurrence(database, familyId, previous.id);
     },
     beforeDelete(familyId: string, actorId: string, task: TaskRow) {
       close(familyId, actorId, task, 'skipped', Date.now());

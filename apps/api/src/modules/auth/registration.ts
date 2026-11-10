@@ -1,9 +1,9 @@
+import { createContactService } from '../contacts/service.js';
+import { createAuthRateLimitService } from './rate-limit-service.js';
 import { randomUUID } from 'node:crypto';
-import { eq, lte } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppConfig } from '../../config.js';
 import type { DatabaseConnection } from '../../db/client.js';
-import { authRateLimits, pendingRegistrations } from '../../db/schema.js';
 import { hashPassword, hashToken, normalizeEmail, randomToken } from '../../auth.js';
 import { ApiError } from '../../http/errors.js';
 import { createAuthRepository } from './repository.js';
@@ -16,6 +16,19 @@ export class RegistrationRateLimitError extends ApiError {
   }
 }
 
+export function registerFamily(
+  database: DatabaseConnection,
+  values: Parameters<ReturnType<typeof createAuthRepository>['registerFamily']>[0],
+) {
+  database.db.transaction(
+    () => {
+      createAuthRepository(database).registerFamily(values);
+      createContactService(database).initializeFamily(values.familyId, values.userId, values.now);
+    },
+    { behavior: 'immediate' },
+  );
+}
+
 export function createRegistration(
   database: DatabaseConnection,
   config: AppConfig,
@@ -26,31 +39,11 @@ export function createRegistration(
   const checkEnabled = () => {
     if (!config.RODZINA_ALLOW_REGISTRATION) throw new ApiError(403, 'FORBIDDEN', 'Rejestracja rodziny jest wyłączona.');
   };
-  const cleanup = (now: number) =>
-    database.db.delete(pendingRegistrations).where(lte(pendingRegistrations.expiresAt, now)).run();
+  const limits = createAuthRateLimitService(database);
   const consume = database.sqlite.transaction((ip: string, email: string, now: number) => {
-    cleanup(now);
-    database.db.delete(authRateLimits).where(lte(authRateLimits.expiresAt, now)).run();
-    const limits = [
-      { key: hashToken(JSON.stringify(['registration-ip', ip])), max: 10, window: 15 * 60_000 },
-      { key: hashToken(JSON.stringify(['registration-email', email])), max: 3, window: 60 * 60_000 },
-    ].map((limit) => ({
-      ...limit,
-      record: database.db.select().from(authRateLimits).where(eq(authRateLimits.scopeKey, limit.key)).get(),
-    }));
-    const blocked = limits.filter(({ record, max }) => record && record.count >= max);
-    if (blocked.length)
-      throw new RegistrationRateLimitError(
-        Math.max(...blocked.map(({ record }) => Math.ceil((record!.expiresAt - now) / 1000))),
-      );
-    for (const { key, record, window } of limits) {
-      const values = { scopeKey: key, count: (record?.count ?? 0) + 1, expiresAt: record?.expiresAt ?? now + window };
-      database.db
-        .insert(authRateLimits)
-        .values(values)
-        .onConflictDoUpdate({ target: authRateLimits.scopeKey, set: values })
-        .run();
-    }
+    repository.deleteExpiredRegistrations(now);
+    const retryAfter = limits.consumeEmailAttempt('registration', ip, email, now);
+    if (retryAfter) throw new RegistrationRateLimitError(retryAfter);
   });
 
   async function request(data: RegisterFamilyInput, ip: string) {
@@ -77,30 +70,23 @@ export function createRegistration(
     const tokenHash = hashToken(token);
     const now = Date.now();
     const expiresAt = now + 24 * 60 * 60_000;
-    database.db
-      .insert(pendingRegistrations)
-      .values({
-        id: randomUUID(),
-        tokenHash,
-        email,
-        familyName: data.familyName,
-        displayName: data.displayName,
-        passwordHash,
-        createdAt: now,
-        expiresAt,
-      })
-      .run();
+    repository.insertPendingRegistration({
+      id: randomUUID(),
+      tokenHash,
+      email,
+      familyName: data.familyName,
+      displayName: data.displayName,
+      passwordHash,
+      createdAt: now,
+      expiresAt,
+    });
     try {
       const link = new URL('/potwierdz-rodzine', config.RODZINA_PUBLIC_URL);
       link.hash = new URLSearchParams({ token }).toString();
       await sendMail(config, { to: email, link: link.href, expiresAt });
-      database.db
-        .update(pendingRegistrations)
-        .set({ ready: true })
-        .where(eq(pendingRegistrations.tokenHash, tokenHash))
-        .run();
+      repository.markRegistrationReady(tokenHash);
     } catch {
-      database.db.delete(pendingRegistrations).where(eq(pendingRegistrations.tokenHash, tokenHash)).run();
+      repository.removePendingRegistration(tokenHash);
       logger.error({ code: 'REGISTRATION_DELIVERY_FAILED' }, 'Registration delivery failed; new token invalidated.');
       throw new ApiError(
         503,
@@ -114,11 +100,7 @@ export function createRegistration(
   const confirm = database.sqlite.transaction((token: string) => {
     checkEnabled();
     const now = Date.now();
-    const pending = database.db
-      .select()
-      .from(pendingRegistrations)
-      .where(eq(pendingRegistrations.tokenHash, hashToken(token)))
-      .get();
+    const pending = repository.findPendingRegistration(hashToken(token));
     if (!pending || !pending.ready || pending.expiresAt <= now)
       throw new ApiError(
         410,
@@ -127,7 +109,7 @@ export function createRegistration(
       );
     if (repository.findUserByEmail(pending.email))
       throw new ApiError(409, 'CONFLICT', 'Konto z tym adresem już istnieje. Zaloguj się lub odzyskaj hasło.');
-    repository.registerFamily({
+    registerFamily(database, {
       familyId: randomUUID(),
       userId: randomUUID(),
       familyName: pending.familyName,
@@ -136,13 +118,13 @@ export function createRegistration(
       passwordHash: pending.passwordHash,
       now,
     });
-    database.db.delete(pendingRegistrations).where(eq(pendingRegistrations.email, pending.email)).run();
+    repository.removeRegistrationsByEmail(pending.email);
     return { ok: true as const };
   });
   return {
     request,
     confirm: (token: string) => {
-      cleanup(Date.now());
+      repository.deleteExpiredRegistrations(Date.now());
       return confirm.immediate(token);
     },
   };

@@ -10,6 +10,17 @@ export function createContactRepository(database: DatabaseConnection) {
   const groupScope = (familyId: string, id: string) =>
     and(eq(contactGroups.familyId, familyId), eq(contactGroups.id, id));
   return {
+    listBirthdays: (familyId: string) =>
+      db
+        .select({
+          id: contacts.id,
+          name: contacts.name,
+          birthday: contacts.birthday,
+          birthdayMonthDay: contacts.birthdayMonthDay,
+        })
+        .from(contacts)
+        .where(eq(contacts.familyId, familyId))
+        .all(),
     snapshot: (familyId: string) =>
       db.transaction(() => ({
         groups: db.select().from(contactGroups).where(eq(contactGroups.familyId, familyId)).all(),

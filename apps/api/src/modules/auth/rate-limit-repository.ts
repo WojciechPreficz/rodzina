@@ -23,16 +23,31 @@ export function createAuthRateLimitRepository(database: DatabaseConnection) {
     return values.expiresAt;
   });
 
+  function retryAfter(scopeKey: string, now: number, limit: number) {
+    const row = find(scopeKey);
+    return row && row.count >= limit && row.expiresAt > now ? Math.ceil((row.expiresAt - now) / 1000) : 0;
+  }
+  const deleteExpired = (now: number) =>
+    database.db.delete(authRateLimits).where(lte(authRateLimits.expiresAt, now)).run().changes;
+
   return {
+    consumeAll(limits: readonly { key: string; max: number; windowMs: number }[], now: number) {
+      return database.sqlite
+        .transaction(() => {
+          deleteExpired(now);
+          const blocked = Math.max(0, ...limits.map(({ key, max }) => retryAfter(key, now, max)));
+          if (blocked) return blocked;
+          for (const { key, max, windowMs } of limits) reserve(key, now, max, windowMs);
+          return 0;
+        })
+        .immediate();
+    },
     consume(scopeKey: string, now: number, limit: number, windowMs: number) {
       // Reserve the attempt before asynchronous credential verification, across all connections.
       return reserve.immediate(scopeKey, now, limit, windowMs) !== undefined;
     },
     reserve: reserve.immediate,
-    retryAfter(scopeKey: string, now: number, limit: number) {
-      const row = find(scopeKey);
-      return row && row.count >= limit && row.expiresAt > now ? Math.ceil((row.expiresAt - now) / 1000) : 0;
-    },
+    retryAfter,
     release(scopeKey: string, expiresAt: number) {
       database.sqlite
         .transaction(() => {
@@ -52,8 +67,6 @@ export function createAuthRateLimitRepository(database: DatabaseConnection) {
     clear(scopeKey: string) {
       database.db.delete(authRateLimits).where(eq(authRateLimits.scopeKey, scopeKey)).run();
     },
-    deleteExpired(now: number) {
-      return database.db.delete(authRateLimits).where(lte(authRateLimits.expiresAt, now)).run().changes;
-    },
+    deleteExpired,
   };
 }

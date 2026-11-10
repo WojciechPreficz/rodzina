@@ -1,3 +1,6 @@
+import { createFamilyReader } from '../family/reader.js';
+import { formatLocalDate } from '../../http/local-date.js';
+import { requireAdult } from '../../http/require-adult.js';
 import {
   getDocumentStatus,
   getDefaultDocumentReminders,
@@ -8,26 +11,19 @@ import type { DatabaseConnection } from '../../db/client.js';
 import type { FamilyRole } from '../../permissions.js';
 import { ApiError } from '../../http/errors.js';
 import { createDocumentRepository } from './repository.js';
-import { createReminderRepository } from '../reminders/repository.js';
+import { createReminderSourcePort } from '../reminders/source-port.js';
 
 export function createDocumentService(database: DatabaseConnection, now = () => Date.now()) {
   const repository = createDocumentRepository(database);
-  const reminders = createReminderRepository(database);
+  const { timezone } = createFamilyReader(database);
+  const reminders = createReminderSourcePort(database);
   function withStatus(familyId: string, document: NonNullable<ReturnType<typeof repository.find>>) {
-    const today = new Intl.DateTimeFormat('en-CA', {
-      timeZone: repository.timezone(familyId),
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(now());
+    const today = formatLocalDate(now(), timezone(familyId));
     return {
       ...document,
       status: getDocumentStatus(document.type, document.expiresOn, today),
       reminders: reminders.listDocument(familyId, document.id),
     };
-  }
-  function requireAdult(role: FamilyRole) {
-    if (role === 'child') throw new ApiError(403, 'FORBIDDEN', 'Ta czynność jest dostępna tylko dla dorosłych.');
   }
   function find(familyId: string, id: string) {
     const document = repository.find(familyId, id);
@@ -43,6 +39,8 @@ export function createDocumentService(database: DatabaseConnection, now = () => 
       throw new ApiError(400, 'VALIDATION_ERROR', 'Ten typ dokumentu nie dotyczy pojazdu.');
   }
   return {
+    findSource: repository.find,
+    listSources: repository.list,
     list: (familyId: string) => repository.list(familyId).map((document) => withStatus(familyId, document)),
     create(familyId: string, actorId: string, role: FamilyRole, data: CreateDocument) {
       requireAdult(role);
@@ -57,7 +55,7 @@ export function createDocumentService(database: DatabaseConnection, now = () => 
             document,
             actorId,
             input ?? getDefaultDocumentReminders(data.type),
-            repository.timezone(familyId),
+            timezone(familyId),
             now(),
           );
           return withStatus(familyId, document);
@@ -78,7 +76,7 @@ export function createDocumentService(database: DatabaseConnection, now = () => 
       return database.db.transaction(() => {
         const { reminders: input, ...fields } = data;
         const document = repository.update(familyId, id, fields)!;
-        reminders.saveDocument(familyId, document, actorId, input, repository.timezone(familyId), now());
+        reminders.saveDocument(familyId, document, actorId, input, timezone(familyId), now());
         return withStatus(familyId, document);
       });
     },

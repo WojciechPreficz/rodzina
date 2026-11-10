@@ -1,8 +1,7 @@
-import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
 import { generateJoinCode } from '../../auth.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
-import { createInitialContactGroups } from '../contacts/repository.js';
 
 export type SessionCredential = { passwordHash: string } | { pinHash: string; joinCode: string };
 
@@ -51,6 +50,34 @@ export function createAuthRepository(database: DatabaseConnection) {
         .from(schema.sessions)
         .where(and(eq(schema.sessions.id, id), eq(schema.sessions.userId, userId), gt(schema.sessions.expiresAt, now)))
         .get(),
+    deleteExpiredRegistrations: (now: number) =>
+      database.db.delete(schema.pendingRegistrations).where(lte(schema.pendingRegistrations.expiresAt, now)).run(),
+    insertPendingRegistration: (values: typeof schema.pendingRegistrations.$inferInsert) =>
+      database.db.insert(schema.pendingRegistrations).values(values).run(),
+    markRegistrationReady: (tokenHash: string) =>
+      database.db
+        .update(schema.pendingRegistrations)
+        .set({ ready: true })
+        .where(eq(schema.pendingRegistrations.tokenHash, tokenHash))
+        .run(),
+    removePendingRegistration: (tokenHash: string) =>
+      database.db.delete(schema.pendingRegistrations).where(eq(schema.pendingRegistrations.tokenHash, tokenHash)).run(),
+    findPendingRegistration: (tokenHash: string) =>
+      database.db
+        .select()
+        .from(schema.pendingRegistrations)
+        .where(eq(schema.pendingRegistrations.tokenHash, tokenHash))
+        .get(),
+    removeRegistrationsByEmail: (email: string) =>
+      database.db.delete(schema.pendingRegistrations).where(eq(schema.pendingRegistrations.email, email)).run(),
+    insertPasswordReset: (values: typeof schema.passwordResets.$inferInsert) =>
+      database.db.insert(schema.passwordResets).values(values).run(),
+    invalidatePasswordReset: (tokenHash: string, now: number) =>
+      database.db
+        .update(schema.passwordResets)
+        .set({ usedAt: now })
+        .where(eq(schema.passwordResets.tokenHash, tokenHash))
+        .run(),
     findPasswordReset: (tokenHash: string) =>
       database.db.select().from(schema.passwordResets).where(eq(schema.passwordResets.tokenHash, tokenHash)).get(),
     registerFamily({
@@ -104,7 +131,6 @@ export function createAuthRepository(database: DatabaseConnection) {
               updatedAt: now,
             })
             .run();
-          createInitialContactGroups(database, familyId, userId, now);
         },
         { behavior: 'immediate' },
       );

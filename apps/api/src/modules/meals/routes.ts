@@ -1,3 +1,4 @@
+import { requireAdult } from '../../http/require-adult.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -35,10 +36,10 @@ export function registerMealRoutes(
       table: 'shopping_operations',
       querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid() }).strict(),
       validate: (request) => {
-        service.requireAdult(requireUser(request).role);
+        requireAdult(requireUser(request).role);
         parse(mealOfflineChangeSchema, request.body);
       },
-      recheckAccess: (request) => service.requireAdult(requireUser(request).role),
+      recheckAccess: (request) => requireAdult(requireUser(request).role),
       fingerprintParts: (request) => [requireUser(request).familyId, request.url, request.body],
     },
     'meal-export': {

@@ -1,3 +1,4 @@
+import { registerFamily as persistFamilyRegistration } from './modules/auth/registration.js';
 import crypto from 'node:crypto';
 import { buildApp } from './app.js';
 import type { AppConfig } from './config.js';
@@ -44,7 +45,15 @@ export async function buildFixtureApp(
     const now = Date.now();
     const passwordHash = await hashPassword(password);
     try {
-      repository.registerFamily({ familyId, userId, familyName, displayName, normalizedEmail, passwordHash, now });
+      persistFamilyRegistration(database, {
+        familyId,
+        userId,
+        familyName,
+        displayName,
+        normalizedEmail,
+        passwordHash,
+        now,
+      });
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new ApiError(409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');

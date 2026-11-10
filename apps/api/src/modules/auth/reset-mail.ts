@@ -1,3 +1,4 @@
+import { escapeHtml } from './mail-html.js';
 import nodemailer from 'nodemailer';
 import { Socket } from 'node:net';
 import type { AppConfig } from '../../config.js';
@@ -7,15 +8,10 @@ export type ResetMail = { to: string; link: string; expiresAt: number };
 
 export function resetMailContent({ link, expiresAt }: ResetMail) {
   const expiry = new Date(expiresAt).toISOString();
-  const escape = (value: string) =>
-    value.replace(
-      /[&<>"']/g,
-      (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!,
-    );
   return {
     subject: 'Rodzina — zmiana hasła',
     text: `Aby ustawić nowe hasło w aplikacji Rodzina, otwórz link:\n${link}\n\nLink jest jednorazowy i ważny przez 30 minut, do ${expiry} (UTC).\nJeśli nie prosisz o zmianę hasła, zignoruj tę wiadomość.`,
-    html: `<p>Aby ustawić nowe hasło w aplikacji Rodzina, <a href="${escape(link)}">otwórz link zmiany hasła</a>.</p><p>Link jest jednorazowy i ważny przez 30 minut, do ${escape(expiry)} (UTC).</p><p>Jeśli nie prosisz o zmianę hasła, zignoruj tę wiadomość.</p>`,
+    html: `<p>Aby ustawić nowe hasło w aplikacji Rodzina, <a href="${escapeHtml(link)}">otwórz link zmiany hasła</a>.</p><p>Link jest jednorazowy i ważny przez 30 minut, do ${escapeHtml(expiry)} (UTC).</p><p>Jeśli nie prosisz o zmianę hasła, zignoruj tę wiadomość.</p>`,
   };
 }
 

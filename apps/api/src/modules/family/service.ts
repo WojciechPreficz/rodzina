@@ -319,7 +319,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       throw new ApiError(400, 'VALIDATION_ERROR', 'Brak danych do zmiany.');
     }
 
-    repository.updateMember(memberId, values);
+    repository.updateMember(user.familyId, memberId, values);
 
     const updated = repository.findUser(memberId);
     if (!updated) {

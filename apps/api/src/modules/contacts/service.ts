@@ -1,14 +1,12 @@
+import { requireAdult } from '../../http/require-adult.js';
 import type { CreateContact, PatchContact } from '@rodzina/shared';
 import type { DatabaseConnection } from '../../db/client.js';
 import type { FamilyRole } from '../../permissions.js';
 import { ApiError } from '../../http/errors.js';
-import { createContactRepository } from './repository.js';
+import { createContactRepository, createInitialContactGroups } from './repository.js';
 
 export function createContactService(database: DatabaseConnection) {
   const repository = createContactRepository(database);
-  function requireAdult(role: FamilyRole) {
-    if (role === 'child') throw new ApiError(403, 'FORBIDDEN', 'Ta czynność jest dostępna tylko dla dorosłych.');
-  }
   function find(familyId: string, id: string) {
     const contact = repository.find(familyId, id);
     if (!contact) throw new ApiError(404, 'NOT_FOUND', 'Kontakt nie istnieje.');
@@ -26,6 +24,9 @@ export function createContactService(database: DatabaseConnection) {
   }
   return {
     snapshot: repository.snapshot,
+    listBirthdays: repository.listBirthdays,
+    initializeFamily: (familyId: string, userId: string, now: number) =>
+      createInitialContactGroups(database, familyId, userId, now),
     create(familyId: string, actorId: string, role: FamilyRole, data: CreateContact) {
       requireAdult(role);
       return database.db.transaction(
