@@ -5,7 +5,7 @@ import { useMe } from '../../sessionContext.js';
 import { isAndroid } from '../../platform.js';
 import { OfflineReminder } from '../notifications/index.js';
 import { EventDetailsPage } from './EventDetailsPage.js';
-import { AndroidUpdateNotice } from '../updates/AndroidUpdates.js';
+import { AndroidUpdateNotice } from '../updates/index.js';
 
 export function EventRoute() {
   const { user, isLoading } = useMe();

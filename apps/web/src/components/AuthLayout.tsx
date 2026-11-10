@@ -1,6 +1,6 @@
 import { Stack } from '@mantine/core';
 import { Outlet, useLocation } from 'react-router';
-import { AndroidDownload, AndroidUpdateNotice } from '../features/updates/AndroidUpdates.js';
+import { AndroidDownload, AndroidUpdateNotice } from '../features/updates/index.js';
 import { AppBrand } from './AppBrand.js';
 
 export function AuthLayout() {

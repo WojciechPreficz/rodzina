@@ -20,7 +20,6 @@ const featureImportExceptions = new Map(
       'family/FamilyPage.js',
       'calendar/CalendarPage.js',
       'calendar/EventRoute.js',
-      'updates/AndroidUpdates.js',
       'shopping/ShoppingPage.js',
       'documents/DocumentsPage.js',
       'contacts/ContactsPage.js',
@@ -35,19 +34,15 @@ const featureImportExceptions = new Map(
     ],
     'AppSession.tsx': ['calendar/CalendarPrefetch.js'],
     // Shared UI: shell notices, family validation and document count.
-    'components/AppShell.tsx': ['updates/AndroidUpdates.js', 'documents/documentQueries.js'],
-    'components/AuthLayout.tsx': ['updates/AndroidUpdates.js'],
+    'components/AppShell.tsx': ['documents/documentQueries.js'],
     'components/JoinPages.tsx': ['family/familyRules.js'],
-    'components/MorePage.tsx': ['updates/AndroidUpdates.js'],
     // Feature integrations: member lookups, reminders, daily cards and family-local dates.
     'features/calendar/CalendarPage.tsx': ['family/familyQueries.js', 'meals/TodayMeal.js'],
     'features/calendar/EventDetailsPage.tsx': ['family/familyQueries.js'],
-    'features/calendar/EventRoute.tsx': ['updates/AndroidUpdates.js'],
     'features/documents/DocumentDetailsPage.tsx': ['family/familyQueries.js'],
     'features/documents/DocumentsPage.tsx': ['family/familyQueries.js'],
     'features/meals/MealsPage.tsx': ['calendar/toScheduleX.js'],
     'features/meals/TodayMeal.tsx': ['calendar/toScheduleX.js'],
-    'features/notifications/NotificationsPage.tsx': ['updates/AndroidUpdates.js'],
     'features/shopping/ShoppingPage.tsx': ['family/familyQueries.js'],
     'features/tasks/TasksPage.tsx': ['family/familyQueries.js'],
     // Tests that set up or inspect offline stores, scheduling, and migration snapshots.

@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../platform.js', () => ({ isAndroid: () => mocks.android }));
 vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ user: { id: 'user', familyId: 'family' } }) }));
 vi.mock('../../reminders/scheduleSync.js', () => ({ useLocalSchedule: () => ({ data: mocks.schedule }) }));
-vi.mock('../updates/AndroidUpdates.js', () => ({ AndroidDownload: () => <div>Pobieranie APK</div> }));
+vi.mock('../updates/index.js', () => ({ AndroidDownload: () => <div>Pobieranie APK</div> }));
 vi.mock('./LocalAlarmsPage.js', () => ({ LocalAlarmsPage: () => <div>Alarmy Androida</div> }));
 beforeEach(() => {
   vi.stubGlobal(

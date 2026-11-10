@@ -3,7 +3,7 @@ import { Card, Stack, Text } from '@mantine/core';
 import { labels } from '../../i18n/pl.js';
 import { isAndroid } from '../../platform.js';
 import { LocalAlarmsPage } from './LocalAlarmsPage.js';
-import { AndroidDownload } from '../updates/AndroidUpdates.js';
+import { AndroidDownload } from '../updates/index.js';
 
 export function NotificationsPage() {
   if (isAndroid()) return <LocalAlarmsPage />;

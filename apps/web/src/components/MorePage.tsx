@@ -1,7 +1,7 @@
 import { Stack } from '@mantine/core';
 import { PageHeader } from './PageHeader.js';
 import { labels } from '../i18n/pl.js';
-import { AppVersionCard } from '../features/updates/AndroidUpdates.js';
+import { AppVersionCard } from '../features/updates/index.js';
 
 export function MorePage() {
   return (

@@ -18,7 +18,7 @@ import { useMe } from '../sessionContext.js';
 import { labels } from '../i18n/pl.js';
 import { allowNavigation } from '../nativeNavigation.js';
 import { isAndroid } from '../platform.js';
-import { AndroidUpdateNotice } from '../features/updates/AndroidUpdates.js';
+import { AndroidUpdateNotice } from '../features/updates/index.js';
 import { AppBrand } from './AppBrand.js';
 import { LogoutControl } from './LogoutControl.js';
 import { useDocumentAttentionCount } from '../features/documents/documentQueries.js';
