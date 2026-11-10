@@ -22,7 +22,7 @@ const state = vi.hoisted(() => ({
 vi.mock('../../sessionContext.js', () => ({
   useMe: () => ({ user: { id: state.userId, role: state.role }, family: { timezone: 'Europe/Warsaw' } }),
 }));
-vi.mock('../family/familyQueries.js', () => ({ useMembersQuery: () => ({ data: [], error: null }) }));
+vi.mock('../family/index.js', () => ({ useMembersQuery: () => ({ data: [], error: null }) }));
 vi.mock('./MyReminders.js', () => ({ MyReminders: () => <div>Moje przypomnienia</div> }));
 vi.mock('./calendarQueries.js', () => ({
   useCalendarReadOnly: () => !onlineManager.isOnline(),

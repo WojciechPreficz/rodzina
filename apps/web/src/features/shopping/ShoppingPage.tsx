@@ -20,7 +20,7 @@ import { useMe } from '../../sessionContext.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { addNativeBackHandler } from '../../nativeNavigation.js';
 import { labels } from '../../i18n/pl.js';
-import { useMembersQuery } from '../family/familyQueries.js';
+import { useMembersQuery } from '../family/index.js';
 import { QuickAdd } from './QuickAdd.js';
 import { useShopping } from './shoppingQueries.js';
 import { OfflineNotice } from '../../offline/OfflineNotice.js';

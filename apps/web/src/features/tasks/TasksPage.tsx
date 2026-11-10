@@ -23,7 +23,7 @@ import { labels } from '../../i18n/pl.js';
 import { addNativeBackHandler, allowNavigation } from '../../nativeNavigation.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { useFormNavigation } from '../../useFormNavigation.js';
-import { useMembersQuery } from '../family/familyQueries.js';
+import { useMembersQuery } from '../family/index.js';
 import type { Member } from '@rodzina/shared';
 
 import { TaskForm } from './TaskForm.js';

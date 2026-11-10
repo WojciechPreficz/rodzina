@@ -17,7 +17,7 @@ import './calendar.css';
 import { useMe } from '../../sessionContext.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { labels } from '../../i18n/pl.js';
-import { useMembersQuery } from '../family/familyQueries.js';
+import { useMembersQuery } from '../family/index.js';
 import type { Member } from '@rodzina/shared';
 
 import { calendarOnlineHint, useCalendarReadOnly, useOccurrences } from './calendarQueries.js';

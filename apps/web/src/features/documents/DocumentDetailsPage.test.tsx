@@ -17,7 +17,7 @@ const connection = vi.hoisted(() => ({ offline: false }));
 const refresh = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('../../sessionContext.js', () => ({ useMe: () => session }));
 vi.mock('../../connectivity.js', () => ({ useOffline: () => connection.offline, isOffline: () => connection.offline }));
-vi.mock('../family/familyQueries.js', () => ({ useMembersQuery: () => ({ data: [] }) }));
+vi.mock('../family/index.js', () => ({ useMembersQuery: () => ({ data: [] }) }));
 vi.mock('../../reminders/scheduleSync.js', () => ({ refreshLocalSchedule: refresh }));
 const document: FamilyDocument = {
   id: 'doc',

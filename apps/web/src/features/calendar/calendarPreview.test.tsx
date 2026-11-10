@@ -23,7 +23,7 @@ vi.mock('../../sessionContext.js', () => ({
     familyConfirmed: false,
   }),
 }));
-vi.mock('../family/familyQueries.js', () => ({
+vi.mock('../family/index.js', () => ({
   useMembersQuery: () => ({ data: [{ id: state.userId, displayName: 'Ania', color: '#123456' }] }),
 }));
 vi.mock('../notifications/index.js', () => ({ NotificationBanner: () => null }));

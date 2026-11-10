@@ -8,7 +8,7 @@ vi.mock('../notifications/index.js', () => ({ NotificationBanner: () => null }))
 vi.mock('../meals/TodayMeal.js', () => ({ TodayMeal: () => null }));
 
 vi.mock('../../sessionContext.js', () => ({ useMe: () => ({ family: { timezone: 'Europe/Warsaw' } }) }));
-vi.mock('../family/familyQueries.js', () => ({
+vi.mock('../family/index.js', () => ({
   useMembersQuery: () => ({
     data: [
       { id: 'anna', displayName: 'Anna', color: '#2F9E44' },

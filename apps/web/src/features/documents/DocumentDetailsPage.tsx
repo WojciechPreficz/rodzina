@@ -7,7 +7,7 @@ import { useOffline } from '../../connectivity.js';
 import { PageHeader } from '../../components/PageHeader.js';
 import { ReminderList } from '../../components/ReminderPicker.js';
 import { reminderInput } from '../../components/reminderFields.js';
-import { useMembersQuery } from '../family/familyQueries.js';
+import { useMembersQuery } from '../family/index.js';
 import { useDocumentDates, useDocumentsQuery } from './documentQueries.js';
 import { documentExpiry, documentStatuses, documentTypeLabels } from './documentUi.js';
 import { DocumentReminders } from './DocumentReminders.js';

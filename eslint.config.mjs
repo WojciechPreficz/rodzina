@@ -17,7 +17,6 @@ const featureImportExceptions = new Map(
     // Application wiring: routes, account stores, prefetch and the native scheduler.
     'router.tsx': [
       'meals/MealsPage.js',
-      'family/FamilyPage.js',
       'calendar/CalendarPage.js',
       'calendar/EventRoute.js',
       'shopping/ShoppingPage.js',
@@ -29,22 +28,15 @@ const featureImportExceptions = new Map(
       'calendar/calendarOffline.js',
       'shopping/shoppingOffline.js',
       'contacts/contactsOffline.js',
-      'family/familyApi.js',
       'meals/mealOffline.js',
     ],
     'AppSession.tsx': ['calendar/CalendarPrefetch.js'],
     // Shared UI: shell notices, family validation and document count.
     'components/AppShell.tsx': ['documents/documentQueries.js'],
-    'components/JoinPages.tsx': ['family/familyRules.js'],
     // Feature integrations: member lookups, reminders, daily cards and family-local dates.
-    'features/calendar/CalendarPage.tsx': ['family/familyQueries.js', 'meals/TodayMeal.js'],
-    'features/calendar/EventDetailsPage.tsx': ['family/familyQueries.js'],
-    'features/documents/DocumentDetailsPage.tsx': ['family/familyQueries.js'],
-    'features/documents/DocumentsPage.tsx': ['family/familyQueries.js'],
+    'features/calendar/CalendarPage.tsx': ['meals/TodayMeal.js'],
     'features/meals/MealsPage.tsx': ['calendar/toScheduleX.js'],
     'features/meals/TodayMeal.tsx': ['calendar/toScheduleX.js'],
-    'features/shopping/ShoppingPage.tsx': ['family/familyQueries.js'],
-    'features/tasks/TasksPage.tsx': ['family/familyQueries.js'],
     // Tests that set up or inspect offline stores, scheduling, and migration snapshots.
     'accountStorage.test.ts': [
       'calendar/calendarOffline.js',

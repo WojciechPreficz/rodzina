@@ -6,7 +6,7 @@ import { LoginPage, RegisterPage } from './components/AuthPages.js';
 import { MorePage } from './components/MorePage.js';
 import { WelcomePage } from './components/WelcomePage.js';
 import { MealsPage } from './features/meals/MealsPage.js';
-import { FamilyPage } from './features/family/FamilyPage.js';
+import { FamilyPage } from './features/family/index.js';
 import { ChildLoginPage, InvitationPage, ResetPasswordPage } from './components/JoinPages.js';
 import { AuthLayout } from './components/AuthLayout.js';
 import { CalendarPage } from './features/calendar/CalendarPage.js';

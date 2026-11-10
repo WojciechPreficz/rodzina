@@ -13,7 +13,7 @@ import { Temporal } from 'temporal-polyfill';
 import { ApiRequestError } from '../../api.js';
 import { useMe } from '../../sessionContext.js';
 import { labels } from '../../i18n/pl.js';
-import { useMembersQuery } from '../family/familyQueries.js';
+import { useMembersQuery } from '../family/index.js';
 import { EventForm } from './EventForm.js';
 import { calendarOnlineHint, useCalendarReadOnly, useCalendarMutations, useEvent } from './calendarQueries.js';
 import { CalendarOfflineNotice } from './CalendarOfflineNotice.js';

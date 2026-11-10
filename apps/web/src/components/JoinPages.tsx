@@ -22,7 +22,7 @@ import { apiFetch, sanitizeNextPath } from '../api.js';
 import { useMe } from '../sessionContext.js';
 import { PasswordRecoveryLink } from './PasswordRecovery.js';
 import { labels } from '../i18n/pl.js';
-import { errorMessage, validateDisplayName, validatePin } from '../features/family/familyRules.js';
+import { errorMessage, validateDisplayName, validatePin } from '../features/family/index.js';
 
 export function ChildLoginPage() {
   const [searchParams] = useSearchParams();

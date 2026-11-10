@@ -16,7 +16,7 @@ const session = vi.hoisted(() => ({
   familyConfirmed: true,
 }));
 vi.mock('../../sessionContext.js', () => ({ useMe: () => session }));
-vi.mock('../family/familyQueries.js', () => ({
+vi.mock('../family/index.js', () => ({
   useMembersQuery: () => ({ data: [{ id: session.user.id, displayName: 'Anna' }] }),
 }));
 vi.mock('../../connectivity.js', () => ({ useOffline: () => false, isOffline: () => false }));

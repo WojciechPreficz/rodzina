@@ -24,7 +24,7 @@ const session = vi.hoisted(() => ({
   familyConfirmed: true,
 }));
 vi.mock('../../sessionContext.js', () => ({ useMe: () => session }));
-vi.mock('../family/familyQueries.js', () => ({
+vi.mock('../family/index.js', () => ({
   useMembersQuery: () => ({
     data: [session.user, { id: '10000000-0000-4000-8000-000000000014', displayName: 'Bartek', color: '#2F9E44' }],
   }),
