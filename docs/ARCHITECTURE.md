@@ -40,7 +40,7 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   odpowiedzi podlegają cyklowi życia sesji; zmiana konta nie może przywrócić
   danych poprzedniej osoby.
 - Sesja offline (`AccountSession`: użytkownik i rodzina) ma niezależny moduł
-  `apps/web/src/session.ts`. Ostatnio potwierdzony stan zapisujemy w istniejącym
+  `apps/web/src/session.ts`. Ostatnio potwierdzony stan zapisujemy w
   IndexedDB konta, w `metadata` pod kluczem `account-session:1`, bez e-maila; kod
   dołączenia pozostaje dostępny offline jak dotychczas. Zapis następuje po
   logowaniu i potwierdzeniu `/api/auth/me`,
@@ -89,8 +89,12 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Rdzeń zarządza IndexedDB i wysyła sygnały po zatwierdzeniu zapisu.
 - Wspólny magazyn aktywuje konto, wczytuje snapshot i wystawia stabilny stan
   przez `useSyncExternalStore`. Rejestracja w `registerAccountStore` wiąże
-  aktywację i czyszczenie pamięci z cyklem życia konta. Trwałe usuwanie obsługuje
-  wspólna baza. Generacja bazy i rewizja magazynu odcinają spóźnione odpowiedzi.
+  aktywację i czyszczenie pamięci z cyklem życia konta. Każde konto ma bazę
+  `rodzina-<accountId>`, gdzie `accountId` to `<familyId>:<userId>`. Zawiera ona
+  sesję, snapshoty, outbox, metadane modułów i stan importów. Web Locks
+  rozdziela operacje na magazynie od przełączeń i czyszczenia. Rewizja
+  rejestru oraz generacje sesji i magazynu odcinają spóźnione operacje
+  również po ponownym zalogowaniu na to samo konto.
   Sygnał między kartami inicjuje ponowny odczyt IndexedDB.
 - Moduł z odczytem offline wyprowadza widok ze snapshotu. Odświeżenie
   online waliduje dane, zapisuje je przez adapter cache i publikuje widok.
@@ -120,7 +124,41 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Rejestracja przez kontrakt przywraca magazyn z sesją i klientem TanStack Query,
   którego nadawca używa do anulowania odczytów zakupów przed eksportem.
 
-### Odzyskiwanie pamięci ze starszej wersji
+### Przeniesienie wspólnej bazy IndexedDB
+
+Przy pierwszym otwarciu WWW lub APK wersja 4 bazy `rodzina-offline` czeka na
+zamknięcie połączeń starszych kart przez `versionchange`. Po zatwierdzeniu
+wersji ich żądania otwarcia wersji 3 i wcześniejszych są odrzucane. Zablokowana
+aktualizacja pokazuje polecenie zamknięcia pozostałych kart i ponowienia próby.
+Migracja kopiuje wszystkie cztery magazyny dotychczasowego konta, w tym
+identyfikatory operacji, kolejność, zależności, stan ponowień, dzierżawę nadawcy
+i niedokończone importy. Wykrycie rekordów różnych kont zatrzymuje migrację
+i zachowuje źródło do odzyskania.
+
+Kopia i jej znacznik są zatwierdzane w jednej transakcji. Osobna transakcja
+zapisuje w rejestrze docelową bazę, a wersja 5 usuwa magazyny źródłowe. Pod
+nazwą `rodzina-offline` zostaje tylko rejestr przełączenia i czyszczenia, który
+zarazem blokuje powrót starych klientów do zapisu. Po przerwaniu aktualizacji
+ponowne otwarcie pomija już zatwierdzoną kopię lub kończy usuwanie źródła.
+
+Po nieudanej aktualizacji zachowaj pamięć aplikacji, zamknij starsze karty i
+uruchom ponownie tę samą wersję lub jej poprawkę. W APK użyj podpisanej
+aktualizacji z zachowaniem danych i odpowiednio wyższym kodem wersji. Dopóki
+rejestr nie wskazuje kopii, źródło w wersji 4 służy do wznowienia migracji.
+Po przełączeniu jedynym źródłem bieżących danych jest baza konta, również
+gdy usunięcie starej kopii zostało przerwane. Jeżeli nowa baza przyjęła już
+zapisy, wdrażaj poprawkę obsługującą ten układ magazynów i zsynchronizuj
+zachowaną kolejkę na tym samym koncie. Powrót kodu aplikacji wymaga wydania
+z zachowaną obsługą nowej bazy. Odtworzenie starego źródła mogłoby zgubić nowe
+zmiany lub ponownie wysłać zakończone operacje.
+
+Przy trwałym czyszczeniu rejestr zapisuje zamiar i etap usuwania, a karty
+zamykają połączenia przed `deleteDatabase` lub po `versionchange`. W razie
+`blocked` należy zamknąć pozostałe karty i ponowić próbę. Start aplikacji
+kończy zapisane czyszczenie również bez dostępu do API. Po 401 zapis zawieszenia
+usuwa aktywną sesję i zachowuje dane potrzebne do wznowienia kolejki.
+
+### Odzyskiwanie danych z localStorage
 
 Zwykły start odczytuje sesję, snapshoty i kolejkę z IndexedDB. Jeżeli wykryje
 stare snapshoty lub dzienniki w `localStorage` albo niedokończony import

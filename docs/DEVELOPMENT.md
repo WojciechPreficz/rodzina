@@ -411,6 +411,11 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       WWW po aktualizacji. Zmienić konto i sprawdzić, że poprzednia sesja,
       dane oraz spóźnione odpowiedzi nie wracają; sprawdzić też wylogowanie
       offline i 401 po odzyskaniu sieci. Próby właściciela pozostają niepotwierdzone.
+- [ ] A-1.3: na fizycznym telefonie zaktualizować podpisane APK ze wspólną bazą
+      `rodzina-offline` i oczekującą kolejką. Bez sieci zakończyć proces i
+      ponownie otworzyć aplikację. Sprawdzić sesję, snapshoty i zachowanie
+      kolejki po przejściu do bazy konta, a po odzyskaniu sieci wysłanie zmian
+      bez duplikatów. Próba na fizycznym APK pozostaje niewykonana.
 - [ ] Wylogowanie, utrata sesji i zmiana konta, również w drugiej karcie,
       usuwają właściwe dane i alarmy; spóźniona odpowiedź ich nie odtwarza
       ani nie usuwa danych nowego konta. Sprawdzić odtworzenie sesji w APK.

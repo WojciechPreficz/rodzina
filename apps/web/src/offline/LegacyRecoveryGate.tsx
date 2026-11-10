@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { hasPendingClear } from './database.js';
 import { isLegacySource, needsLegacyRecovery } from './legacySources.js';
 import { storageError } from './status.js';
+import { StorageBlockedError } from './idb.js';
 
 const recoveryParameter = 'odzyskaj-dane-offline';
 
@@ -9,6 +10,7 @@ export function LegacyRecoveryGate({ children }: { children: ReactNode }) {
   const [required, setRequired] = useState<boolean>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [blocked, setBlocked] = useState<string>();
   const url = new URL(window.location.href);
   const recovering = url.searchParams.has(recoveryParameter);
 
@@ -23,7 +25,12 @@ export function LegacyRecoveryGate({ children }: { children: ReactNode }) {
       (needed) => {
         if (current) setRequired((alreadyRequired) => alreadyRequired || needed);
       },
-      () => {
+      (cause: unknown) => {
+        if (!current) return;
+        if (cause instanceof StorageBlockedError) {
+          setBlocked(cause.message);
+          return;
+        }
         // The account lifecycle reports storage failures and can still serve online data.
         if (current) setRequired((alreadyRequired) => alreadyRequired ?? false);
       },
@@ -34,6 +41,15 @@ export function LegacyRecoveryGate({ children }: { children: ReactNode }) {
     };
   }, [recovering]);
 
+  if (blocked)
+    return (
+      <main className="offline-storage-notices">
+        <div className="offline-storage-error" role="alert">
+          {blocked}
+        </div>
+        <button onClick={() => window.location.reload()}>Ponów próbę</button>
+      </main>
+    );
   if (!recovering && required === undefined) return null;
   if (!recovering && !required) return children;
 

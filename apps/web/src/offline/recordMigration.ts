@@ -1,4 +1,13 @@
-import { accountToken, isAccountCurrent, transact, requestValue, PROTOCOL_KEY, CLEAR_PENDING_KEY } from './database.js';
+import {
+  accountToken,
+  isAccountCurrent,
+  offlineOwner,
+  prepareOfflineRecovery,
+  transact,
+  requestValue,
+  PROTOCOL_KEY,
+  CLEAR_PENDING_KEY,
+} from './database.js';
 import { offlineTransaction, type OfflineTransaction } from './transaction.js';
 import { chargedBytes, type CacheEntry, type CacheModule } from './registry.js';
 import { freezeParticipants, resumeParticipants } from './coordinator.js';
@@ -56,15 +65,18 @@ export function createRecordRecovery(
     const token = accountToken();
     const work = async () => {
       if (localStorage.getItem(CLEAR_PENDING_KEY)) error('Usuwanie danych konta nie zostało zakończone.');
-      const states = await transact(
-        'readonly',
-        async (tx) => requestValue<ImportState[]>(tx.objectStore('migration').getAll()),
-        token,
-      );
+      const owner = await offlineOwner(token);
+      const states = owner
+        ? await transact(
+            'readonly',
+            async (tx) => requestValue<ImportState[]>(tx.objectStore('migration').getAll()),
+            token,
+          )
+        : [];
       let state = states.find((s) => s.module === module);
       const source = sources();
       if (!state && !Object.keys(source).length) return;
-      if (!state) {
+      if (!state && owner) {
         const markers = await transact(
           'readonly',
           async (tx) => requestValue<{ key: string }[]>(tx.objectStore('metadata').getAll()),
@@ -85,15 +97,8 @@ export function createRecordRecovery(
         if (encode(await boundary(tx)) !== encode(s.boundary)) throw new DOMException('Session changed', 'AbortError');
       };
       if (!state) {
-        const active = await transact(
-          'readonly',
-          async (tx) =>
-            requestValue<{ value: { accountId: string } } | undefined>(
-              tx.objectStore('metadata').get(['__origin__', 'active']),
-            ),
-          token,
-        );
         const preview =
+          owner &&
           options?.previewFallback &&
           (await transact(
             'readonly',
@@ -103,8 +108,8 @@ export function createRecordRecovery(
             },
             token,
           ));
-        const data = parse(source, active?.value.accountId, preview);
-        if (active && active.value.accountId !== data.account) error('Dane offline należą do innego konta.');
+        const data = parse(source, owner, preview);
+        await prepareOfflineRecovery(data.account, token);
         state = {
           accountId: data.account,
           module,
@@ -145,6 +150,8 @@ export function createRecordRecovery(
               tx.objectStore('metadata').get(['__origin__', 'active']),
             );
             if (active && active.value.accountId !== staged.accountId)
+              throw new DOMException('Session changed', 'AbortError');
+            if (await requestValue(tx.objectStore('metadata').get(['__origin__', 'suspended'])))
               throw new DOMException('Session changed', 'AbortError');
             await put(offlineTransaction(tx, staged.accountId), staged.data);
             if (!active)

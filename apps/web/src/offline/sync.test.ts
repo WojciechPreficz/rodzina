@@ -451,6 +451,7 @@ describe('shared account sender', () => {
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
     sender.stop();
     await clearDatabase();
+    await activateOfflineAccount(account, true);
     finish({});
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(reconcile).not.toHaveBeenCalled();

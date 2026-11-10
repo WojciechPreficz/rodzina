@@ -6,14 +6,15 @@ import {
   assertContext,
   hasPendingClear,
   isAccountCurrent,
+  offlineOwner,
   requestValue,
+  SESSION_KEY,
   transact,
 } from './offline/database.js';
 import { reportStorageIssue, storageError } from './offline/status.js';
 
 export type AccountSession = { user: AuthUser; family: Family };
 export const PENDING_LOGOUT_KEY = 'rodzina:pending-logout';
-const SESSION_KEY = 'account-session:1';
 const id = z.string().min(1);
 const sessionSchema = z
   .object({
@@ -41,6 +42,7 @@ export async function readSavedAccountSession(tx: IDBTransaction, account: strin
 }
 
 async function readStored(token: number, migrate: boolean) {
+  if (!(await offlineOwner(token))) return;
   const active = await transact(
     'readonly',
     async (tx) => requestValue<Active | undefined>(tx.objectStore('metadata').get(['__origin__', 'active'])),

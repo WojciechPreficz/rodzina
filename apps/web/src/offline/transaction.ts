@@ -1,5 +1,13 @@
 import { readSavedAccountSession } from '../session.js';
-import { assertContext, hasPendingClear, makeEntry, readAccountCache, requestValue, transact } from './database.js';
+import {
+  accountToken,
+  assertContext,
+  makeEntry,
+  offlineOwner,
+  readAccountCache,
+  requestValue,
+  transact,
+} from './database.js';
 import { appendOperation, readOperations, recountOutboxBudgets, type Intent, type Operation } from './outbox.js';
 import type { CacheEntry, CacheModule } from './registry.js';
 import { notifyOutboxChanged } from './signals.js';
@@ -81,14 +89,19 @@ export async function withOfflineAccount<T>(
 
 export type OfflineRead = Pick<OfflineTransaction, 'readSnapshot' | 'readChanges' | 'readEngine'>;
 
-export function readStoredOfflineAccount<T>(work: (tx: OfflineRead, account: string) => Promise<T>) {
-  if (hasPendingClear()) throw changed();
-  return transact('readonly', async (tx) => {
-    const active = await requestValue<{ value: { accountId: string } } | undefined>(
-      tx.objectStore('metadata').get(['__origin__', 'active']),
-    );
-    if (active) return work(offlineTransaction(tx, active.value.accountId, true), active.value.accountId);
-  });
+export async function readStoredOfflineAccount<T>(work: (tx: OfflineRead, account: string) => Promise<T>) {
+  const token = accountToken();
+  if (!(await offlineOwner(token))) return;
+  return transact(
+    'readonly',
+    async (tx) => {
+      const active = await requestValue<{ value: { accountId: string } } | undefined>(
+        tx.objectStore('metadata').get(['__origin__', 'active']),
+      );
+      if (active) return work(offlineTransaction(tx, active.value.accountId, true), active.value.accountId);
+    },
+    token,
+  );
 }
 
 export function updateAccountRecord<T>(

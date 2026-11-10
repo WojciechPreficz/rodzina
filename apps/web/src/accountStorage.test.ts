@@ -1,7 +1,7 @@
 import { PENDING_LOGOUT_KEY } from './session.js';
 import { registerApplicationStores } from './accountAdapters.js';
 import { readTaskData, taskStore, TASK_STORAGE_KEY } from './features/tasks/index.js';
-import { invalidateOfflineContext, readCache, requestValue, transact } from './offline/database.js';
+import { invalidateOfflineContext, offlineOwner, readCache, requestValue, transact } from './offline/database.js';
 import './offline/testSetup.js';
 import { onlineManager, QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -178,9 +178,11 @@ describe('account storage cleanup', () => {
       expect(taskStore.getSnapshot()).toMatchObject({ account: '', items: {}, pending: [] });
       expect(contactsStore.snapshot()).toEqual({ account: '' });
       expect(await readCache('contacts')).toBeUndefined();
-      expect(await transact('readonly', (tx) => requestValue(tx.objectStore('outbox').count()))).toBe(
-        expectedOutboxCount,
-      );
+      if (expectedOutboxCount)
+        expect(await transact('readonly', (tx) => requestValue(tx.objectStore('outbox').count()))).toBe(
+          expectedOutboxCount,
+        );
+      else expect(await offlineOwner()).toBeUndefined();
       expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
       expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
     },

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
+import { offlineDatabaseName } from './offlineDatabase.js';
 
 async function setOffline(page: Page, offline: boolean) {
   await page.evaluate((offline) => {
@@ -9,11 +10,14 @@ async function setOffline(page: Page, offline: boolean) {
   }, offline);
 }
 
-function outboxCount(page: Page) {
+async function outboxCount(page: Page) {
+  const name = await offlineDatabaseName(page);
+  if (!name) return 0;
   return page.evaluate(
-    () =>
+    (name) =>
       new Promise<number>((resolve, reject) => {
-        const open = indexedDB.open('rodzina-offline');
+        const open = indexedDB.open(name);
+        open.onupgradeneeded = () => open.transaction!.abort();
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
           const db = open.result;
@@ -23,6 +27,7 @@ function outboxCount(page: Page) {
           db.close();
         };
       }),
+    name,
   );
 }
 
@@ -64,6 +69,7 @@ for (const scenario of ['same account', 'different account', 'Android transport'
     await page.getByRole('button', { name: 'Dodaj', exact: true }).click();
     await expect(page.getByRole('article', { name: title })).toBeVisible();
     await expect.poll(() => outboxCount(page)).toBe(1);
+    const previousDatabase = await offlineDatabaseName(page);
 
     if (scenario === 'discard' || scenario === 'send') {
       if (info.project.name === 'phone') await page.getByRole('button', { name: 'Otwórz menu' }).click();
@@ -99,6 +105,7 @@ for (const scenario of ['same account', 'different account', 'Android transport'
       }
       await expect(page).toHaveURL(/\/login/);
       await expect.poll(() => outboxCount(page)).toBe(0);
+      expect(await offlineDatabaseName(page)).toBeUndefined();
     } else {
       // Revoke the session on the server before reconnecting the frontend.
       expect((await page.request.post('/api/auth/logout', { headers })).ok()).toBe(true);
@@ -113,6 +120,10 @@ for (const scenario of ['same account', 'different account', 'Android transport'
       await expect.poll(() => outboxCount(page)).toBe(0);
       if (scenario !== 'different account') await expect(page.getByRole('article', { name: title })).toBeVisible();
     }
+    if (['discard', 'send', 'different account'].includes(scenario))
+      expect(await page.evaluate(() => indexedDB.databases())).not.toContainEqual(
+        expect.objectContaining({ name: previousDatabase }),
+      );
 
     const verification = await browser.newContext({ baseURL: baseURL! });
     try {

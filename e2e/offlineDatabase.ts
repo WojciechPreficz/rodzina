@@ -1,57 +1,87 @@
 import type { Page } from '@playwright/test';
 
-export function readOfflineSnapshot<T>(
-  page: Page,
-  module: 'family' | 'calendar' | 'shopping' | 'tasks' | 'contacts',
-): Promise<T | undefined> {
-  return page.evaluate(async (module) => {
-    if (!(await indexedDB.databases()).some((database) => database.name === 'rodzina-offline')) return;
+export function offlineDatabaseName(page: Page) {
+  return page.evaluate(async () => {
+    if (!(await indexedDB.databases()).some((db) => db.name === 'rodzina-offline' && db.version === 5)) return;
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('rodzina-offline');
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const open = indexedDB.open('rodzina-offline', 5);
+      open.onupgradeneeded = () => open.transaction!.abort();
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
     });
     try {
-      if (!db.objectStoreNames.contains('cache')) return;
-      return await new Promise((resolve, reject) => {
-        const transaction = db.transaction(['cache', 'outbox']);
-        const request = transaction.objectStore('cache').getAll();
-        request.onsuccess = () => {
-          const record = request.result.find((entry: { module: string }) => entry.module === module);
-          if (!['shopping', 'tasks'].includes(module) || !record) return resolve(record?.payload);
-          const pending = transaction.objectStore('outbox').index('accountId').getAll(record.accountId);
-          pending.onsuccess = () =>
-            resolve({
-              ...record.payload,
-              operations: pending.result
-                .filter((op: { module: string }) => op.module === module)
-                .map((op) =>
-                  module === 'tasks'
-                    ? {
-                        ...op.payload,
-                        id: op.operationId,
-                        submittedAt: op.submittedAt,
-                        status: op.status === 'needs-review' ? 'needs-review' : 'pending',
-                        reason: op.reviewReason,
-                      }
-                    : op,
-                ),
-            });
-          pending.onerror = () => reject(pending.error);
-        };
+      return await new Promise<string | undefined>((resolve, reject) => {
+        const request = db.transaction('routing').objectStore('routing').get('account');
+        request.onsuccess = () =>
+          resolve(request.result?.accountId ? `rodzina-${request.result.accountId}` : undefined);
         request.onerror = () => reject(request.error);
       });
     } finally {
       db.close();
     }
-  }, module) as Promise<T | undefined>;
+  });
+}
+
+export async function readOfflineSnapshot<T>(
+  page: Page,
+  module: 'family' | 'calendar' | 'shopping' | 'tasks' | 'contacts',
+): Promise<T | undefined> {
+  const name = await offlineDatabaseName(page);
+  if (!name) return;
+  return page.evaluate(
+    async ({ module, name }) => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(name);
+        request.onupgradeneeded = () => request.transaction!.abort();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        if (!db.objectStoreNames.contains('cache')) return;
+        return await new Promise((resolve, reject) => {
+          const transaction = db.transaction(['cache', 'outbox']);
+          const request = transaction.objectStore('cache').getAll();
+          request.onsuccess = () => {
+            const record = request.result.find((entry: { module: string }) => entry.module === module);
+            if (!['shopping', 'tasks'].includes(module) || !record) return resolve(record?.payload);
+            const pending = transaction.objectStore('outbox').index('accountId').getAll(record.accountId);
+            pending.onsuccess = () =>
+              resolve({
+                ...record.payload,
+                operations: pending.result
+                  .filter((op: { module: string }) => op.module === module)
+                  .map((op) =>
+                    module === 'tasks'
+                      ? {
+                          ...op.payload,
+                          id: op.operationId,
+                          submittedAt: op.submittedAt,
+                          status: op.status === 'needs-review' ? 'needs-review' : 'pending',
+                          reason: op.reviewReason,
+                        }
+                      : op,
+                  ),
+              });
+            pending.onerror = () => reject(pending.error);
+          };
+          request.onerror = () => reject(request.error);
+        });
+      } finally {
+        db.close();
+      }
+    },
+    { module, name },
+  ) as Promise<T | undefined>;
 }
 
 export async function writeOfflineSnapshot<T>(page: Page, module: 'tasks' | 'contacts', payload: T) {
+  const name = await offlineDatabaseName(page);
+  if (!name) throw new Error('No offline account database');
   await page.evaluate(
-    async ({ module, payload }) => {
+    async ({ module, payload, name }) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('rodzina-offline');
+        const request = indexedDB.open(name);
+        request.onupgradeneeded = () => request.transaction!.abort();
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -123,6 +153,6 @@ export async function writeOfflineSnapshot<T>(page: Page, module: 'tasks' | 'con
       }
       window.dispatchEvent(new StorageEvent('storage', { key: `offline-${module}-changed:1` }));
     },
-    { module, payload },
+    { module, payload, name },
   );
 }

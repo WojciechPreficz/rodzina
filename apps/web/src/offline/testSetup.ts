@@ -12,14 +12,22 @@ beforeEach(async () => {
   reportStorageIssue();
   Object.defineProperty(globalThis.crypto, 'subtle', { configurable: true, value: webcrypto.subtle });
   Object.defineProperty(globalThis, 'indexedDB', { configurable: true, writable: true, value: new IDBFactory() });
-  let queue = Promise.resolve<unknown>(undefined);
+  const queues = new Map<string, Promise<unknown>>();
   Object.defineProperty(navigator, 'locks', {
     configurable: true,
     value: {
-      request: (_name: string, action: () => Promise<unknown>) => {
-        if (_name.startsWith('offline-client:')) return action();
-        const result = queue.then(action);
-        queue = result.catch(() => {});
+      request: (
+        name: string,
+        actionOrOptions: (() => Promise<unknown>) | LockOptions,
+        callback?: () => Promise<unknown>,
+      ) => {
+        const action = typeof actionOrOptions === 'function' ? actionOrOptions : callback!;
+        if (name.startsWith('offline-client:')) return action();
+        const result = (queues.get(name) ?? Promise.resolve()).then(action);
+        queues.set(
+          name,
+          result.catch(() => {}),
+        );
         return result;
       },
       query: async () => ({ held: [], pending: [] }),

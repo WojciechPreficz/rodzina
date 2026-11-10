@@ -13,13 +13,14 @@ export const nativeApi = registerPlugin<{
   clearSession(): Promise<void>;
 }>('RodzinaApi');
 
-export async function clearNativeSession() {
+export async function clearNativeSession(current = () => true) {
   if (isAndroid()) {
     const { localScheduler } = await import('./reminders/localSchedule.js');
+    if (!current()) return;
     try {
       await localScheduler.clear();
     } finally {
-      await nativeApi.clearSession();
+      if (current()) await nativeApi.clearSession();
     }
   }
 }

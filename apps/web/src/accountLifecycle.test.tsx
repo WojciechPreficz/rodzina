@@ -13,10 +13,9 @@ vi.mock('./accountStorage.js', () => ({
   stopAccountPersistence: vi.fn(),
 }));
 vi.mock('./offline/database.js', () => ({
+  isLatestAccountSignal: () => true,
   ACCOUNT_SIGNAL_KEY: 'account-signal',
   activateOfflineAccount: vi.fn(async () => {}),
-  announceAccount: vi.fn(),
-  recoverPendingClear: vi.fn(async () => {}),
   hasPendingClear: () => false,
 }));
 
@@ -115,4 +114,39 @@ it('checks again after another tab changes the account', async () => {
   });
   await backgroundRefresh();
   expect(result.current.value.user?.id).toBe('adult');
+});
+
+it('keeps a new session when the previous logout response arrives late', async () => {
+  const next = { ...session, user: { ...session.user, id: 'other' } };
+  let finish!: () => void;
+  const logoutResponse = new Promise<Response>((resolve) => {
+    finish = () => resolve(new Response('{}'));
+  });
+  const request = vi.fn((path: string) =>
+    path === '/api/auth/logout' ? logoutResponse : Promise.resolve(authorized()),
+  );
+  vi.stubGlobal('fetch', request);
+  const { result } = renderHook(() => useAccountLifecycle(services));
+  await act(async () => {});
+  vi.mocked(clearAccountData)
+    .mockImplementationOnce(async (_reason, options) => {
+      options?.invalidateSession?.();
+      await options?.beforeQueryClear?.();
+    })
+    .mockImplementationOnce(async (_reason, options) => options?.invalidateSession?.());
+  let loggingOut!: Promise<void>;
+  await act(async () => {
+    loggingOut = result.current.value.logout();
+  });
+  expect(request).toHaveBeenCalledWith('/api/auth/logout', expect.anything());
+  request.mockImplementation((path) =>
+    path === '/api/auth/logout' ? logoutResponse : Promise.resolve(new Response(JSON.stringify(next))),
+  );
+  await act(async () => result.current.value.setSession(next.user, next.family));
+  const cancelled = expect(loggingOut).rejects.toMatchObject({ name: 'AbortError' });
+  await act(async () => {
+    finish();
+    await cancelled;
+  });
+  expect(result.current.value.user?.id).toBe('other');
 });

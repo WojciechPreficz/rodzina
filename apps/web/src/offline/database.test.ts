@@ -10,7 +10,7 @@ import {
   activateOfflineAccount,
   clearDatabase,
   closeDatabase,
-  openDatabase,
+  offlineOwner,
   readCache,
   recoverPendingClear,
   requestValue,
@@ -20,6 +20,8 @@ import {
   CLEAR_PENDING_KEY,
 } from './database.js';
 import { adapters, chargedBytes } from './registry.js';
+import { accountDatabaseName } from './accountDatabases.js';
+import { open } from './idb.js';
 
 // Keep other feature migrations unregistered while testing the family and calendar previews.
 vi.mock('../features/contacts/index.js', () => ({}));
@@ -160,11 +162,11 @@ describe('shared IndexedDB previews', () => {
   });
   it('keeps a durable clear-pending marker when deletion is denied', async () => {
     await saveOfflineData(family.session);
-    const clear = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(() => {
+    const clear = vi.spyOn(indexedDB, 'deleteDatabase').mockImplementation(() => {
       throw new Error('Odmowa');
     });
     await expect(clearDatabase()).rejects.toThrow('Odmowa');
-    expect(localStorage.getItem(CLEAR_PENDING_KEY)).toBe('yes');
+    await expect(offlineOwner()).rejects.toThrow('nie zostało zakończone');
     expect(await hydrateOfflineData()).toBeUndefined();
     clear.mockRestore();
     await clearDatabase();
@@ -178,11 +180,16 @@ describe('shared IndexedDB previews', () => {
       await transact('readwrite', async (tx) => {
         tx.objectStore('outbox').put({ accountId: owner, operationId: 'pending' });
       });
-      const clear = vi.spyOn(IDBObjectStore.prototype, 'clear').mockImplementation(() => {
-        throw new Error('Odmowa');
+      const put = IDBObjectStore.prototype.put;
+      const clear = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+        this: IDBObjectStore,
+        ...args: Parameters<IDBObjectStore['put']>
+      ) {
+        if (this.name === 'metadata' && args[0].key === 'suspended') throw new Error('Odmowa');
+        return put.apply(this, args);
       });
       await expect(clearDatabase(true, 'session-lost')).rejects.toThrow('Odmowa');
-      expect(localStorage.getItem(CLEAR_PENDING_KEY)).toBe('session-lost');
+      await expect(offlineOwner()).rejects.toThrow('nie zostało zakończone');
       clear.mockRestore();
       await closeDatabase();
       await recoverPendingClear();
@@ -194,8 +201,11 @@ describe('shared IndexedDB previews', () => {
         await clearDatabase(true, 'sign-in');
         await activateOfflineAccount(boundary === 'same' ? owner : 'other:user', true);
       }
-      const count = await transact('readonly', (tx) => requestValue(tx.objectStore('outbox').count()));
+      const count =
+        boundary === 'logout' ? 0 : await transact('readonly', (tx) => requestValue(tx.objectStore('outbox').count()));
       expect(count).toBe(boundary === 'same' ? 1 : 0);
+      if (boundary !== 'same')
+        expect((await indexedDB.databases()).map(({ name }) => name)).not.toContain(accountDatabaseName(owner));
       await clearDatabase();
     },
   );
@@ -226,7 +236,7 @@ describe('shared IndexedDB previews', () => {
     try {
       expect(await saveOfflineData(family.session)).toBe(false);
       expect(localStorage.getItem('rodzina:offline-data:v1')).toBeNull();
-      await expect(openDatabase()).rejects.toThrow('IndexedDB');
+      await expect(offlineOwner()).rejects.toThrow('IndexedDB');
     } finally {
       Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: factory });
     }
@@ -251,7 +261,7 @@ describe('shared IndexedDB previews', () => {
     const close = vi.fn();
     const request = {} as IDBOpenDBRequest;
     vi.spyOn(indexedDB, 'open').mockReturnValue(request);
-    const opening = openDatabase();
+    const opening = open('fixture', 1, () => {});
     request.onblocked!.call(request, new Event('blocked') as IDBVersionChangeEvent);
     await expect(opening).rejects.toThrow('zablokowana');
     Object.defineProperty(request, 'result', { value: { close } });
@@ -261,14 +271,14 @@ describe('shared IndexedDB previews', () => {
   it('closes an older connection and invalidates its writer on versionchange', async () => {
     await saveOfflineData(family.session);
     await new Promise<void>((resolve, reject) => {
-      const upgrade = indexedDB.open('rodzina-offline', 4);
+      const upgrade = indexedDB.open(accountDatabaseName(fixture.accountId), 2);
       upgrade.onsuccess = () => {
         upgrade.result.close();
         resolve();
       };
       upgrade.onerror = () => reject(upgrade.error);
     });
-    await expect(openDatabase()).rejects.toThrow('IndexedDB');
+    await expect(transact('readonly', async () => {})).rejects.toMatchObject({ name: 'VersionError' });
     expect(await saveOfflineData(family.session)).toBe(false);
   });
   it('invalidates an import paused in preflight when logout starts', async () => {

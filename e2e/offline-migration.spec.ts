@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
-import { readOfflineSnapshot } from './offlineDatabase.js';
+import { offlineDatabaseName, readOfflineSnapshot } from './offlineDatabase.js';
 import type { Snapshot } from '../apps/web/src/features/calendar/index.js';
 
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
@@ -104,30 +104,33 @@ for (const native of [false, true]) {
     await page.getByRole('link', { name: 'Otwórz odzyskiwanie danych offline' }).click();
     await page.getByRole('button', { name: 'Potwierdzam zamknięcie starych kart — przenieś dane' }).click();
     await expect(page.getByText('TEST-CODE', { exact: true })).toBeVisible();
-    await page.evaluate(async () => {
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('rodzina-offline', 3);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const tx = db.transaction('cache', 'readwrite');
-          const store = tx.objectStore('cache');
-          const request = store.openCursor();
-          request.onsuccess = () => {
-            const cursor = request.result;
-            if (!cursor) return;
-            if (['family', 'shopping'].includes(cursor.value.module)) cursor.delete();
-            cursor.continue();
-          };
-          tx.oncomplete = () => resolve();
-          tx.onerror = tx.onabort = () => reject(tx.error);
+    await page.evaluate(
+      async (name) => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open(name!);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
         });
-      } finally {
-        db.close();
-      }
-    });
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('cache', 'readwrite');
+            const store = tx.objectStore('cache');
+            const request = store.openCursor();
+            request.onsuccess = () => {
+              const cursor = request.result;
+              if (!cursor) return;
+              if (['family', 'shopping'].includes(cursor.value.module)) cursor.delete();
+              cursor.continue();
+            };
+            tx.oncomplete = () => resolve();
+            tx.onerror = tx.onabort = () => reject(tx.error);
+          });
+        } finally {
+          db.close();
+        }
+      },
+      await offlineDatabaseName(page),
+    );
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Rodzina', exact: true })).toBeVisible();
     await expect(page.getByText(/Brak danych rodziny zapisanych/)).toBeVisible();
@@ -235,6 +238,7 @@ test('replays a pre-upgrade IndexedDB shopping journal after an offline restart'
   await page.goto('/zakupy');
   if (info.project.name === 'phone') await page.getByRole('button', { name: 'Zakupy', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Dodaj produkt' })).toBeEnabled();
+  const accountDbName = (await offlineDatabaseName(page))!;
 
   // Close the running app before replacing the cache with a pre-upgrade snapshot and its embedded journal.
   await page.route('**/before-upgrade', (route) =>
@@ -242,9 +246,9 @@ test('replays a pre-upgrade IndexedDB shopping journal after an offline restart'
   );
   await page.goto('/before-upgrade');
   await page.evaluate(
-    async ({ listId, operationId }) => {
+    async ({ listId, operationId, accountDbName }) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const open = indexedDB.open('rodzina-offline');
+        const open = indexedDB.open(accountDbName);
         open.onsuccess = () => resolve(open.result);
         open.onerror = () => reject(open.error);
       });
@@ -293,16 +297,60 @@ test('replays a pre-upgrade IndexedDB shopping journal after an offline restart'
       } finally {
         db.close();
       }
+      const keyPaths = {
+        cache: ['accountId', 'module', 'key'],
+        metadata: ['accountId', 'key'],
+        outbox: ['accountId', 'operationId'],
+        migration: ['accountId', 'module', 'importId'],
+      };
+      const names = Object.keys(keyPaths) as (keyof typeof keyPaths)[];
+      const copied = await new Promise<unknown[][]>((resolve, reject) => {
+        const request = indexedDB.open(accountDbName);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction(names);
+          const reads = names.map((name) => tx.objectStore(name).getAll());
+          tx.oncomplete = () => resolve(reads.map((read) => read.result));
+          tx.onabort = () => reject(tx.error);
+          db.close();
+        };
+      });
+      for (const name of ['rodzina-offline', accountDbName]) {
+        await new Promise<void>((resolve, reject) => {
+          const request = indexedDB.deleteDatabase(name);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+          request.onblocked = () => reject(new Error('Fixture database still open'));
+        });
+      }
+      const legacy = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('rodzina-offline', 3);
+        request.onupgradeneeded = () => {
+          for (const [i, name] of names.entries()) {
+            const store = request.result.createObjectStore(name, { keyPath: keyPaths[name] });
+            for (const record of copied[i]!) store.add(record);
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      // This simulates a tab that has not yet reacted to versionchange.
+      legacy.onversionchange = () => (document.title = 'Legacy connection blocking the upgrade');
       localStorage.setItem('test:offline', 'yes');
     },
-    { listId, operationId },
+    { listId, operationId, accountDbName },
   );
-  await page.close();
 
   // Assets remain reachable, as in an APK cold start. Only API access is unavailable.
   const reopened = await context.newPage();
   await installNativeTransport(reopened);
   await reopened.route('**/api/**', (route) => route.abort('internetdisconnected'));
+  await reopened.goto('/zakupy');
+  await expect(page).toHaveTitle('Legacy connection blocking the upgrade');
+  await expect(reopened.getByRole('alert').filter({ hasText: 'Aktualizacja pamięci jest zablokowana' })).toBeVisible();
+  expect(await page.evaluate(() => indexedDB.databases())).toEqual([{ name: 'rodzina-offline', version: 3 }]);
+  await page.close();
   await reopened.goto('/zakupy');
   if (info.project.name === 'phone') await reopened.getByRole('button', { name: 'Zakupy', exact: true }).click();
   await expect(reopened.getByRole('article', { name: 'Ryż sprzed aktualizacji', exact: true })).toBeVisible();
@@ -313,6 +361,8 @@ test('replays a pre-upgrade IndexedDB shopping journal after an offline restart'
   );
   expect(shopping?.version).toBe(2);
   expect(shopping?.operations.map((operation) => operation.operationId)).toEqual([operationId]);
+  await reopened.reload();
+  await expect(reopened.getByRole('article', { name: 'Ryż sprzed aktualizacji', exact: true })).toBeVisible();
   expect(await reopened.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await reopened.screenshot({ path: info.outputPath('pre-upgrade-journal-offline.png'), fullPage: true });
 

@@ -184,10 +184,7 @@ describe('O.4 legacy import', () => {
     seed();
     await recoverLegacyData();
     await clearDatabase();
-    const records = await transact('readonly', async (tx) =>
-      Promise.all(['cache', 'outbox', 'migration'].map((name) => requestValue(tx.objectStore(name).getAll()))),
-    );
-    expect(records).toEqual([[], [], []]);
+    expect((await indexedDB.databases()).map(({ name }) => name)).not.toContain(`rodzina-${fixture.accountId}`);
     expect(Object.keys(localStorage).filter((key) => key.startsWith('rodzina:'))).toEqual([]);
   });
 });

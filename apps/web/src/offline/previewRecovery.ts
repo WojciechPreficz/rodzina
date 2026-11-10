@@ -4,6 +4,8 @@ import {
   checkPendingClear,
   isAccountCurrent,
   makeEntry,
+  offlineOwner,
+  prepareOfflineRecovery,
   PROTOCOL_KEY,
   putEntry,
   requestValue,
@@ -65,12 +67,14 @@ export async function recoverPreviewData(validateAccount?: (account: string) => 
   const token = accountToken();
   // Web Locks serializes new clients. Pre-protocol clients require the explicit maintenance procedure.
   const work = async () => {
-    const boundary = await transact('readonly', readBoundary, token);
-    const states = await transact(
-      'readonly',
-      async (tx) => requestValue<ImportState[]>(tx.objectStore('migration').getAll()),
-      token,
-    );
+    const owner = await offlineOwner(token);
+    const states = owner
+      ? await transact(
+          'readonly',
+          async (tx) => requestValue<ImportState[]>(tx.objectStore('migration').getAll()),
+          token,
+        )
+      : [];
     let state = states.find((state) => state.module === 'preview');
     const source = sourceEntries();
     if (!state && !Object.keys(source).length) return;
@@ -94,6 +98,7 @@ export async function recoverPreviewData(validateAccount?: (account: string) => 
         fail('Nie można połączyć danych offline różnych kont. Wyloguj się i pobierz dane ponownie.');
       const accountId = entries[0]!.accountId;
       validateAccount?.(accountId);
+      await prepareOfflineRecovery(accountId, token);
       state = {
         accountId,
         module: 'preview',
@@ -103,7 +108,7 @@ export async function recoverPreviewData(validateAccount?: (account: string) => 
         entries,
         sourceDigest: await digest(source),
         targetDigest: await digest(entries),
-        boundary,
+        boundary: await transact('readonly', readBoundary, token),
       };
       if (chargedBytes(accountId, state) > 48 * 1048576)
         fail('Brak miejsca na kopię danych podczas aktualizacji pamięci.');

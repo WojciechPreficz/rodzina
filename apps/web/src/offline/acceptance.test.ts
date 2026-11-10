@@ -15,6 +15,7 @@ import { activateOfflineAccount, closeDatabase, recoverPendingClear, requestValu
 import { readOperations } from './outbox.js';
 import { startSync, type SyncAdapter } from './sync.js';
 import { adapters, chargedBytes, type CacheEntry } from './registry.js';
+import { accountDatabaseName } from './accountDatabases.js';
 
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {
   accountId: string;
@@ -177,10 +178,7 @@ it('clears all modules, pending work, staged imports and legacy sources through 
   client.setQueryData(['private'], 'private');
   await clearAccountData('logout', { queryClient: client });
   expect(client.getQueryCache().getAll()).toHaveLength(0);
-  for (const name of ['cache', 'outbox', 'migration'] as const)
-    expect(await transact('readonly', (tx) => requestValue(tx.objectStore(name).count()))).toBe(0);
-  const metadata = await transact('readonly', (tx) => requestValue(tx.objectStore('metadata').getAll()));
-  expect(metadata.every((entry: { accountId: string }) => entry.accountId === '__origin__')).toBe(true);
+  expect((await indexedDB.databases()).map(({ name }) => name)).not.toContain(accountDatabaseName(account));
   expect(fixture.entries.every(({ key }) => localStorage.getItem(key) === null)).toBe(true);
   expect(localStorage.getItem('offline-clear-pending:1')).toBeNull();
   expect(localStorage.getItem('device-preference')).toBe('keep');

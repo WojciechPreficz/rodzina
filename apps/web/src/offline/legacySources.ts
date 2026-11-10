@@ -1,4 +1,4 @@
-import { hasPendingClear, requestValue, transact } from './database.js';
+import { offlineOwner, recoverPendingClear, requestValue, transact } from './database.js';
 import { adapters } from './registry.js';
 
 export function isLegacySource(key: string) {
@@ -13,8 +13,11 @@ export function isLegacySource(key: string) {
 
 export async function needsLegacyRecovery() {
   // An account clear that has already been requested takes precedence over recovery.
-  if (hasPendingClear()) return false;
+  await recoverPendingClear();
   if (Object.keys(localStorage).some(isLegacySource)) return true;
   // A verified import can have removed its source just before the tab closed.
-  return transact('readonly', async (tx) => (await requestValue(tx.objectStore('migration').count())) > 0);
+  return (
+    !!(await offlineOwner()) &&
+    transact('readonly', async (tx) => (await requestValue(tx.objectStore('migration').count())) > 0)
+  );
 }

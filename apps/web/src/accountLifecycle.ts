@@ -9,12 +9,7 @@ import type { AuthState } from './sessionContext.js';
 import { reportTransportFailure } from './connectivity.js';
 import { SYNC_INTERVAL_MS } from './queryClient.js';
 import { clearAccountData, restoreAccountStores, stopAccountPersistence } from './accountStorage.js';
-import {
-  ACCOUNT_SIGNAL_KEY,
-  activateOfflineAccount,
-  announceAccount,
-  recoverPendingClear,
-} from './offline/database.js';
+import { ACCOUNT_SIGNAL_KEY, activateOfflineAccount, isLatestAccountSignal } from './offline/database.js';
 import { reportStorageIssue, storageError } from './offline/status.js';
 export type AccountServices = {
   accountId: (session: AccountSession) => string;
@@ -102,13 +97,10 @@ export function useAccountLifecycle(services: AccountServices) {
         setFamilySyncedAt(undefined);
         setFamilyConfirmed(false);
       }
-      currentSession.current = response;
-      sessionRejected.current = false;
-      await recoverPendingClear();
-      if (!current()) return;
       try {
         await activateOfflineAccount(accountId(response), true);
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
         reportStorageIssue(storageError(error));
       }
       if (!current()) return;
@@ -116,6 +108,8 @@ export function useAccountLifecycle(services: AccountServices) {
       if (!current()) return;
       await restoreAccountStores(response, queryClient, current);
       if (!current()) return;
+      currentSession.current = response;
+      sessionRejected.current = false;
       setUser(response.user);
       setFamily(response.family);
       setIsLoading(false);
@@ -223,7 +217,7 @@ export function useAccountLifecycle(services: AccountServices) {
     window.addEventListener('rodzina:session-lost', onSessionLost);
     const onStorage = (event: StorageEvent) => {
       if (event.key === ACCOUNT_SIGNAL_KEY) {
-        loseSession(false);
+        if (isLatestAccountSignal(event)) loseSession(false);
         return;
       }
       if (services.foreignStorage(event, identity)) loseSession(false);
@@ -247,15 +241,18 @@ export function useAccountLifecycle(services: AccountServices) {
   const logout = async (mode?: 'queue-checked') => {
     sessionRejected.current = true;
     let cleanupError: unknown;
+    let logoutGeneration = generation.current;
+    const current = () => generation.current === logoutGeneration;
     // A concurrent tab may queue a change between the UI check and this transaction.
     await clearAccountData(mode === 'queue-checked' ? 'logout-checked' : 'logout', {
       queryClient,
       invalidateSession: () => {
         services.invalidateAlarms();
-        generation.current += 1;
+        logoutGeneration = ++generation.current;
         invalidateSessionRequests();
       },
       beforeQueryClear: async () => {
+        setIsLoading(true);
         currentSession.current = undefined;
         setUser(null);
         setFamily(null);
@@ -267,17 +264,22 @@ export function useAccountLifecycle(services: AccountServices) {
     }).catch((error: unknown) => {
       cleanupError = error;
     });
+    if (!current()) throw new DOMException('Session changed', 'AbortError');
     try {
       await apiFetch<AuthOkResponse>('/api/auth/logout', { method: 'POST' });
-      pendingLogout(false);
+      if (current()) pendingLogout(false);
     } catch (error) {
+      if (!current()) throw new DOMException('Session changed', 'AbortError');
       if (error instanceof ApiRequestError && error.status === 401) pendingLogout(false);
       else if (!isAndroid() && error instanceof ApiRequestError) throw error;
     } finally {
-      await clearNativeSession();
-      setUser(null);
-      setFamily(null);
+      try {
+        if (current()) await clearNativeSession(current);
+      } finally {
+        if (current()) setIsLoading(false);
+      }
     }
+    if (!current()) throw new DOMException('Session changed', 'AbortError');
     if (cleanupError) throw cleanupError;
   };
 
@@ -302,13 +304,13 @@ export function useAccountLifecycle(services: AccountServices) {
       try {
         await activateOfflineAccount(accountId({ user: nextUser, family: nextFamily }), true);
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
         reportStorageIssue(storageError(error));
       }
       if (!current()) return;
       await saveSession({ user: nextUser, family: nextFamily });
       if (!current()) return;
       await restoreAccountStores({ user: nextUser, family: nextFamily }, queryClient, current);
-      if (current()) announceAccount(services.accountId({ user: nextUser, family: nextFamily }));
       if (!current()) return;
       currentSession.current = { user: nextUser, family: nextFamily };
       sessionRejected.current = false;
