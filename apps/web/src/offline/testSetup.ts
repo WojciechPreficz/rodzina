@@ -23,12 +23,18 @@ beforeEach(async () => {
       ) => {
         const action = typeof actionOrOptions === 'function' ? actionOrOptions : callback!;
         if (name.startsWith('offline-client:')) return action();
-        const result = (queues.get(name) ?? Promise.resolve()).then(action);
-        queues.set(
-          name,
-          result.catch(() => {}),
-        );
-        return result;
+        const signal = typeof actionOrOptions === 'function' ? undefined : actionOrOptions.signal;
+        return new Promise((resolve, reject) => {
+          const abort = () => reject(signal?.reason);
+          signal?.addEventListener('abort', abort, { once: true });
+          if (signal?.aborted) abort();
+          const turn = (queues.get(name) ?? Promise.resolve()).then(async () => {
+            signal?.removeEventListener('abort', abort);
+            signal?.throwIfAborted();
+            resolve(await action());
+          });
+          queues.set(name, turn.catch(reject));
+        });
       },
       query: async () => ({ held: [], pending: [] }),
     },

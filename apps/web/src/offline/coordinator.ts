@@ -26,20 +26,25 @@ window.addEventListener('storage', (event) => {
 export async function participate(onFreeze: () => void) {
   invalidate = onFreeze;
   if (!navigator.locks?.query || participating) return participating;
-  participating = new Promise<void>((resolve) => {
-    void navigator.locks.request(`${CLIENT_PREFIX}${instanceId}`, async () => {
-      resolve();
-      await new Promise<void>((release) =>
-        window.addEventListener(
-          'pagehide',
-          () => {
-            participating = undefined;
-            release();
-          },
-          { once: true },
-        ),
-      );
-    });
+  participating = new Promise<void>((resolve, reject) => {
+    void navigator.locks
+      .request(`${CLIENT_PREFIX}${instanceId}`, async () => {
+        resolve();
+        await new Promise<void>((release) =>
+          window.addEventListener(
+            'pagehide',
+            () => {
+              participating = undefined;
+              release();
+            },
+            { once: true },
+          ),
+        );
+      })
+      .catch(reject);
+  }).catch((error: unknown) => {
+    participating = undefined;
+    throw error;
   });
   return participating;
 }

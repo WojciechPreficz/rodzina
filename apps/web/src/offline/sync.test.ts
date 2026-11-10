@@ -1,14 +1,16 @@
 import './testSetup.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onlineManager } from '@tanstack/react-query';
+import { Capacitor } from '@capacitor/core';
 import { IDBDatabase } from 'fake-indexeddb';
 import { OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../api.js';
 import { invalidateSessionRequests } from '../platform.js';
 import type { AccountSession } from '../session.js';
 import { activateOfflineAccount, transact, clearDatabase, requestValue } from './database.js';
-import { appendOperation, readOperations, type Lease } from './outbox.js';
+import { appendOperation, readOperations } from './outbox.js';
 import { joinSync, retryAt, startSync, type SyncAdapter } from './sync.js';
+import * as status from './status.js';
 import { OUTBOX_SIGNAL } from './signals.js';
 
 const account = 'family:user';
@@ -124,19 +126,44 @@ describe('shared account sender', () => {
     expect(send).toHaveBeenCalledOnce();
     expect(await read()).toEqual([]);
   });
-  it('waits for another sender lease to expire without polling or taking it early', async () => {
+  it('cancels a queued request while another sender still holds the lock', async () => {
     await seed();
-    const { acquireLease } = await import('./outbox.js');
-    await transact('readwrite', (tx) => acquireLease(tx, account, 'other-tab', Date.now()));
-    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const request = vi.spyOn(navigator.locks, 'request');
+    const first = start({ send: () => new Promise(() => {}) });
+    const firstRun = first.synchronize();
+    await vi.waitFor(async () => expect((await read())[0]?.status).toBe('sending'));
     const send = vi.fn(async () => ({}));
+    const waiting = start({ send });
+    const waitingRun = waiting.synchronize();
+    await vi.waitFor(() => expect(request.mock.calls.filter(([name]) => name === `sync:${account}`)).toHaveLength(2));
+    waiting.stop();
+    await waitingRun;
+    expect(send).not.toHaveBeenCalled();
+    first.stop();
+    await firstRun;
+    expect((await read())[0]?.operationId).toBe('stable-id');
+  });
+  it.each(['missing', 'denied'])('keeps the queue intact when Web Locks are %s', async (availability) => {
+    await seed();
+    const locks = navigator.locks;
+    const request = locks.request.bind(locks) as typeof locks.request;
+    const issue = vi.spyOn(status, 'reportStorageIssue');
+    const send = vi.fn(async () => ({}));
+    if (availability === 'missing') Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+    else {
+      vi.spyOn(locks, 'request').mockImplementation(((name: string, ...args: unknown[]) => {
+        if (name === `sync:${account}`) return Promise.reject(new DOMException('Denied', 'SecurityError'));
+        return Reflect.apply(request, locks, [name, ...args]);
+      }) as typeof locks.request);
+    }
     const sender = start({ send });
     await sender.synchronize();
-    const transactions = vi.spyOn(IDBDatabase.prototype, 'transaction').mockClear();
-    await vi.advanceTimersByTimeAsync(14000);
-    expect(transactions).not.toHaveBeenCalled();
+    expect(issue).toHaveBeenCalledWith(expect.stringContaining('Nie można zsynchronizować zmian.'));
     expect(send).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1000);
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: locks });
+    vi.restoreAllMocks();
+    expect(await read()).toMatchObject([{ operationId: 'stable-id', status: 'pending', attempts: 0 }]);
+    window.dispatchEvent(new Event('focus'));
     await sender.synchronize();
     expect(send).toHaveBeenCalledOnce();
   });
@@ -160,23 +187,6 @@ describe('shared account sender', () => {
     const transactions = vi.spyOn(IDBDatabase.prototype, 'transaction').mockClear();
     window.dispatchEvent(new CustomEvent(OUTBOX_SIGNAL, { detail: account }));
     expect(transactions).not.toHaveBeenCalled();
-  });
-  it('rechecks a renewed foreign lease at its saved deadline before taking over', async () => {
-    await seed();
-    const { acquireLease } = await import('./outbox.js');
-    await transact('readwrite', (tx) => acquireLease(tx, account, 'other-tab', Date.now()));
-    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
-    const send = vi.fn(async () => ({}));
-    const sender = start({ send });
-    await sender.synchronize();
-    await vi.advanceTimersByTimeAsync(10000);
-    await transact('readwrite', (tx) => acquireLease(tx, account, 'other-tab', Date.now()));
-    await vi.advanceTimersByTimeAsync(5000);
-    await sender.synchronize();
-    expect(send).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(10000);
-    await sender.synchronize();
-    expect(send).toHaveBeenCalledOnce();
   });
   it('expires a waiting retry at the age deadline without sending or reviving it after clock correction', async () => {
     await seed();
@@ -225,7 +235,7 @@ describe('shared account sender', () => {
     let concurrent = 0;
     let maximum = 0;
     const sent: string[] = [];
-    const owners: string[] = [];
+    const locks = vi.spyOn(navigator.locks, 'request');
     const adapter = (module: string): SyncAdapter => ({
       module,
       prepare: async () => {},
@@ -234,14 +244,6 @@ describe('shared account sender', () => {
       send: async (op) => {
         maximum = Math.max(maximum, ++concurrent);
         sent.push(op.operationId);
-        owners.push(
-          await transact(
-            'readonly',
-            async (tx) =>
-              (await requestValue<{ value: Lease }>(tx.objectStore('metadata').get([account, 'sender-lease']))).value
-                .owner,
-          ),
-        );
         concurrent--;
         if (op.operationId === 'stable-id') throw new ApiRequestError('Konflikt', 409);
         return {};
@@ -254,7 +256,7 @@ describe('shared account sender', () => {
     await tasks.synchronize();
     expect(sent).toEqual(['stable-id', 'independent-task']);
     expect(maximum).toBe(1);
-    expect(new Set(owners).size).toBe(1);
+    expect(locks.mock.calls.filter(([name]) => name === `sync:${account}`)).toHaveLength(1);
     expect((await read()).map((op) => [op.operationId, op.reviewReason, op.dependsOn])).toEqual([
       ['stable-id', 'conflict', []],
       ['dependent-task', 'dependency', ['stable-id']],
@@ -449,52 +451,54 @@ describe('shared account sender', () => {
       reconcile,
     });
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
-    sender.stop();
+    window.dispatchEvent(new Event('offline-account-changed'));
     await clearDatabase();
-    await activateOfflineAccount(account, true);
+    await activateOfflineAccount('family:another-user', true);
     finish({});
     await new Promise((resolve) => setTimeout(resolve, 20));
+    await sender.synchronize();
     expect(reconcile).not.toHaveBeenCalled();
-    expect(await read()).toEqual([]);
+    expect(await transact('readonly', (tx) => readOperations(tx, 'family:another-user'))).toEqual([]);
   });
   it('bounds exponential jitter and honors Retry-After', () => {
     expect(retryAt(0, 0, 1000, 0.5)).toBe(2500);
     expect(retryAt(100, 0, 1000, 1)).toBe(301000);
     expect(retryAt(0, 60000, 1000, 0)).toBe(61000);
   });
-  it('fences a late response after another tab takes over the lease', async () => {
+  it.each(['WWW', 'Android'])('hands off the same operation after stopping a %s sender', async (platform) => {
     await seed();
-    vi.useFakeTimers({ toFake: ['Date'] });
-    let finish!: (value: unknown) => void;
-    const reconcile = vi.fn(async () => {});
-    const sessionTransport = vi.fn(async () => session);
-    const send = vi
-      .fn<SyncAdapter['send']>(async () => ({}))
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            finish = resolve;
-          }),
-      );
-    const sender = start({ send, reconcile, sessionTransport });
-    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
-    await transact('readwrite', async (tx) => {
-      const store = tx.objectStore('metadata');
-      const old = (await requestValue<{ value: Lease }>(store.get([account, 'sender-lease']))).value;
-      store.put({
-        accountId: account,
-        key: 'sender-lease',
-        value: { ...old, epoch: old.epoch + 1, owner: 'replacement', expiresAt: Date.now() + 60000 },
-      });
+    if (platform === 'Android') vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('android');
+    const locks = vi.spyOn(navigator.locks, 'request');
+    let respond!: (value: unknown) => void;
+    const response = new Promise((resolve) => {
+      respond = resolve;
     });
-    finish({});
-    await sender.synchronize();
-    expect(reconcile).not.toHaveBeenCalled();
-    expect((await read())[0]?.operationId).toBe('stable-id');
-    vi.setSystemTime(Date.now() + 60001);
-    await sender.synchronize();
-    expect(sessionTransport).toHaveBeenCalledTimes(2);
-    expect(reconcile).toHaveBeenCalledOnce();
+    const sendFirst = vi.fn<SyncAdapter['send']>(() => response);
+    const reconcileFirst = vi.fn(async () => {});
+    const first = start({ send: sendFirst, reconcile: reconcileFirst });
+    const firstRun = first.synchronize();
+    await vi.waitFor(() => expect(sendFirst).toHaveBeenCalledOnce());
+    const sendNext = vi.fn<SyncAdapter['send']>(async () => ({}));
+    const sessionTransport = vi.fn(async () => session);
+    const next = start({ send: sendNext, sessionTransport });
+    const nextRun = next.synchronize();
+    first.stop();
+    expect(sendFirst.mock.calls[0]![1].aborted).toBe(true);
+    if (platform === 'Android') {
+      await next.refreshStatus();
+      expect(sendNext).not.toHaveBeenCalled();
+      respond({});
+    }
+    await Promise.all([firstRun, nextRun]);
+    respond({});
+    expect(reconcileFirst).not.toHaveBeenCalled();
+    expect(sendNext).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ operationId: 'stable-id' }),
+      expect.any(AbortSignal),
+      { session },
+    );
+    expect(sessionTransport).toHaveBeenCalledOnce();
     expect(await read()).toEqual([]);
+    if (platform === 'Android') expect(locks.mock.calls.some(([name]) => name.startsWith('sync:'))).toBe(false);
   });
 });

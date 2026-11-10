@@ -63,8 +63,8 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   sprawdzenia uprawnień przez API. Klucz `rodzina:pending-logout` zachowuje wartość.
 - Wspólny nadawca outboxa potwierdza użytkownika i rodzinę przez `/api/auth/me`
   przed pierwszą gotową operacją zadań, zakupów lub obiadów. Potwierdzenie
-  współdzielą moduły w obrębie jednego przebiegu i dzierżawy. Zmiana konta lub
-  generacji, utrata dzierżawy, przerwa transportu i koniec przebiegu je wygaszają.
+  współdzielą moduły w obrębie jednego przebiegu nadawcy. Zmiana konta lub
+  generacji, przerwa transportu i koniec przebiegu je wygaszają.
   `GET /api/auth/me` zwraca `401 UNAUTHORIZED` dla nieważnej sesji.
   `403 INVALID_CREDENTIALS` dotyczy błędnych danych logowania.
   Błąd `403` przy potwierdzaniu sesji nie czyści danych i pozwala ponowić
@@ -108,6 +108,18 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   outboxa odświeżają tę projekcję po zatwierdzeniu transakcji. Reguły zapisu
   i kolejkowania należą do modułu. Wspólny nadawca używa `SyncAdapter` danego konta
   do przygotowania, wysłania i rozliczenia operacji oraz obsługi utraty dostępu.
+  WWW kolejkuje wyłączną blokadę Web Locks `sync:<accountId>`. Po jej przyznaniu
+  nadawca ponownie odczytuje IndexedDB, wybiera operację i trzyma blokadę do
+  zatwierdzenia rozliczenia. Zamknięcie karty lub zatrzymanie nadawcy pozwala
+  oczekującej karcie przejąć pracę. Zatrzymanie osobno anuluje oczekiwanie
+  i przerywa aktywny transport. Ponowienie zachowuje `operationId`, także po
+  utracie odpowiedzi serwera. BroadcastChannel powiadamia pozostałe karty
+  po zatwierdzeniu transakcji. Powrót fokusu lub sieci odświeża stan z IndexedDB.
+  Przy braku Web Locks lub odmowie dostępu WWW wstrzymuje synchronizację,
+  zgłasza problem z pamięcią offline i zachowuje kolejkę na urządzeniu.
+  APK z pojedynczym WebView szereguje przebiegi nadawcy w pamięci procesu.
+  Po zatrzymaniu następny przebieg czeka na zakończenie wywołania mostka Androida.
+  Blokady używane do przełączania magazynu nadal obowiązują w WebView.
   Zadania korzystają z tego trybu. Przed odczytem magazyn może przenieść starszy
   dziennik IndexedDB do outboxa i utrwalić zmiany wymagające sprawdzenia.
   Zadania dołączają do nadawcy po potwierdzeniu sesji i odświeżeniu dostępu do
@@ -131,8 +143,8 @@ zamknięcie połączeń starszych kart przez `versionchange`. Po zatwierdzeniu
 wersji ich żądania otwarcia wersji 3 i wcześniejszych są odrzucane. Zablokowana
 aktualizacja pokazuje polecenie zamknięcia pozostałych kart i ponowienia próby.
 Migracja kopiuje wszystkie cztery magazyny dotychczasowego konta, w tym
-identyfikatory operacji, kolejność, zależności, stan ponowień, dzierżawę nadawcy
-i niedokończone importy. Wykrycie rekordów różnych kont zatrzymuje migrację
+identyfikatory operacji, kolejność, zależności, stan ponowień i niedokończone
+importy. Wykrycie rekordów różnych kont zatrzymuje migrację
 i zachowuje źródło do odzyskania.
 
 Kopia i jej znacznik są zatwierdzane w jednej transakcji. Osobna transakcja
@@ -140,6 +152,12 @@ zapisuje w rejestrze docelową bazę, a wersja 5 usuwa magazyny źródłowe. Pod
 nazwą `rodzina-offline` zostaje tylko rejestr przełączenia i czyszczenia, który
 zarazem blokuje powrót starych klientów do zapisu. Po przerwaniu aktualizacji
 ponowne otwarcie pomija już zatwierdzoną kopię lub kończy usuwanie źródła.
+
+Przejście na Web Locks podnosi wersję rejestru do 6. `versionchange` zatrzymuje
+nadawców starszych kart i zamyka ich połączenia przed zatwierdzeniem aktualizacji.
+Starszy kod otwierający wersję 5 otrzymuje `VersionError`. Jeżeli karta blokuje
+aktualizację, trzeba ją zamknąć i ponowić próbę. Baza konta oraz jej kolejka
+pozostają w miejscu.
 
 Po nieudanej aktualizacji zachowaj pamięć aplikacji, zamknij starsze karty i
 uruchom ponownie tę samą wersję lub jej poprawkę. W APK użyj podpisanej

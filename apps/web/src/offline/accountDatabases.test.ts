@@ -42,7 +42,7 @@ async function seedLegacy() {
 
 async function expectCopied() {
   expect(await offlineOwner()).toBe(accountId);
-  const db = await open(legacyName, 5, () => {});
+  const db = await open(legacyName, 6, () => {});
   expect([...db.objectStoreNames]).toEqual(['routing']);
   db.close();
   for (const store of stores) {
@@ -158,7 +158,7 @@ it('resumes a blocked deletion and fences operations from before a quick return 
   await recoverPendingClear();
   expect(await offlineOwner()).toBeUndefined();
   expect(opening).not.toHaveBeenCalledWith(name, expect.anything());
-  expect(await indexedDB.databases()).toEqual([{ name: legacyName, version: 5 }]);
+  expect(await indexedDB.databases()).toEqual([{ name: legacyName, version: 6 }]);
   await activateOfflineAccount(accountId, true);
   const action = vi.fn(async () => {});
   await expect(transact('readonly', action, stale)).rejects.toMatchObject({ name: 'AbortError' });
@@ -168,7 +168,7 @@ it('resumes a blocked deletion and fences operations from before a quick return 
 
 it('rejects work after another tab changes the route before its storage event is delivered', async () => {
   await activateOfflineAccount(accountId);
-  const routing = await open(legacyName, 5, () => {});
+  const routing = await open(legacyName, 6, () => {});
   const other = 'family:other';
   try {
     await writeRoute(routing, { accountId: other, revision: 'new-session' });
@@ -183,4 +183,25 @@ it('rejects work after another tab changes the route before its storage event is
   expect(action).not.toHaveBeenCalled();
   expect(opening).not.toHaveBeenCalled();
   expect(await offlineOwner()).toBe(other);
+});
+
+it('fences a version 5 lease sender before the new routing version can access the existing queue', async () => {
+  const old = await open(legacyName, 5, (db) => db.createObjectStore('routing'));
+  await writeRoute(old, { accountId, revision: 'existing-route' });
+  const target = await open(name, 1, createAccountStores);
+  await runTransaction(target.transaction('outbox', 'readwrite'), async (tx) => {
+    for (const operation of records.outbox) tx.objectStore('outbox').add(operation);
+  });
+  target.close();
+
+  try {
+    await expect(activateOfflineAccount(accountId)).rejects.toThrow('zablokowana');
+  } finally {
+    old.close();
+  }
+  await activateOfflineAccount(accountId);
+  await expect(open(legacyName, 5, () => {})).rejects.toMatchObject({ name: 'VersionError' });
+  expect(await transact('readonly', async (tx) => requestValue(tx.objectStore('outbox').getAll()))).toEqual(
+    records.outbox,
+  );
 });

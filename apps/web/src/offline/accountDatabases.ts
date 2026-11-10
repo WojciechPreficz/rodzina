@@ -3,7 +3,8 @@ import { createAccountStores, open, requestValue, runTransaction, stores } from 
 const LEGACY_DB = 'rodzina-offline';
 const ROUTING = 'routing';
 const FENCED_VERSION = 4;
-const ROUTING_VERSION = 5;
+// Version 5 clients close on versionchange and cannot reopen to send via the old lease.
+const ROUTING_VERSION = 6;
 const COPY_KEY = ['__origin__', 'account-copy:1'];
 export const accountDatabaseName = (accountId: string) => `rodzina-${accountId}`;
 export const openAccount = (accountId: string) => open(accountDatabaseName(accountId), 1, createAccountStores);

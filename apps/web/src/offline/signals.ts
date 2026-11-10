@@ -20,7 +20,7 @@ export function notifyOutboxChanged(tx: IDBTransaction, accountId: string) {
     try {
       localStorage.setItem(OUTBOX_SIGNAL, JSON.stringify({ accountId, nonce: crypto.randomUUID() }));
     } catch {
-      // IDB remains authoritative; online/focus and lease timers also resume replay.
+      // IDB remains authoritative; online/focus and retry timers also resume replay.
     }
   });
 }

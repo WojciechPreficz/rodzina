@@ -194,6 +194,7 @@ it('reopens locally before sending and replays deterministic close/undo versions
 it.each(['response', 'snapshot'] as const)(
   'retries a lost %s with the same payload and atomically ACKs a complete snapshot',
   async (lost) => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
     const f = await fixture();
     await f.store.enqueue(listId, taskId, { type: 'update', data: { isDone: true } });
     if (lost === 'response') f.lose();

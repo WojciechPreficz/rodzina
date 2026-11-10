@@ -132,36 +132,3 @@ export async function recountOutboxBudgets(tx: IDBTransaction, accountId: string
     });
   }
 }
-
-export type Lease = { owner: string; epoch: number; expiresAt: number; generation: string };
-export async function acquireLease(tx: IDBTransaction, accountId: string, owner: string, now: number) {
-  const active = await assertContext(tx);
-  if (active.accountId !== accountId) throw new DOMException('Session changed', 'AbortError');
-  const store = tx.objectStore('metadata');
-  const old = (await requestValue<{ value: Lease } | undefined>(store.get([accountId, 'sender-lease'])))?.value;
-  if (old && old.owner !== owner && old.expiresAt > now && old.generation === active.generation) return;
-  const value: Lease = {
-    owner,
-    epoch: (old?.epoch ?? 0) + (old?.owner === owner && old.expiresAt > now ? 0 : 1),
-    expiresAt: now + 15000,
-    generation: active.generation,
-  };
-  store.put({ accountId, key: 'sender-lease', value });
-  return value;
-}
-export async function assertLease(tx: IDBTransaction, accountId: string, expected: Lease, now: number) {
-  const active = await assertContext(tx);
-  const lease = (
-    await requestValue<{ value: Lease } | undefined>(tx.objectStore('metadata').get([accountId, 'sender-lease']))
-  )?.value;
-  if (
-    active.accountId !== accountId ||
-    !lease ||
-    lease.owner !== expected.owner ||
-    lease.epoch !== expected.epoch ||
-    lease.expiresAt <= now ||
-    lease.generation !== active.generation
-  )
-    throw new DOMException('Sender lease lost', 'AbortError');
-  return lease;
-}

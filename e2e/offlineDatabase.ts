@@ -2,9 +2,9 @@ import type { Page } from '@playwright/test';
 
 export function offlineDatabaseName(page: Page) {
   return page.evaluate(async () => {
-    if (!(await indexedDB.databases()).some((db) => db.name === 'rodzina-offline' && db.version === 5)) return;
+    if (!(await indexedDB.databases()).some((db) => db.name === 'rodzina-offline' && (db.version ?? 0) >= 5)) return;
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const open = indexedDB.open('rodzina-offline', 5);
+      const open = indexedDB.open('rodzina-offline');
       open.onupgradeneeded = () => open.transaction!.abort();
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);

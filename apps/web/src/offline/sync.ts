@@ -1,22 +1,13 @@
 import { focusManager, onlineManager } from '@tanstack/react-query';
 import { assertOfflineReplayAge, OfflineOperationExpiredError, OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../api.js';
-import { getSessionGeneration } from '../platform.js';
+import { getSessionGeneration, isAndroid } from '../platform.js';
 import type { AccountSession } from '../session.js';
-import { accountToken, isAccountCurrent, transact, requestValue } from './database.js';
-import {
-  acquireLease,
-  assertLease,
-  completeOperation,
-  recountOutboxBudgets,
-  nextOperation,
-  readOperations,
-  type Operation,
-  type Lease,
-} from './outbox.js';
+import { accountToken, assertContext, isAccountCurrent, transact, requestValue } from './database.js';
+import { completeOperation, recountOutboxBudgets, nextOperation, readOperations, type Operation } from './outbox.js';
 import { publishSyncStatus, reportStorageIssue, storageError } from './status.js';
 import { offlineTransaction, type OfflineTransaction } from './transaction.js';
-import { notifyOutboxChanged, watchOutbox } from './signals.js';
+import { watchOutbox } from './signals.js';
 
 export type SyncRun = { session?: AccountSession };
 
@@ -39,42 +30,61 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
     else signal.addEventListener('abort', abort, { once: true });
   });
 }
+// Android has one application WebView. A replacement sender waits for the previous
+// native transport and its reconciliation to settle before using the bridge.
+let androidSender = Promise.resolve();
+function withSenderLock(accountId: string, android: boolean, signal: AbortSignal, work: () => Promise<void>) {
+  if (android) {
+    const turn = androidSender.then(async () => {
+      if (!signal.aborted) await work();
+    });
+    androidSender = turn.catch(() => {});
+    return abortable(turn, signal);
+  }
+  const locks = navigator.locks;
+  if (!locks) throw new Error('Przeglądarka nie obsługuje bezpiecznej synchronizacji offline.');
+  return locks.request(`sync:${accountId}`, { mode: 'exclusive', signal }, work);
+}
+
 export function startSync(accountId: string, adapters: SyncAdapter[], changed: () => Promise<void> | void) {
   const token = accountToken();
-  const owner = crypto.randomUUID();
+  const android = isAndroid();
   let active = true;
   let running: Promise<void> | undefined;
+  let waiting: AbortController | undefined;
   let controller: AbortController | undefined;
-  let lease: Lease | undefined;
+  let hidden = false;
   let revision = '';
   let preparation: SyncRun | undefined;
   let networkRevision = 0;
   let timer: number | undefined;
   let requested = false;
   const current = () => active && isAccountCurrent(token);
-  const transaction = <T>(action: (tx: IDBTransaction) => Promise<T>) => transact('readwrite', action, token);
-  const available = (op: Operation) => adapters.some((adapter) => adapter.module === op.module);
-  const expired = (op: Operation) =>
-    op.status !== 'needs-review' && Date.now() - op.submittedAt > OFFLINE_REPLAY_MAX_AGE_MS;
-  const inspect = () =>
+  const assertRunning = () => {
+    if (!current() || hidden) throw new DOMException('Sender context changed', 'AbortError');
+  };
+  const transaction = <T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => Promise<T>) =>
     transact(
-      'readonly',
-      async (tx) => ({
-        operations: await readOperations(tx, accountId),
-        held: (
-          await requestValue<{ value: Lease } | undefined>(tx.objectStore('metadata').get([accountId, 'sender-lease']))
-        )?.value,
-      }),
+      mode,
+      async (tx) => {
+        if ((await assertContext(tx)).accountId !== accountId)
+          throw new DOMException('Sender account changed', 'AbortError');
+        assertRunning();
+        const result = await action(tx);
+        assertRunning();
+        return result;
+      },
       token,
     );
+  const available = (op: Operation) => adapters.some((adapter) => adapter.module === op.module);
+  const inspect = () => transaction('readonly', (tx) => readOperations(tx, accountId));
   const schedule = async () => {
     window.clearTimeout(timer);
     timer = undefined;
-    if (!current() || !onlineManager.isOnline()) return;
-    const { operations, held } = await inspect();
+    if (!current() || hidden || !onlineManager.isOnline()) return;
+    const operations = await inspect();
     if (!current()) return;
     const now = Date.now();
-    const blockedUntil = held && held.owner !== owner ? held.expiresAt : 0;
     const due = operations.flatMap((op, index) => {
       if (op.status === 'needs-review') return [];
       const times = [op.submittedAt + OFFLINE_REPLAY_MAX_AGE_MS + 1];
@@ -83,13 +93,13 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         !op.dependsOn.length &&
         !operations.slice(0, index).some((parent) => parent.orderingKeys.some((key) => op.orderingKeys.includes(key)))
       )
-        times.push(Math.max(op.nextAttemptAt, blockedUntil));
+        times.push(op.nextAttemptAt);
       return times;
     });
     if (due.length) timer = window.setTimeout(wake, Math.min(2147483647, Math.max(1, Math.min(...due) - now)));
   };
   const status = async () => {
-    if (!current()) return;
+    if (!current() || hidden) return;
     const { operations, synced } = await transact(
       'readonly',
       async (tx) => ({
@@ -124,33 +134,16 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
       });
     }
   };
-  const run = async () => {
-    if (!current()) return;
+  const runLocked = async () => {
     const network = networkRevision;
-    const online = () => network === networkRevision && onlineManager.isOnline();
+    const online = () => !hidden && network === networkRevision && onlineManager.isOnline();
     let generation = getSessionGeneration();
     try {
-      await status();
       while (current() && online()) {
-        const preview = await inspect();
-        if (!current() || !online()) break;
-        const ready = nextOperation(preview.operations, Date.now(), available);
-        const heldByOther = preview.held && preview.held.owner !== owner && preview.held.expiresAt > Date.now();
-        const reviewParents = preview.operations.filter((op) => op.status === 'needs-review');
-        const needsClassification = preview.operations.some(
-          (op) =>
-            expired(op) ||
-            (op.status !== 'needs-review' &&
-              reviewParents.some(
-                (parent) =>
-                  op.dependsOn.includes(parent.operationId) ||
-                  (parent.sequence < op.sequence && parent.orderingKeys.some((key) => op.orderingKeys.includes(key))),
-              )),
-        );
-        if (!needsClassification && (!ready || heldByOther)) break;
-        const previousLease = lease;
-        const operation = await transaction(async (tx) => {
+        const operation = await transaction('readwrite', async (tx) => {
+          if (!online()) return;
           const operations = await readOperations(tx, accountId);
+          if (!online() || !current()) return;
           let classified = false;
           // Expiration is durable, even if the clock subsequently moves backwards.
           for (const op of operations) {
@@ -186,19 +179,16 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
           if (classified) await recountOutboxBudgets(tx, accountId);
           const op = nextOperation(operations, Date.now(), available);
           if (!op) return;
-          lease = await acquireLease(tx, accountId, owner, Date.now());
-          if (!lease) return;
           op.status = 'sending';
           tx.objectStore('outbox').put(op);
           await recountOutboxBudgets(tx, accountId);
           return op;
         });
         await status();
-        if (!operation || !current()) break;
+        if (!operation || !current() || !online()) break;
         const adapter = adapters.find((adapter) => adapter.module === operation.module);
         if (!adapter) continue;
-        const captured = lease!;
-        if (previousLease?.epoch !== captured.epoch || generation !== getSessionGeneration()) {
+        if (generation !== getSessionGeneration()) {
           preparation = undefined;
           generation = getSessionGeneration();
         }
@@ -210,45 +200,34 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
           if (!online() || generation !== getSessionGeneration())
             throw new DOMException('Sender context changed', 'AbortError');
         };
-        const renewal = window.setInterval(() => {
-          void transaction(async (tx) => {
-            const old = await assertLease(tx, accountId, captured, Date.now());
-            tx.objectStore('metadata').put({
-              accountId,
-              key: 'sender-lease',
-              value: { ...old, expiresAt: Date.now() + 15000 },
-            });
-          }).catch(() => request.abort());
-        }, 5000);
+        const transport = <T>(result: Promise<T>) => (android ? result : abortable(result, request.signal));
         const timeout = window.setTimeout(() => request.abort(), 60000);
         let confirmingSession = false;
         try {
           assertRequestCurrent();
           if (adapter.sessionTransport && !context.session) {
             confirmingSession = true;
-            const session = await abortable(
-              adapter.sessionTransport('/api/auth/me', { signal: request.signal }),
-              request.signal,
-            );
+            const session = await transport(adapter.sessionTransport('/api/auth/me', { signal: request.signal }));
             assertRequestCurrent();
             if (`${session.family.id}:${session.user.id}` !== accountId)
               throw new ApiRequestError('Sesja konta uległa zmianie.', 401, 'SESSION_CHANGED');
             context.session = session;
             confirmingSession = false;
           }
-          if (adapter.prepare) await abortable(adapter.prepare(operation, request.signal, context), request.signal);
+          if (adapter.prepare) await transport(adapter.prepare(operation, request.signal, context));
           if (!current()) break;
-          await transaction((tx) => assertLease(tx, accountId, captured, Date.now()));
+          await transaction('readonly', async () => {});
           assertRequestCurrent();
           assertOfflineReplayAge(operation.submittedAt);
-          const response = await abortable(adapter.send(operation, request.signal, context), request.signal);
+          const response = await transport(adapter.send(operation, request.signal, context));
           if (!current()) break;
           assertRequestCurrent();
-          await transaction(async (tx) => {
-            await assertLease(tx, accountId, captured, Date.now());
+          await transaction('readwrite', async (tx) => {
             const operations = await readOperations(tx, accountId);
             if (!operations.some((op) => op.operationId === operation.operationId)) return;
+            assertRequestCurrent();
             await adapter.reconcile(offlineTransaction(tx, accountId), operation, response);
+            assertRequestCurrent();
             completeOperation(tx, await readOperations(tx, accountId), operation);
             await recountOutboxBudgets(tx, accountId);
             tx.objectStore('metadata').put({ accountId, key: `last-sync:${operation.module}`, value: Date.now() });
@@ -256,14 +235,13 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         } catch (error) {
           if (!(error instanceof ApiRequestError)) preparation = undefined;
           else if (error.status === 403) delete context.session;
-          if (!current()) break;
+          if (!current() || hidden) break;
           if (error instanceof ApiRequestError && (error.status === 401 || error.code === 'SESSION_CHANGED')) {
             stop();
             window.dispatchEvent(new Event('rodzina:session-lost'));
             break;
           }
-          await transaction(async (tx) => {
-            await assertLease(tx, accountId, captured, Date.now());
+          await transaction('readwrite', async (tx) => {
             let old = (await readOperations(tx, accountId)).find((op) => op.operationId === operation.operationId);
             if (!old) return;
             const expired = error instanceof OfflineOperationExpiredError;
@@ -298,30 +276,53 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             await recountOutboxBudgets(tx, accountId);
           });
         } finally {
-          window.clearInterval(renewal);
           window.clearTimeout(timeout);
           controller = undefined;
         }
         await status();
       }
+    } finally {
+      preparation = undefined;
+    }
+  };
+  const run = async () => {
+    if (!current() || hidden) return;
+    try {
+      await status();
+      if (!current() || hidden || !onlineManager.isOnline()) return;
+      const operations = await inspect();
+      const now = Date.now();
+      const reviewParents = operations.filter((op) => op.status === 'needs-review');
+      const needsClassification = operations.some(
+        (op) =>
+          op.status !== 'needs-review' &&
+          (now - op.submittedAt > OFFLINE_REPLAY_MAX_AGE_MS ||
+            reviewParents.some(
+              (parent) =>
+                op.dependsOn.includes(parent.operationId) ||
+                (parent.sequence < op.sequence && parent.orderingKeys.some((key) => op.orderingKeys.includes(key))),
+            )),
+      );
+      if (
+        current() &&
+        !hidden &&
+        onlineManager.isOnline() &&
+        (needsClassification || nextOperation(operations, now, available))
+      ) {
+        const pending = new AbortController();
+        waiting = pending;
+        await withSenderLock(accountId, android, pending.signal, async () => {
+          waiting = undefined;
+          if (!pending.signal.aborted && current() && !hidden) await runLocked();
+        });
+      }
+      await status();
+      await schedule();
     } catch (error) {
       if (current() && !(error instanceof DOMException && error.name === 'AbortError'))
         reportStorageIssue(`Nie można zsynchronizować zmian. ${storageError(error)}`);
     } finally {
-      preparation = undefined;
-      if (current()) {
-        if (lease) {
-          const captured = lease;
-          lease = undefined;
-          await transaction(async (tx) => {
-            const old = await assertLease(tx, accountId, captured, Date.now());
-            tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...old, expiresAt: 0 } });
-            notifyOutboxChanged(tx, accountId);
-          }).catch(() => {});
-        }
-        await status().catch(() => {});
-        await schedule().catch(() => {});
-      }
+      waiting = undefined;
     }
   };
   const synchronize = () => {
@@ -344,12 +345,14 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
     }
     void synchronize();
   };
+  const interrupt = () => {
+    networkRevision++;
+    preparation = undefined;
+    waiting?.abort();
+    controller?.abort();
+  };
   const stopOnline = onlineManager.subscribe((isOnline) => {
-    if (!isOnline) {
-      networkRevision++;
-      preparation = undefined;
-      controller?.abort();
-    }
+    if (!isOnline) interrupt();
     wake();
   });
   const stopFocus = focusManager.subscribe((focused) => {
@@ -359,12 +362,24 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
   window.addEventListener('offline-account-changed', stop);
   window.addEventListener('offline-context-invalidated', stop);
   window.addEventListener('rodzina:session-lost', stop);
-  window.addEventListener('pagehide', stop);
+  const pageHide = (event: PageTransitionEvent) => {
+    if (!event.persisted) return stop();
+    hidden = true;
+    interrupt();
+    window.clearTimeout(timer);
+  };
+  const pageShow = () => {
+    if (!hidden) return;
+    hidden = false;
+    wake();
+  };
+  window.addEventListener('pagehide', pageHide);
+  window.addEventListener('pageshow', pageShow);
+  window.addEventListener('focus', wake);
   function stop() {
     if (!active) return;
     active = false;
-    preparation = undefined;
-    controller?.abort();
+    interrupt();
     window.clearTimeout(timer);
     stopOnline();
     stopFocus();
@@ -372,17 +387,10 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
     window.removeEventListener('offline-account-changed', stop);
     window.removeEventListener('offline-context-invalidated', stop);
     window.removeEventListener('rodzina:session-lost', stop);
-    window.removeEventListener('pagehide', stop);
+    window.removeEventListener('pagehide', pageHide);
+    window.removeEventListener('pageshow', pageShow);
+    window.removeEventListener('focus', wake);
     for (const adapter of adapters) publishSyncStatus(accountId, adapter.module);
-    if (lease) {
-      const captured = lease;
-      lease = undefined;
-      void transaction(async (tx) => {
-        const old = await assertLease(tx, accountId, captured, Date.now());
-        tx.objectStore('metadata').put({ accountId, key: 'sender-lease', value: { ...old, expiresAt: 0 } });
-        notifyOutboxChanged(tx, accountId);
-      }).catch(() => {});
-    }
   }
   wake();
   return { wake, stop, refreshStatus: status, synchronize, isActive: current };

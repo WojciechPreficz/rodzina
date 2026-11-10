@@ -1,15 +1,7 @@
 import './testSetup.js';
 import { describe, it, expect } from 'vitest';
 import { activateOfflineAccount, transact } from './database.js';
-import {
-  acquireLease,
-  appendOperation,
-  assertLease,
-  completeOperation,
-  nextOperation,
-  readOperations,
-  type Intent,
-} from './outbox.js';
+import { appendOperation, completeOperation, nextOperation, readOperations, type Intent } from './outbox.js';
 
 const account = 'family:user';
 const intent = (operationId: string, key = 'list:a', dependsOn: string[] = []): Intent => ({
@@ -62,14 +54,5 @@ describe('durable account outbox', () => {
       const operations = await readOperations(tx, account);
       expect(nextOperation(operations, Date.now())?.operationId).toBe(e.operationId);
     });
-  });
-  it('fences an old sender after lease takeover, including a clock jump', async () => {
-    await activateOfflineAccount(account);
-    const first = await transact('readwrite', (tx) => acquireLease(tx, account, 'first', 1000));
-    expect(await transact('readwrite', (tx) => acquireLease(tx, account, 'second', 2000))).toBeUndefined();
-    const second = await transact('readwrite', (tx) => acquireLease(tx, account, 'second', 20000));
-    expect(second!.epoch).toBe(first!.epoch + 1);
-    await expect(transact('readwrite', (tx) => assertLease(tx, account, first!, 2001))).rejects.toThrow('lease');
-    await transact('readwrite', (tx) => assertLease(tx, account, second!, 20001));
   });
 });
