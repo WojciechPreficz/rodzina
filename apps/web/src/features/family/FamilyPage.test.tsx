@@ -1,5 +1,5 @@
 import '../../offline/testing.js';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -169,11 +169,9 @@ describe('FamilyPage', () => {
       expect(button).toBeEnabled();
       return button;
     });
-    await act(async () => {
-      fireEvent.click(createInvitation);
-    });
-    expect(fetchMock).toHaveBeenCalledWith('/api/invitations', expect.objectContaining({ method: 'POST' }));
+    fireEvent.click(createInvitation);
     expect(await screen.findByRole('textbox', { name: 'Link' }, { timeout: 3000 })).toHaveValue(INVITE_LINK);
+    expect(fetchMock).toHaveBeenCalledWith('/api/invitations', expect.objectContaining({ method: 'POST' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Kopiuj' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(INVITE_LINK));
