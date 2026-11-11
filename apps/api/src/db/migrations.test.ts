@@ -32,3 +32,22 @@ it('accepts a migrated database without writing, and rejects a missing earlier m
   );
   expect(() => assertMigrationsApplied(connection, migrationsFolder)).toThrow('Baza wymaga migracji (1)');
 });
+
+it('enforces foreign keys and cascades deletes on a fresh application connection', () => {
+  const connection = database();
+  connections.push(connection);
+  expect(connection.sqlite.pragma('foreign_keys', { simple: true })).toBe(1);
+  migrate(connection.db, { migrationsFolder });
+  const insertSession = connection.sqlite.prepare(
+    "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES ('session', 'user', 1, 2000)",
+  );
+  expect(() => insertSession.run()).toThrow('FOREIGN KEY constraint failed');
+  connection.sqlite.exec(`
+    INSERT INTO families (id, name, join_code, created_at) VALUES ('family', 'Family', 'ABC123', 1);
+    INSERT INTO users (id, family_id, display_name, created_at, updated_at) VALUES ('user', 'family', 'User', 1, 1);
+  `);
+  insertSession.run();
+  connection.sqlite.exec("DELETE FROM families WHERE id = 'family'");
+  expect(connection.sqlite.prepare('SELECT id FROM users').all()).toEqual([]);
+  expect(connection.sqlite.prepare('SELECT id FROM sessions').all()).toEqual([]);
+});

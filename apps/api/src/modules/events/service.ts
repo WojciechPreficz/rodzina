@@ -167,6 +167,7 @@ export function createEventService(database: DatabaseConnection) {
               id: operationId,
               fingerprint,
               eventId: created.id,
+              createdAt: Date.now(),
             });
             return { operationId, status: 'created', eventId: created.id };
           },

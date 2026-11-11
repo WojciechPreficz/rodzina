@@ -16,7 +16,7 @@ it('adds pending requests without modifying existing families, passwords or sess
   try {
     // Build the schema as it existed immediately before this migration.
     const migrations = readMigrationFiles({ migrationsFolder: './apps/api/drizzle' });
-    for (const migration of migrations.slice(0, -1)) for (const sql of migration.sql) database.sqlite.exec(sql);
+    for (const migration of migrations.slice(0, 34)) for (const sql of migration.sql) database.sqlite.exec(sql);
     const now = Date.now();
     database.db
       .insert(families)

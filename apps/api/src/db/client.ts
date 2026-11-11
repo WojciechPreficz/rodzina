@@ -21,6 +21,7 @@ export function createDatabase(config: AppConfig): DatabaseConnection {
 
   const sqlite = new Database(filename);
   sqlite.function('random_uuid', () => randomUUID());
+  sqlite.pragma('foreign_keys = ON');
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('busy_timeout = 5000');
 

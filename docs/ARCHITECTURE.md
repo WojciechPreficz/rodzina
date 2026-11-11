@@ -25,7 +25,8 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   (wspólne schematy Zod, typy i czas).
 - API jest modularnym monolitem: modules/<moduł>/ zawiera routes,
   service, repository i testy. Połączenia z bazą centralizuje db/client.ts.
-  better-sqlite3 działa synchronicznie z WAL i busy_timeout=5000.
+  better-sqlite3 działa synchronicznie z WAL i busy_timeout=5000. Każde
+  połączenie jawnie włącza klucze obce (`PRAGMA foreign_keys = ON`).
 - Zapytania modułów są w repozytoriach. Moduły współpracują przez serwisy
   lub jawne porty. Serwis może objąć operacje kilku modułów jedną transakcją
   SQLite, np. zapis zadania wraz z przypomnieniami. ESLint blokuje import
@@ -621,7 +622,8 @@ Po powrocie do aplikacji kolejkę należy zsynchronizować na tym samym koncie.
   hasha, aby rozpoczęte wcześniej logowanie nie przywróciło sesji starym hasłem.
 - Operacje zakupów, zadań i obiadów zachowują identyfikatory przy ponowieniu.
   Automatyczne retry trwa do 30 dni; odpowiedzi idempotentne są przechowywane
-  90 dni. Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
+  90 dni. Starsze wpisy usuwa backup i obsługa kolejnej operacji z UUID.
+  Uprawnienia sprawdzamy także przy odtwarzaniu odpowiedzi.
   Mutacje API jawnie wybierają profil idempotencji zdefiniowany w module lub
   ustawiają `config.idempotency: false`. Rejestracja trasy z profilem wymaga
   synchronicznego handlera. Nieznany lub nieużywany profil przerywa start API.
@@ -775,8 +777,11 @@ i sukces w `event_import_operations`. Klucz obejmuje rodzinę, użytkownika i UU
 odcisk SHA-256 dotyczy zwalidowanych danych po uzupełnieniu wartości domyślnych.
 Retry identycznych danych zwraca zapisany identyfikator, inne dane — błąd pozycji
 `OPERATION_CONFLICT`. Przed replay sprawdzamy sesję, dostęp do rodziny i aktualną
-przynależność uczestników. Rejestr nie wygasa; znika po usunięciu konta lub rodziny,
-ale pozostaje po usunięciu wydarzenia, więc retry nie odtwarza usuniętej treści.
+przynależność uczestników. Rejestr ma 90 dni retencji i jest czyszczony po udanym
+backupie. W tym okresie wpis pozostaje także po usunięciu wydarzenia, więc retry
+nie odtwarza usuniętej treści. Usunięcie konta lub rodziny usuwa wpis od razu.
+Po usunięciu wpisu przez backup serwer może potraktować ponowienie jako nowy import.
+Wpisy sprzed migracji 0035 mają pełne 90 dni od jej wykonania.
 Zdjęcia i surowy OCR nie należą do kontraktu API. Dotychczasowy `POST /api/events`
 zachowuje kontrakt.
 

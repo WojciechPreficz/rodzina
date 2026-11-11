@@ -3,10 +3,10 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from 'fastify';
 import { z } from 'zod';
 import type { DatabaseConnection } from '../db/client.js';
+import { OPERATION_RETENTION_MS } from '../db/operation-retention.js';
 import { ApiError } from './errors.js';
 import { requireUser } from './session-auth.js';
 
-export const OPERATION_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const querySchema = z
   .object({
     operationId: z.string().uuid().optional(),

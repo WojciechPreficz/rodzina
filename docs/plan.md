@@ -51,6 +51,9 @@ Zweryfikowane lokalnie, oczekuje na CI.
 A-4: granice repozytoriów i serwisów API, wspólne reguły oraz warunki
 rodziny w zapisach. Zweryfikowane lokalnie, oczekuje na CI.
 
+A-5: indeksy, codzienne czyszczenie po backupie i jawne włączenie kluczy obcych.
+Zweryfikowane lokalnie, oczekuje na CI.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

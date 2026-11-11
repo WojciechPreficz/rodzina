@@ -240,11 +240,19 @@ describe('events API', () => {
     it.each(['admin', 'member', 'child'] as const)('imports for %s with the existing event rules', async (role) => {
       const user = { admin, member, child }[role];
       const items = [item({ ...single, participantIds: [child.id] }), item({ ...single, title: 'Drugie' })];
+      const startedAt = Date.now();
       const response = await importBatch(items, user);
+      const finishedAt = Date.now();
       expect(response.statusCode).toBe(200);
       expect(response.json().results).toEqual(
         items.map(({ operationId }) => ({ operationId, status: 'created', eventId: expect.any(String) })),
       );
+      const operations = database.db.select().from(schema.eventImportOperations).all();
+      expect(operations).toHaveLength(items.length);
+      for (const { createdAt } of operations) {
+        expect(createdAt).toBeGreaterThanOrEqual(startedAt);
+        expect(createdAt).toBeLessThanOrEqual(finishedAt);
+      }
       for (const result of response.json().results) {
         expect((await request('GET', `/api/events/${result.eventId}`, undefined, user)).json().event).toMatchObject({
           familyId,

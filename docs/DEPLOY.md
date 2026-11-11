@@ -211,8 +211,11 @@ Jedyny cron: backup dziennie o 03:15 czasu serwera. Sprawdź istniejący wpis,
 VACUUM INTO tworzy samodzielną bazę bez WAL/SHM. Pozostaje 14 kopii dziennych
 rodzina-YYYY-MM-DD.db, według Europe/Warsaw. Nowa kopia zastępuje dzisiejszą
 dopiero po sukcesie; błąd nie uruchamia rotacji i kończy job kodem 1.
-Po udanym backupie job sprząta wygasłe sesje i limity logowania; błąd sprzątania
-jest logowany oddzielnie i nie unieważnia kopii. Monitoruj log oraz wolne miejsce.
+Po udanym backupie job sprząta wygasłe sesje, limity logowania, zaproszenia i
+żądania resetu hasła oraz wpisy importu wydarzeń, zakupów i zadań starsze niż
+90 dni. Migracja 0035 rozpoczyna retencję dotychczasowych wpisów importu od
+dnia migracji. Błąd sprzątania jest logowany dla danej tabeli i nie unieważnia
+kopii. Monitoruj log oraz wolne miejsce.
 Przed aktualizacją wykonaj polecenie crona bez harmonogramu i przekierowania.
 Backup zachowuje także odpowiedzi idempotentne operacji; nie usuwaj ich ręcznie.
 Usuwanie konta lub rodziny czyści aktywną bazę, nie przepisuje istniejących

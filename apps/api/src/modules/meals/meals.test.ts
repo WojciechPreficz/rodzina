@@ -15,7 +15,7 @@ import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
-import { OPERATION_RETENTION_MS } from '../../http/idempotency.js';
+import { OPERATION_RETENTION_MS } from '../../db/operation-retention.js';
 import { createMealRepository } from './repository.js';
 
 describe('meals API', () => {

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createDatabase } from '../db/client.js';
+import { OPERATION_RETENTION_MS } from '../db/operation-retention.js';
 import { loadConfig } from '../config.js';
 import * as schema from '../db/schema.js';
 import { backupDatabase, deleteExpiredSessions, runBackup } from './backup-db.js';
@@ -57,6 +58,40 @@ describe('SQLite backup', () => {
         { scopeKey: 'active', count: 3, expiresAt: Date.now() + 60000 },
       ])
       .run();
+  };
+  const seedExpiredRecords = (now: number) => {
+    database.db
+      .insert(schema.taskLists)
+      .values({ id: 'list', familyId: 'family', ownerId: 'user', name: 'List', createdAt: now, updatedAt: now })
+      .run();
+    for (const [id, offset] of [
+      ['old', -1],
+      ['boundary', 0],
+      ['active', 1],
+    ] as const) {
+      const token = { id, tokenHash: id, expiresAt: now + offset };
+      database.db
+        .insert(schema.passwordResets)
+        .values({ ...token, userId: 'user' })
+        .run();
+      database.db
+        .insert(schema.invitations)
+        .values({ ...token, familyId: 'family', role: 'member', createdBy: 'user' })
+        .run();
+      const operation = { id, userId: 'user', fingerprint: id, createdAt: now - OPERATION_RETENTION_MS + offset };
+      database.db
+        .insert(schema.eventImportOperations)
+        .values({ ...operation, familyId: 'family', eventId: 'deleted-event' })
+        .run();
+      database.db
+        .insert(schema.shoppingOperations)
+        .values({ ...operation, response: '{}', status: 200 })
+        .run();
+      database.db
+        .insert(schema.taskOperations)
+        .values({ ...operation, listId: 'list', response: '{}', status: 200 })
+        .run();
+    }
   };
   beforeEach(() => {
     directory = mkdtempSync(path.join(tmpdir(), 'rodzina-backup-'));
@@ -114,7 +149,53 @@ describe('SQLite backup', () => {
       'backup_finished',
       'expired_sessions_deleted',
       'expired_auth_rate_limits_deleted',
+      ...Array<string>(5).fill('expired_records_deleted'),
     ]);
+  });
+
+  it('cleans expired tokens and old operations only in the live database after backup', () => {
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    seedSessions(now);
+    seedExpiredRecords(now);
+
+    runBackup(backupConfig());
+
+    const file = readdirSync(backupConfig().RODZINA_BACKUP_DIR).find((name) => name.endsWith('.db'))!;
+    const copy = connect(path.join(backupConfig().RODZINA_BACKUP_DIR, file));
+    for (const table of [schema.passwordResets, schema.invitations]) {
+      expect(database.db.select({ id: table.id }).from(table).all()).toEqual([{ id: 'active' }]);
+      expect(copy.db.select().from(table).all()).toHaveLength(3);
+    }
+    for (const table of [schema.eventImportOperations, schema.shoppingOperations, schema.taskOperations]) {
+      expect(database.db.select({ id: table.id }).from(table).orderBy(table.id).all()).toEqual([
+        { id: 'active' },
+        { id: 'boundary' },
+      ]);
+      expect(copy.db.select().from(table).all()).toHaveLength(3);
+    }
+  });
+
+  it('continues cleaning other tables when deleting expired records from one table fails', () => {
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    seedSessions(now);
+    seedExpiredRecords(now);
+    database.sqlite.exec(
+      "CREATE TRIGGER reject_reset_cleanup BEFORE DELETE ON password_resets BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+    );
+
+    runBackup(backupConfig());
+
+    expect(error).toHaveBeenCalledWith(
+      JSON.stringify({ event: 'expired_records_cleanup_failed', table: 'password_resets' }),
+    );
+    expect(database.db.select().from(schema.passwordResets).all()).toHaveLength(3);
+    expect(database.db.select().from(schema.invitations).all()).toHaveLength(1);
+    expect(database.db.select().from(schema.taskOperations).all()).toHaveLength(2);
   });
 
   it('logs a cleanup failure without failing or removing the completed backup', () => {
@@ -142,10 +223,13 @@ describe('SQLite backup', () => {
   it('does not clean sessions when the backup fails', () => {
     seedSessions(Date.now() - 1000);
     seedRateLimits();
+    seedExpiredRecords(Date.now());
     writeFileSync(backupConfig().RODZINA_BACKUP_DIR, 'blocked');
     expect(() => runBackup(backupConfig())).toThrow();
     expect(database.db.select().from(schema.sessions).all()).toHaveLength(3);
     expect(database.db.select().from(schema.authRateLimits).all()).toHaveLength(2);
+    expect(database.db.select().from(schema.passwordResets).all()).toHaveLength(3);
+    expect(database.db.select().from(schema.eventImportOperations).all()).toHaveLength(3);
   });
 
   it('logs a rate limit cleanup failure without failing the backup or session cleanup', () => {

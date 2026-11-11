@@ -21,6 +21,7 @@ export const meals = sqliteTable(
   (table) => [
     index('meals_family_date_idx').on(table.familyId, table.date),
     index('meals_family_updated_idx').on(table.familyId, table.updatedAt),
+    index('meals_created_by_idx').on(table.createdBy),
     check('meals_dinner_slot', sql`${table.slot} = 'dinner'`),
   ],
 );
@@ -47,22 +48,26 @@ export const families = sqliteTable('families', {
   createdAt: integer('created_at').notNull(),
 });
 
-export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
-  familyId: text('family_id')
-    .notNull()
-    .references(() => families.id, { onDelete: 'cascade' }),
-  displayName: text('display_name').notNull(),
-  email: text('email').unique(),
-  passwordHash: text('password_hash'),
-  pinHash: text('pin_hash'),
-  role: text('role', { enum: ['admin', 'member', 'child'] })
-    .notNull()
-    .default('member'),
-  color: text('color').notNull().default('#5c7cfa'),
-  createdAt: integer('created_at').notNull(),
-  updatedAt: integer('updated_at').notNull(),
-});
+export const users = sqliteTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    displayName: text('display_name').notNull(),
+    email: text('email').unique(),
+    passwordHash: text('password_hash'),
+    pinHash: text('pin_hash'),
+    role: text('role', { enum: ['admin', 'member', 'child'] })
+      .notNull()
+      .default('member'),
+    color: text('color').notNull().default('#5c7cfa'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('users_family_idx').on(table.familyId)],
+);
 
 export const sessions = sqliteTable(
   'sessions',
@@ -75,7 +80,7 @@ export const sessions = sqliteTable(
     createdAt: integer('created_at').notNull(),
     userAgent: text('user_agent'),
   },
-  (table) => [index('sessions_user_idx').on(table.userId)],
+  (table) => [index('sessions_user_idx').on(table.userId), index('sessions_expiry_idx').on(table.expiresAt)],
 );
 
 export const authRateLimits = sqliteTable(
@@ -88,29 +93,40 @@ export const authRateLimits = sqliteTable(
   (table) => [index('auth_rate_limits_expiry_idx').on(table.expiresAt)],
 );
 
-export const invitations = sqliteTable('invitations', {
-  id: text('id').primaryKey(),
-  familyId: text('family_id')
-    .notNull()
-    .references(() => families.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull().unique(),
-  role: text('role', { enum: ['admin', 'member'] }).notNull(),
-  createdBy: text('created_by')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: integer('expires_at').notNull(),
-  usedAt: integer('used_at'),
-});
+export const invitations = sqliteTable(
+  'invitations',
+  {
+    id: text('id').primaryKey(),
+    familyId: text('family_id')
+      .notNull()
+      .references(() => families.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    role: text('role', { enum: ['admin', 'member'] }).notNull(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at').notNull(),
+    usedAt: integer('used_at'),
+  },
+  (table) => [
+    index('invitations_expiry_idx').on(table.expiresAt),
+    index('invitations_created_by_idx').on(table.createdBy),
+  ],
+);
 
-export const passwordResets = sqliteTable('password_resets', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull().unique(),
-  expiresAt: integer('expires_at').notNull(),
-  usedAt: integer('used_at'),
-});
+export const passwordResets = sqliteTable(
+  'password_resets',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: integer('expires_at').notNull(),
+    usedAt: integer('used_at'),
+  },
+  (table) => [index('password_resets_expiry_idx').on(table.expiresAt)],
+);
 
 export const pendingRegistrations = sqliteTable(
   'pending_registrations',
@@ -154,7 +170,10 @@ export const documents = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [index('documents_family_expiry_idx').on(table.familyId, table.expiresOn)],
+  (table) => [
+    index('documents_family_expiry_idx').on(table.familyId, table.expiresOn),
+    index('documents_created_by_idx').on(table.createdBy),
+  ],
 );
 
 export const contactGroups = sqliteTable(
@@ -176,6 +195,7 @@ export const contactGroups = sqliteTable(
       .on(table.familyId)
       .where(sql`${table.isDefault} = 1`),
     index('contact_groups_family_idx').on(table.familyId),
+    index('contact_groups_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -203,6 +223,7 @@ export const contacts = sqliteTable(
       foreignColumns: [contactGroups.id, contactGroups.familyId],
     }),
     index('contacts_family_group_idx').on(table.familyId, table.groupId),
+    index('contacts_created_by_idx').on(table.createdBy),
   ],
 );
 
@@ -226,7 +247,10 @@ export const events = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [index('events_family_date_idx').on(table.familyId, table.startDate)],
+  (table) => [
+    index('events_family_date_idx').on(table.familyId, table.startDate),
+    index('events_created_by_idx').on(table.createdBy),
+  ],
 );
 
 export const eventImportOperations = sqliteTable(
@@ -240,12 +264,14 @@ export const eventImportOperations = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     id: text('id').notNull(),
     fingerprint: text('fingerprint').notNull(),
-    // Intentionally no event FK: deletion must not allow a retry to recreate the event.
+    // Keep the operation for replay even if the event is deleted during the retention window.
     eventId: text('event_id').notNull(),
+    createdAt: integer('created_at').notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.familyId, table.userId, table.id] }),
     index('event_import_operations_user_idx').on(table.userId),
+    index('event_import_operations_created_at_idx').on(table.createdAt),
   ],
 );
 
@@ -304,7 +330,9 @@ export const reminders = sqliteTable(
   (table) => [
     index('reminders_event_idx').on(table.familyId, table.eventId),
     index('reminders_document_idx').on(table.familyId, table.documentId),
+    index('reminders_task_idx').on(table.taskId, table.familyId),
     index('reminders_next_fire_idx').on(table.nextFireAt),
+    index('reminders_created_by_idx').on(table.createdBy),
     check(
       'reminders_one_source',
       sql`(${table.eventId} IS NOT NULL) + (${table.taskId} IS NOT NULL) + (${table.documentId} IS NOT NULL) = 1`,
@@ -329,7 +357,10 @@ export const shoppingLists = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [index('shopping_lists_family_position_idx').on(table.familyId, table.position)],
+  (table) => [
+    index('shopping_lists_family_position_idx').on(table.familyId, table.position),
+    index('shopping_lists_created_by_idx').on(table.createdBy),
+  ],
 );
 
 export const shoppingItems = sqliteTable(
@@ -350,7 +381,10 @@ export const shoppingItems = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [index('shopping_items_list_position_idx').on(table.listId, table.position)],
+  (table) => [
+    index('shopping_items_list_position_idx').on(table.listId, table.position),
+    index('shopping_items_created_by_idx').on(table.createdBy),
+  ],
 );
 
 export const shoppingHistory = sqliteTable(
@@ -464,6 +498,7 @@ export const tasks = sqliteTable(
   },
   (table) => [
     index('tasks_list_position_idx').on(table.listId, table.position),
+    index('tasks_created_by_idx').on(table.createdBy),
     uniqueIndex('tasks_id_list_idx').on(table.id, table.listId),
   ],
 );
@@ -488,6 +523,7 @@ export const taskSeries = sqliteTable(
   (table) => [
     uniqueIndex('task_series_id_list_idx').on(table.id, table.listId),
     index('task_series_list_idx').on(table.listId),
+    index('task_series_created_by_idx').on(table.createdBy),
     check('task_series_state', sql`${table.state} IN ('active', 'stopped', 'ended')`),
     check('task_series_version', sql`${table.version} >= 0`),
   ],
@@ -577,7 +613,10 @@ export const taskChecklistItems = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [index('task_checklist_task_position_idx').on(table.taskId, table.position)],
+  (table) => [
+    index('task_checklist_task_position_idx').on(table.taskId, table.position),
+    index('task_checklist_items_created_by_idx').on(table.createdBy),
+  ],
 );
 
 export const taskOperations = sqliteTable(

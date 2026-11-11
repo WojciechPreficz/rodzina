@@ -10,7 +10,8 @@ import { createDatabase } from '../db/client.js';
 import { loadConfig } from '../config.js';
 import * as schema from '../db/schema.js';
 import { registerApiErrorHandler } from './errors.js';
-import { OPERATION_RETENTION_MS, registerIdempotency } from './idempotency.js';
+import { OPERATION_RETENTION_MS } from '../db/operation-retention.js';
+import { registerIdempotency } from './idempotency.js';
 import { OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 
 const migrationsFolder = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../drizzle');
