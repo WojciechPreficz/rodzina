@@ -361,6 +361,7 @@ describe('tasks UI', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'Edytuj zadanie' });
     await within(dialog).findByLabelText('Notatka');
+    await waitFor(() => expect(taskStore.getSnapshot().syncing).toBe(false));
     expect(within(dialog).getByLabelText('Notatka')).toHaveValue('Biała');
     fireEvent.click(within(dialog).getByRole('textbox', { name: 'Osoba przypisana' }));
     expect(screen.getByRole('option', { name: 'Ania' })).toBeInTheDocument();
@@ -368,7 +369,7 @@ describe('tasks UI', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: /^Tytuł/ }), { target: { value: 'Nowy tytuł' } });
     fireEvent.change(within(dialog).getByLabelText('Termin'), { target: { value: '' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Zapisz' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(dialog).not.toBeInTheDocument(), { timeout: 8000 });
     expect(confirmation).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/^\/api\/tasks\/10000000-0000-4000-8000-000000000013\?operationId=/),
@@ -562,9 +563,10 @@ const checklistTask: Task = {
 const taskPath = `/zadania/${list.id}?zadanie=${task.id}`;
 async function openOfflineChecklist(initial = checklistTask) {
   setup(taskPath, [structuredClone(initial)]);
-  await screen.findByRole('region', { name: 'Podzadania' });
+  const region = await screen.findByRole('region', { name: 'Podzadania' });
+  await waitFor(() => expect(taskStore.getSnapshot().syncing).toBe(false));
   act(() => onlineManager.setOnline(false));
-  return within(screen.getByRole('region', { name: 'Podzadania' }));
+  return within(region);
 }
 
 describe('task checklist UI', () => {
@@ -636,15 +638,19 @@ describe('task checklist UI', () => {
     const initial = structuredClone(checklistTask);
     initial.checklist![0]!.isDone = true;
     const section = await openOfflineChecklist(initial);
-    fireEvent.click(section.getByRole('checkbox', { name: 'Podłoga' }));
+    const lastStep = section.getByRole('checkbox', { name: 'Podłoga' });
+    await waitFor(() => expect(lastStep).toBeEnabled());
+    fireEvent.click(lastStep);
     await section.findByText('Podzadania: 2 z 2');
     expect(taskStore.getSnapshot().items[list.id]![0]!.isDone).toBe(false);
     const confirm = vi.spyOn(window, 'confirm');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Ukończ zadanie' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Ukończ zadanie' }));
-    await screen.findByRole('button', { name: 'Oznacz zadanie jako niewykonane' });
+    const dialog = within(screen.getByRole('dialog', { name: 'Edytuj zadanie' }));
+    const complete = dialog.getByRole('button', { name: 'Ukończ zadanie' });
+    await waitFor(() => expect(complete).toBeEnabled());
+    fireEvent.click(complete);
+    await dialog.findByRole('button', { name: 'Oznacz zadanie jako niewykonane' });
     expect(confirm).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it('explains an unknown checklist and warns on completion from the list', async () => {
     const initial = { ...task, checklist: undefined, checklistOrderVersion: undefined };

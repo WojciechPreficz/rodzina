@@ -42,9 +42,11 @@ it('adds lookup indexes to a backup of the previous schema and preserves existin
     const { file } = backupDatabase(source, path.join(directory, 'backup'));
     copy = connect(file);
 
-    const before = Date.now();
+    // Use SQLite's clock for both bounds, since its resolution can differ from Date.now().
+    const clock = copy.sqlite.prepare<[], number>("SELECT CAST(unixepoch('subsec') * 1000 AS INTEGER)").pluck();
+    const before = clock.get()!;
     migrate(copy.db, { migrationsFolder });
-    const after = Date.now();
+    const after = clock.get()!;
     migrate(copy.db, { migrationsFolder });
     assertMigrationsApplied(copy, migrationsFolder);
     const readRows = (connection: ReturnType<typeof connect>, table: string) =>

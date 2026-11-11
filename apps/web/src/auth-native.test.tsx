@@ -13,7 +13,7 @@ import type { AuthUser, Family } from '@rodzina/shared';
 import { AppSession as AuthProvider } from './AppSession.js';
 import { useMe } from './sessionContext.js';
 import { localScheduler } from './reminders/localSchedule.js';
-import { ACCOUNT_SIGNAL_KEY, clearDatabase } from './offline/database.js';
+import { ACCOUNT_SIGNAL_KEY, activateOfflineAccount, invalidateOfflineContext } from './offline/database.js';
 import {
   readShoppingData,
   SHOPPING_STORAGE_KEY,
@@ -87,14 +87,20 @@ describe('native session lifecycle', () => {
     request.mockResolvedValueOnce({ status: 200, body: JSON.stringify(session) });
     mount();
     await screen.findByText('Anna');
-    await clearDatabase();
-    const other = createShoppingStore();
-    await other.activate('family:other');
+    // Simulate a fresh tab using the same database and routing lock.
+    invalidateOfflineContext();
+    await activateOfflineAccount('family:other', true);
     await updateShoppingData('family:other', () =>
       emptyShopping({ ...session, user: { ...session.user, id: 'other' } }),
     );
-    other.clear();
-    window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_SIGNAL_KEY, newValue: 'changed' }));
+    fireEvent(
+      window,
+      new StorageEvent('storage', {
+        key: ACCOUNT_SIGNAL_KEY,
+        newValue: localStorage.getItem(ACCOUNT_SIGNAL_KEY),
+        storageArea: localStorage,
+      }),
+    );
     await screen.findByText('logged out');
     expect((await readShoppingData())?.session.user.id).toBe('other');
   });
