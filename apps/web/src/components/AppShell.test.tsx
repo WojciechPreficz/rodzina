@@ -11,7 +11,7 @@ import { AppShell } from './AppShell.js';
 import { AppSession as AuthProvider } from '../AppSession.js';
 import { addNavigationGuard } from '../nativeNavigation.js';
 import { theme, cssVariablesResolver } from '../theme.js';
-import { clearDatabase, transact } from '../offline/database.js';
+import { clearDatabase, offlineOwner, transact } from '../offline/database.js';
 
 function mockViewport(desktop: boolean) {
   vi.stubGlobal(
@@ -46,7 +46,9 @@ function renderShell(path = '/') {
 }
 
 describe('AppShell', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Finish routing initialization before any render can leave it running into the next test.
+    await offlineOwner();
     mockViewport(true);
     vi.stubGlobal(
       'fetch',
@@ -150,7 +152,10 @@ describe('AppShell', () => {
       fireEvent.click(logout);
       expect(guard).toHaveBeenCalledTimes(2);
       await waitFor(
-        () => expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' })),
+        () => {
+          expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' }));
+          expect(logout).toBeEnabled();
+        },
         { timeout: 3000 },
       );
     } finally {
