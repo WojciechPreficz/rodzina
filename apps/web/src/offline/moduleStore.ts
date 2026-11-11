@@ -82,13 +82,12 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
   let state: State<Snapshot, View> = { account: '' };
   let revision = 0;
   let request = 0;
-  let token = accountToken();
   let ready = Promise.resolve();
   let updates = Promise.resolve();
   let sender: ReturnType<typeof joinSync> | undefined;
   let stopWatching: (() => void) | undefined;
   const listeners = new Set<() => void>();
-  const current = (captured: number) => captured === revision && !!state.account && isAccountCurrent(token);
+  const current = (captured: number) => captured === revision && scope.current();
 
   // Reloads supersede reads, but only account changes invalidate module transactions.
   function createScope(account: string, token: number) {
@@ -99,7 +98,7 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
     };
     return captured;
   }
-  let scope = createScope('', token);
+  let scope = createScope('', accountToken());
 
   function emit(next: State<Snapshot, View>) {
     state = next;
@@ -139,9 +138,9 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
   }
 
   function load(prepare = false) {
-    const account = state.account;
-    if (!account || !isAccountCurrent(token)) return ready;
     const activeScope = scope;
+    if (!activeScope.current()) return ready;
+    const { account } = activeScope;
     const captured = ++revision;
     const current = () => captured === revision && activeScope.current();
     ready = (async () => {
@@ -156,8 +155,7 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
           async (tx) => {
             if (prepareRead) {
               if (!activeScope.current()) throw new DOMException('Session changed', 'AbortError');
-              if ((await assertContext(tx)).accountId !== account)
-                throw new DOMException('Session changed', 'AbortError');
+              assertContext(tx, account);
               await prepareRead(offlineTransaction(tx, account), account);
             }
             const record = await readAccountCache(tx, module, account);
@@ -204,7 +202,7 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
   ) {
     let durable: unknown;
     try {
-      durable = await writeCache(module, saved, token, assertCurrent);
+      durable = await writeCache(module, saved, scope.token, assertCurrent);
     } catch (cause) {
       assertCurrent();
       const issue = mode.writeError(storageError(cause));
@@ -228,12 +226,7 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
     whenReady,
     notify: () => emit({ ...state }),
     publishCommitted(captured: typeof scope, saved: Snapshot, changes: readonly Change[]) {
-      if (
-        definition.mode !== 'read-write' ||
-        captured !== scope ||
-        !captured.current() ||
-        saved.account !== scope.account
-      )
+      if (definition.mode !== 'read-write' || !captured.current() || saved.account !== captured.account)
         throw new DOMException('Session changed', 'AbortError');
       revision++;
       emit({ account: saved.account, saved, view: definition.project(saved, changes) });
@@ -249,11 +242,10 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
       };
     },
     activate(account: string) {
-      if (state.account === account && isAccountCurrent(token)) return whenReady();
+      if (scope.account === account && scope.current()) return whenReady();
       stop();
       revision++;
-      token = accountToken();
-      scope = createScope(account, token);
+      scope = createScope(account, accountToken());
       emit({ account });
       void load(true);
       return whenReady();
@@ -261,7 +253,7 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
     clear() {
       revision++;
       stop();
-      scope = createScope('', token);
+      scope = createScope('', accountToken());
       ready = Promise.resolve();
       emit({ account: '' });
     },
@@ -294,16 +286,10 @@ function createOfflineStore<Snapshot extends AccountSnapshot, Change, View, Cont
     async fetchSnapshot<Raw>(account: string, load: () => Promise<Raw>, toSnapshot: (raw: Raw) => unknown) {
       if (definition.mode !== 'read-only') throw new Error('Use the module transaction to refresh a writable cache');
       const captured = revision;
-      const capturedToken = token;
+      const activeScope = scope;
       const sequence = ++request;
       const assertCurrent = () => {
-        if (
-          captured !== revision ||
-          !isAccountCurrent(capturedToken) ||
-          sequence !== request ||
-          state.account !== account ||
-          !account
-        )
+        if (!activeScope.current() || activeScope.account !== account || captured !== revision || sequence !== request)
           throw new DOMException('Session changed', 'AbortError');
       };
       const raw = await load();

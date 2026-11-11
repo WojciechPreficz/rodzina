@@ -103,6 +103,42 @@ it('keeps the current account when checking its session returns 403', async () =
   expect(clearAccountData).not.toHaveBeenCalled();
 });
 
+it.each([200, 401])('keeps the newer session refresh when an older read finishes with %s', async (status) => {
+  const request = vi.fn().mockImplementation(authorized);
+  vi.stubGlobal('fetch', request);
+  const { result } = renderHook(() => useAccountLifecycle(services));
+  await act(async () => {});
+
+  let finish!: (response: Response) => void;
+  request.mockImplementationOnce(() => new Promise<Response>((resolve) => (finish = resolve)));
+  const older = result.current.value.refresh();
+  const updated = { ...session, user: { ...session.user, displayName: 'Anna Nowak' } };
+  request.mockResolvedValueOnce(new Response(JSON.stringify(updated)));
+  await act(async () => result.current.value.refresh());
+  await act(async () => {
+    finish(status === 401 ? unauthorized() : authorized());
+    await older;
+  });
+  expect(result.current.value.user).toEqual(updated.user);
+  expect(clearAccountData).not.toHaveBeenCalled();
+});
+
+it('finishes logout when the server session has already expired', async () => {
+  const request = vi.fn().mockImplementation(authorized);
+  vi.stubGlobal('fetch', request);
+  const { result } = renderHook(() => useAccountLifecycle(services));
+  await act(async () => {});
+  vi.mocked(clearAccountData).mockImplementationOnce(async (_reason, options) => {
+    options?.invalidateSession?.();
+    await options?.beforeQueryClear?.();
+  });
+  request.mockImplementationOnce(unauthorized);
+  await act(async () => result.current.value.logout());
+  expect(result.current.value.user).toBeNull();
+  expect(result.current.value.isLoading).toBe(false);
+  expect(localStorage.getItem(services.pendingLogoutKey)).toBeNull();
+});
+
 it('checks again after another tab changes the account', async () => {
   const request = vi.fn().mockImplementation(unauthorized);
   vi.stubGlobal('fetch', request);

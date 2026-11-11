@@ -1,8 +1,9 @@
 import { focusManager, onlineManager } from '@tanstack/react-query';
 import { assertOfflineReplayAge, OfflineOperationExpiredError, OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import { ApiRequestError } from '../api.js';
-import { getSessionGeneration, isAndroid } from '../platform.js';
+import { isAndroid } from '../platform.js';
 import type { AccountSession } from '../session.js';
+import { getSessionGeneration, isSessionCurrent } from '../sessionRequests.js';
 import { accountToken, assertContext, isAccountCurrent, transact, requestValue } from './database.js';
 import { completeOperation, recountOutboxBudgets, nextOperation, readOperations, type Operation } from './outbox.js';
 import { publishSyncStatus, reportStorageIssue, storageError } from './status.js';
@@ -67,9 +68,8 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
     transact(
       mode,
       async (tx) => {
-        if ((await assertContext(tx)).accountId !== accountId)
-          throw new DOMException('Sender account changed', 'AbortError');
         assertRunning();
+        assertContext(tx, accountId);
         const result = await action(tx);
         assertRunning();
         return result;
@@ -188,7 +188,7 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         if (!operation || !current() || !online()) break;
         const adapter = adapters.find((adapter) => adapter.module === operation.module);
         if (!adapter) continue;
-        if (generation !== getSessionGeneration()) {
+        if (!isSessionCurrent(generation)) {
           preparation = undefined;
           generation = getSessionGeneration();
         }
@@ -197,7 +197,8 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
         controller = request;
         const assertRequestCurrent = () => {
           request.signal.throwIfAborted();
-          if (!online() || generation !== getSessionGeneration())
+          assertRunning();
+          if (!online() || !isSessionCurrent(generation))
             throw new DOMException('Sender context changed', 'AbortError');
         };
         const transport = <T>(result: Promise<T>) => (android ? result : abortable(result, request.signal));
@@ -215,12 +216,11 @@ export function startSync(accountId: string, adapters: SyncAdapter[], changed: (
             confirmingSession = false;
           }
           if (adapter.prepare) await transport(adapter.prepare(operation, request.signal, context));
-          if (!current()) break;
+          assertRequestCurrent();
           await transaction('readonly', async () => {});
           assertRequestCurrent();
           assertOfflineReplayAge(operation.submittedAt);
           const response = await transport(adapter.send(operation, request.signal, context));
-          if (!current()) break;
           assertRequestCurrent();
           await transaction('readwrite', async (tx) => {
             const operations = await readOperations(tx, accountId);

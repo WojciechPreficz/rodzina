@@ -115,8 +115,22 @@ serwera i ręcznego odtworzenia brakujących zmian po imporcie.
 Podpisana aktualizacja APK bez reinstalacji na fizycznym telefonie: niewykonana.
 Do odbioru pozostaje aktualizacja z APK 15 do 16 z oczekującą zmianą,
 import, ponowne uruchomienie offline i synchronizacja po odzyskaniu sieci.
-Status regresji: zweryfikowane lokalnie w Vitest i Playwright headless przy
-390 i 1280 px, oczekuje na CI.
+Status regresji: Vitest i Playwright headless przy 390 i 1280 px oraz CI
+dla `46ea0da` zakończyły się sukcesem.
+
+## A-1.2–A-1.5 — przebudowa silnika offline
+
+- A-1.2 przeniósł import `localStorage` na osobny ekran odzyskiwania. Próg
+  zgodności i termin wycofania migratora pozostają do zatwierdzenia według A-1.1.
+- A-1.3 przeniósł dane i kolejkę do osobnej bazy konta z możliwością
+  wznowienia przerwanej migracji.
+- A-1.4 zastąpił dzierżawę nadawcy blokadą Web Locks na WWW i szeregowaniem
+  w procesie APK. CI dla `d65f43e` zakończyło się sukcesem. Odbiór na fizycznym
+  APK pozostaje otwarty.
+- A-1.5 współdzieli unieważnianie żądań w cyklu życia sesji i transporcie.
+  Zweryfikowane lokalnie, oczekuje na CI. Odbiór A-1 wymaga też prób na
+  fizycznym telefonie według
+  [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 
 ## Potwierdzenie założenia rodziny przez e-mail
 

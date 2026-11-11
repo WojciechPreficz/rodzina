@@ -411,11 +411,14 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       WWW po aktualizacji. Zmienić konto i sprawdzić, że poprzednia sesja,
       dane oraz spóźnione odpowiedzi nie wracają; sprawdzić też wylogowanie
       offline i 401 po odzyskaniu sieci. Próby właściciela pozostają niepotwierdzone.
-- [ ] A-1.3: na fizycznym telefonie zaktualizować podpisane APK ze wspólną bazą
+- [ ] Odbiór A-1 na fizycznym telefonie. Zaktualizować bez reinstalacji
+      podpisane APK 15 do 16 z oczekującą zmianą i potwierdzić import.
+      Sprawdzić też aktualizację podpisanego APK ze wspólną bazą
       `rodzina-offline` i oczekującą kolejką. Bez sieci zakończyć proces i
       ponownie otworzyć aplikację. Sprawdzić sesję, snapshoty i zachowanie
       kolejki po przejściu do bazy konta, a po odzyskaniu sieci wysłanie zmian
-      bez duplikatów. Próba na fizycznym APK pozostaje niewykonana.
+      bez duplikatów. Zmienić konto i wylogować się, sprawdzając izolację
+      danych i usunięcie alarmów. ADB nie wykrył telefonu podczas A-1.5.
 - [ ] Wylogowanie, utrata sesji i zmiana konta, również w drugiej karcie,
       usuwają właściwe dane i alarmy; spóźniona odpowiedź ich nie odtwarza
       ani nie usuwa danych nowego konta. Sprawdzić odtworzenie sesji w APK.

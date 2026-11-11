@@ -51,8 +51,7 @@ export async function readOperations(tx: IDBTransaction, accountId: string): Pro
   return operations.sort((a, b) => a.sequence - b.sequence);
 }
 export async function appendOperation(tx: IDBTransaction, accountId: string, module: string, intent: Intent) {
-  const active = await assertContext(tx);
-  if (active.accountId !== accountId) throw new DOMException('Session changed', 'AbortError');
+  assertContext(tx, accountId);
   const operations = await readOperations(tx, accountId);
   if (operations.some((op) => op.operationId === intent.operationId))
     throw new Error('Ta operacja jest już zapisana w kolejce.');

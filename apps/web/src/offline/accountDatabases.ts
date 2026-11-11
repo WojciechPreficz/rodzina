@@ -10,7 +10,7 @@ export const accountDatabaseName = (accountId: string) => `rodzina-${accountId}`
 export const openAccount = (accountId: string) => open(accountDatabaseName(accountId), 1, createAccountStores);
 export type ClearMode = 'yes' | 'session-lost' | 'sign-in';
 export type Route = { accountId?: string; revision: string; pending?: ClearMode | 'delete' };
-export type Active = { accountId: '__origin__'; key: 'active'; value: { accountId: string; generation: string } };
+export type Active = { accountId: '__origin__'; key: 'active'; value: { accountId: string } };
 
 export function readRoute(db: IDBDatabase) {
   return runTransaction(db.transaction(ROUTING), async (tx) =>

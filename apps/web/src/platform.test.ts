@@ -49,7 +49,7 @@ describe('Android API transport', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('discards a response started before an account change', async () => {
+  it.each([200, 401])('discards a late native %s before applying session or alarm effects', async (status) => {
     let finish!: (value: { status: number; body: string }) => void;
     request.mockImplementationOnce(
       () =>
@@ -57,10 +57,18 @@ describe('Android API transport', () => {
           finish = resolve;
         }),
     );
-    const pending = apiFetch('/api/events');
-    invalidateSessionRequests();
-    finish({ status: 200, body: '{"title":"Previous account"}' });
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    const lost = vi.fn();
+    window.addEventListener('rodzina:session-lost', lost);
+    try {
+      const pending = apiFetch('/api/events');
+      invalidateSessionRequests();
+      finish({ status, body: '{"title":"Previous account"}' });
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(lost).not.toHaveBeenCalled();
+      expect(localScheduler.clear).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('rodzina:session-lost', lost);
+    }
     await clearNativeSession();
     expect(clearSession).toHaveBeenCalledOnce();
   });

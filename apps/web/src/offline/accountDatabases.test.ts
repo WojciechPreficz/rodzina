@@ -166,10 +166,22 @@ it('resumes a blocked deletion and fences operations from before a quick return 
   expect(action).not.toHaveBeenCalled();
 });
 
-it('rejects work after another tab changes the route before its storage event is delivered', async () => {
+it('discards a routing connection opened across local invalidation', async () => {
+  const put = IDBObjectStore.prototype.put;
+  vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(function (this: IDBObjectStore, value, key) {
+    void closeDatabase();
+    return put.call(this, value, key);
+  });
+  await expect(offlineOwner()).rejects.toMatchObject({ name: 'AbortError' });
+
+  const opening = vi.spyOn(indexedDB, 'open');
+  await expect(offlineOwner()).resolves.toBeUndefined();
+  expect(opening).toHaveBeenCalledWith(legacyName, 6);
+});
+
+it.each([accountId, 'family:other'])('rejects work before the remote route signal arrives for %s', async (other) => {
   await activateOfflineAccount(accountId);
   const routing = await open(legacyName, 6, () => {});
-  const other = 'family:other';
   try {
     await writeRoute(routing, { accountId: other, revision: 'new-session' });
   } finally {

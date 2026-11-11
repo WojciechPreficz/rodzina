@@ -21,12 +21,12 @@ export const SESSION_KEY = 'account-session:1';
 const ROUTING_LOCK = 'offline-account-routing:1';
 let routing: IDBDatabase | undefined;
 let connection: { accountId: string; db: IDBDatabase } | undefined;
-let epoch = 0;
+let contextVersion = 0;
 let revision: string | undefined;
-let context: Active['value'] | undefined;
+let activeAccount: string | undefined;
 const transactions = new Set<IDBTransaction>();
-export const accountToken = () => epoch;
-export const isAccountCurrent = (token: number) => token === epoch;
+export const accountToken = () => contextVersion;
+export const isAccountCurrent = (token: number) => token === contextVersion;
 
 function closeAccount() {
   for (const transaction of transactions) abort(transaction);
@@ -35,9 +35,9 @@ function closeAccount() {
 }
 
 export function invalidateOfflineContext() {
-  epoch++;
+  contextVersion++;
   revision = undefined;
-  context = undefined;
+  activeAccount = undefined;
   closeAccount();
 }
 
@@ -61,7 +61,12 @@ function withRoutingLock<T>(work: () => Promise<T>, mode: LockMode = 'exclusive'
 
 async function routingDatabase() {
   if (routing) return routing;
+  const token = accountToken();
   const db = await initializeRouting();
+  if (!isAccountCurrent(token)) {
+    db.close();
+    throw changed();
+  }
   db.onversionchange = () => {
     db.close();
     if (routing !== db) return;
@@ -73,7 +78,7 @@ async function routingDatabase() {
 }
 
 function assertCurrent(token: number) {
-  if (token !== epoch) throw changed();
+  if (!isAccountCurrent(token)) throw changed();
 }
 
 async function currentRoute(db: IDBDatabase, token: number) {
@@ -99,7 +104,7 @@ async function withCurrentRoute<T>(token: number, work: (route: Route) => Promis
   return withRoutingLock(async () => work(await currentRoute(db, token)), 'shared');
 }
 
-export async function offlineOwner(token = epoch) {
+export async function offlineOwner(token = accountToken()) {
   return withCurrentRoute(token, async (route) => route.accountId);
 }
 
@@ -107,7 +112,7 @@ async function accountConnection(accountId: string, token: number) {
   assertCurrent(token);
   if (connection?.accountId === accountId) return connection.db;
   const db = await openAccount(accountId);
-  if (token !== epoch || (connection && connection.accountId !== accountId)) {
+  if (!isAccountCurrent(token) || (connection && connection.accountId !== accountId)) {
     db.close();
     throw changed();
   }
@@ -126,7 +131,7 @@ async function accountConnection(accountId: string, token: number) {
 export async function transact<T>(
   mode: IDBTransactionMode,
   action: (transaction: IDBTransaction) => Promise<T>,
-  token = epoch,
+  token = accountToken(),
 ): Promise<T> {
   return withCurrentRoute(token, async ({ accountId }) => {
     if (!accountId) throw changed();
@@ -144,11 +149,11 @@ export async function transact<T>(
   });
 }
 
-export async function assertContext(tx: IDBTransaction, captured = context) {
-  const active = await requestValue<Active | undefined>(tx.objectStore('metadata').get(['__origin__', 'active']));
-  if (!captured || active?.value.accountId !== captured.accountId || active.value.generation !== captured.generation)
-    throw changed();
-  return captured;
+export function assertContext(tx: IDBTransaction, accountId = activeAccount) {
+  // transact holds the routing lock and verifies its revision. Local invalidation
+  // drops the active account and aborts transactions on the old connection.
+  if (!accountId || activeAccount !== accountId || tx.db !== connection?.db) throw changed();
+  return accountId;
 }
 export function checkPendingClear() {
   if (localStorage.getItem(CLEAR_PENDING_KEY)) throw pendingClearError();
@@ -186,7 +191,7 @@ export async function prepareOfflineRecovery(accountId: string, token: number) {
 }
 
 export async function activateOfflineAccount(accountId: string, confirmed = false) {
-  const token = epoch;
+  const token = accountToken();
   checkPendingClear();
   await participate(invalidateOfflineContext);
   return withRoutingLock(async () => {
@@ -194,7 +199,7 @@ export async function activateOfflineAccount(accountId: string, confirmed = fals
     const db = await routingDatabase();
     const route = await currentRoute(db, token);
     if (route.accountId && route.accountId !== accountId) {
-      if (!confirmed || context) throw changed();
+      if (!confirmed || activeAccount) throw changed();
       closeAccount();
       await beginClear(db, route, 'yes');
       assertCurrent(token);
@@ -213,19 +218,17 @@ export async function activateOfflineAccount(accountId: string, confirmed = fals
     const tx = account.transaction('metadata', 'readwrite', { durability: 'strict' });
     transactions.add(tx);
     try {
-      const active = await runTransaction(tx, async (tx) => {
+      const created = await runTransaction(tx, async (tx) => {
         const store = tx.objectStore('metadata');
         const old = await requestValue<Active | undefined>(store.get(['__origin__', 'active']));
-        if (context && old?.value.generation !== context.generation) throw changed();
         if (old && old.value.accountId !== accountId) throw changed();
         if (suspended) store.delete(['__origin__', 'suspended']);
-        const value = old?.value ?? { accountId, generation: crypto.randomUUID() };
-        if (!old) store.put({ accountId: '__origin__', key: 'active', value });
-        return { value, created: !old };
+        if (!old) store.put({ accountId: '__origin__', key: 'active', value: { accountId } });
+        return !old;
       });
       assertCurrent(token);
-      context = active.value;
-      if (confirmed && active.created) announceAccount(accountId);
+      activeAccount = accountId;
+      if (confirmed && created) announceAccount(accountId);
       return token;
     } finally {
       transactions.delete(tx);
@@ -334,7 +337,7 @@ export async function recoverPendingClear() {
 }
 
 export async function readCache(module: CacheModule, accountId?: string) {
-  const token = epoch;
+  const token = accountToken();
   if (!(await offlineOwner(token))) return;
   return transact(
     'readonly',
@@ -349,10 +352,8 @@ export async function readCache(module: CacheModule, accountId?: string) {
     token,
   );
 }
-export async function readAccountCache(tx: IDBTransaction, module: CacheModule, accountId: string) {
-  checkPendingClear();
-  const active = await assertContext(tx);
-  if (active.accountId !== accountId) throw changed();
+export function readAccountCache(tx: IDBTransaction, module: CacheModule, accountId: string) {
+  assertContext(tx, accountId);
   return requestValue<CacheEntry | undefined>(tx.objectStore('cache').get([accountId, module, 'snapshot']));
 }
 export class SnapshotBudgetError extends Error {}
@@ -394,16 +395,17 @@ export function putEntry(tx: IDBTransaction, entry: CacheEntry) {
     value: entry.chargedBytes,
   });
 }
-export async function writeCache(module: CacheModule, value: unknown, token = epoch, assertCurrent?: () => void) {
-  checkPendingClear();
-  if (token !== epoch) throw changed();
-  const captured = context;
+export async function writeCache(
+  module: CacheModule,
+  value: unknown,
+  token = accountToken(),
+  assertCurrent?: () => void,
+) {
   const entry = makeEntry(module, value);
   await transact(
     'readwrite',
     async (tx) => {
-      const active = await assertContext(tx, captured);
-      if (entry.accountId !== active.accountId) throw changed();
+      assertContext(tx, entry.accountId);
       assertCurrent?.();
       putEntry(tx, entry);
     },

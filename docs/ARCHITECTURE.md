@@ -48,10 +48,13 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   Przy braku nowego rekordu aplikacja po istniejącej migracji magazynów kopiuje
   sesję z cache `family`, a zapasowo z `shopping`. Zwraca ją dopiero po trwałym
   zapisie; kolejne odczyty korzystają z metadanych. Stare pola sesji i format
-  zakupów w wersji 1 pozostają dla zgodności. Migracja sprawdza tożsamość konta;
-  zapis i odczyt korzystają z bariery oraz generacji IndexedDB. Wylogowanie,
-  zmiana konta i utrata sesji czyszczą ten rekord, a spóźnione operacje
-  poprzedniego konta nie mogą go odtworzyć. Po 401 kolejka i zapisane podstawy
+  zakupów w wersji 1 pozostają dla zgodności. Migracja sprawdza tożsamość konta.
+  Cykl życia sesji i transport WWW oraz Androida używają wspólnego licznika
+  unieważniania żądań. Sprawdzenie przy mostku Androida poprzedza skutki
+  uboczne odpowiedzi, w tym czyszczenie alarmów. Rozpoczęcie odświeżenia
+  anuluje poprzedni odczyt `/api/auth/me` w tej samej sesji.
+  Wylogowanie, zmiana konta i utrata sesji czyszczą zapis sesji offline.
+  Po 401 kolejka i zapisane podstawy
   modułów zapisu pozostają zawieszone pod identyfikatorem rodziny i użytkownika.
   Dopiero potwierdzone logowanie na to samo konto pozwala wznowić wysyłkę.
   Logowanie na inne konto usuwa zawieszone dane przed aktywacją jego magazynu.
@@ -91,18 +94,22 @@ nie pobiera zmian w tle. Nie przywracamy PWA ani Web Push.
   przez `useSyncExternalStore`. Rejestracja w `registerAccountStore` wiąże
   aktywację i czyszczenie pamięci z cyklem życia konta. Każde konto ma bazę
   `rodzina-<accountId>`, gdzie `accountId` to `<familyId>:<userId>`. Zawiera ona
-  sesję, snapshoty, outbox, metadane modułów i stan importów. Web Locks
-  rozdziela operacje na magazynie od przełączeń i czyszczenia. Rewizja
-  rejestru oraz generacje sesji i magazynu odcinają spóźnione operacje
-  również po ponownym zalogowaniu na to samo konto.
-  Sygnał między kartami inicjuje ponowny odczyt IndexedDB.
+  sesję, snapshoty, outbox, metadane modułów i stan importów. Operacje na
+  bazie sprawdzają rewizję rejestru pod współdzieloną blokadą Web Locks.
+  Przełączenie i czyszczenie używają blokady wyłącznej oraz zmieniają rewizję,
+  także przy wznowieniu zawieszonej sesji tego samego konta. Lokalny token
+  magazynu odcina oczekujące operacje i spóźnione wyniki. Unieważnienie
+  zamyka połączenie i przerywa jego transakcje. Rekord `active` wskazuje konto
+  do odtworzenia przy starcie. Sygnał między kartami inicjuje ponowny odczyt
+  IndexedDB. Magazyny zachowują kontrolę kolejności równoległych odczytów
+  w obrębie jednego konta.
 - Moduł z odczytem offline wyprowadza widok ze snapshotu. Odświeżenie
   online waliduje dane, zapisuje je przez adapter cache i publikuje widok.
   Kontakty korzystają z tego trybu i formatu snapshotu w wersji 1.
   Kalendarz korzysta z tego samego trybu. Pobrane zakresy miesięczne,
   szczegóły wydarzeń, przypomnienia osobiste i wydarzenia odległe uzupełniają
   snapshot kolejno przez `updateSnapshot`, z kontrolą bieżącej rewizji
-  i generacji konta. Zachowuje format snapshotu w wersji 1.
+  i zakresu aktywacji magazynu. Zachowuje format snapshotu w wersji 1.
 - Moduł z zapisem offline odczytuje snapshot i uporządkowane zmiany w jednej
   transakcji, a następnie czysta funkcja wyprowadza z nich widok. Sygnały
   outboxa odświeżają tę projekcję po zatwierdzeniu transakcji. Reguły zapisu

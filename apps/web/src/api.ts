@@ -1,4 +1,5 @@
-import { getSessionGeneration, invalidateSessionRequests, isAndroid, nativeRequest } from './platform.js';
+import { isAndroid, nativeRequest } from './platform.js';
+import { assertSessionCurrent, getSessionGeneration, invalidateSessionRequests } from './sessionRequests.js';
 import { reportTransportFailure } from './connectivity.js';
 
 export type ApiError = { error?: { code?: string; message?: string }; message?: string };
@@ -50,7 +51,7 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
 
   const request = async () =>
     isAndroid()
-      ? await nativeRequest(input, init)
+      ? await nativeRequest(input, init, generation)
       : await fetch(input, {
           credentials: 'include',
           ...init,
@@ -62,11 +63,12 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
     response = await request();
     text = await response.text();
   } catch (error) {
-    if (generation !== getSessionGeneration()) throw new DOMException('Session changed', 'AbortError');
+    assertSessionCurrent(generation);
+    init.signal?.throwIfAborted();
     if (!(error instanceof Error && error.name === 'AbortError')) reportTransportFailure(true);
     throw error;
   }
-  if (generation !== getSessionGeneration()) throw new DOMException('Session changed', 'AbortError');
+  assertSessionCurrent(generation);
   init.signal?.throwIfAborted();
 
   let payload: ApiError | Record<string, unknown> | null = null;
@@ -80,7 +82,8 @@ export async function apiFetch<T>(input: string, init: RequestInit = {}): Promis
   }
 
   if (!response.ok) {
-    if (response.status === 401) {
+    // Logout already invalidated the session. A 401 confirms it can finish cleanup.
+    if (response.status === 401 && input !== '/api/auth/logout') {
       invalidateSessionRequests();
       window.dispatchEvent(new Event('rodzina:session-lost'));
     }

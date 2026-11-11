@@ -3,7 +3,8 @@ import type { AuthUser, Family, AuthMeResponse, AuthOkResponse, Member } from '@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { focusManager, onlineManager, QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiRequestError } from './api.js';
-import { clearNativeSession, invalidateSessionRequests, isAndroid } from './platform.js';
+import { clearNativeSession, isAndroid } from './platform.js';
+import { getSessionGeneration, invalidateSessionRequests, isSessionCurrent } from './sessionRequests.js';
 import type { OfflineData } from './offlineData.js';
 import type { AuthState } from './sessionContext.js';
 import { reportTransportFailure } from './connectivity.js';
@@ -53,18 +54,23 @@ export function useAccountLifecycle(services: AccountServices) {
   const [family, setFamily] = useState<Family | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const queryClient = useContext(QueryClientContext);
-  const generation = useRef(0);
-  const refreshRevision = useRef(0);
+  const refreshRequest = useRef<AbortController>(undefined);
   const currentSession = useRef<AccountSession | undefined>(undefined);
   const sessionRejected = useRef(false);
   const [familySyncedAt, setFamilySyncedAt] = useState<number>();
   const [familySyncError, setFamilySyncError] = useState<string>();
   const [familyConfirmed, setFamilyConfirmed] = useState(false);
+  const invalidateAccountSession = useCallback(() => {
+    services.invalidateAlarms();
+    invalidateSessionRequests();
+  }, [services]);
 
   const refresh = useCallback(async () => {
-    const requestGeneration = generation.current;
-    const revision = ++refreshRevision.current;
-    const current = () => requestGeneration === generation.current && revision === refreshRevision.current;
+    let generation = getSessionGeneration();
+    refreshRequest.current?.abort();
+    const request = new AbortController();
+    refreshRequest.current = request;
+    const current = () => isSessionCurrent(generation) && !request.signal.aborted;
     if (!currentSession.current && !pendingLogout()) {
       const cached = await readSession();
       if (!current()) return;
@@ -86,13 +92,23 @@ export function useAccountLifecycle(services: AccountServices) {
     try {
       if (!onlineManager.isOnline()) throw new TypeError('Offline');
       if (!isAndroid() && pendingLogout()) {
-        await apiFetch('/api/auth/logout', { method: 'POST' });
+        try {
+          await apiFetch('/api/auth/logout', { method: 'POST', signal: request.signal });
+        } catch (error) {
+          if (!(error instanceof ApiRequestError && error.status === 401)) throw error;
+        }
+        if (!current()) return;
         pendingLogout(false);
       }
-      const response = await apiFetch<AuthMeResponse>('/api/auth/me');
+      const response = await apiFetch<AuthMeResponse>('/api/auth/me', { signal: request.signal });
       if (!current()) return;
       if (currentSession.current && accountId(currentSession.current) !== accountId(response)) {
-        await clearAccountData('account-changed', { queryClient });
+        const clearing = clearAccountData('account-changed', {
+          queryClient,
+          invalidateSession: invalidateAccountSession,
+        });
+        generation = getSessionGeneration();
+        await clearing;
         if (!current()) return;
         setFamilySyncedAt(undefined);
         setFamilyConfirmed(false);
@@ -130,7 +146,7 @@ export function useAccountLifecycle(services: AccountServices) {
               return result;
             },
           })
-        : await listMembers();
+        : await listMembers(request.signal);
       if (!current()) return;
       const syncedAt = Date.now();
       const persisted = await saveOfflineData(response, members, syncedAt);
@@ -160,6 +176,7 @@ export function useAccountLifecycle(services: AccountServices) {
     readSession,
     saveSession,
     pendingLogout,
+    invalidateAccountSession,
   ]);
 
   useEffect(() => {
@@ -178,12 +195,12 @@ export function useAccountLifecycle(services: AccountServices) {
       if (onlineManager.isOnline() && focusManager.isFocused()) refreshAutomatically();
     }, SYNC_INTERVAL_MS);
     return () => {
-      refreshRevision.current += 1;
+      refreshRequest.current?.abort();
       reconnect();
       focus();
       window.clearInterval(interval);
       stopAccountPersistence(queryClient);
-      generation.current += 1;
+      invalidateSessionRequests();
     };
   }, [queryClient, refresh]);
 
@@ -194,13 +211,9 @@ export function useAccountLifecycle(services: AccountServices) {
       sessionRejected.current = removeStored;
       const clearing = clearAccountData(removeStored ? 'session-lost' : 'storage-changed', {
         queryClient,
-        invalidateSession: () => {
-          services.invalidateAlarms();
-          generation.current += 1;
-          invalidateSessionRequests();
-        },
+        invalidateSession: invalidateAccountSession,
       });
-      const cleanupGeneration = generation.current;
+      const generation = getSessionGeneration();
       setUser(null);
       setFamily(null);
       currentSession.current = undefined;
@@ -210,7 +223,7 @@ export function useAccountLifecycle(services: AccountServices) {
       void clearing
         .catch(() => {})
         .finally(() => {
-          if (generation.current === cleanupGeneration) setIsLoading(false);
+          if (isSessionCurrent(generation)) setIsLoading(false);
         });
     };
     const onSessionLost = () => loseSession(true);
@@ -236,20 +249,19 @@ export function useAccountLifecycle(services: AccountServices) {
       window.removeEventListener('offline-context-invalidated', onInvalidated);
       window.removeEventListener('offline-storage-resumed', onResumed);
     };
-  }, [queryClient, identity, refresh, services]);
+  }, [queryClient, identity, refresh, services, invalidateAccountSession]);
 
   const logout = async (mode?: 'queue-checked') => {
     sessionRejected.current = true;
     let cleanupError: unknown;
-    let logoutGeneration = generation.current;
-    const current = () => generation.current === logoutGeneration;
+    let generation = getSessionGeneration();
+    const current = () => isSessionCurrent(generation);
     // A concurrent tab may queue a change between the UI check and this transaction.
     await clearAccountData(mode === 'queue-checked' ? 'logout-checked' : 'logout', {
       queryClient,
       invalidateSession: () => {
-        services.invalidateAlarms();
-        logoutGeneration = ++generation.current;
-        invalidateSessionRequests();
+        invalidateAccountSession();
+        generation = getSessionGeneration();
       },
       beforeQueryClear: async () => {
         setIsLoading(true);
@@ -287,17 +299,15 @@ export function useAccountLifecycle(services: AccountServices) {
     const clearing = clearAccountData('account-changed', {
       queryClient,
       invalidateSession: () => {
-        services.invalidateAlarms();
-        generation.current += 1;
-        invalidateSessionRequests();
+        invalidateAccountSession();
         pendingLogout(false);
       },
     });
     currentSession.current = undefined;
     setUser(null);
     setFamily(null);
-    const requestGeneration = generation.current;
-    const current = () => generation.current === requestGeneration;
+    const generation = getSessionGeneration();
+    const current = () => isSessionCurrent(generation);
     try {
       await clearing;
       if (!current()) return;
@@ -322,7 +332,7 @@ export function useAccountLifecycle(services: AccountServices) {
       await saveOfflineData(currentSession.current);
       if (current()) void refresh();
     } catch (error) {
-      reportStorageIssue(`Nie można zmienić konta. ${storageError(error)}`);
+      if (current()) reportStorageIssue(`Nie można zmienić konta. ${storageError(error)}`);
     }
   };
 

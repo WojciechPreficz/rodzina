@@ -158,7 +158,7 @@ export function createRecordRecovery(
               tx.objectStore('metadata').put({
                 accountId: '__origin__',
                 key: 'active',
-                value: { accountId: staged.accountId, generation: crypto.randomUUID() },
+                value: { accountId: staged.accountId },
               });
             tx.objectStore('migration').put({ ...staged, phase: 'committed' });
           },

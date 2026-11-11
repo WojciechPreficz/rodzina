@@ -10,6 +10,7 @@ import {
   requestValue,
   SESSION_KEY,
   transact,
+  type Active,
 } from './offline/database.js';
 import { reportStorageIssue, storageError } from './offline/status.js';
 
@@ -22,7 +23,6 @@ const sessionSchema = z
     family: z.object({ id }).passthrough(),
   })
   .refine((session) => session.user.familyId === session.family.id);
-type Active = { value: { accountId: string; generation: string } };
 type Record = { value: AccountSession };
 type Legacy = { accountId: string; schemaVersion: number; payload: { account: string; session?: unknown } };
 const identity = (session: AccountSession) => `${session.family.id}:${session.user.id}`;
@@ -49,31 +49,27 @@ async function readStored(token: number, migrate: boolean) {
     token,
   );
   if (!active) return;
+  const accountId = active.value.accountId;
   if (!isAccountCurrent(token)) throw new DOMException('Session changed', 'AbortError');
-  await activateOfflineAccount(active.value.accountId);
+  await activateOfflineAccount(accountId);
   return transact(
     migrate ? 'readwrite' : 'readonly',
     async (tx) => {
-      const current = await assertContext(tx);
-      if (current.generation !== active.value.generation) throw new DOMException('Session changed', 'AbortError');
-      const saved = await readSavedAccountSession(tx, current.accountId);
+      assertContext(tx, accountId);
+      const saved = await readSavedAccountSession(tx, accountId);
       if (saved || !migrate) return saved;
       // Only the legacy session envelope is needed; module data and outboxes are independent.
       for (const module of ['family', 'shopping']) {
         const legacy = await requestValue<Legacy | undefined>(
-          tx.objectStore('cache').get([current.accountId, module, 'snapshot']),
+          tx.objectStore('cache').get([accountId, module, 'snapshot']),
         );
         if (!legacy) continue;
         const parsed = sessionSchema.safeParse(legacy.payload?.session);
         if (!parsed.success) continue;
-        if (
-          legacy.schemaVersion !== 1 ||
-          legacy.accountId !== current.accountId ||
-          legacy.payload.account !== current.accountId
-        )
+        if (legacy.schemaVersion !== 1 || legacy.accountId !== accountId || legacy.payload.account !== accountId)
           throw new Error('Zapisana sesja należy do innego konta.');
-        const value = minimalSession(parseSession(parsed.data, current.accountId));
-        tx.objectStore('metadata').put({ accountId: current.accountId, key: SESSION_KEY, value });
+        const value = minimalSession(parseSession(parsed.data, accountId));
+        tx.objectStore('metadata').put({ accountId, key: SESSION_KEY, value });
         return value;
       }
     },
@@ -105,8 +101,7 @@ export async function saveAccountSession(session: AccountSession): Promise<boole
     await transact(
       'readwrite',
       async (tx) => {
-        const active = await assertContext(tx);
-        if (active.accountId !== account) throw new DOMException('Session changed', 'AbortError');
+        assertContext(tx, account);
         tx.objectStore('metadata').put({ accountId: account, key: SESSION_KEY, value });
       },
       token,

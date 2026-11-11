@@ -158,7 +158,7 @@ export async function recoverPreviewData(validateAccount?: (account: string) => 
           tx.objectStore('metadata').put({
             accountId: '__origin__',
             key: 'active',
-            value: old?.value ?? { accountId, generation: crypto.randomUUID() },
+            value: old?.value ?? { accountId },
           });
         },
         token,

@@ -78,7 +78,8 @@ export async function withOfflineAccount<T>(
   return transact(
     mode,
     async (tx) => {
-      if (!scope.current() || (await assertContext(tx)).accountId !== scope.account) throw changed();
+      if (!scope.current()) throw changed();
+      assertContext(tx, scope.account);
       const result = await work(offlineTransaction(tx, scope.account));
       if (!scope.current()) throw changed();
       return result;
@@ -109,7 +110,7 @@ export function updateAccountRecord<T>(
   update: (value: unknown, save: (next: unknown) => void) => T,
 ) {
   return transact('readwrite', async (tx) => {
-    const { accountId } = await assertContext(tx);
+    const accountId = assertContext(tx);
     const store = tx.objectStore('metadata');
     const record = await requestValue<{ value: unknown } | undefined>(store.get([accountId, key]));
     return update(record?.value, (value) => store.put({ accountId, key, value }));
