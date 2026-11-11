@@ -1,12 +1,15 @@
 import '../../offline/testing.js';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import type { AuthUser, Family } from '@rodzina/shared';
-import { AppSession as AuthProvider } from '../../AppSession.js';
+import { AppSession } from '../../AppSession.js';
+import { AuthProvider } from '../../auth.js';
+import { reportTransportFailure } from '../../connectivity.js';
+import type { AuthState } from '../../sessionContext.js';
 import { FamilyPage } from './FamilyPage.js';
 
 const family: Family = { id: 'f1', name: 'Kowalscy', timezone: 'Europe/Warsaw', joinCode: 'ABC123' };
@@ -63,19 +66,20 @@ function mockApi(me: AuthUser) {
   return fetchMock;
 }
 
-function renderFamilyPage() {
+function renderFamilyPage(session?: AuthState) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   queryClients.push(queryClient);
+  const page = (
+    <Routes>
+      <Route path="/wiecej/rodzina" element={<FamilyPage />} />
+    </Routes>
+  );
 
   return render(
     <QueryClientProvider client={queryClient}>
       <MantineProvider>
         <MemoryRouter initialEntries={['/wiecej/rodzina']}>
-          <AuthProvider>
-            <Routes>
-              <Route path="/wiecej/rodzina" element={<FamilyPage />} />
-            </Routes>
-          </AuthProvider>
+          {session ? <AuthProvider value={session}>{page}</AuthProvider> : <AppSession>{page}</AppSession>}
         </MemoryRouter>
       </MantineProvider>
     </QueryClientProvider>,
@@ -162,16 +166,30 @@ describe('FamilyPage', () => {
     const fetchMock = mockApi(admin);
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    renderFamilyPage();
-
-    const createInvitation = await waitFor(() => {
-      const button = screen.getByRole('button', { name: 'Utwórz zaproszenie' });
-      expect(button).toBeEnabled();
-      return button;
+    onlineManager.setOnline(true);
+    reportTransportFailure(false);
+    renderFamilyPage({
+      user: admin,
+      family,
+      isLoading: false,
+      familyConfirmed: true,
+      familySyncError: undefined,
+      familySyncedAt: undefined,
+      refresh: vi.fn(async () => {}),
+      setSession: vi.fn(async () => {}),
+      logout: vi.fn(async () => {}),
     });
+
+    const createInvitation = screen.getByRole('button', { name: 'Utwórz zaproszenie' });
+    expect(createInvitation).toBeEnabled();
     fireEvent.click(createInvitation);
-    expect(await screen.findByRole('textbox', { name: 'Link' }, { timeout: 3000 })).toHaveValue(INVITE_LINK);
-    expect(fetchMock).toHaveBeenCalledWith('/api/invitations', expect.objectContaining({ method: 'POST' }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/invitations',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ role: 'member' }) }),
+      );
+      expect(screen.getByRole('textbox', { name: 'Link' })).toHaveValue(INVITE_LINK);
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Kopiuj' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(INVITE_LINK));
