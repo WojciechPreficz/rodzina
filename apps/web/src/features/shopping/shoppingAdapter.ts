@@ -9,12 +9,14 @@ import {
   putShoppingTransaction,
   shoppingUsesOutbox,
   shoppingOperation,
+} from './shoppingStorage.js';
+import {
   rangeListId,
   type ShoppingRange,
   type ShoppingData,
   type StoredShoppingOperation,
   type QueuedShoppingChange,
-} from './shoppingStorage.js';
+} from './shoppingSnapshot.js';
 
 export function shoppingIntent(op: QueuedShoppingChange, reviewReason?: string): Intent {
   const change = op.change;

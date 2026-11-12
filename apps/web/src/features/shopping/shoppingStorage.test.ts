@@ -12,7 +12,8 @@ import { onlineManager } from '@tanstack/react-query';
 import { readFileSync } from 'node:fs';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { readShoppingData, SHOPPING_STORAGE_KEY, updateShoppingData, emptyShopping } from './shoppingStorage.js';
+import { readShoppingData, updateShoppingData } from './shoppingStorage.js';
+import { emptyShopping, SHOPPING_STORAGE_KEY } from './shoppingSnapshot.js';
 import { createShoppingStore } from './shoppingOffline.js';
 import '../../offlineData.js';
 const fixture = JSON.parse(readFileSync('test-fixtures/offline/legacy-valid.json', 'utf8')) as {

@@ -2,7 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { normalizeShoppingName, type ShoppingItem } from '@rodzina/shared';
 import type { OfflineTransaction } from '../../offline/index.js';
 import { projectShopping, shoppingAccount, shoppingKey } from './shoppingOptimistic.js';
-import { putShoppingTransaction, readShoppingTransaction, rangeListId } from './shoppingStorage.js';
+import { putShoppingTransaction, readShoppingTransaction } from './shoppingStorage.js';
+import { rangeListId } from './shoppingSnapshot.js';
 
 export async function prepareMealExportSync(client: QueryClient, accountId: string) {
   // Shopping queries pause automatic refresh while meals sync. Cancel any earlier fetch.

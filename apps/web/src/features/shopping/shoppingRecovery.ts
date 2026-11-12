@@ -2,18 +2,17 @@ import { z } from 'zod';
 import { OFFLINE_REPLAY_MAX_AGE_MS } from '@rodzina/shared';
 import type { AccountSession } from '../../session.js';
 import { checkSnapshotBudget, createRecordRecovery } from '../../offline/index.js';
+import { putShoppingTransaction, shoppingBudgetError } from './shoppingStorage.js';
 import {
   emptyShopping,
   legacyRanges,
-  putShoppingTransaction,
-  shoppingBudgetError,
   shoppingCache,
   shoppingSessionSchema,
   SHOPPING_STORAGE_KEY,
   variablesSchema,
   type QueuedShoppingChange,
   type ShoppingData,
-} from './shoppingStorage.js';
+} from './shoppingSnapshot.js';
 
 export const JOURNAL_PREFIX = `${SHOPPING_STORAGE_KEY}:operation:`;
 const error = (message: string): never => {

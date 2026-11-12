@@ -1,6 +1,6 @@
 import { mergeQuantities, normalizeShoppingName, type ShoppingItem, type ShoppingList } from '@rodzina/shared';
 import type { ShoppingChange, MealShoppingProjection } from './shoppingApi.js';
-import { rangeListId, type ShoppingData, type StoredShoppingOperation } from './shoppingStorage.js';
+import { rangeListId, type ShoppingData, type StoredShoppingOperation } from './shoppingSnapshot.js';
 
 export type ShoppingAccount = { familyId: string; userId: string };
 export function shoppingAccount(account: string): ShoppingAccount {

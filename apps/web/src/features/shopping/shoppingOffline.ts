@@ -8,17 +8,14 @@ import type { ShoppingChange } from './shoppingApi.js';
 import { shoppingAdapter, shoppingIntent, takeOverShopping } from './shoppingAdapter.js';
 import { projectShopping } from './shoppingOptimistic.js';
 import {
-  emptyShopping,
   notifyShopping,
   putShoppingTransaction,
   readShoppingChanges,
   readShoppingTransaction,
-  shoppingCache,
-  shoppingRange,
-  rangeListId,
   shoppingUsesOutbox,
   updateShoppingData,
 } from './shoppingStorage.js';
+import { emptyShopping, shoppingCache, shoppingRange, rangeListId } from './shoppingSnapshot.js';
 
 const aborted = () => new DOMException('Session changed', 'AbortError');
 const writeError = (error: unknown) => `Nie można zapisać zakupów. ${storageError(error)}`;

@@ -11,11 +11,10 @@ export { createShoppingStore, registerShoppingStore, shoppingStore } from './sho
 export { projectShopping } from './shoppingOptimistic.js';
 export { ShoppingPage } from './ShoppingPage.js';
 export {
-  emptyShopping,
   putShoppingTransaction,
   readShoppingData,
   readShoppingTransaction,
-  SHOPPING_STORAGE_KEY,
   updateShoppingData,
 } from './shoppingStorage.js';
+export { emptyShopping, SHOPPING_STORAGE_KEY } from './shoppingSnapshot.js';
 export const loadShoppingRecovery = () => import('./shoppingRecovery.js');
