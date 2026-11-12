@@ -62,6 +62,10 @@ R-1: przybliżone alarmy Androida przy braku zgody na dokładne, z odtwarzaniem
 po restarcie i informacją o możliwym opóźnieniu. Końcowe CI i próba trybu
 przybliżonego na fizycznym telefonie do potwierdzenia według DEVELOPMENT.md.
 
+R-2: dokładne przypomnienia Androida bez ikony budzika, z automatycznym
+przeplanowaniem po aktualizacji APK. Końcowe CI i próba na fizycznym
+telefonie do potwierdzenia według DEVELOPMENT.md.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

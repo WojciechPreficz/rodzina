@@ -104,15 +104,11 @@ final class SystemAlarmScheduler {
                         target = operation(alarm.id());
                     }
                     if (target == null) throw new IllegalStateException("Alarm operation unavailable");
-                    if (!exact) {
+                    if (exact) {
+                        manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.fireAt(), target);
+                    } else {
                         manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.fireAt(), target);
-                        return;
                     }
-                    Intent show = new Intent(context, MainActivity.class).setAction(Intent.ACTION_MAIN)
-                        .addCategory(Intent.CATEGORY_LAUNCHER).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    PendingIntent showAlarm = PendingIntent.getActivity(context, 0, show,
-                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                    manager.setAlarmClock(new AlarmManager.AlarmClockInfo(alarm.fireAt(), showAlarm), target);
                 }
             });
         SharedPreferences.Editor editor = receipts.edit().clear();

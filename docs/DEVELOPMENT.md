@@ -424,6 +424,11 @@ APK, urządzenia i wyniki pomiarów, wymagają danych z prób.
       i faktyczny. Udziel zgody i sprawdź pojedyncze dokładne powiadomienie,
       następnie cofnij zgodę i sprawdź powrót do trybu przybliżonego po
       uruchomieniu APK.
+- [ ] R-2: na telefonie, który pokazuje systemową ikonę budzika, wyłącz inne
+      budziki i zaplanuj dokładne przypomnienie w starszym APK. Zaktualizuj
+      APK bez czyszczenia danych. Bez edycji wydarzenia i otwierania aplikacji
+      sprawdź zniknięcie ikony oraz pojedyncze powiadomienie przy zablokowanym
+      ekranie, bez sieci. Sprawdź też brak ikony dla nowego przypomnienia.
 - [x] Alarm dokumentu: termin za 31 dni i offset 30 dni, następnego dnia
       09:00 Europe/Warsaw. Odbiór po zamknięciu APK i po restarcie; kliknięcie
       otwiera zapisany podgląd. Zdalne odnowienie/usunięcie po sync anuluje

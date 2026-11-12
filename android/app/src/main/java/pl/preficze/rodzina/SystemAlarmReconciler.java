@@ -10,7 +10,8 @@ import java.util.Set;
 final class SystemAlarmReconciler {
     record Alarm(int id, long fireAt, String fingerprint) {
         String receipt(boolean exact) {
-            return exact ? fingerprint : "approximate:" + fingerprint;
+            // Legacy alarm-clock receipts contain only the fingerprint.
+            return (exact ? "exact-idle:" : "approximate:") + fingerprint;
         }
     }
     record Result(List<Integer> registeredIds, List<Integer> failedIds) {}

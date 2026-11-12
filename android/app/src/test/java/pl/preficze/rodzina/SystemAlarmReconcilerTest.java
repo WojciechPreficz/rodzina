@@ -32,8 +32,19 @@ public class SystemAlarmReconcilerTest {
         assertEquals(List.of(7), registry.registrations);
     }
 
-    @Test public void changesModeUnderTheSameIdEvenWithAnExistingOperation() {
+    @Test public void replacesAnExistingAlarmClockOnceAfterUpgrade() {
         Map<Integer, String> receipts = new HashMap<>(Map.of(7, "payload-a"));
+        Registry registry = new Registry();
+        registry.operations.add(7);
+
+        assertEquals(List.of(7), SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, true, registry).registeredIds());
+        assertEquals(alarm.receipt(true), receipts.get(7));
+        SystemAlarmReconciler.reconcile(List.of(alarm), new HashMap<>(receipts), Set.of(), now, true, registry);
+        assertEquals(List.of(7), registry.registrations);
+    }
+
+    @Test public void changesModeUnderTheSameIdEvenWithAnExistingOperation() {
+        Map<Integer, String> receipts = new HashMap<>(Map.of(7, alarm.receipt(true)));
         Registry registry = new Registry();
         registry.operations.add(7);
 
@@ -56,7 +67,7 @@ public class SystemAlarmReconcilerTest {
     }
 
     @Test public void recreatesMissingOperationsDespiteAnExistingReceipt() {
-        Map<Integer, String> receipts = new HashMap<>(Map.of(7, "payload-a"));
+        Map<Integer, String> receipts = new HashMap<>(Map.of(7, alarm.receipt(true)));
         Registry registry = new Registry();
         SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, true, registry);
         assertEquals(List.of(7), registry.registrations);
@@ -67,7 +78,7 @@ public class SystemAlarmReconcilerTest {
         Registry registry = new Registry();
         registry.operations.add(7);
         SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, true, registry);
-        assertEquals("payload-a", receipts.get(7));
+        assertEquals(alarm.receipt(true), receipts.get(7));
         SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(7), now, true, registry);
         assertEquals(List.of(7, 7), registry.registrations);
     }
@@ -87,7 +98,7 @@ public class SystemAlarmReconcilerTest {
     }
 
     @Test public void expiredOrRemovedPayloadsLoseTheirReceiptsAndAreNeverResurrected() {
-        Map<Integer, String> receipts = new HashMap<>(Map.of(7, "payload-a", 9, "removed"));
+        Map<Integer, String> receipts = new HashMap<>(Map.of(7, alarm.receipt(true), 9, "removed"));
         Registry registry = new Registry();
         SystemAlarmReconciler.Result result = SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), 5000, true, registry);
         assertTrue(result.registeredIds().isEmpty());
