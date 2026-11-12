@@ -17,7 +17,7 @@ import { createDocumentService } from './service.js';
 
 export function registerDocumentRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createDocumentService(database);
-  const idSchema = z.object({ id: z.string().uuid() });
+  const idSchema = z.object({ id: z.guid() });
   app.register(async (routes) => {
     routes.get('/api/documents', routeOptions({ responses: { 200: documentsResponseSchema } }), async (request) =>
       documentsResponseSchema.parse({

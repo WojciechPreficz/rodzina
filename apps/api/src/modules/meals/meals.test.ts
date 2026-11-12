@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   mealResponseSchema,
+  mealOfflineWriteChangeSchema,
   mealWeekResponseSchema,
   mealsToShoppingListResponseSchema,
   type MealOfflineChange,
@@ -115,6 +116,20 @@ describe('meals API', () => {
   function offline(change: unknown, operationId = randomUUID(), user = admin) {
     return request('POST', `/api/meals/offline?operationId=${operationId}&actorId=${user.id}`, change, user);
   }
+  it('rejects an oversized expected-days record before validating its values', async () => {
+    const readDay = () => {
+      throw new Error('Oversized record values must not be read');
+    };
+    const expectedDays = Object.fromEntries(Array.from({ length: 8 }, (_, index) => [`2026-10-${19 + index}`, null]));
+    const change = { type: 'write', byId: true, weekStart: start, writes: [], expectedDays };
+
+    const response = await offline(change);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('VALIDATION_ERROR');
+    Object.defineProperty(expectedDays, start, { get: readDay });
+    const validation = mealOfflineWriteChangeSchema.safeParse(change);
+    expect(validation.error?.issues).toMatchObject([{ code: 'custom', path: ['expectedDays'] }]);
+  });
   it('rejects a foreign meal ID at the repository boundary without changing its ingredients', async () => {
     const foreignMeal = await put(start, meal, outsider);
     const repository = createMealRepository(database);

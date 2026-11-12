@@ -2,6 +2,15 @@ import { z } from 'zod';
 import { calendarDateSchema } from './events.js';
 import { shoppingItemSchema } from './shopping.js';
 import { normalizeShoppingName } from '../shopping.js';
+import { API_JSON_BODY_LIMIT } from '../http.js';
+
+// These ceilings reject oversized arrays before parsing their items, while allowing every valid
+// request that fits the existing body limit. The sizes count the shortest JSON item plus a comma.
+const maxMealIds = Math.floor(API_JSON_BODY_LIMIT / 39);
+const maxMealTargets = Math.floor(API_JSON_BODY_LIMIT / 57);
+const maxMealSnapshots = Math.floor(API_JSON_BODY_LIMIT / 87);
+const maxMealWrites = Math.floor(API_JSON_BODY_LIMIT / 96);
+const maxExpectedDays = 7;
 
 // Leave room for every date of the requested week inside the supported calendar.
 export const mealWeekStartSchema = calendarDateSchema.refine(
@@ -35,13 +44,13 @@ export const copyMealWeekSchema = z
   .refine((value) => value.fromWeekStart !== value.toWeekStart, 'Wybierz inny tydzień docelowy.');
 export const mealSuggestionsQuerySchema = z.object({ q: z.string().trim().max(200).default('') }).strict();
 export const mealSchema = putMealSchema.extend({
-  id: z.string().uuid(),
-  familyId: z.string().uuid(),
+  id: z.guid(),
+  familyId: z.guid(),
   date: calendarDateSchema,
   slot: z.literal('dinner'),
   notes: z.string().nullable(),
   ingredients: z.array(z.object({ name: z.string(), quantity: z.string().nullable() })),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });
@@ -59,22 +68,26 @@ export const copyMealWeekResponseSchema = z.object({ ok: z.literal(true), copied
 export const mealsToShoppingListSchema = z
   .object({
     weekStart: mealWeekStartSchema,
-    listId: z.string().uuid(),
-    mealIds: z.array(z.string().uuid()).min(1).optional(),
+    listId: z.guid(),
+    mealIds: z.array(z.guid()).min(1).max(maxMealIds).optional(),
     confirmRepeat: z.boolean().default(false),
     snapshot: z
       .array(
         z
           .object({
-            mealId: z.string().uuid(),
+            mealId: z.guid(),
             date: calendarDateSchema,
             ingredients: z.array(mealIngredientInputSchema).max(100),
           })
           .strict(),
       )
       .min(1)
+      .max(maxMealSnapshots)
       .optional(),
-    targets: z.array(z.object({ name: z.string().trim().min(1).max(200), id: z.string().uuid() }).strict()).optional(),
+    targets: z
+      .array(z.object({ name: z.string().trim().min(1).max(200), id: z.guid() }).strict())
+      .max(maxMealTargets)
+      .optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -109,20 +122,33 @@ export type CopyMealWeek = z.infer<typeof copyMealWeekSchema>;
 export const mealOfflineWriteSchema = z
   .object({
     date: calendarDateSchema,
-    id: z.string().uuid(),
-    expectedId: z.string().uuid().nullable(),
+    id: z.guid(),
+    expectedId: z.guid().nullable(),
     data: putMealSchema.nullable(),
   })
   .strict();
+const mealExpectedDaysSchema = z
+  .preprocess(
+    (value, context) => {
+      if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > maxExpectedDays) {
+        context.addIssue({ code: 'custom', message: 'Oczekiwane dni muszą należeć do jednego tygodnia.' });
+        return z.NEVER;
+      }
+      return value;
+    },
+    z.record(calendarDateSchema, z.array(z.guid()).max(maxMealIds)),
+  )
+  .meta({ maxProperties: maxExpectedDays });
 const mealOfflineWriteChange = z
   .object({
     type: z.literal('write'),
     weekStart: mealWeekStartSchema,
     // Omitted by older clients, whose writes target the first meal on a date.
     byId: z.literal(true).optional(),
-    expectedDays: z.record(calendarDateSchema, z.array(z.string().uuid())).optional(),
+    expectedDays: mealExpectedDaysSchema.optional(),
     writes: z
       .array(mealOfflineWriteSchema)
+      .max(maxMealWrites)
       .refine(
         (writes) => new Set(writes.map((write) => write.id)).size === writes.length,
         'Identyfikatory zapisów nie mogą się powtarzać.',

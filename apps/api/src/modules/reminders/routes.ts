@@ -23,7 +23,7 @@ const scheduleQuerySchema = z
     includeContacts: z.enum(['true', 'false']).optional(),
   })
   .strict();
-const idSchema = z.object({ id: z.string().uuid() }).strict();
+const idSchema = z.object({ id: z.guid() }).strict();
 
 export function registerReminderRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createReminderService(database);

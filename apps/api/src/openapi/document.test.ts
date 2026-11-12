@@ -47,7 +47,7 @@ describe('OpenAPI from registered routes', async () => {
     const checklist = document.paths['/api/tasks/{id}/checklist/{itemId}']?.delete;
     const parentChecklist = document.paths['/api/tasks/{id}/checklist']?.get;
 
-    expect(meals?.parameters).toEqual([
+    expect(meals?.parameters).toMatchObject([
       { name: 'operationId', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
       { name: 'actorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
     ]);
@@ -70,9 +70,21 @@ describe('OpenAPI from registered routes', async () => {
     const writes = document.paths['/api/meals/offline']?.post;
     const imports = document.paths['/api/events/import']?.post;
     const events = document.paths['/api/events']?.post;
+    const documents = document.paths['/api/documents']?.post;
     expect(writes?.requestBody?.content['application/json'].schema).toMatchObject({
       additionalProperties: false,
-      properties: { type: { const: 'write' }, writes: { type: 'array' } },
+      properties: {
+        type: { const: 'write' },
+        expectedDays: {
+          type: 'object',
+          maxProperties: 7,
+          additionalProperties: { type: 'array', items: { format: 'uuid' } },
+        },
+        writes: { type: 'array', items: { properties: { data: { anyOf: expect.any(Array) } } } },
+      },
+    });
+    expect(documents?.requestBody?.content['application/json'].schema).toMatchObject({
+      properties: { reminders: { type: 'array', maxItems: 20, items: { oneOf: expect.any(Array) } } },
     });
     expect(imports?.responses['200']).toMatchObject({
       content: { 'application/json': { schema: { properties: { results: { type: 'array' } } } } },

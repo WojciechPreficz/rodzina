@@ -23,7 +23,7 @@ const dataSchema = z.object({
   account: z.string().min(1),
   snapshot: snapshotSchema,
   operations: z.array(operationSchema),
-  discards: z.record(discardSchema),
+  discards: z.record(z.string(), discardSchema),
   rejection: z.string().optional(),
 });
 export type TaskData = z.infer<typeof dataSchema>;

@@ -41,7 +41,7 @@ export function registerTaskListRoutes(
   registerProfiles: RegisterIdempotencyProfiles,
 ) {
   const service = createTaskListService(database);
-  const idSchema = z.object({ id: z.string().uuid() });
+  const idSchema = z.object({ id: z.guid() });
   app.register(async (routes) => {
     routes.addHook('onRoute', (route) => {
       route.config = { ...route.config, primaryKeyConflictMessage: 'Identyfikator zadania jest już używany.' };
@@ -52,7 +52,7 @@ export function registerTaskListRoutes(
         throw new ApiError(404, 'NOT_FOUND', 'Lista zadań nie istnieje.');
     };
     const checklist = createTaskChecklistService(database);
-    const checklistParams = z.object({ id: z.string().uuid(), itemId: z.string().uuid().optional() });
+    const checklistParams = z.object({ id: z.guid(), itemId: z.guid().optional() });
     const checkParent = (request: FastifyRequest) => {
       const { id } = parse(checklistParams, request.params);
       const user = requireUser(request);
@@ -64,9 +64,7 @@ export function registerTaskListRoutes(
       request.url,
       request.body,
     ];
-    const requiredOperation = z
-      .object({ operationId: z.string().uuid(), actorId: z.string().uuid().optional() })
-      .strict();
+    const requiredOperation = z.object({ operationId: z.guid(), actorId: z.guid().optional() }).strict();
     const occurrenceScope = (request: FastifyRequest) => {
       const user = requireUser(request);
       const { id } = parse(idSchema, request.params);
@@ -93,8 +91,8 @@ export function registerTaskListRoutes(
       'task-entity': {
         table: 'task_operations',
         querySchema: requiredOperation.extend({
-          operationId: z.string().uuid().optional(),
-          taskId: z.string().uuid().optional(),
+          operationId: z.guid().optional(),
+          taskId: z.guid().optional(),
         }),
         validate: (request) => {
           if ((request.query as { taskId?: string }).taskId && request.method !== 'POST')

@@ -4,7 +4,7 @@ import { reminderSchema, sharedTaskReminderSchema } from './reminders.js';
 import { taskOccurrenceSchema } from './task-recurrence.js';
 
 const nameSchema = z.string().trim().min(1).max(200);
-const memberIdsSchema = z.array(z.string().uuid()).max(200);
+const memberIdsSchema = z.array(z.guid()).max(200);
 
 export const createTaskListSchema = z.object({ name: nameSchema, memberIds: memberIdsSchema.optional() }).strict();
 export const patchTaskListSchema = createTaskListSchema
@@ -12,9 +12,9 @@ export const patchTaskListSchema = createTaskListSchema
   .refine((data) => Object.keys(data).length > 0, 'Brak danych do zmiany.');
 
 export const taskListSchema = z.object({
-  id: z.string().uuid(),
-  familyId: z.string().uuid(),
-  ownerId: z.string().uuid(),
+  id: z.guid(),
+  familyId: z.guid(),
+  ownerId: z.guid(),
   name: nameSchema,
   isDefault: z.boolean(),
   position: z.number().int().nonnegative(),
@@ -40,7 +40,7 @@ const taskFieldsSchema = z.object({
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
     .nullable(),
-  assigneeId: z.string().uuid().nullable(),
+  assigneeId: z.guid().nullable(),
   reminders: z.array(sharedTaskReminderSchema).max(20).optional(),
 });
 
@@ -55,7 +55,7 @@ export const patchTaskSchema = taskFieldsSchema
     closedAt: z.number().int().nonnegative().max(253402300799999),
     expectedOccurrenceVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     expectedSeriesVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    expectedSeriesId: z.string().uuid(),
+    expectedSeriesId: z.guid(),
   })
   .partial()
   .strict()
@@ -68,20 +68,20 @@ export const patchTaskSchema = taskFieldsSchema
   .refine((data) => data.closedAt === undefined || data.expectedOccurrenceVersion !== undefined, 'Czas wymaga wersji.');
 const versionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const taskChecklistItemSchema = z.object({
-  id: z.string().uuid(),
-  taskId: z.string().uuid(),
+  id: z.guid(),
+  taskId: z.guid(),
   title: nameSchema,
   position: z.number().int().nonnegative(),
   isDone: z.boolean(),
-  doneBy: z.string().uuid().nullable(),
+  doneBy: z.guid().nullable(),
   doneAt: z.number().int().nullable(),
   version: versionSchema,
   doneVersion: versionSchema,
-  createdBy: z.string().uuid().nullable(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });
-export const createTaskChecklistItemSchema = z.object({ id: z.string().uuid(), title: nameSchema }).strict();
+export const createTaskChecklistItemSchema = z.object({ id: z.guid(), title: nameSchema }).strict();
 export const patchTaskChecklistItemSchema = z.union([
   z.object({ title: nameSchema, version: versionSchema }).strict(),
   z.object({ isDone: z.boolean(), doneVersion: versionSchema }).strict(),
@@ -91,7 +91,7 @@ export const reorderTaskChecklistSchema = z
   .object({
     orderVersion: versionSchema,
     itemIds: z
-      .array(z.string().uuid())
+      .array(z.guid())
       .max(100)
       .refine((ids) => new Set(ids).size === ids.length),
   })
@@ -112,13 +112,13 @@ export const taskSchema = taskFieldsSchema.extend({
   checklist: z.array(taskChecklistItemSchema).max(100).optional(),
   checklistOrderVersion: versionSchema.optional(),
   reminders: z.array(reminderSchema).optional(),
-  id: z.string().uuid(),
-  listId: z.string().uuid(),
+  id: z.guid(),
+  listId: z.guid(),
   isDone: z.boolean(),
-  doneBy: z.string().uuid().nullable(),
+  doneBy: z.guid().nullable(),
   doneAt: z.number().int().nullable(),
   position: z.number().int().nonnegative(),
-  createdBy: z.string().uuid().nullable(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });
@@ -147,7 +147,7 @@ export const taskSnapshotResponseSchema = z
     ok: z.literal(true),
     taskRecurrenceVersion: z.literal(1).optional(),
     lists: z.array(taskListSchema),
-    items: z.record(z.array(taskSchema)),
+    items: z.record(z.string(), z.array(taskSchema)),
   })
   .superRefine((snapshot, ctx) => {
     const ids = new Set(snapshot.lists.map((list) => list.id));

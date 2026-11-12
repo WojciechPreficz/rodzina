@@ -1,4 +1,5 @@
 export const packageName = 'rodzina';
+export { API_JSON_BODY_LIMIT } from './http.js';
 export * from './schemas/meals.js';
 export * from './schemas/contacts.js';
 export * from './offline.js';

@@ -53,25 +53,25 @@ export const patchShoppingItemSchema = createShoppingItemSchema
 export const shoppingSuggestionsQuerySchema = z.object({ q: nameSchema }).strict();
 
 export const shoppingListSchema = z.object({
-  id: z.string().uuid(),
-  familyId: z.string().uuid(),
+  id: z.guid(),
+  familyId: z.guid(),
   name: nameSchema,
   position: positionSchema,
-  createdBy: z.string().uuid().nullable(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });
 export const shoppingItemSchema = z.object({
-  id: z.string().uuid(),
-  listId: z.string().uuid(),
+  id: z.guid(),
+  listId: z.guid(),
   name: nameSchema,
   quantity: z.string().nullable(),
   category: shoppingCategorySchema,
   isChecked: z.boolean(),
-  checkedBy: z.string().uuid().nullable(),
+  checkedBy: z.guid().nullable(),
   checkedAt: z.number().int().nullable(),
   position: positionSchema,
-  createdBy: z.string().uuid().nullable(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });

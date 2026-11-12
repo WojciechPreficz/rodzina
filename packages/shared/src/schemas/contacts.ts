@@ -7,10 +7,10 @@ const optionalText = (max: number) =>
     .trim()
     .max(max)
     .nullable()
-    .transform((value) => value || null);
+    .overwrite((value) => value || null);
 const contactFields = z.object({
   name: z.string().trim().min(1).max(120),
-  groupId: z.string().uuid(),
+  groupId: z.guid(),
   address: optionalText(1000),
   phone: optionalText(50),
   birthday: calendarDateSchema.nullable().optional(),
@@ -23,9 +23,9 @@ const contactFields = z.object({
   relationship: optionalText(120),
 });
 const metadata = {
-  id: z.string().uuid(),
-  familyId: z.string().uuid(),
-  createdBy: z.string().uuid().nullable(),
+  id: z.guid(),
+  familyId: z.guid(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 };

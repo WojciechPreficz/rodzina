@@ -27,14 +27,14 @@ const fixture = z
     fixtureVersion: z.literal(1),
     referenceTime: z.number().int().positive(),
     accountId: z.string(),
-    ids: z.record(z.string()),
-    keys: z.record(z.string()),
+    ids: z.record(z.string(), z.string()),
+    keys: z.record(z.string(), z.string()),
     entries: z.array(z.object({ key: z.string(), value: z.unknown() })),
     expected: z.object({
-      pendingShoppingIds: z.array(z.string().uuid()),
-      pendingTaskIds: z.array(z.string().uuid()),
-      discardedIds: z.array(z.string().uuid()),
-      blockedTaskIds: z.array(z.string().uuid()),
+      pendingShoppingIds: z.array(z.guid()),
+      pendingTaskIds: z.array(z.guid()),
+      discardedIds: z.array(z.guid()),
+      blockedTaskIds: z.array(z.guid()),
     }),
   })
   .parse(JSON.parse(readFileSync(resolve('test-fixtures/offline/legacy-valid.json'), 'utf8')));
@@ -74,25 +74,25 @@ const variants = z
         value: z.object({
           state: z.object({
             variables: z.object({
-              operationId: z.string().uuid(),
+              operationId: z.guid(),
               change: z.discriminatedUnion('type', [
-                createShoppingListSchema.extend({ type: z.literal('createList'), id: z.string().uuid() }),
-                createShoppingListSchema.extend({ type: z.literal('renameList'), id: z.string().uuid() }),
-                z.object({ type: z.literal('deleteList'), id: z.string().uuid() }),
+                createShoppingListSchema.extend({ type: z.literal('createList'), id: z.guid() }),
+                createShoppingListSchema.extend({ type: z.literal('renameList'), id: z.guid() }),
+                z.object({ type: z.literal('deleteList'), id: z.guid() }),
                 z.object({
                   type: z.literal('add'),
-                  id: z.string().uuid(),
-                  listId: z.string().uuid(),
+                  id: z.guid(),
+                  listId: z.guid(),
                   data: createShoppingItemSchema,
                 }),
                 z.object({
                   type: z.literal('edit'),
-                  id: z.string().uuid(),
-                  listId: z.string().uuid(),
+                  id: z.guid(),
+                  listId: z.guid(),
                   data: patchShoppingItemSchema,
                 }),
-                z.object({ type: z.literal('remove'), id: z.string().uuid(), listId: z.string().uuid() }),
-                z.object({ type: z.literal('clear'), listId: z.string().uuid() }),
+                z.object({ type: z.literal('remove'), id: z.guid(), listId: z.guid() }),
+                z.object({ type: z.literal('clear'), listId: z.guid() }),
               ]),
             }),
           }),
@@ -118,7 +118,7 @@ const taskSources = () =>
   );
 const shopping = createShoppingStore();
 const read = (name: string): unknown => JSON.parse(localStorage.getItem(key(name))!);
-const record = (value: unknown) => z.record(z.unknown()).parse(value);
+const record = (value: unknown) => z.record(z.string(), z.unknown()).parse(value);
 const mutation = (name: string) =>
   z.object({ state: z.object({ variables: z.unknown() }) }).parse(read(name)).state.variables;
 const snapshot = () => read('shopping') as { clientState: DehydratedState };

@@ -10,8 +10,8 @@ import type { RouteContract } from './route-contract.js';
 
 const querySchema = z
   .object({
-    operationId: z.string().uuid().optional(),
-    actorId: z.string().uuid().optional(),
+    operationId: z.guid().optional(),
+    actorId: z.guid().optional(),
   })
   .strict();
 

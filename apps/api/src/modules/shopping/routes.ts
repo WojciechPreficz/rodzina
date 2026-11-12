@@ -28,7 +28,7 @@ export function registerShoppingRoutes(
   registerProfiles: RegisterIdempotencyProfiles,
 ) {
   const service = createShoppingService(database);
-  const idSchema = z.object({ id: z.string().uuid() });
+  const idSchema = z.object({ id: z.guid() });
   app.register(async (routes) => {
     routes.addHook('onRoute', (route) => {
       route.config = { ...route.config, primaryKeyConflictMessage: 'Identyfikator zmiany jest już używany.' };

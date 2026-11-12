@@ -13,13 +13,13 @@ import {
 } from '@rodzina/shared';
 export const TASK_STORAGE_KEY = 'rodzina:tasks:v1';
 export const operationSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   submittedAt: z.number(),
   listId: z.string(),
   taskId: z.string(),
   occurrence: z
     .object({
-      seriesId: z.string().uuid(),
+      seriesId: z.guid(),
       sequence: z.number().int().nonnegative(),
       version: z.number().int().nonnegative(),
       seriesVersion: z.number().int().nonnegative(),
@@ -32,8 +32,8 @@ export const operationSchema = z.object({
     z.object({ type: z.literal('update'), data: patchTaskSchema }),
     z.object({ type: z.literal('remove') }),
     z.object({ type: z.literal('checklist-create'), data: createTaskChecklistItemSchema }),
-    z.object({ type: z.literal('checklist-update'), itemId: z.string().uuid(), data: patchTaskChecklistItemSchema }),
-    z.object({ type: z.literal('checklist-remove'), itemId: z.string().uuid(), data: deleteTaskChecklistItemSchema }),
+    z.object({ type: z.literal('checklist-update'), itemId: z.guid(), data: patchTaskChecklistItemSchema }),
+    z.object({ type: z.literal('checklist-remove'), itemId: z.guid(), data: deleteTaskChecklistItemSchema }),
     z.object({ type: z.literal('checklist-order'), data: reorderTaskChecklistSchema }),
   ]),
 });
@@ -53,7 +53,7 @@ export function taskOrderingKeys(op: Pick<TaskOperation, 'listId' | 'taskId' | '
   return [base];
 }
 export const discardSchema = z.object({
-  operationIds: z.array(z.string().uuid()),
+  operationIds: z.array(z.guid()),
   listId: z.string(),
   requiresRefresh: z.boolean(),
 });
@@ -85,7 +85,7 @@ export function classify(operations: TaskOperation[]): TaskOperation[] {
 export const snapshotSchema = z.object({
   account: z.string(),
   lists: z.array(taskListSchema).optional(),
-  items: z.record(z.array(taskSchema)),
+  items: z.record(z.string(), z.array(taskSchema)),
   syncedAt: z.number().optional(),
 });
 export type Snapshot = z.infer<typeof snapshotSchema>;

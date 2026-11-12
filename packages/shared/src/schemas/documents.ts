@@ -8,7 +8,7 @@ export const documentStatusSchema = z.enum(['valid', 'expiring', 'expired']);
 const documentFieldsSchema = z.object({
   type: documentTypeSchema,
   label: z.string().trim().min(1).max(200),
-  holderUserId: z.string().uuid().nullable(),
+  holderUserId: z.guid().nullable(),
   vehicleLabel: z.string().trim().min(1).max(200).nullable(),
   expiresOn: calendarDateSchema,
   notes: z.string().trim().max(10000).nullable(),
@@ -25,9 +25,9 @@ export const patchDocumentSchema = documentFieldsSchema
 
 export const documentSchema = documentFieldsSchema.extend({
   reminders: z.array(reminderSchema),
-  id: z.string().uuid(),
-  familyId: z.string().uuid(),
-  createdBy: z.string().uuid().nullable(),
+  id: z.guid(),
+  familyId: z.guid(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   status: documentStatusSchema,

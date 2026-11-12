@@ -5,9 +5,9 @@ const timestamp = z.number().int().nonnegative();
 export const scheduledReminderSchema = z
   .object({
     key: z.string().min(1),
-    reminderId: z.string().uuid(),
+    reminderId: z.guid(),
     sourceType: z.enum(['event', 'task', 'document', 'contact']),
-    sourceId: z.string().uuid(),
+    sourceId: z.guid(),
     occurrenceDate: calendarDateSchema,
     fireAt: timestamp,
     title: z.string(),

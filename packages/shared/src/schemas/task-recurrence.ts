@@ -31,7 +31,7 @@ export const taskSeriesTemplateSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     notes: z.string().trim().max(10000).nullable(),
-    assigneeId: z.string().uuid().nullable(),
+    assigneeId: z.guid().nullable(),
     checklist: z.array(z.string().trim().min(1).max(200)).max(100).optional(),
     reminders: z
       .array(sharedTaskReminderSchema)
@@ -43,27 +43,27 @@ export const taskSeriesTemplateSchema = z
   .strict();
 
 export const taskSeriesSchema = z.object({
-  id: z.string().uuid(),
-  listId: z.string().uuid(),
+  id: z.guid(),
+  listId: z.guid(),
   rule: taskRecurrenceRuleSchema,
   template: taskSeriesTemplateSchema,
   state: z.enum(['active', 'stopped', 'ended']),
   version: versionSchema,
-  createdBy: z.string().uuid().nullable(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });
 
 export const taskOccurrenceSchema = z
   .object({
-    seriesId: z.string().uuid(),
+    seriesId: z.guid(),
     seriesVersion: versionSchema.optional(),
     sequence: versionSchema,
     plannedDate: calendarDateSchema,
     plannedTime: timeSchema.nullable(),
     state: z.enum(['active', 'done', 'skipped']),
     closedAt: z.number().int().nonnegative().nullable(),
-    closedBy: z.string().uuid().nullable(),
+    closedBy: z.guid().nullable(),
     version: versionSchema,
   })
   .superRefine((item, ctx) => {
@@ -98,23 +98,23 @@ export const closeTaskOccurrenceSchema = z
   })
   .strict();
 export const taskSeriesHistoryItemSchema = z.object({
-  id: z.string().uuid(),
-  seriesId: z.string().uuid(),
-  taskId: z.string().uuid(),
+  id: z.guid(),
+  seriesId: z.guid(),
+  taskId: z.guid(),
   sequence: versionSchema,
   title: z.string(),
   plannedDate: calendarDateSchema,
   plannedTime: timeSchema.nullable(),
   state: z.enum(['done', 'skipped']),
   closedAt: z.number().int(),
-  closedBy: z.string().uuid().nullable(),
+  closedBy: z.guid().nullable(),
   undoneAt: z.number().int().nullable(),
-  undoneBy: z.string().uuid().nullable(),
+  undoneBy: z.guid().nullable(),
 });
 export const taskSeriesResponseSchema = z.object({
   ok: z.literal(true),
   series: taskSeriesSchema,
-  activeTaskId: z.string().uuid().nullable(),
+  activeTaskId: z.guid().nullable(),
   occurrenceVersion: versionSchema.nullable(),
 });
 export const taskSeriesHistoryResponseSchema = z.object({

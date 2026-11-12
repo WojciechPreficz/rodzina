@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DOCUMENT_TYPES, documentsResponseSchema, type FamilyDocument } from '@rodzina/shared';
+import { createDocumentSchema, DOCUMENT_TYPES, documentsResponseSchema, type FamilyDocument } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
 import { hashToken } from '../../auth.js';
 import { loadConfig } from '../../config.js';
@@ -79,6 +79,42 @@ describe('documents API', () => {
     await app?.close();
     database?.sqlite.close();
   });
+  it('rejects oversized reminder arrays before reading any element and writes nothing', async () => {
+    const readReminder = vi.fn(() => null);
+    const safeParse = createDocumentSchema.safeParse;
+    const validate = vi.spyOn(createDocumentSchema, 'safeParse').mockImplementation((input) => {
+      Object.defineProperty((input as { reminders: unknown[] }).reminders, 0, { get: readReminder });
+      return safeParse(input);
+    });
+
+    const response = await request('POST', '/api/documents', { ...data, reminders: Array(21).fill(null) });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: { code: 'VALIDATION_ERROR', message: 'Dane żądania są niepoprawne.' } });
+    expect(validate).toHaveBeenCalledOnce();
+    expect(validate.mock.results[0]?.value).toMatchObject({
+      success: false,
+      error: { issues: [{ code: 'too_big', path: ['reminders'], maximum: 20 }] },
+    });
+    expect(readReminder).not.toHaveBeenCalled();
+    expect(database.db.select().from(schema.documents).all()).toEqual([]);
+    expect(database.db.select().from(schema.reminders).all()).toEqual([]);
+  });
+
+  it('accepts and stores exactly 20 valid reminders', async () => {
+    const reminders = Array.from({ length: 20 }, (_, offsetValue) => ({
+      type: 'offset',
+      offsetValue,
+      offsetUnit: 'day',
+    }));
+    const document = await add({ reminders });
+
+    expect(document.reminders).toHaveLength(20);
+    expect(
+      database.db.select().from(schema.reminders).where(eq(schema.reminders.documentId, document.id)).all(),
+    ).toHaveLength(20);
+  });
+
   it('supports all types, shared adult edits, sorting and deletion', async () => {
     for (const type of DOCUMENT_TYPES)
       await add({ type, ...(type.startsWith('car_') ? { vehicleLabel: 'Skoda' } : {}) });

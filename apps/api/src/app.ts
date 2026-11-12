@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance, type onRouteHookHandler } from 'fastify';
+import { API_JSON_BODY_LIMIT } from '@rodzina/shared';
 import { z } from 'zod';
 import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -42,6 +43,7 @@ export async function buildApp(
   invitationMailSender?: typeof sendInvitationMail,
 ): Promise<FastifyInstance> {
   const app = Fastify({
+    bodyLimit: API_JSON_BODY_LIMIT,
     trustProxy: config.RODZINA_TRUSTED_PROXIES.length ? config.RODZINA_TRUSTED_PROXIES : false,
     logger:
       config.NODE_ENV === 'test'

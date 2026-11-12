@@ -10,7 +10,7 @@ import {
 import { updateAccountRecord } from '../../offline/index.js';
 
 const entrySchema = z.object({
-  operationId: z.string().uuid(),
+  operationId: z.guid(),
   event: importEventSchema,
   result: importEventResultSchema.optional(),
   duplicateResolution: eventDuplicateResolutionSchema.optional(),

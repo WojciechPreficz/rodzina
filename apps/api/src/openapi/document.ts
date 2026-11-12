@@ -1,6 +1,5 @@
 import type { RouteOptions } from 'fastify';
-import type { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 import { apiVersion, buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { createDatabase } from '../db/client.js';
@@ -10,19 +9,14 @@ import type { RouteContract } from '../http/route-contract.js';
 type JsonSchema = Record<string, unknown>;
 type Response = { $ref: string } | { description: string; content: { 'application/json': { schema: JsonSchema } } };
 
-function toSchema(schema: z.ZodTypeAny, input = false): JsonSchema {
-  const json = zodToJsonSchema(schema, {
-    // The converter emits numeric exclusive bounds only with this target.
-    target: 'jsonSchema7',
-    $refStrategy: 'none',
-    removeAdditionalStrategy: input ? 'strict' : 'passthrough',
-  });
+function toSchema(schema: z.ZodType, io: 'input' | 'output' = 'output'): JsonSchema {
+  const json = z.toJSONSchema(schema, { io });
   delete json.$schema;
   return json;
 }
 
 function parameters(schema: z.ZodTypeAny | undefined, location: 'path' | 'query', names?: string[]) {
-  const converted = schema && toSchema(schema, true);
+  const converted = schema && toSchema(schema, 'input');
   const properties = (converted?.properties ?? {}) as Record<string, JsonSchema>;
   const required = (converted?.required ?? []) as string[];
 
@@ -63,7 +57,7 @@ function operation(route: RouteOptions, contract: RouteContract, pathParams: str
     ...(isPublic && { security: [] }),
     parameters: [...parameters(contract.params, 'path', pathParams), ...parameters(contract.query, 'query')],
     ...(contract.body && {
-      requestBody: { required: true, content: { 'application/json': { schema: toSchema(contract.body, true) } } },
+      requestBody: { required: true, content: { 'application/json': { schema: toSchema(contract.body, 'input') } } },
     }),
     responses,
   };

@@ -19,7 +19,7 @@ import { createContactService } from './service.js';
 
 export function registerContactRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createContactService(database);
-  const idSchema = z.object({ id: z.string().uuid() });
+  const idSchema = z.object({ id: z.guid() });
   app.register(async (routes) => {
     routes.get('/api/contacts', routeOptions({ responses: { 200: contactsResponseSchema } }), async (request) =>
       contactsResponseSchema.parse({ ok: true, ...service.snapshot(requireUser(request).familyId) }),

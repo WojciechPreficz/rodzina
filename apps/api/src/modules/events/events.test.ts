@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { localDateTimeToUtc } from '@rodzina/shared';
+import { importEventSchema, localDateTimeToUtc } from '@rodzina/shared';
 import { buildApp } from '../../app.js';
 import { hashToken, hashPassword } from '../../auth.js';
 import { loadConfig } from '../../config.js';
@@ -236,6 +236,25 @@ describe('events API', () => {
   describe('photo event import', () => {
     const item = (event: unknown = single) => ({ operationId: crypto.randomUUID(), event });
     const importBatch = (items: unknown[], user = admin) => request('POST', '/api/events/import', { items }, user);
+
+    it('rejects oversized nested reminders and still imports the valid item', async () => {
+      const validate = vi.spyOn(importEventSchema, 'safeParse');
+      const oversized = item({ ...single, reminders: Array(101).fill(null) });
+      const valid = item();
+
+      const response = await importBatch([oversized, valid]);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().results).toMatchObject([
+        { operationId: oversized.operationId, status: 'error', error: { code: 'VALIDATION_ERROR' } },
+        { operationId: valid.operationId, status: 'created' },
+      ]);
+      expect(validate.mock.results[0]?.value).toMatchObject({
+        success: false,
+        error: { issues: [{ code: 'too_big', path: ['reminders'], maximum: 100 }] },
+      });
+      expect(database.db.select().from(schema.eventImportOperations).all()).toMatchObject([{ id: valid.operationId }]);
+    });
 
     it.each(['admin', 'member', 'child'] as const)('imports for %s with the existing event rules', async (role) => {
       const user = { admin, member, child }[role];

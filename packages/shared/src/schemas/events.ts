@@ -117,7 +117,7 @@ const eventFields = z
     rrule: recurrenceSchema.nullable(),
     kind: z.enum(['single', 'recurring', 'distant']),
     participantIds: z
-      .array(z.string().uuid())
+      .array(z.guid())
       .max(100)
       .refine((ids) => new Set(ids).size === ids.length, 'Uczestnicy nie mogą się powtarzać.'),
     reminders: z.array(sharedEventReminderSchema).max(100).optional(),
@@ -188,7 +188,7 @@ export const occurrencesQuerySchema = z
   .object({
     from: calendarDateSchema,
     to: calendarDateSchema,
-    userId: z.string().uuid().optional(),
+    userId: z.guid().optional(),
   })
   .strict()
   .refine(({ from, to }) => {
@@ -196,10 +196,10 @@ export const occurrencesQuerySchema = z
     return days >= 0 && days < 62;
   }, 'Zakres musi obejmować od 1 do 62 dni.');
 
-export const eventParticipantSchema = z.object({ id: z.string().uuid(), displayName: z.string(), color: z.string() });
+export const eventParticipantSchema = z.object({ id: z.guid(), displayName: z.string(), color: z.string() });
 export const eventExceptionSchema = z.object({
-  id: z.string().uuid(),
-  eventId: z.string().uuid(),
+  id: z.guid(),
+  eventId: z.guid(),
   originalDate: calendarDateSchema,
   isCancelled: z.boolean(),
   overrideStartDate: calendarDateSchema.nullable(),
@@ -208,9 +208,9 @@ export const eventExceptionSchema = z.object({
   overrideTitle: z.string().nullable(),
 });
 export const eventSchema = eventFields.omit({ participantIds: true }).extend({
-  id: z.string().uuid(),
-  familyId: z.string().uuid(),
-  createdBy: z.string().uuid().nullable(),
+  id: z.guid(),
+  familyId: z.guid(),
+  createdBy: z.guid().nullable(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   participants: z.array(eventParticipantSchema),
@@ -223,7 +223,7 @@ export const occurrencesResponseSchema = z.object({
   ok: z.literal(true),
   occurrences: z.array(
     z.object({
-      eventId: z.string().uuid(),
+      eventId: z.guid(),
       occurrenceDate: calendarDateSchema,
       startUtc: z.number().int(),
       endUtc: z.number().int(),
@@ -232,7 +232,7 @@ export const occurrencesResponseSchema = z.object({
       title: z.string(),
       location: z.string().nullable(),
       kind: z.enum(['single', 'recurring', 'distant']),
-      createdBy: z.string().uuid().nullable(),
+      createdBy: z.guid().nullable(),
       participants: z.array(eventParticipantSchema),
     }),
   ),
@@ -250,13 +250,11 @@ export const importEventSchema = createEventSchema.refine((event) => event.kind 
 export const eventDuplicateResolutionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('check') }).strict(),
   z.object({ action: z.literal('add') }).strict(),
-  z
-    .object({ action: z.literal('replace'), eventId: z.string().uuid(), version: z.string().regex(/^[a-f0-9]{64}$/) })
-    .strict(),
+  z.object({ action: z.literal('replace'), eventId: z.guid(), version: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
 ]);
 export type EventDuplicateResolution = z.infer<typeof eventDuplicateResolutionSchema>;
 export const eventDuplicateSchema = z.object({
-  eventId: z.string().uuid(),
+  eventId: z.guid(),
   title: z.string(),
   startDate: calendarDateSchema,
   startTime: timeSchema.nullable(),
@@ -273,7 +271,7 @@ export const importEventsSchema = z
       .array(
         z
           .object({
-            operationId: z.string().uuid(),
+            operationId: z.guid(),
             event: z.unknown(),
             duplicateResolution: eventDuplicateResolutionSchema.optional(),
           })
@@ -289,10 +287,10 @@ export const importEventsSchema = z
     'Identyfikatory operacji nie mogą się powtarzać.',
   );
 export const importEventResultSchema = z.discriminatedUnion('status', [
-  z.object({ operationId: z.string().uuid(), status: z.literal('created'), eventId: z.string().uuid() }),
-  z.object({ operationId: z.string().uuid(), status: z.literal('already_created'), eventId: z.string().uuid() }),
+  z.object({ operationId: z.guid(), status: z.literal('created'), eventId: z.guid() }),
+  z.object({ operationId: z.guid(), status: z.literal('already_created'), eventId: z.guid() }),
   z.object({
-    operationId: z.string().uuid(),
+    operationId: z.guid(),
     status: z.literal('error'),
     error: z.object({ code: z.string(), message: z.string(), duplicates: z.array(eventDuplicateSchema).optional() }),
   }),

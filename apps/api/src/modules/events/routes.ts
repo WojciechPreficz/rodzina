@@ -29,13 +29,13 @@ const duplicatesQuerySchema = z.object({
 });
 const createEventQuerySchema = z.object({
   duplicateAction: z.enum(['check', 'add', 'replace']).optional(),
-  duplicateEventId: z.string().uuid().optional(),
+  duplicateEventId: z.guid().optional(),
   duplicateVersion: z.string().optional(),
 });
 
 export function registerEventRoutes(app: FastifyInstance, database: DatabaseConnection) {
   const service = createEventService(database);
-  const idSchema = z.object({ id: z.string().uuid() });
+  const idSchema = z.object({ id: z.guid() });
   app.register(async (routes) => {
     routes.get(
       '/api/events/duplicates',

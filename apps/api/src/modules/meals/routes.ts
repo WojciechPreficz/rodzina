@@ -39,7 +39,7 @@ export function registerMealRoutes(
   const mutation = registerProfiles(app, {
     'meal-offline': {
       table: 'shopping_operations',
-      querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid() }).strict(),
+      querySchema: z.object({ operationId: z.guid(), actorId: z.guid() }).strict(),
       validate: (request) => {
         requireAdult(requireUser(request).role);
         parse(mealOfflineChangeSchema, request.body);
@@ -49,7 +49,7 @@ export function registerMealRoutes(
     },
     'meal-export': {
       table: 'shopping_operations',
-      querySchema: z.object({ operationId: z.string().uuid(), actorId: z.string().uuid().optional() }).strict(),
+      querySchema: z.object({ operationId: z.guid(), actorId: z.guid().optional() }).strict(),
       validate: checkExportAccess,
       recheckAccess: checkExportAccess,
       fingerprintParts: (request) => [requireUser(request).familyId, request.method, request.url, request.body],

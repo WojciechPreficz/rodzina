@@ -21,9 +21,9 @@ export const sharedDocumentReminderSchema = z.discriminatedUnion('type', [
   absolute.extend({ audience: z.enum(['family', 'adults', 'owner']).default('adults') }).strict(),
 ]);
 const sourceFields = {
-  eventId: z.string().uuid().optional(),
-  taskId: z.string().uuid().optional(),
-  documentId: z.string().uuid().optional(),
+  eventId: z.guid().optional(),
+  taskId: z.guid().optional(),
+  documentId: z.guid().optional(),
 };
 const oneSource = (data: {
   eventId?: string | undefined;
@@ -35,18 +35,18 @@ export const createMyReminderSchema = z
   .discriminatedUnion('type', [offset.extend(sourceFields).strict(), absolute.extend(sourceFields).strict()])
   .refine(oneSource, 'Wybierz jedno źródło.');
 export const reminderSchema = z.object({
-  id: z.string().uuid(),
-  familyId: z.string().uuid(),
-  eventId: z.string().uuid().nullable(),
-  taskId: z.string().uuid().nullable(),
-  documentId: z.string().uuid().nullable(),
+  id: z.guid(),
+  familyId: z.guid(),
+  eventId: z.guid().nullable(),
+  taskId: z.guid().nullable(),
+  documentId: z.guid().nullable(),
   type: z.enum(['offset', 'absolute']),
   offsetValue: z.number().int().nullable(),
   offsetUnit: z.enum(['minute', 'hour', 'day', 'week', 'month']).nullable(),
   remindAt: timestamp.nullable(),
   audience: z.enum(['participants', 'family', 'adults', 'owner', 'user', 'list_members']),
-  userId: z.string().uuid().nullable(),
-  createdBy: z.string().uuid().nullable(),
+  userId: z.guid().nullable(),
+  createdBy: z.guid().nullable(),
   nextFireAt: timestamp.nullable(),
   lastSentAt: timestamp.nullable(),
 });
