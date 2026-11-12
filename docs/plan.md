@@ -6,44 +6,44 @@ aplikacji jest w [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Statusy
 
-Stan dokumentacji na 04.11.2026. Brak potwierdzenia CI lub prób ręcznych
-nie oznacza ich zaliczenia. Usunięcie historycznych opisów nie zamyka odbioru.
+Właściciel 12.11.2026 polecił oznaczyć dotychczasowe próby na fizycznym
+telefonie jako ukończone. Ich zakres zbiera [DEVELOPMENT.md](DEVELOPMENT.md#odbiór-na-fizycznym-telefonie).
 
-| Zakres                                                        | Stan                                                                            | Pozostałe warunki                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane                                                                | Niepotwierdzone próby sprzętowe według DEVELOPMENT                |
-| Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026                                     | Nie powtarzać konfiguracji pierwszego wdrożenia                   |
-| Faza 6: obiady, kroki 6.1–6.5                                 | API, UI tygodnia, eksport, dzisiejsza karta i offline zaimplementowane lokalnie | Odbiór ręczny, fizyczne APK i końcowe CI do potwierdzenia         |
-| Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026                         | Odbiór telefonu i końcowe CI do potwierdzenia                     |
-| Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                                                       | Końcowe CI, UI i fizyczne APK do potwierdzenia                    |
-| K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                                                       | Końcowe CI i fizyczne APK do potwierdzenia                        |
-| Redesign R.1–R.7                                              | Implementacja opisana w historii zmian                                          | R.8: odbiór całości i gotowość aktualizacji do potwierdzenia      |
-| Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                                                       | Końcowe CI, alarmy, restart i pomiary urządzenia do potwierdzenia |
-| Oddzielenie sesji od modułów                                  | Sesja offline wydzielona; zweryfikowane lokalnie, oczekuje na CI                | Końcowe CI i fizyczne APK do potwierdzenia                        |
-| Kalendarz we wspólnym kontrakcie offline                      | Zweryfikowane lokalnie, oczekuje na CI                                          | Fizyczne APK: offline, restart i zmiana konta                     |
-| Zadania we wspólnym kontrakcie offline                        | Zweryfikowane lokalnie, oczekuje na CI                                          | Fizyczne APK: offline, restart i zmiana konta                     |
-| Zakupy we wspólnym kontrakcie offline                         | Zweryfikowane lokalnie, oczekuje na CI                                          | Fizyczne APK: offline, restart i zmiana konta                     |
-| Obiady we wspólnym kontrakcie offline                         | Zweryfikowane lokalnie, oczekuje na CI                                          | Fizyczne APK: offline, restart i zmiana konta                     |
-| Potwierdzanie sesji w przebiegu nadawcy                       | Zweryfikowane lokalnie, oczekuje na CI                                          | Końcowe CI i próba synchronizacji oraz baterii w fizycznym APK    |
-| Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI, pomiary i fizyczny odbiór do potwierdzenia            |
-| Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP, UI i fizyczne APK do potwierdzenia  |
-| LP.1: prototyp strony marketingowej                           | Zweryfikowane lokalnie, oczekuje na CI                                          | Docelowy adres aplikacji i publikacja poza zakresem prototypu     |
-| LP.2: strona marketingowa pod /strona                         | Zweryfikowane lokalnie, oczekuje na CI                                          | Fizyczne APK i publikacja do potwierdzenia                        |
+| Zakres                                                        | Stan                                                                            | Pozostałe warunki                                                |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Fazy 0–5 i 7: fundamenty, kalendarz, Android, zakupy, zadania | Zaimplementowane. Odbiór telefonu ukończony                                     | —                                                                |
+| Pierwszy deploy D.1–D.4                                       | Wykonany; działanie potwierdzone 16.10.2026                                     | Nie powtarzać konfiguracji pierwszego wdrożenia                  |
+| Faza 6: obiady, kroki 6.1–6.5                                 | API, UI tygodnia, eksport, dzisiejsza karta i offline zaimplementowane lokalnie | Ręczny odbiór WWW i końcowe CI do potwierdzenia                  |
+| Faza 8: dokumenty                                             | Implementacja potwierdzona przez właściciela 25.10.2026                         | Końcowe CI do potwierdzenia                                      |
+| Faza 9: kontakty, kroki 9.1–9.3                               | Zaimplementowane lokalnie                                                       | Końcowe CI i odbiór UI na WWW do potwierdzenia                   |
+| K.1: święta i dni okolicznościowe                             | Zaimplementowane lokalnie                                                       | Końcowe CI do potwierdzenia                                      |
+| Redesign R.1–R.7                                              | Implementacja opisana w historii zmian                                          | R.8: odbiór WWW i gotowość wydania do potwierdzenia              |
+| Wspólna pamięć urządzenia i synchronizacja O.1–O.7            | Zaimplementowane lokalnie                                                       | Końcowe CI do potwierdzenia                                      |
+| Oddzielenie sesji od modułów                                  | Sesja offline wydzielona i zweryfikowana lokalnie                               | Końcowe CI do potwierdzenia                                      |
+| Kalendarz we wspólnym kontrakcie offline                      | Zweryfikowane lokalnie                                                          | Końcowe CI do potwierdzenia                                      |
+| Zadania we wspólnym kontrakcie offline                        | Zweryfikowane lokalnie                                                          | Końcowe CI do potwierdzenia                                      |
+| Zakupy we wspólnym kontrakcie offline                         | Zweryfikowane lokalnie                                                          | Końcowe CI do potwierdzenia                                      |
+| Obiady we wspólnym kontrakcie offline                         | Zweryfikowane lokalnie                                                          | Końcowe CI do potwierdzenia                                      |
+| Potwierdzanie sesji w przebiegu nadawcy                       | Zweryfikowane lokalnie                                                          | Końcowe CI do potwierdzenia                                      |
+| Optymalizacja odczytów zadań, wydarzeń i harmonogramu         | Implementacja w osobnym commicie 661d2e5                                        | Końcowe CI i pomiary WWW do potwierdzenia                        |
+| Reset hasła przez e-mail                                      | Zaimplementowany i zweryfikowany lokalnie                                       | Końcowe CI, rzeczywiste SMTP i odbiór UI na WWW do potwierdzenia |
+| LP.1: prototyp strony marketingowej                           | Zweryfikowane lokalnie, oczekuje na CI                                          | Docelowy adres aplikacji i publikacja poza zakresem prototypu    |
+| LP.2: strona marketingowa pod /strona                         | Zweryfikowane lokalnie, oczekuje na CI                                          | Publikacja do potwierdzenia                                      |
 
 Zadania cykliczne C.1–C.2 (#65–#66): zweryfikowane lokalnie, oczekuje na CI.
 Wykonanie offline C.3 (#67): zweryfikowane lokalnie, oczekuje na CI.
 UI reguł i wzorcowe checklisty C.4 (#68): zweryfikowane lokalnie, oczekuje na CI.
-Odbiór ręczny, fizyczne APK, alarmy i zgodność starszego APK do potwierdzenia.
+Ręczny odbiór WWW do potwierdzenia.
 
 Usuwanie kont domowników i całej rodziny: zweryfikowane lokalnie, oczekuje na CI.
-Próby ręczne i fizyczne APK do potwierdzenia według DEVELOPMENT.md.
+Ręczne próby WWW do potwierdzenia według DEVELOPMENT.md.
 
 Jawna deklaracja idempotencji mutacji API — zweryfikowane lokalnie, oczekuje na CI.
 
 Publiczne API zakupów dla eksportu obiadów i reguła granic importów — zweryfikowane lokalnie, oczekuje na CI.
 
 A-2: publiczny kontrakt modułów offline, migracja zakupów w module i snapshot zakupów w wersji 2.
-Zweryfikowane lokalnie w zakresie offline, oczekuje na CI i próbę na fizycznym APK.
+Zweryfikowane lokalnie w zakresie offline, oczekuje na CI.
 
 B-3: limiter żądań API, limity rekordów rodzinnych i współbieżności Argon2.
 Zweryfikowane lokalnie, oczekuje na CI.
@@ -115,9 +115,9 @@ Propozycja do zatwierdzenia przez właściciela przed A-1.2:
 Na obu platformach zmiany starsze niż 30 dni wymagają sprawdzenia stanu
 serwera i ręcznego odtworzenia brakujących zmian po imporcie.
 
-Podpisana aktualizacja APK bez reinstalacji na fizycznym telefonie: niewykonana.
-Do odbioru pozostaje aktualizacja z APK 15 do 16 z oczekującą zmianą,
-import, ponowne uruchomienie offline i synchronizacja po odzyskaniu sieci.
+Odbiór na fizycznym telefonie ukończony. Zakres obejmuje podpisaną
+aktualizację z APK 15 do 16 bez reinstalacji, import oczekującej zmiany,
+ponowne uruchomienie offline i synchronizację po odzyskaniu sieci.
 Status regresji: Vitest i Playwright headless przy 390 i 1280 px oraz CI
 dla `46ea0da` zakończyły się sukcesem.
 
@@ -128,12 +128,9 @@ dla `46ea0da` zakończyły się sukcesem.
 - A-1.3 przeniósł dane i kolejkę do osobnej bazy konta z możliwością
   wznowienia przerwanej migracji.
 - A-1.4 zastąpił dzierżawę nadawcy blokadą Web Locks na WWW i szeregowaniem
-  w procesie APK. CI dla `d65f43e` zakończyło się sukcesem. Odbiór na fizycznym
-  APK pozostaje otwarty.
+  w procesie APK. CI dla `d65f43e` zakończyło się sukcesem.
 - A-1.5 współdzieli unieważnianie żądań w cyklu życia sesji i transporcie.
-  Zweryfikowane lokalnie, oczekuje na CI. Odbiór A-1 wymaga też prób na
-  fizycznym telefonie według
-  [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
+  Zweryfikowane lokalnie, oczekuje na CI. Próby telefonu dla A-1 ukończone.
 
 ## Potwierdzenie założenia rodziny przez e-mail
 
@@ -148,11 +145,10 @@ Starsze APK otrzymuje instrukcję potwierdzenia i późniejszego logowania.
 
 Odbiór: API, migracja zachowująca stare konta i sesje, SMTP, komponenty,
 headless WWW i transport Androida przy 390/1280 px, build WWW/Android,
-release:smoke i końcowe CI. Rzeczywista dostawa poczty i fizyczne APK pozostają
-do odbioru według DEVELOPMENT.md. Bez zmiany zaproszeń do istniejącej rodziny,
+release:smoke i końcowe CI. Bez zmiany zaproszeń do istniejącej rodziny,
 ponownej weryfikacji starych kont, nowego crona, wdrożenia ani publikacji APK.
 Status: zweryfikowane lokalnie, oczekuje na CI. Rzeczywista dostawa poczty
-i próby na fizycznym telefonie do potwierdzenia.
+do potwierdzenia według DEVELOPMENT.md.
 
 ## LP.3 — regulamin i zasady korzystania
 
@@ -171,7 +167,7 @@ Formularz WWW i APK wymaga zaznaczenia pola z linkiem do regulaminu przed
 wysłaniem zgłoszenia. API odrzuca zgłoszenie bez jawnej akceptacji. Starsze APK
 bez pola akceptacji kieruje do rejestracji w przeglądarce. Odbiór obejmuje
 walidację API, komponent, Playwright przy 390/1280 px, fizyczne APK i końcowe CI.
-Status: zweryfikowane lokalnie, oczekuje na CI i próbę na fizycznym telefonie.
+Status: zweryfikowane lokalnie, oczekuje na CI. Odbiór telefonu ukończony.
 
 ## B-8 — polityka prywatności
 
@@ -212,8 +208,8 @@ Odbiór: routowanie, anonimowy i zalogowany użytkownik, rejestracja oraz oba
 logowania, działające demonstracje i UI przy 390/1280 px. Testy komponentów,
 serwowania plików, Playwright headless, build WWW/Android i release:smoke.
 Fizyczne APK: istniejący ekran wejścia, logowanie, kalendarz i systemowy Wstecz.
-Status: zweryfikowane lokalnie, oczekuje na CI; odbiór fizycznego APK
-i publikacja do potwierdzenia.
+Status: zweryfikowane lokalnie, oczekuje na CI. Odbiór telefonu ukończony.
+Publikacja do potwierdzenia.
 
 ## Faza 6 — plan obiadów
 
@@ -224,7 +220,7 @@ i publikacja do potwierdzenia.
 - `GET /api/meals?weekStart=YYYY-MM-DD&multiple=true` (poniedziałek) zwraca 7 dni ze wszystkimi daniami i składnikami.
 - `PUT /api/meals/:date/:slot` z `{ title, notes?, ingredients: [{ name, quantity? }] }` (upsert), `DELETE /api/meals/:date/:slot`.
 - `POST /api/meals/copy-week` z `{ fromWeekStart, toWeekStart, overwrite: boolean }`.
-- `POST /api/meals/to-shopping-list` z `{ weekStart, listId, mealIds? }`. Scala składniki po znormalizowanej nazwie zarówno między wybranymi daniami, jak i z pozycjami już obecnymi na docelowej liście zakupów. Ilości łączymy tekstowo, np. "500 g + 1 kg". Podsumowanie rozróżnia pozycje dodane i uzupełnione.
+- Eksport do zakupów scala składniki po znormalizowanej nazwie. Ilości łączymy tekstowo, np. „500 g + 1 kg”. Podsumowanie rozróżnia pozycje dodane i uzupełnione. Kontrakt mutacji opisuje krok 6.2.
 - `GET /api/meals/suggestions?q=` zwraca wcześniejsze tytuły obiadów razem z ostatnio użytymi składnikami (do szybkiego powtórzenia dania).
 
 **UI:**
@@ -298,19 +294,19 @@ i publikacja do potwierdzenia.
 
 #### Krok 6.3 - UI: tydzień obiadów
 
-- **Status:** zaimplementowane lokalnie; końcowe CI i odbiór ręczny oraz fizyczne APK do potwierdzenia. Funkcje online, bez eksportu do zakupów i trwałej kolejki offline.
+- **Status:** zaimplementowane lokalnie. Końcowe CI i ręczny odbiór WWW do potwierdzenia. Funkcje online, bez eksportu do zakupów i trwałej kolejki offline.
 - **Zakres:** zakładka Obiady z widokiem tygodnia (pon-nd), strzałkami i przyciskiem "dziś". Karta dnia z przyciskiem „+ Dodaj danie”. Formularz (nazwa z podpowiedziami, które po wyborze uzupełniają składniki, notatka, lista składników), usuwanie, "Skopiuj poprzedni tydzień" z pytaniem o nadpisanie. Dziecko widzi tylko odczyt.
 - **Gotowe, gdy:** testy komponentów formularza i podpowiedzi. Ręcznie: zaplanowanie 5 obiadów i skopiowanie tygodnia.
 
 #### Krok 6.4 - UI: dodawanie do listy zakupów i karta "Dziś na obiad"
 
-- **Status:** zweryfikowane lokalnie, oczekuje na CI; odbiór ręczny i fizyczne APK do potwierdzenia.
+- **Status:** zweryfikowane lokalnie, oczekuje na CI. Ręczny odbiór WWW do potwierdzenia.
 - **Zakres:** akcja "Dodaj składniki do listy zakupów" (wybór listy i dań, potem podsumowanie), karta "Dziś na obiad" na górze kalendarza.
 - **Gotowe, gdy:** ręcznie: 5 zaplanowanych obiadów i eksport do niepustej listy daje poprawnie pogrupowane zakupy ze scalonymi ilościami i podsumowaniem pozycji dodanych oraz uzupełnionych. Karta pokazuje dzisiejszy obiad. Zmiana planu po eksporcie nie zmienia zakupów. UI przy 390 i 1280 px, wspólny frontend APK i kontrole według AGENTS.md. Domknięcie fazy przeniesione do kroku 6.5.
 
 #### Krok 6.5 - Obiady offline z trwałą kolejką zmian i domknięcie fazy
 
-- **Status:** zaimplementowane lokalnie; odbiór ręczny, fizyczne APK i końcowe CI do potwierdzenia.
+- **Status:** zaimplementowane lokalnie. Ręczny odbiór WWW i końcowe CI do potwierdzenia.
 - **Zakres:** pełny opis offline powyżej: trwały podgląd i edycja planu,
   kopiowanie zapisanych tygodni, eksport kopii składników do zapisanej listy,
   lokalna projekcja zakupów i karty „Dziś na obiad”, synchronizacja i ochrona
@@ -342,7 +338,7 @@ i publikacja do potwierdzenia.
 ## Reset hasła przez e-mail
 
 Status: zweryfikowane lokalnie, oczekuje na CI.
-Próby rzeczywistej poczty, hostingu i fizycznego APK pozostają do odbioru
+Próby rzeczywistej poczty, hostingu i UI na WWW pozostają do odbioru
 według DEVELOPMENT.md. Konfigurację opisuje DEPLOY.md.
 
 Jeden osobny krok dla dorosłych, również jedynego administratora, na WWW i w APK.
@@ -437,9 +433,9 @@ checklistę. Bez osobnych terminów, przypisań, alarmów i zagnieżdżania.
   pominięcie, zatrzymanie, zakresy edycji i konflikty. Wzorcowa checklista
   kopiowana atomowo z nowymi UUID i zerowym postępem; jawna aktualizacja
   wzorca bez zmiany historii. Testy komponentów i headless Playwright
-  390/1280 px dla WWW i transportu Androida. Odbiór ręczny, fizyczne APK
-  na dwóch urządzeniach, alarmy i zgodność starszego APK do potwierdzenia
-  według DEVELOPMENT.md. Moduł nie ma jeszcze końcowego odbioru ani CI.
+  390/1280 px dla WWW i transportu Androida. Próby telefonu na dwóch
+  urządzeniach, alarmów i zgodności starszego APK ukończone. Ręczny odbiór
+  WWW i końcowe CI do potwierdzenia według DEVELOPMENT.md.
 
 Reguła wymaga daty startu, opcjonalnej godziny, strefy Europe/Warsaw,
 interwału 1–1000 oraz opcjonalnej końcowej daty (włącznie). Tryby:
@@ -490,17 +486,15 @@ na liście zadań; dzień i miesiąc urodzin w jednym polu, opcjonalny rok osobn
 numer urodzin w bieżącym roku, wspólna typografia danych kontaktu i ikona tortu.
 Przypomnienia działają także bez roku. Bez rozszerzenia konfiguracji alarmów.
 Status: zweryfikowane lokalnie, oczekuje na CI. Testy headless 390/1280 px
-obejmują WWW i transport Androida; odbiór ręczny i fizyczne APK do potwierdzenia.
+obejmują WWW i transport Androida. Ręczny odbiór WWW do potwierdzenia.
 
 ## Wydarzenia ze zdjęcia — OCR.1–OCR.6 (#70)
 
 Kolejność: OCR.1 → OCR.2 → OCR.3 → OCR.4 → OCR.5 → OCR.6; osobny krok i commit.
 Numery kroków odpowiadają kolejności realizacji; numery zgłoszeń pozostają bez zmian. Najpierw pełna funkcjonalność i odbiór
 WWW w OCR.4, następnie integracja Androida w OCR.5. Zadania #71 i #72 są
-zamknięte w GitHub; nie oznacza to potwierdzenia brakujących prób opisanych
-poniżej. OCR.4 (#75) zaimplementowany lokalnie; odbiór właściciela i końcowe CI
-pozostają do potwierdzenia. OCR.5 wymaga domknięcia odbioru WWW, bez zależności
-OCR.4 od ML Kit.
+zamknięte w GitHub. Ręczny odbiór WWW dla OCR.4 (#75) pozostaje
+do potwierdzenia według DEVELOPMENT.md.
 Zdjęcie z pliku lub galerii: JPEG, PNG, WebP do 20 MB, korekta orientacji
 i zmniejszenie dłuższego boku do 3200 px przed lokalnym OCR. WWW używa
 Tesseract.js, a Android Tesseract4Android z tym samym polskim modelem w APK.
@@ -518,8 +512,8 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   jeden i kilka terminów, kolumny, zapisy, brak roku/godziny i błędny OCR.
   Odbiór: testy parsera, walidacja dat i lat przestępnych, sprawdzenie
   użytkowników shared oraz końcowe CI. Bez silników OCR, UI i API importu.
-- **OCR.2 (#72): zweryfikowane lokalnie, oczekuje na CI.** Odbiór ręczny
-  i regresja fizycznego APK do potwierdzenia według DEVELOPMENT.md.
+- **OCR.2 (#72): zweryfikowane lokalnie, oczekuje na CI.** Ręczny odbiór WWW
+  do potwierdzenia według DEVELOPMENT.md.
   Akcja „Dodaj ze zdjęcia”, przygotowanie obrazu,
   Tesseract.js w workerze ładowanym na żądanie, lokalne wersjonowane zasoby
   i licencje, minimalna CSP dla WASM/workera. Podgląd zdjęcia i propozycji,
@@ -538,7 +532,9 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   nie pozwala odtworzyć go przez retry. Zachowane role, także dzieci, oraz
   stary POST /api/events. Odbiór: częściowy sukces, retry i równoległość,
   rollback, konflikty ID, izolacja, migracja, build i release:smoke.
-- **OCR.4 (#75): zweryfikowany lokalnie, oczekuje na CI; ręczny odbiór właściciela do potwierdzenia.** Poprawianie, odrzucanie i ręczne dodawanie
+- **OCR.4 (#75): zweryfikowany lokalnie.** [CI dla `6e6565f`](https://github.com/WojciechPreficz/rodzina/actions/runs/41612936107)
+  zakończyło się sukcesem. Ręczny odbiór WWW do potwierdzenia.
+  Poprawianie, odrzucanie i ręczne dodawanie
   propozycji istniejącym formularzem; potwierdzenie przed zaznaczeniem do paczki.
   Zapis online do 20 wydarzeń i wynik każdej pozycji, odświeżenie kalendarza
   i harmonogramu także przy częściowym sukcesie. Przed wysłaniem trwały zapis
@@ -555,12 +551,12 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   decyzji o zastąpieniu wybranego wpisu lub dodaniu kolejnego. Decyzja importu
   jest utrwalana z operacją; retry nie powtarza zastąpienia.
   Wspólne komponenty zachowują zgodność z istniejącym APK; natywna integracja
-  nowej funkcji i jej odbiór pozostają w OCR.5/OCR.6. Publikacja osobno.
+  nowej funkcji i próby telefonu opisano w OCR.5/OCR.6. Publikacja osobno.
 - **OCR.5 (#73): zweryfikowany lokalnie, oczekuje na CI.** Zależne #75 zamknięte, CI jego commita zakończone sukcesem.
-  Próby fizycznego telefonu wykona właściciel według DEVELOPMENT.md.
+  Próby fizycznego telefonu ukończone według DEVELOPMENT.md.
   Po zgłoszeniu błędów plakatu: regresje siedmiu kartek, ochrona przed datą
   sąsiedniej kartki, tytuły zaczynające się od „Szkoła”, rozdzielanie fragmentów
-  ML Kit, pewność i drugi odczyt kontrastu; ponowny odbiór telefonu wymagany.
+  ówczesnego silnika ML Kit, pewność i drugi odczyt kontrastu.
   Natywny selektor zdjęć, model dołączony do APK, wspólny format i parser.
   Podłączenie do gotowego podglądu, zatwierdzania i zapisu z OCR.2/OCR.4,
   bez drugiej implementacji formularza i importu. Obsługa URI, orientacji,
@@ -572,11 +568,10 @@ i czas trwania są opcjonalne. Brak godziny oznacza wpis w danym dniu
   częściowy sukces, utrata odpowiedzi, restart/retry i zmiana konta.
   Sprawdzenie regresji WWW i wspólnych komponentów headless 390/1280 px.
 - **OCR.6 (#76): podmiana natywnego silnika na Tesseract4Android,
-  zweryfikowana lokalnie, oczekuje na CI i odbiór fizycznego APK.** Ponowny odczyt
+  zweryfikowana lokalnie, oczekuje na CI.** Odbiór telefonu ukończony. Ponowny odczyt
   niepewnych wierszy WWW/Androida, dodatkowe przebiegi WWW także po znalezieniu
   daty oraz regresja rzeczywistego listopadowego zdjęcia: siedem tytułów i dat.
-  Końcowy odbiór obu platform i regresja
-  odebranego wcześniej WWW. Odbiór całego przepływu na kontrolnych zdjęciach
+  Końcowy odbiór całego przepływu na kontrolnych zdjęciach
   w WWW 390/1280 px i fizycznym APK, także offline OCR Androida, częściowy
   sukces, restart/retry, konto, sieć, Wstecz, fokus, klawiatura i safe area.
   Sprawdzenie CSP, lokalnych zasobów, modelu APK, prywatności i zgodności
@@ -599,18 +594,21 @@ Kolejne kroki nie zmieniają obecnych uprawnień kalendarza.
   migracja, zgodność starego APK, API, wspólny UI WWW/APK, testy i odbiór.
   Poza zakresem: e-mail, Web Push i konfigurowanie godziny/wyprzedzenia.
   Status: zweryfikowane lokalnie, oczekuje na CI. Testy headless 390/1280 px
-  obejmują WWW i transport Androida; odbiór ręczny i fizyczne APK do potwierdzenia.
+  obejmują WWW i transport Androida. Ręczny odbiór WWW do potwierdzenia.
 
-- R.8: sprawdzić wszystkie istniejące ekrany przy 390 i 1280 px oraz w APK,
-  klawiaturę, fokus, kontrast, safe area i stany błędów. Potwierdzić aktualizację
-  z zachowaniem danych; publikacja wymaga osobnego polecenia.
+- R.8: odbiór telefonu i aktualizacji APK z zachowaniem danych ukończony.
+  Na WWW sprawdzić wszystkie istniejące ekrany przy 390 i 1280 px, klawiaturę,
+  fokus, kontrast i stany błędów. Publikacja wymaga osobnego polecenia.
 - Odbiór optymalizacji odczytów z commita 661d2e5: zbiorczy snapshot dostępnych list i zadań, grupowe
   odczyty relacji wydarzeń/przypomnień z porcjowaniem SQL i jeden właściciel
   odświeżania. Zachować stare kontrakty APK, kontrolę uprawnień przed zapisem
   i odtworzeniem odpowiedzi idempotentnej oraz kompletność cache.
   Porównać liczbę HTTP/SQL, czas i rozmiar odpowiedzi dla tych samych danych
-  (np. 1, 10, 30 list), WWW i fizycznego APK. Sprawdzić prywatne listy,
+  (np. 1, 10, 30 list) na WWW. Próba fizycznego APK ukończona.
+  Sprawdzić prywatne listy,
   cofnięcie udostępnienia, izolację rodzin i przypomnienia osobiste.
   Natywny transport pozostaje szeregowy; zmiany współbieżności wymagają
   osobnego uzasadnienia pomiarami.
-- Dalsze pomysły, bez zatwierdzonego zakresu: iCal, przepisy i iOS.
+- Integracja Google Calendar przez iCal ma osobny [plan kroków G.1–G.5](GOOGLE_CALENDAR_PLAN.md).
+  Implementacja i jej odbiór są przyszłą pracą.
+- Dalsze pomysły, bez zatwierdzonego zakresu: przepisy i iOS.

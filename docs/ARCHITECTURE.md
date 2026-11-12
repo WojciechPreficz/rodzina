@@ -761,7 +761,6 @@ zmiana konta i limit 120 s unieważniają wynik i zlecają anulowanie natywne.
 Powrót z selektora kontynuuje istniejącą operację; nie uruchamia nowego odczytu.
 Podgląd, parser, poprawianie, zatwierdzanie, zapis online, wyniki i trwałe retry
 są wspólne z WWW. Transport API nie przesyła zdjęcia ani surowego OCR.
-Fizyczny odbiór pozostaje wymagany w OCR.5/OCR.6.
 
 `POST /api/events/import` (OCR.3) przyjmuje `{ items: [{ operationId, event }] }`
 z 1–20 pozycjami i unikalnymi UUID operacji. Niepoprawna struktura odrzuca całe

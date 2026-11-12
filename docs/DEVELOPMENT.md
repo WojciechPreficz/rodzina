@@ -38,8 +38,8 @@ Pełne logi wybranej kontroli można zapisać w ignorowanym `.check-logs/`
 przez `npm run check:logged -- test <ścieżka>` lub analogicznie `test:e2e`,
 `build`, `typecheck`, `lint`, `format:check`, `release:smoke`. Skrypt zachowuje
 kod wyjścia npm i wypisuje podsumowanie oraz ścieżkę logu.
-Pozostaje odbiór fizycznego APK: ekran wejścia, logowanie, kalendarz i Wstecz;
-symulowany transport Androida nie zastępuje telefonu. Wdrożenie jest osobne.
+Zakres ukończonego odbioru LP.2 w APK obejmuje ekran wejścia, logowanie,
+kalendarz i systemowy Wstecz.
 
 Regulamin: `/strona/regulamin.html` (samodzielny podgląd: `/regulamin.html`),
 odnośnik w stopce i przy wymaganym polu akceptacji w formularzu założenia rodziny.
@@ -68,13 +68,12 @@ Link potwierdzenia otwiera przeglądarkę; po jego użyciu wracamy do APK
 i logujemy się. Nie zmieniamy Android App Links. Build frontendu Androida:
 npm run build --workspace @rodzina/web -- --mode android.
 
-Pozostaje ręczny odbiór: rzeczywisty e-mail (także Spam, SPF/DKIM/DMARC),
-nowa rodzina założona z fizycznego APK, otwarcie wiadomości w przeglądarce,
-potwierdzenie i powrót do logowania w aplikacji. W fizycznym APK sprawdź też
-otwarcie regulaminu i powrót do wypełnionego formularza, komunikat starszego APK
-kierujący do rejestracji w przeglądarce oraz istniejące konto bez dodatkowej
-weryfikacji. Testowa skrzynka i emulowany transport nie zaliczają tych prób.
-Wdrożenie i publikacja APK są osobnymi czynnościami.
+Do potwierdzenia pozostaje dostawa poczty w docelowej konfiguracji SMTP,
+w tym folder Spam i SPF/DKIM/DMARC. Ukończony odbiór fizycznego APK obejmuje
+założenie rodziny, otwarcie wiadomości w przeglądarce, potwierdzenie i powrót
+do logowania, otwarcie regulaminu i powrót do wypełnionego formularza,
+komunikat starszego APK kierujący do rejestracji w przeglądarce oraz
+logowanie na istniejące konto bez dodatkowej weryfikacji.
 
 Zakres obowiązkowych kontroli określa [AGENTS.md](../AGENTS.md).
 Komendy: npm run lint, npm run format:check, npm run typecheck, npm test,
@@ -147,10 +146,9 @@ wyniki online; pozycje zapisane nie mogą się powielić. Po błędzie pamięci
 przed zapisem żądanie nie może zostać wysłane. Niezapisane szkice i źródło
 OCR nie przetrwają zamknięcia ekranu; wysłane operacje i odrzucenia przetrwają.
 Po zmianie zależności lub konfiguracji Vite zrestartuj serwer deweloperski.
-Ręczny odbiór właściciela na kontrolnych i rzeczywistych zdjęciach przy
-390/1280 px oraz regresja wspólnego frontendu w fizycznym APK pozostają do
-potwierdzenia. Zależne #75 jest zamknięte, a CI jego commita przeszło;
-końcowy odbiór obu platform pozostaje w OCR.6.
+Ręczny odbiór WWW na kontrolnych i rzeczywistych zdjęciach przy 390/1280 px
+pozostaje do potwierdzenia. Regresję wspólnego frontendu w fizycznym APK
+oznaczono jako ukończoną. Zależne #75 jest zamknięte, a CI jego commita przeszło.
 Nie deklarujemy gwarancji uruchamiania WWW offline.
 
 OCR.5: testy `ocrNative` sprawdzają kontrakt, limit podglądu, anulowanie
@@ -168,7 +166,7 @@ osobne „Sesja zdjęciowa świąteczna” (5.11), „Szkoła do hymnu” (9.11)
 wielowierszową audycję i brak odczytanej pierwszej daty bez pożyczania 9.11.
 Budowanie debug APK i `testDebugUnitTest lintDebug` opisano poniżej.
 
-Do odbioru właściciela na fizycznym telefonie (#73): po instalacji APK
+Zakres ukończonego odbioru na fizycznym telefonie (#73): po instalacji APK
 przed pierwszym OCR wyłącz sieć, wybierz lokalny plakat i sprawdź odczyt bez
 pobierania modelu. Sprawdź anulowanie selektora i odczytu, ponowny wybór,
 powrót z selektora, zdjęcie z EXIF (obrót i odbicie), duże zdjęcie, plik ponad
@@ -178,18 +176,17 @@ porównaj wyniki, kalendarz i harmonogram. Sprawdź częściowy sukces, utratę
 odpowiedzi, restart APK i ręczne retry bez duplikatów oraz czyszczenie konta.
 Właściciel zgłosił błędy odczytu listopadowego plakatu: przypisanie 9.11
 pierwszej kartce zamiast 5.11, brak „Szkoły do hymnu” i przekręcone litery.
-Po poprawce wymagany ponowny fizyczny odczyt tego zdjęcia, także offline,
+Ponowna próba po poprawce obejmuje fizyczny odczyt tego zdjęcia, także offline,
 porównanie wszystkich siedmiu terminów i tytułów oraz anulowanie odczytu.
 Regresje geometrii są syntetyczne; rzeczywiste zdjęcie
 `test-fixtures/ocr/november-2026.jpg` sprawdza test headless „seven November”
 w `e2e/calendar-ocr.spec.ts` przy 390/1280 px: siedem pełnych tytułów i dat,
 w tym sesję 5.11 i „Szkołę do hymnu” 9.11, oraz zatwierdzenie i zapis.
-Po podmianie silnika wymagany jest odbiór APK z Tesseract4Android. Pierwsza
-kartka ma mieć datę 5.11.2026, a wszystkie siedem tytułów ma odpowiadać zdjęciu,
-także offline. Sprawdź również zdjęcia, dla których użytkownik zgłosił gorszy
-odczyt w APK niż w WWW. Porównaj tytuły, daty i czas oczekiwania.
-Sprawdź anulowanie podczas odczytu fragmentów i ponowny wybór zdjęcia.
-Pozostałe próby telefonu nadal wymagają potwierdzenia właściciela.
+Zakres ukończonego odbioru OCR.6 obejmuje APK z Tesseract4Android, odczyt
+daty 5.11.2026 na pierwszej kartce i wszystkich siedmiu tytułów, także offline.
+Obejmuje też porównanie tytułów, dat i czasu oczekiwania dla zdjęć zgłoszonych
+z gorszym odczytem w APK oraz anulowanie podczas odczytu fragmentów i ponowny
+wybór zdjęcia.
 
 Duplikaty wydarzeń sprawdzają testy API `modules/events`, kontraktów
 `schemas/events`, komponentu `PhotoImportReview` i magazynu `photoImportStorage`.
@@ -198,9 +195,9 @@ formularz WWW i transport Androida, anulowanie, zastąpienie i dodanie kolejnego
 import z częściowymi wynikami oraz utratę odpowiedzi i restart po decyzji.
 API sprawdza datę i znormalizowany tytuł, izolację rodzin, uprawnienia dzieci,
 zmianę wersji, równoległe importy i rollback zastąpienia wraz z rejestrem.
-Ręcznie sprawdź dwukrotne dodanie tego samego tytułu w tej samej dacie,
+Na WWW ręcznie sprawdź dwukrotne dodanie tego samego tytułu w tej samej dacie,
 obie decyzje, kilka istniejących dopasowań i zmianę wpisu z drugiego urządzenia
-przy otwartym dialogu. Odbiór fizycznego APK i końcowe CI pozostają do potwierdzenia.
+przy otwartym dialogu. Odbiór telefonu ukończony, końcowe CI do potwierdzenia.
 
 Reguły cykliczności C.1 sprawdzają testy shared/task-recurrence oraz
 modules/tasks/recurrence-migrations: końce miesięcy, lata przestępne, tygodnie
@@ -214,17 +211,19 @@ restart, retry, utrata odpowiedzi/snapshotu, stara kolejka, wersje po edycjach,
 cofnięcie, konflikty, wygaśnięcie, dostęp i błędy pamięci. Headless Playwright
 task-recurrence-offline sprawdza wykonanie i restart offline przy 390/1280 px
 dla WWW i transportu Androida oraz historię z rzeczywistym czasem wykonania.
-Test transportu nie zastępuje fizycznego APK. Do odbioru pozostają fizyczny
-restart offline i uzgodnienie na dwóch urządzeniach, zatrzymanie/usunięcie
+Zakres ukończonego odbioru telefonu obejmuje fizyczny restart offline
+i uzgodnienie na dwóch urządzeniach, zatrzymanie/usunięcie
 serii na drugim urządzeniu, alarmy pending i po synchronizacji, utrata dostępu
 i zmiana konta. C.4 sprawdzają testy TaskRecurrenceEditor, taskRecurrencePreview
 oraz API recurrence: formularz obu trybów, błędy, historia, wzorzec checklisty,
 nowe UUID i postęp 0/N, retry, atomowy rollback i konflikty wersji. Headless
 Playwright task-recurrence-ui sprawdza oba tryby, zakresy edycji, checklisty,
 historię, pominięcie i zatrzymanie przy 390/1280 px dla WWW i transportu Androida.
-Końcowe CI i poniższy odbiór ręczny pozostają do potwierdzenia.
+Końcowe CI i poniższy odbiór WWW pozostają do potwierdzenia.
 
 ## Odbiór cykliczności C.4
+
+### WWW do potwierdzenia
 
 Uruchom npm run dev, a po zmianie shared uruchom je ponownie. W formularzu
 zadania wybierz „Powtarzaj”, początek i godzinę oraz „Utwórz serię”. Przy nowym
@@ -243,24 +242,23 @@ Przy istniejącym zadaniu dołączenie do serii przejmuje jego checklistę.
       pomijane daty rytmu, „Pomiń wystąpienie”, historię i „Zatrzymaj serię”.
       Zatrzymane bieżące zadanie pozostaje jednorazowe. Cofnij wykonanie przed
       edycją następcy, potem powtórz po jego edycji: drugi przypadek daje konflikt.
-- [ ] Na dwóch urządzeniach zmień regułę/checklistę i równolegle wykonaj zadanie;
-      sprawdź jawny konflikt oraz odświeżenie bez utraty kroków. Zweryfikuj dostęp
-      dziecka do udostępnionej listy, prywatne listy, cofnięcie udostępnienia,
-      wylogowanie i zmianę konta. Stary wspierany APK ma edytować i kończyć
-      wystąpienia bez usuwania serii, wzorca i checklist.
-- [ ] W fizycznym APK na dwóch urządzeniach sprawdź wykonanie online, potem
+
+### Odbiór telefonu ukończony
+
+- [x] Konflikt reguł i checklist, równoległe wykonanie oraz odświeżenie na dwóch
+      urządzeniach. Dostęp dziecka, prywatne listy, cofnięcie udostępnienia,
+      wylogowanie i zmiana konta. Starsze wspierane APK edytuje i kończy
+      wystąpienia z zachowaniem serii, wzorca i checklist.
+- [x] W fizycznym APK na dwóch urządzeniach sprawdź wykonanie online, potem
       offline → wykonanie → zamknięcie procesu → otwarcie offline → online.
       Przed synchronizacją brak następcy i jego alarmu; po niej dokładnie jeden
       następca z poprawną datą i checklistą 0/N na obu urządzeniach. Konfiguracja,
       pominięcie, zatrzymanie i pobranie historii offline są zablokowane.
-- [ ] Ustaw wspólne względne przypomnienie, odbierz rzeczywisty alarm następcy
+- [x] Ustaw wspólne względne przypomnienie, odbierz rzeczywisty alarm następcy
       po synchronizacji. Zmień termin, uruchom telefon ponownie i sprawdź nowy
       alarm oraz brak alarmu ukończonego/usuniętego zadania. Potwierdź, że zamknięte
       APK nie pobiera zmian z drugiego urządzenia; trzeba je otworzyć i uzgodnić.
       Sprawdź klawiaturę, fokus, systemowy Wstecz i safe area formularza.
-
-Żadna z powyższych prób ręcznych i fizycznych nie jest potwierdzona przez
-testy automatyczne. Bez commita nie ma końcowego CI; deploy pozostaje osobny.
 
 ## Android lokalnie
 
@@ -303,54 +301,80 @@ pozostaje w module cykliczności.
 
 ## Pozostały odbiór
 
-Poniższe próby nie mają potwierdzenia wykonania. Dla każdej zapisz commit,
-model telefonu, Android, wersje APK przed/po, datę i wynik. Nie zaliczaj
-historycznych terminów wstecz; mocki i test transportu nie dowodzą działania
-systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
+Aktualne CI sprawdzaj dla konkretnego commita.
 
-- [ ] Usuwanie kont: UI przy 390/1280 px i fizyczne APK, klawiatura, fokus
+- [ ] Usuwanie kont na WWW przy 390/1280 px. Scenariusze uprawnień, błędów,
+      offline, utraty odpowiedzi i czyszczenia danych jak w odbiorze telefonu
+      oraz czyszczenie po usunięciu konta w drugiej karcie.
+- [ ] Reset hasła: rzeczywista skrzynka SMTP według DEPLOY, odbiór i Spam,
+      SPF/DKIM/DMARC oraz brak tokenów w logach hostingu. Nadawca nie jest
+      skonfigurowany automatycznie; domyślnie funkcja pozostaje wyłączona.
+- [ ] Reset hasła na WWW przy 390/1280 px: otwarcie linku bez APK, błędny,
+      wygasły i użyty link, ponowne zamówienie, brak sieci, limit i wyłączona
+      funkcja. Potwierdzić zaufane proxy i odporność limitu IP na własny
+      X-Forwarded-For.
+- [ ] Odbiór WWW przy 390 i 1280 px: kalendarz, zadania, zakupy, rodzina,
+      dokumenty, kontakty, powiadomienia, aktualizator i 404. Sprawdzić
+      klawiaturę, fokus, kontrast, duży tekst, formularze i błędy.
+- [ ] Kontakty na WWW: wyszukiwanie, grupy, formularz i szczegóły, role,
+      izolacja rodzin i cofnięcie dostępu.
+- [ ] Obiady (6.3–6.5) na WWW przy 390/1280 px: ręczny odbiór tygodnia,
+      eksportu i kolejki offline według scenariuszy fazy 6 w planie.
+- [ ] Poprawki list i urodziny kontaktu na WWW przy 390/1280 px: odhaczanie
+      podzadań, także offline, zapis i odczyt urodzin z rokiem i bez roku,
+      usunięcie daty, numer urodzin, ikona i typografia.
+- [ ] WWW: przerwanie importu pięciu magazynów, brak miejsca, odmowa zapisu
+      i stare karty. Sprawdzić utratę sesji i zmianę konta w drugiej karcie,
+      spóźnione odpowiedzi oraz restart offline WWW po aktualizacji.
+- [ ] WWW: stare zmiany, odrzucenia, konflikty, cofnięcie dostępu i zależności
+      operacji według scenariusza wspólnej kolejki z odbioru APK.
+- [ ] Hosting: zaufane proxy, backup/odzyskanie oraz powrót ze starej PWA
+      (wyrejestrowanie workera, zachowana sesja, manifest 410), po zleconym deployu.
+
+## Odbiór na fizycznym telefonie
+
+Właściciel 12.11.2026 polecił oznaczyć dotychczasowe próby telefonu jako
+ukończone. Data dotyczy zmiany statusu. Szczegóły przebiegów, w tym wersje
+APK, urządzenia i wyniki pomiarów, wymagają danych z prób.
+
+- [x] Usuwanie kont: fizyczne APK, klawiatura, fokus
       i systemowy Wstecz. Administrator usuwa domownika lub rodzinę; inny dorosły
       siebie i dowolne dziecko, dziecko nikogo. Ostatni administrator musi
       przekazać rolę albo usunąć rodzinę. Sprawdzić błędne hasło, limit, nazwę
       rodziny, anulowanie, offline i utratę odpowiedzi ze sprawdzeniem wyniku.
       Usunięcie dziecka nie wylogowuje dorosłego; pojedyncze usunięcie zachowuje
       wspólne treści i przekazuje listy. Usunięcie siebie/rodziny czyści lokalne
-      dane, kolejki i alarmy, również w drugiej karcie. Telefon offline traci
+      dane, kolejki i alarmy. Telefon offline traci
       dostęp i czyści alarmy po kontakcie z API. Potwierdzić komunikat aktualizacji
-      przy usuwaniu bez hasła ze starszego APK i końcowe CI.
-- [ ] Reset hasła: rzeczywista skrzynka SMTP według DEPLOY, odbiór i Spam,
-      SPF/DKIM/DMARC oraz brak tokenów w logach hostingu. Nadawca nie jest
-      skonfigurowany automatycznie; domyślnie funkcja pozostaje wyłączona.
-- [ ] Reset na fizycznym APK: zamówienie linku, otwarcie z poczty przy zamkniętej
-      i uruchomionej aplikacji, a także bez APK (WWW). Po zmianie hasła stare
+      przy usuwaniu bez hasła ze starszego APK.
+- [x] Reset na fizycznym APK: zamówienie linku, otwarcie z poczty przy zamkniętej
+      i uruchomionej aplikacji. Po zmianie hasła stare
       hasło nie działa, nowe działa, własne dane i alarmy są czyszczone.
       Reset innej osoby nie wylogowuje bieżącego konta. Drugie urządzenie online
       traci sesję przy kontakcie z API; offline dopiero po powrocie sieci.
-- [ ] Reset: odbiór formularzy przy 390/1280 px i w APK, błędny/wygasły/użyty
+- [x] Reset: odbiór formularzy w APK, błędny/wygasły/użyty
       link, ponowne zamówienie linku, brak sieci, limit i wyłączona funkcja.
-      Potwierdzić zaufane proxy i odporność limitu IP na własny X-Forwarded-For.
 
-- [ ] UI przy 390 i 1280 px oraz wspólny frontend APK: kalendarz, zadania,
+- [x] Wspólny frontend APK: kalendarz, zadania,
       zakupy, rodzina, dokumenty, kontakty, powiadomienia, aktualizator i 404.
       Klawiatura, fokus, kontrast, safe area, duży tekst, formularze i błędy.
-- [ ] Kontakty: wyszukiwanie, grupy, formularz i szczegóły; dorośli edytują,
+- [x] Kontakty: wyszukiwanie, grupy, formularz i szczegóły; dorośli edytują,
       dziecko tylko odczytuje. Domyślnej grupy nie usuwamy, usunięcie innej
       przenosi kontakty. Izolacja rodzin i cofnięcie dostępu.
-- [ ] Obiady (6.3): ręcznie zaplanować pięć obiadów i skopiować tydzień,
+- [x] Obiady (6.3): ręcznie zaplanować pięć obiadów i skopiować tydzień,
       w tym dodać dwa dania tego samego dnia i zmienić lub usunąć jedno z nich,
       sprawdzić pomijanie oraz nadpisanie zajętych dni, podpowiedzi składników,
-      edycję, usuwanie i odczyt dziecka. Odbiór przy 390/1280 px i w fizycznym
-      APK, w tym klawiatura, fokus oraz systemowy Wstecz. Test transportu Androida
-      w Playwright nie zastępuje próby telefonu.
-- [ ] Obiady (6.4): wyeksportować pięć dań do niepustej listy, sprawdzić
+      edycję, usuwanie i odczyt dziecka. W APK także klawiatura, fokus oraz
+      systemowy Wstecz.
+- [x] Obiady (6.4): wyeksportować pięć dań do niepustej listy, sprawdzić
       scalanie nazw i ilości, podsumowanie dodanych/uzupełnionych pozycji oraz
       pozostawienie kupionych pozycji bez zmian. Sprawdzić wybór części dań,
       ostrzeżenie i potwierdzenie ponownego eksportu, ponowienie po błędzie
       oraz brak zmian zakupów po edycji/usunięciu obiadu. Karta „Dziś na obiad”
       pokazuje dzisiejszy plan według strefy rodziny, także po zmianie daty
-      kalendarza; dziecko ma podgląd bez eksportu. Odbiór przy 390/1280 px
-      i w fizycznym APK, w tym systemowy Wstecz i utrata sieci w oknie eksportu.
-- [ ] Obiady (6.5): na fizycznym APK pobrać tygodnie i niepustą listę zakupów,
+      kalendarza; dziecko ma podgląd bez eksportu. W APK także systemowy Wstecz
+      i utrata sieci w oknie eksportu.
+- [x] Obiady (6.5): na fizycznym APK pobrać tygodnie i niepustą listę zakupów,
       odłączyć sieć, dodać/zmienić/usunąć obiad, skopiować zapisany tydzień
       i wyeksportować składniki. Zmienić obiad po eksporcie, zamknąć proces
       aplikacji i uruchomić bez internetu. Sprawdzić zachowanie zmian,
@@ -358,79 +382,78 @@ systemowego alarmu. Aktualne CI sprawdzaj dla konkretnego commita.
       Po powrocie sieci porównać z drugim urządzeniem: bez utraty zmian
       i podwojenia ilości, także po utracie odpowiedzi. Sprawdzić ponowny
       eksport, konflikty po usunięciu obiadu/listy na drugim urządzeniu,
-      wylogowanie i zmianę konta. Odbiór UI 390/1280 px oraz fizycznego APK
-      pozostaje wymagany; testy headless z transportem Androida nie potwierdzają
-      restartu procesu, klawiatury ani systemowego Wstecz na telefonie.
-- [ ] Dokumenty: wszystkie typy i filtry, szczegóły po nazwie, plakietka
+      wylogowanie, zmianę konta, klawiaturę i systemowy Wstecz.
+- [x] Dokumenty: wszystkie typy i filtry, szczegóły po nazwie, plakietka
       niezależna od filtra. „Odnowiono” zmienia termin i offsety; minione
       absolute pozostaje nieaktywne. Osobiste przypomnienia są prywatne;
       dziecko zarządza własnymi, bez edycji dokumentu.
-- [ ] K.1: wszystkie widoki kalendarza, przełączniki i podglądy warstw,
+- [x] K.1: wszystkie widoki kalendarza, przełączniki i podglądy warstw,
       zachowanie preferencji po ponownym uruchomieniu APK i bez sieci,
       bez zależności od błędu API wydarzeń.
-- [ ] Aktualizacja między dwoma podpisanymi wydaniami bez czyszczenia danych:
+- [x] Aktualizacja między dwoma podpisanymi wydaniami bez czyszczenia danych:
       pobranie, anulowanie instalatora, ponowienie, większy numer wersji,
       zachowana sesja i dane; dotychczasowy klucz i pl.preficze.rodzina.
-- [ ] App Links zaproszenia i resetu: zamknięte/otwarte APK oraz brak APK,
+- [x] App Links zaproszenia i resetu: zamknięte/otwarte APK oraz brak APK,
       prawidłowy powrót i systemowy Wstecz; weryfikacja domeny na telefonie.
-- [ ] Alarm wydarzenia co najmniej 10 minut w przyszłości: po synchronizacji
+- [x] Alarm wydarzenia co najmniej 10 minut w przyszłości: po synchronizacji
       wyłącz sieć, zamknij interfejs i zablokuj ekran. Odbiór bez otwierania
       APK, opóźnienie najwyżej 60 s. Powtórz po restarcie i pierwszym
       odblokowaniu, także po zmianie strefy telefonu. Zapisz czas lokalny/UTC,
-      faktyczny odbiór i wynik kliknięcia. Zgłoszenie OPPO deploy.3 nadal
-      wymaga potwierdzenia na aktualnej wersji.
-- [ ] Alarm dokumentu: termin za 31 dni i offset 30 dni, następnego dnia
+      faktyczny odbiór i wynik kliknięcia. Zakres obejmuje też regresję
+      zgłoszenia OPPO deploy.3 na aktualnej wersji.
+- [x] Alarm dokumentu: termin za 31 dni i offset 30 dni, następnego dnia
       09:00 Europe/Warsaw. Odbiór po zamknięciu APK i po restarcie; kliknięcie
       otwiera zapisany podgląd. Zdalne odnowienie/usunięcie po sync anuluje
       lub zastępuje stary alarm. Wydarzenia: zmiana/anulowanie i podział serii
       nie pozostawiają duplikatów. Wymagane zgody powiadomień i alarmów.
-- [ ] Poprawki list: na WWW 390/1280 px i fizycznym APK odhaczyć i cofnąć
+- [x] Poprawki list: w fizycznym APK odhaczyć i cofnąć
       podzadanie bez otwierania formularza, także offline; rodzic pozostaje
       bez zmian. Sprawdzić zapis i odczyt urodzin bez roku, numer urodzin ze
       znanym rokiem, ikonę tortu i wspólną typografię danych kontaktu.
-- [ ] Urodziny kontaktu: na WWW 390/1280 px i fizycznym APK zapisać datę,
+- [x] Urodziny kontaktu: w fizycznym APK zapisać datę,
       zmienić ją i wyczyścić. Na dwóch kontach potwierdzić alarm w dniu
       urodzin o 09:00 Europe/Warsaw, także offline po zamknięciu APK
       i restarcie telefonu. Kliknięcie otwiera Kontakty. Po synchronizacji
       zmiana/usunięcie daty lub kontaktu usuwa stary alarm, bez duplikatów.
       Starsze wspierane APK zachowuje odczyt kontaktów, zapis bez zmiany daty
       i dotychczasowe alarmy. Wymagane systemowe zgody powiadomień i alarmów.
-- [ ] Migracja pięciu magazynów: aktualizacja ze wspieranych źródeł, także
+- [x] Migracja pięciu magazynów: aktualizacja ze wspieranych źródeł, także
       pominięcie wydań, po zamknięciu starych instancji. Bez sieci dane i zmiany
       zakupów/zadań przetrwają zakończenie procesu; powrót sieci nie dubluje zapisów.
-      Sprawdzić przerwanie importu, brak miejsca, odmowę zapisu i stare karty.
-- [ ] Stare zmiany (>30 dni), odrzucenia, konflikty, cofnięcie udostępnienia
+      Sprawdzić przerwanie importu, brak miejsca i odmowę zapisu w APK.
+- [x] Stare zmiany (>30 dni), odrzucenia, konflikty, cofnięcie udostępnienia
       i zależności nie gubią operacji. Niezależne zmiany idą dalej.
       Panel odrzuca tylko obejrzany łańcuch, po potwierdzeniu i trwałym zapisie;
       lista wymaga świeżego odczytu przed kolejnym zapisem.
       Blokada alarmów zadania utrzymuje się po restarcie, a ustępuje po uzgodnieniu.
-- [ ] Niezależna sesja offline: zaktualizować fizyczne APK z danymi zakupów,
+- [x] Niezależna sesja offline: zaktualizować fizyczne APK z danymi zakupów,
       obiadów i niewysłanymi zmianami zapisanymi przez poprzednią wersję,
       bez czyszczenia pamięci. Bez sieci zakończyć proces i uruchomić ponownie:
-      konto, dane i kolejki mają pozostać dostępne. Powtórzyć restart offline
-      WWW po aktualizacji. Zmienić konto i sprawdzić, że poprzednia sesja,
-      dane oraz spóźnione odpowiedzi nie wracają; sprawdzić też wylogowanie
-      offline i 401 po odzyskaniu sieci. Próby właściciela pozostają niepotwierdzone.
-- [ ] Odbiór A-1 na fizycznym telefonie. Zaktualizować bez reinstalacji
+      konto, dane i kolejki mają pozostać dostępne. Po zmianie konta
+      poprzednia sesja, dane i spóźnione odpowiedzi nie wracają. Scenariusz
+      obejmuje też wylogowanie offline i 401 po odzyskaniu sieci.
+- [x] Odbiór A-1 na fizycznym telefonie. Zaktualizować bez reinstalacji
       podpisane APK 15 do 16 z oczekującą zmianą i potwierdzić import.
       Sprawdzić też aktualizację podpisanego APK ze wspólną bazą
       `rodzina-offline` i oczekującą kolejką. Bez sieci zakończyć proces i
       ponownie otworzyć aplikację. Sprawdzić sesję, snapshoty i zachowanie
       kolejki po przejściu do bazy konta, a po odzyskaniu sieci wysłanie zmian
       bez duplikatów. Zmienić konto i wylogować się, sprawdzając izolację
-      danych i usunięcie alarmów. ADB nie wykrył telefonu podczas A-1.5.
-- [ ] Wylogowanie, utrata sesji i zmiana konta, również w drugiej karcie,
+      danych i usunięcie alarmów.
+- [x] Wylogowanie, utrata sesji i zmiana konta w APK
       usuwają właściwe dane i alarmy; spóźniona odpowiedź ich nie odtwarza
       ani nie usuwa danych nowego konta. Sprawdzić odtworzenie sesji w APK.
-- [ ] Pamięć i bateria: pomiar navigator.storage.estimate() oraz liczników
+- [x] Pamięć i bateria: pomiar navigator.storage.estimate() oraz liczników
       cache/kolejki przed i po rzeczywistych danych, zachowanie przy granicach
       i brak okresowej pracy pustego nadawcy; próba na fizycznym telefonie.
-- [ ] Synchronizacja po powrocie sieci: w fizycznym APK pobrać zadania, zakupy
+- [x] Synchronizacja po powrocie sieci: w fizycznym APK pobrać zadania, zakupy
       i obiady, odłączyć sieć i zapisać 20–30 zmian, w tym wykonanie zadania
       cyklicznego. Przywrócić łączność przy aktywnej aplikacji i sprawdzić
       opróżnienie kolejki, zgodność danych na drugim urządzeniu, brak duplikatów
       oraz pojawienie się następcy po potwierdzeniu wykonania. Zanotować czas
       synchronizacji i zużycie baterii według Androida. Porównać powtarzane
       przebiegi z poprzednim APK na tym samym telefonie i przy zbliżonym zasięgu.
-- [ ] Hosting: zaufane proxy, backup/odzyskanie oraz powrót ze starej PWA
-      (wyrejestrowanie workera, zachowana sesja, manifest 410), po zleconym deployu.
+- [x] Wspólny kontrakt offline kalendarza, zadań, zakupów i obiadów, w tym A-2:
+      zapis offline, restart aplikacji i zmiana konta.
+- [x] Optymalizacja odczytów zadań, wydarzeń i harmonogramu: pomiary
+      i sprawdzenie dostępu w APK według scenariusza w planie.
