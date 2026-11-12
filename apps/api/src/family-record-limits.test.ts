@@ -14,6 +14,7 @@ let database: ReturnType<typeof createDatabase>;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let cookie: string;
 let actorId: string;
+let emailVerificationToken: string | null;
 
 function createFamily() {
   const familyId = randomUUID();
@@ -36,6 +37,10 @@ beforeEach(async () => {
   const config = loadConfig({
     NODE_ENV: 'test',
     RODZINA_DATABASE_PATH: ':memory:',
+    RODZINA_SMTP_HOST: 'unused.example.com',
+    RODZINA_SMTP_USER: 'test',
+    RODZINA_SMTP_PASSWORD: 'test-only',
+    RODZINA_MAIL_FROM: 'sender@example.com',
     RODZINA_MAX_FAMILY_EVENTS: '1',
     RODZINA_MAX_FAMILY_CONTACTS: '1',
     RODZINA_MAX_FAMILY_CONTACT_GROUPS: '5',
@@ -51,7 +56,10 @@ beforeEach(async () => {
   database = createDatabase(config);
   migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
   ({ cookie, userId: actorId } = createFamily());
-  app = await buildApp(config, database);
+  emailVerificationToken = null;
+  app = await buildApp(config, database, undefined, undefined, undefined, async (_config, mail) => {
+    emailVerificationToken = new URLSearchParams(new URL(mail.link).hash.slice(1)).get('token');
+  });
 });
 
 afterEach(async () => {
@@ -209,11 +217,14 @@ it('shares the member quota across child creation and invitation acceptance with
   const invitation = await request('POST', '/api/invitations', { role: 'member' });
   expect(invitation.statusCode, invitation.body).toBe(200);
   const url = `/api/invitations/${invitation.json().token}`;
+  const verification = await request('POST', `${url}/email-verification`, { email: 'gosc@example.com' }, '');
+  expect(verification.statusCode, verification.body).toBe(202);
+  expect(emailVerificationToken).toBeTruthy();
   expectLimit(
     await request(
       'POST',
       `${url}/accept`,
-      { displayName: 'Gość', email: 'gosc@example.com', password: 'password123' },
+      { displayName: 'Gość', emailVerificationToken, password: 'password123' },
       '',
     ),
     'domowników',
