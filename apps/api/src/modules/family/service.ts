@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import type {
   CreateChildInput,
   CreateInvitationInput,
-  AcceptInvitationInput,
+  VerifiedInvitationInput,
   UpdateMemberInput,
   UpdateFamilyInput,
 } from './schemas.js';
@@ -21,9 +21,19 @@ import {
 } from '../../permissions.js';
 import type { StartSession } from '../auth/service.js';
 import { createFamilyRepository } from './repository.js';
+import type { FastifyBaseLogger } from 'fastify';
+import { AuthRateLimitError, createAuthRateLimitService } from '../auth/rate-limit-service.js';
+import { smtpConfigured } from '../auth/reset-mail.js';
+import { sendInvitationMail } from './invitation-mail.js';
 
-export function createFamilyService(database: DatabaseConnection, config: AppConfig) {
+export function createFamilyService(
+  database: DatabaseConnection,
+  config: AppConfig,
+  logger: FastifyBaseLogger,
+  sendMail = sendInvitationMail,
+) {
   const repository = createFamilyRepository(database);
+  const rateLimits = createAuthRateLimitService(database);
   async function listMembers(user: PublicAuthUser) {
     const members = repository.listMembers(user.familyId);
 
@@ -98,11 +108,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     };
   }
 
-  async function getInvitation(token: string | undefined) {
-    if (!token) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Brak tokenu zaproszenia.');
-    }
-
+  function requireInvitation(token: string) {
     const invitation = repository.findInvitation(hashToken(token));
 
     if (!invitation) {
@@ -117,6 +123,11 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       throw new ApiError(410, 'USED', 'Zaproszenie zostało już wykorzystane.');
     }
 
+    return invitation;
+  }
+
+  async function getInvitation(token: string) {
+    const invitation = requireInvitation(token);
     const family = repository.findFamily(invitation.familyId);
     if (!family) {
       throw new ApiError(404, 'NOT_FOUND', 'Rodzina z zaproszeniem nie istnieje.');
@@ -129,34 +140,49 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     };
   }
 
-  async function acceptInvitation(token: string | undefined, data: AcceptInvitationInput, startSession: StartSession) {
-    if (!token) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Brak tokenu zaproszenia.');
+  async function requestInvitationEmail(token: string, rawEmail: string, ip: string) {
+    const invitation = requireInvitation(token);
+    if (!smtpConfigured(config))
+      throw new ApiError(503, 'UNAVAILABLE', 'Potwierdzanie zaproszeń jest chwilowo niedostępne.');
+    const email = normalizeEmail(rawEmail);
+    const now = Date.now();
+    const retryAfter = rateLimits.consumeEmailAttempt('invitation', ip, email, now);
+    if (retryAfter)
+      throw new AuthRateLimitError(retryAfter, 'Za dużo prób potwierdzenia zaproszenia. Spróbuj później.');
+    repository.deleteExpiredInvitationEmailVerifications(now);
+    const proof = randomToken();
+    const expiresAt = Math.min(now + 30 * 60_000, invitation.expiresAt);
+    const link = new URL('/potwierdz-zaproszenie', config.RODZINA_PUBLIC_URL);
+    link.hash = new URLSearchParams({ invitation: token, token: proof }).toString();
+    try {
+      // Deliver the same message for every address. Account lookup happens only after mailbox proof.
+      await sendMail(config, { to: email, link: link.href });
+      repository.insertInvitationEmailVerification({
+        invitationId: invitation.id,
+        email,
+        tokenHash: hashToken(proof),
+        expiresAt,
+      });
+    } catch {
+      logger.error({ code: 'INVITATION_EMAIL_FAILED' }, 'Invitation email verification could not be issued.');
     }
+    return { ok: true as const };
+  }
 
-    const invitation = repository.findInvitation(hashToken(token));
-
-    if (!invitation) {
-      throw new ApiError(404, 'NOT_FOUND', 'Zaproszenie nie istnieje.');
-    }
-
-    if (invitation.expiresAt <= Date.now()) {
-      throw new ApiError(410, 'EXPIRED', 'Zaproszenie wygasło.');
-    }
-
-    if (invitation.usedAt) {
-      throw new ApiError(410, 'USED', 'Zaproszenie zostało już wykorzystane.');
+  async function acceptInvitation(token: string, data: VerifiedInvitationInput, startSession: StartSession) {
+    const invitation = requireInvitation(token);
+    const verificationHash = hashToken(data.emailVerificationToken);
+    if (!repository.findInvitationEmailVerification(invitation.id, verificationHash, Date.now())) {
+      throw new ApiError(
+        410,
+        'EXPIRED',
+        'Link potwierdzający jest nieprawidłowy lub wygasł. Ponów potwierdzenie adresu.',
+      );
     }
 
     const family = repository.findFamily(invitation.familyId);
     if (!family) {
       throw new ApiError(404, 'NOT_FOUND', 'Rodzina z zaproszeniem nie istnieje.');
-    }
-
-    const normalizedEmail = normalizeEmail(data.email);
-    const existingUser = repository.findUserByEmail(normalizedEmail);
-    if (existingUser) {
-      throw new ApiError(409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
     }
 
     const userId = crypto.randomUUID();
@@ -165,21 +191,16 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
 
     let accepted = false;
     try {
-      accepted = repository.acceptInvitation(
-        invitation.id,
-        {
-          id: userId,
-          familyId: family.id,
-          displayName: data.displayName,
-          email: normalizedEmail,
-          passwordHash,
-          role: invitation.role,
-          color: '#5C7CFA',
-          createdAt: now,
-          updatedAt: now,
-        },
-        now,
-      );
+      accepted = repository.acceptInvitation(invitation.id, verificationHash, {
+        id: userId,
+        familyId: family.id,
+        displayName: data.displayName,
+        passwordHash,
+        role: invitation.role,
+        color: '#5C7CFA',
+        createdAt: now,
+        updatedAt: now,
+      });
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new ApiError(409, 'CONFLICT', 'Użytkownik z tym adresem e-mail już istnieje.');
@@ -187,7 +208,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
       throw error;
     }
     if (!accepted) {
-      throw new ApiError(410, 'USED', 'Zaproszenie wygasło lub zostało już wykorzystane.');
+      throw new ApiError(410, 'USED', 'Link lub zaproszenie wygasły albo zostały już wykorzystane.');
     }
 
     await startSession(userId);
@@ -364,6 +385,7 @@ export function createFamilyService(database: DatabaseConnection, config: AppCon
     createChild,
     createInvitation,
     getInvitation,
+    requestInvitationEmail,
     acceptInvitation,
     createPasswordResetLink,
     updateMember,

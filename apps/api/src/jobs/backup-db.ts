@@ -8,6 +8,7 @@ import { createDatabase, type DatabaseConnection } from '../db/client.js';
 import { OPERATION_RETENTION_MS } from '../db/operation-retention.js';
 import {
   eventImportOperations,
+  invitationEmailVerifications,
   invitations,
   passwordResets,
   sessions,
@@ -24,6 +25,7 @@ function deleteExpiredRecords(database: DatabaseConnection, nowMs: number): void
   const cutoff = nowMs - OPERATION_RETENTION_MS;
   const deletions = [
     [passwordResets, lte(passwordResets.expiresAt, nowMs)],
+    [invitationEmailVerifications, lte(invitationEmailVerifications.expiresAt, nowMs)],
     [invitations, lte(invitations.expiresAt, nowMs)],
     [eventImportOperations, lt(eventImportOperations.createdAt, cutoff)],
     [shoppingOperations, lt(shoppingOperations.createdAt, cutoff)],

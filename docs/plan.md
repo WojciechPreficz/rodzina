@@ -48,6 +48,12 @@ Zweryfikowane lokalnie w zakresie offline, oczekuje na CI.
 B-3: limiter żądań API, limity rekordów rodzinnych i współbieżności Argon2.
 Zweryfikowane lokalnie, oczekuje na CI.
 
+R-7: ochrona przed enumeracją kont przez czas logowania lub publiczne
+odpowiedzi rejestracji i zaproszeń. Dotychczasowe zaproszenia wymagają
+potwierdzenia dostępu do skrzynki. Zweryfikowane lokalnie, oczekuje na CI.
+Rzeczywiste SMTP i próba na fizycznym telefonie do potwierdzenia według
+DEVELOPMENT.md.
+
 A-4: granice repozytoriów i serwisów API, wspólne reguły oraz warunki
 rodziny w zapisach. Zweryfikowane lokalnie, oczekuje na CI.
 

@@ -240,7 +240,12 @@ try {
   if ((await fetch(`http://127.0.0.1:${port}/strona/missing.js`)).status !== 404)
     fail('brak zasobu strony zwraca SPA zamiast 404.');
 
-  for (const route of ['/zaproszenie/smoke-token', '/reset-hasla/smoke-token', '/login-child']) {
+  for (const route of [
+    '/zaproszenie/smoke-token',
+    '/potwierdz-zaproszenie',
+    '/reset-hasla/smoke-token',
+    '/login-child',
+  ]) {
     const response = await fetch(`http://127.0.0.1:${port}${route}`);
     if (!response.ok || !(await response.text()).includes('<div id="root"></div>')) {
       fail(`serwer nie dostarczył SPA dla ${route}.`);

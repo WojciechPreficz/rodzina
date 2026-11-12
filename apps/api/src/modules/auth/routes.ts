@@ -101,7 +101,7 @@ export function registerAuthRoutes(
             throw new ApiError(
               409,
               registrationConfirmationRequired,
-              'Sprawdź pocztę i potwierdź założenie rodziny linkiem w wiadomości. Konto powstanie po potwierdzeniu. Następnie zaloguj się w aplikacji.',
+              'Sprawdź pocztę. Jeśli możesz założyć konto pod tym adresem, otrzymasz link potwierdzający. Po potwierdzeniu zaloguj się w aplikacji.',
             );
           return reply.code(202).send(registrationRequestResponseSchema.parse(result));
         } catch (error) {

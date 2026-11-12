@@ -29,6 +29,7 @@ async function renderPage(path: string) {
               <Routes>
                 <Route path="/login-child" element={<ChildLoginPage />} />
                 <Route path="/zaproszenie/:token" element={<InvitationPage />} />
+                <Route path="/potwierdz-zaproszenie" element={<InvitationPage confirmEmail />} />
                 <Route path="/reset-hasla/:token" element={<ResetPasswordPage />} />
                 <Route path="/zakupy" element={<div>Child destination</div>} />
                 <Route path="/" element={<div>Family destination</div>} />
@@ -120,27 +121,53 @@ describe('joining and child authentication', () => {
     },
   );
 
-  it('validates and accepts the invitation with the token from the route', async () => {
+  it('requests email proof and displays neutral feedback before asking for a password', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/email-verification')) return response({ ok: true }, 202);
+      if (url.startsWith('/api/invitations/')) return response({ family: { name: 'Kowalscy' } });
+      return response({ error: { message: 'Brak sesji.' } }, 401);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await renderPage('/zaproszenie/invite-token');
+    const submit = await screen.findByRole('button', { name: 'Wyślij link potwierdzający' });
+    fireEvent.click(submit);
+    expect(screen.getByText('E-mail jest niepoprawny.')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Hasło/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: /E-mail/ }), { target: { value: 'piotr@example.com' } });
+    fireEvent.click(submit);
+    expect(await screen.findByRole('status')).toHaveTextContent('Jeśli otrzymasz link potwierdzający');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/invitations/invite-token/email-verification',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ email: 'piotr@example.com' }),
+      }),
+    );
+  });
+
+  it('validates and accepts the invitation with the proof from the email link', async () => {
+    const invitation = 'a'.repeat(64);
+    const proof = 'b'.repeat(64);
     const fetchMock = vi.fn(async (url: string) => {
       if (url.endsWith('/accept')) return response(session);
       if (url.startsWith('/api/invitations/')) return response({ family: { name: 'Kowalscy' } });
       return response({ error: { message: 'Brak sesji.' } }, 401);
     });
     vi.stubGlobal('fetch', fetchMock);
-    await renderPage('/zaproszenie/invite-token');
+    await renderPage(`/potwierdz-zaproszenie#invitation=${invitation}&token=${proof}`);
     const submit = await screen.findByRole('button', { name: 'Dołącz do rodziny' });
     fireEvent.click(submit);
     expect(screen.getByText('Imię musi mieć co najmniej 2 znaki.')).toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: /Twoje imię/ }), { target: { value: 'Piotr' } });
-    fireEvent.change(screen.getByRole('textbox', { name: /E-mail/ }), { target: { value: 'piotr@example.com' } });
+    expect(screen.queryByRole('textbox', { name: /E-mail/ })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/^Hasło/), { target: { value: 'password123' } });
     fireEvent.click(submit);
     expect(await screen.findByText('Family destination')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/invitations/invite-token/accept',
+      `/api/invitations/${invitation}/accept`,
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ displayName: 'Piotr', email: 'piotr@example.com', password: 'password123' }),
+        body: JSON.stringify({ displayName: 'Piotr', password: 'password123', emailVerificationToken: proof }),
       }),
     );
   });

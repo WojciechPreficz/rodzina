@@ -3,6 +3,7 @@ import { parse } from '../../http/validation.js';
 import {
   createChildSchema,
   createInvitationSchema,
+  invitationEmailSchema,
   invitationParamsSchema,
   memberParamsSchema,
   acceptInvitationSchema,
@@ -10,6 +11,7 @@ import {
   updateFamilySchema,
 } from './schemas.js';
 import {
+  authOkResponseSchema,
   membersResponseSchema,
   memberResponseSchema,
   createInvitationResponseSchema,
@@ -30,9 +32,17 @@ import { createSessionFactory } from '../auth/session.js';
 import { createFamilyService } from './service.js';
 import { hashToken } from '../../auth.js';
 import { createAccountDeletion, DeletionRateLimitError } from './deletion.js';
+import { ApiError } from '../../http/errors.js';
+import { AuthRateLimitError } from '../auth/rate-limit-service.js';
+import type { sendInvitationMail } from './invitation-mail.js';
 
-export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseConnection, config: AppConfig) {
-  const service = createFamilyService(database, config);
+export function registerFamilyRoutes(
+  app: FastifyInstance,
+  database: DatabaseConnection,
+  config: AppConfig,
+  invitationMailSender?: typeof sendInvitationMail,
+) {
+  const service = createFamilyService(database, config, app.log, invitationMailSender);
   const createSession = createSessionFactory(database, config);
   const deletion = createAccountDeletion(database);
   app.get('/api/members', routeOptions({ responses: { 200: membersResponseSchema } }), async (request) =>
@@ -76,6 +86,25 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       ),
   );
   app.post(
+    '/api/invitations/:token/email-verification',
+    routeOptions(
+      { params: invitationParamsSchema, body: invitationEmailSchema, responses: { 202: authOkResponseSchema } },
+      { auth: 'public', idempotency: false },
+    ),
+    async (request, reply) => {
+      const { token } = parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.');
+      const { email } = parse(invitationEmailSchema, request.body, 'Podaj prawidłowy adres e-mail.');
+      try {
+        return reply
+          .code(202)
+          .send(authOkResponseSchema.parse(await service.requestInvitationEmail(token, email, request.ip)));
+      } catch (error) {
+        if (error instanceof AuthRateLimitError) reply.header('Retry-After', error.retryAfter);
+        throw error;
+      }
+    },
+  );
+  app.post(
     '/api/invitations/:token/accept',
     routeOptions(
       {
@@ -85,18 +114,25 @@ export function registerFamilyRoutes(app: FastifyInstance, database: DatabaseCon
       },
       { auth: 'public', idempotency: false },
     ),
-    async (request, reply) =>
-      reply
-        .code(201)
-        .send(
-          acceptInvitationResponseSchema.parse(
-            await service.acceptInvitation(
-              parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.').token,
-              parse(acceptInvitationSchema, request.body, 'Dane akceptacji zaproszenia są niepoprawne.'),
-              (id) => createSession(reply, request, id),
-            ),
-          ),
-        ),
+    async (request, reply) => {
+      const { token } = parse(invitationParamsSchema, request.params, 'Brak tokenu zaproszenia.');
+      const data = parse(acceptInvitationSchema, request.body, 'Dane akceptacji zaproszenia są niepoprawne.');
+      if ('email' in data) {
+        try {
+          await service.requestInvitationEmail(token, data.email, request.ip);
+        } catch (error) {
+          if (error instanceof AuthRateLimitError) reply.header('Retry-After', error.retryAfter);
+          throw error;
+        }
+        throw new ApiError(
+          409,
+          'EMAIL_CONFIRMATION_REQUIRED',
+          'Sprawdź pocztę. Jeśli otrzymasz link potwierdzający, otwórz go w przeglądarce, aby dołączyć do rodziny. Potem możesz zalogować się w aplikacji.',
+        );
+      }
+      const result = await service.acceptInvitation(token, data, (id) => createSession(reply, request, id));
+      return reply.code(201).send(acceptInvitationResponseSchema.parse(result));
+    },
   );
   app.post(
     '/api/members/:id/password-reset-link',

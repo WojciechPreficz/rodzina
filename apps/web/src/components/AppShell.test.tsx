@@ -277,7 +277,7 @@ describe('AppShell', () => {
     fireEvent.change(screen.getByLabelText('Hasło'), { target: { value: 'password123' } });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Akceptuję regulamin' }));
     fireEvent.click(screen.getByRole('button', { name: 'Utwórz rodzinę' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Konto rodziny jeszcze nie istnieje');
+    expect(await screen.findByRole('status')).toHaveTextContent('Jeśli możesz założyć konto pod adresem');
     expect(screen.queryByText('Registered destination')).not.toBeInTheDocument();
     const registration = fetchMock.mock.calls.find(([url]) => url === '/api/auth/registration-requests');
     expect(registration).toBeDefined();

@@ -1,6 +1,8 @@
 import { createContactService } from '../contacts/service.js';
 import { createAuthRateLimitService } from './rate-limit-service.js';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppConfig } from '../../config.js';
 import type { DatabaseConnection } from '../../db/client.js';
@@ -9,6 +11,7 @@ import { ApiError } from '../../http/errors.js';
 import { createAuthRepository } from './repository.js';
 import type { RegisterFamilyInput } from './schemas.js';
 import { sendRegistrationMail } from './registration-mail.js';
+import { SMTP_TIMEOUT_MS, smtpConfigured } from './reset-mail.js';
 
 export class RegistrationRateLimitError extends ApiError {
   constructor(public retryAfter: number) {
@@ -48,24 +51,22 @@ export function createRegistration(
 
   async function request(data: RegisterFamilyInput, ip: string) {
     checkEnabled();
-    if (
-      !config.RODZINA_SMTP_HOST ||
-      !config.RODZINA_SMTP_USER ||
-      !config.RODZINA_SMTP_PASSWORD ||
-      !config.RODZINA_MAIL_FROM
-    )
+    if (!smtpConfigured(config))
       throw new ApiError(503, 'UNAVAILABLE', 'Rejestracja jest chwilowo niedostępna. Spróbuj ponownie później.');
     const email = normalizeEmail(data.email);
     consume.immediate(ip, email, Date.now());
-    if (repository.findUserByEmail(email))
-      throw new ApiError(
-        409,
-        'CONFLICT',
-        'Użytkownik z tym adresem e-mail już istnieje. Zaloguj się lub odzyskaj hasło.',
-      );
     const passwordHash = await hashPassword(data.password);
-    if (repository.findUserByEmail(email))
-      throw new ApiError(409, 'CONFLICT', 'Konto z tym adresem już istnieje. Zaloguj się lub odzyskaj hasło.');
+    const started = performance.now();
+    try {
+      if (!repository.findUserByEmail(email)) await sendConfirmation(data, email, passwordHash);
+    } finally {
+      // Apply the same SMTP response floor after the shared Argon2 work.
+      await delay(Math.max(0, SMTP_TIMEOUT_MS + 500 - (performance.now() - started)));
+    }
+    return { ok: true as const };
+  }
+
+  async function sendConfirmation(data: RegisterFamilyInput, email: string, passwordHash: string) {
     const token = randomToken();
     const tokenHash = hashToken(token);
     const now = Date.now();
@@ -88,13 +89,7 @@ export function createRegistration(
     } catch {
       repository.removePendingRegistration(tokenHash);
       logger.error({ code: 'REGISTRATION_DELIVERY_FAILED' }, 'Registration delivery failed; new token invalidated.');
-      throw new ApiError(
-        503,
-        'UNAVAILABLE',
-        'Nie udało się wysłać potwierdzenia. Spróbuj ponownie później. Konto nie zostało utworzone.',
-      );
     }
-    return { ok: true as const };
   }
 
   const confirm = database.sqlite.transaction((token: string) => {

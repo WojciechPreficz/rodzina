@@ -17,7 +17,7 @@ import {
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { apiFetch, sanitizeNextPath } from '../api.js';
 import { useMe } from '../sessionContext.js';
 import { PasswordRecoveryLink } from './PasswordRecovery.js';
@@ -203,36 +203,51 @@ export function ChildLoginPage() {
   );
 }
 
-export function InvitationPage() {
-  const { token = '' } = useParams();
+export function InvitationPage({ confirmEmail = false }: { confirmEmail?: boolean }) {
+  const { token: routeToken = '' } = useParams();
+  const { hash } = useLocation();
+  const fragment = new URLSearchParams(hash.slice(1));
+  const token = confirmEmail ? (fragment.get('invitation') ?? '') : routeToken;
+  const emailVerificationToken = fragment.get('token') ?? '';
+  const validLink = !confirmEmail || (/^[a-f0-9]{64}$/.test(token) && /^[a-f0-9]{64}$/.test(emailVerificationToken));
+  const endpoint = `/api/invitations/${encodeURIComponent(token)}`;
   const navigate = useNavigate();
   const { user, isLoading, setSession } = useMe();
   const queryClient = useQueryClient();
   const preview = useQuery({
     queryKey: ['invitation', token],
-    queryFn: () => apiFetch<InvitationResponse>(`/api/invitations/${encodeURIComponent(token)}`),
+    queryFn: () => apiFetch<InvitationResponse>(endpoint),
+    enabled: validLink,
     retry: false,
   });
   const [form, setForm] = useState({ displayName: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const [sent, setSent] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ displayName: '', email: '', password: '' });
 
-  const accept = async (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (pending || !validLink) return;
+    const email = form.email.trim();
     const errors = {
-      displayName: validateDisplayName(form.displayName),
-      email: /.+@.+\..+/.test(form.email.trim()) ? '' : labels.emailError,
-      password: form.password.length >= 8 ? '' : labels.passwordError,
+      displayName: confirmEmail ? validateDisplayName(form.displayName) : '',
+      email: confirmEmail || /.+@.+\..+/.test(email) ? '' : labels.emailError,
+      password: confirmEmail && form.password.length < 8 ? labels.passwordError : '',
     };
     setFieldErrors(errors);
     if (Object.values(errors).some(Boolean)) return;
     setPending(true);
     setError('');
     try {
-      const response = await apiFetch<SessionResponse>(`/api/invitations/${encodeURIComponent(token)}/accept`, {
+      if (!confirmEmail) {
+        await apiFetch(`${endpoint}/email-verification`, { method: 'POST', body: JSON.stringify({ email }) });
+        setSent(true);
+        return;
+      }
+      const response = await apiFetch<SessionResponse>(`${endpoint}/accept`, {
         method: 'POST',
-        body: JSON.stringify({ ...form, displayName: form.displayName.trim(), email: form.email.trim() }),
+        body: JSON.stringify({ displayName: form.displayName.trim(), password: form.password, emailVerificationToken }),
       });
       queryClient.clear();
       await setSession(response.user, response.family);
@@ -248,7 +263,11 @@ export function InvitationPage() {
     <Paper className="auth-card" withBorder p="lg">
       <Stack>
         <PageHeader title={labels.invitationTitle} />
-        {preview.isPending || isLoading ? (
+        {!validLink ? (
+          <Alert color="red" role="alert">
+            {labels.invitationInvalidVerification}
+          </Alert>
+        ) : preview.isPending || isLoading ? (
           <Group>
             <Loader size="sm" />
             <Text>{labels.invitationLoading}</Text>
@@ -265,36 +284,50 @@ export function InvitationPage() {
                 <Text>{labels.alreadyLoggedIn}</Text>
                 <LogoutControl />
               </>
+            ) : sent ? (
+              <>
+                <Alert color="green" role="status" title={labels.invitationCheckEmail}>
+                  {labels.invitationCheckEmailHint}
+                </Alert>
+                <Button variant="default" onClick={() => setSent(false)}>
+                  {labels.invitationChangeEmail}
+                </Button>
+              </>
             ) : (
-              <form onSubmit={accept} noValidate>
+              <form onSubmit={submit} noValidate>
                 <Stack>
-                  <TextInput
-                    label={labels.yourName}
-                    autoComplete="given-name"
-                    required
-                    value={form.displayName}
-                    error={fieldErrors.displayName}
-                    onChange={(e) => setForm({ ...form, displayName: e.currentTarget.value })}
-                  />
-                  <TextInput
-                    label={labels.email}
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={form.email}
-                    error={fieldErrors.email}
-                    onChange={(e) => setForm({ ...form, email: e.currentTarget.value })}
-                  />
-                  <PasswordInput
-                    label={labels.password}
-                    autoComplete="new-password"
-                    required
-                    value={form.password}
-                    error={fieldErrors.password}
-                    onChange={(e) => setForm({ ...form, password: e.currentTarget.value })}
-                  />
+                  {confirmEmail ? (
+                    <>
+                      <TextInput
+                        label={labels.yourName}
+                        autoComplete="given-name"
+                        required
+                        value={form.displayName}
+                        error={fieldErrors.displayName}
+                        onChange={(e) => setForm({ ...form, displayName: e.currentTarget.value })}
+                      />
+                      <PasswordInput
+                        label={labels.password}
+                        autoComplete="new-password"
+                        required
+                        value={form.password}
+                        error={fieldErrors.password}
+                        onChange={(e) => setForm({ ...form, password: e.currentTarget.value })}
+                      />
+                    </>
+                  ) : (
+                    <TextInput
+                      label={labels.email}
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={form.email}
+                      error={fieldErrors.email}
+                      onChange={(e) => setForm({ ...form, email: e.currentTarget.value })}
+                    />
+                  )}
                   <Button type="submit" loading={pending}>
-                    {labels.acceptInvitation}
+                    {confirmEmail ? labels.acceptInvitation : labels.invitationSendVerification}
                   </Button>
                 </Stack>
               </form>
@@ -306,6 +339,11 @@ export function InvitationPage() {
             {error}
           </Alert>
         ) : null}
+        {confirmEmail && validLink && !user && (
+          <Button component={Link} to={`/zaproszenie/${encodeURIComponent(token)}`} replace variant="default">
+            {labels.invitationChangeEmail}
+          </Button>
+        )}
         <Button component={Link} to="/" variant="subtle">
           {labels.back}
         </Button>

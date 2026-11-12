@@ -38,7 +38,7 @@ for (const native of [false, true]) {
     await page.keyboard.press('Space');
     await expect(terms).toBeChecked();
     await page.getByRole('button', { name: 'Utwórz rodzinę' }).click();
-    await expect(page.getByRole('status')).toContainText('Konto rodziny jeszcze nie istnieje');
+    await expect(page.getByRole('status')).toContainText('Jeśli możesz założyć konto pod adresem', { timeout: 10000 });
     await page.screenshot({ path: testInfo.outputPath(`registration-sent-${native}.png`), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const login = () =>

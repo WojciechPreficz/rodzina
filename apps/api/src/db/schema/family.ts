@@ -49,3 +49,19 @@ export const invitations = sqliteTable(
     index('invitations_created_by_idx').on(table.createdBy),
   ],
 );
+
+export const invitationEmailVerifications = sqliteTable(
+  'invitation_email_verifications',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    invitationId: text('invitation_id')
+      .notNull()
+      .references(() => invitations.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (table) => [
+    index('invitation_email_verifications_invitation_idx').on(table.invitationId),
+    index('invitation_email_verifications_expiry_idx').on(table.expiresAt),
+  ],
+);

@@ -25,6 +25,7 @@ import { registerMealRoutes } from './modules/meals/routes.js';
 import { registerAndroidDownloads } from './android-downloads.js';
 import type { sendResetMail } from './modules/auth/reset-mail.js';
 import type { sendRegistrationMail } from './modules/auth/registration-mail.js';
+import type { sendInvitationMail } from './modules/family/invitation-mail.js';
 
 export const { version: apiVersion } = JSON.parse(
   readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'),
@@ -38,6 +39,7 @@ export async function buildApp(
   mailSender?: typeof sendResetMail,
   registrationMailSender?: typeof sendRegistrationMail,
   observeRoute?: onRouteHookHandler,
+  invitationMailSender?: typeof sendInvitationMail,
 ): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: config.RODZINA_TRUSTED_PROXIES.length ? config.RODZINA_TRUSTED_PROXIES : false,
@@ -81,7 +83,7 @@ export async function buildApp(
 
   registerSessionAuth(app, database, config);
   registerAuthRoutes(app, database, config, mailSender, registrationMailSender);
-  registerFamilyRoutes(app, database, config);
+  registerFamilyRoutes(app, database, config, invitationMailSender);
 
   const healthResponse = <Ready extends boolean>(ready: Ready) =>
     z.object({ ok: z.literal(ready), version: z.string(), dbOk: z.literal(ready) });

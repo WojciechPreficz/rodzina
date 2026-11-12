@@ -91,6 +91,12 @@ do logowania, otwarcie regulaminu i powrót do wypełnionego formularza,
 komunikat starszego APK kierujący do rejestracji w przeglądarce oraz
 logowanie na istniejące konto bez dodatkowej weryfikacji.
 
+R-7 obejmuje także potwierdzanie adresu zapraszanego domownika. Scenariusze
+`e2e/invitation.spec.ts` sprawdzają żądanie na WWW i przez transport Androida,
+dokończenie w przeglądarce przy 390/1280 px oraz powrót do logowania w APK.
+Do potwierdzenia pozostaje rzeczywisty odbiór linku z docelowego SMTP i próba
+na fizycznym telefonie, również z poprzednią wersją APK.
+
 Zakres obowiązkowych kontroli określa [AGENTS.md](../AGENTS.md).
 Komendy: npm run lint, npm run format:check, npm run typecheck, npm test,
 npm run build, npm run test:e2e, npm run release:smoke.

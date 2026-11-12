@@ -253,6 +253,13 @@
       "when": 1794425979312,
       "tag": "0035_indexes_and_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794509002199,
+      "tag": "0036_invitation_email_verifications",
+      "breakpoints": true
     }
   ]
 }

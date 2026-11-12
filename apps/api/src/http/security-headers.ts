@@ -24,6 +24,7 @@ export function registerSecurityHeaders(app: FastifyInstance, config: AppConfig)
       pathname === '/sw.js' ||
       pathname.startsWith('/reset-hasla/') ||
       pathname === '/potwierdz-rodzine' ||
+      pathname === '/potwierdz-zaproszenie' ||
       pathname === '/nie-pamietam-hasla'
     )
       reply.header('Cache-Control', 'no-store');

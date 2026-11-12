@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
+import { invitationConfirmationLink } from './invitation.js';
 
 for (const native of [false, true]) {
   test(`deletes child, own account and family through ${native ? 'Android transport' : 'website'}`, async ({
@@ -27,9 +28,18 @@ for (const native of [false, true]) {
       serviceWorkers: 'block',
     });
     try {
-      const accepted = await adult.request.post(`/api/invitations/${(await invite.json()).token}/accept`, {
+      const token = (await invite.json()).token;
+      const memberEmail = `member-${email}`;
+      const verification = await adult.request.post(`/api/invitations/${token}/email-verification`, {
         headers,
-        data: { displayName: 'Piotr', email: `member-${email}`, password },
+        data: { email: memberEmail },
+      });
+      expect(verification.status()).toBe(202);
+      const link = await invitationConfirmationLink(adult.request, memberEmail);
+      const proof = new URLSearchParams(link.hash.slice(1)).get('token');
+      const accepted = await adult.request.post(`/api/invitations/${token}/accept`, {
+        headers,
+        data: { displayName: 'Piotr', emailVerificationToken: proof, password },
       });
       expect(accepted.ok()).toBe(true);
       const adultPage = await adult.newPage();

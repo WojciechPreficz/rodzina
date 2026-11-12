@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
 export async function confirmRegistrationFromInbox(page: Page, email: string) {
-  await expect(page.getByRole('status')).toContainText('Konto rodziny jeszcze nie istnieje');
+  await expect(page.getByRole('status')).toContainText('Jeśli możesz założyć konto pod adresem', { timeout: 10000 });
   const response = await page.request.get(`/api/test/registration-mail?email=${encodeURIComponent(email)}`);
   const mail = await response.json();
   const link = new URL(mail.link);

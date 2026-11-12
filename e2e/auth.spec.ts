@@ -2,12 +2,14 @@ import { expect, test } from '@playwright/test';
 import { installNativeTransport } from './nativeTransport.js';
 import { openNavigation } from './navigation.js';
 import { confirmRegistrationFromInbox } from './registration.js';
+import { invitationConfirmationLink } from './invitation.js';
 
 test('registers, joins through an invitation, logs in a child and resets a password', async ({
   page,
   browser,
   baseURL,
 }, testInfo) => {
+  test.setTimeout(45_000);
   const suffix = testInfo.project.name;
   const second = await browser.newContext({
     baseURL: baseURL!,
@@ -43,8 +45,13 @@ test('registers, joins through an invitation, logs in a child and resets a passw
     await expect(memberPage.getByText(`Rodzina ${suffix}`, { exact: true })).toBeVisible();
     await memberPage.screenshot({ path: testInfo.outputPath('invitation.png'), fullPage: true });
     expect(await memberPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const memberEmail = `piotr-${suffix}@example.com`;
+    await memberPage.getByRole('textbox', { name: /E-mail/ }).fill(memberEmail);
+    await memberPage.getByRole('button', { name: 'Wyślij link potwierdzający' }).click();
+    await expect(memberPage.getByRole('status')).toContainText('Jeśli otrzymasz link potwierdzający');
+    const confirmation = await invitationConfirmationLink(memberPage.request, memberEmail);
+    await memberPage.goto(confirmation.pathname + confirmation.hash);
     await memberPage.getByRole('textbox', { name: /Twoje imię/ }).fill('Piotr');
-    await memberPage.getByRole('textbox', { name: /E-mail/ }).fill(`piotr-${suffix}@example.com`);
     await memberPage.getByLabel(/^Hasło/).fill('password123');
     await memberPage.getByRole('button', { name: 'Dołącz do rodziny' }).click();
     await expect(memberPage.locator('.mantine-AppShell-main')).toBeVisible();

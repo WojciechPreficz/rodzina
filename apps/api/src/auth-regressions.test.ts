@@ -5,7 +5,9 @@ import { buildFixtureApp as buildApp } from './test-fixtures.js';
 import { createDatabase } from './db/client.js';
 import { loadConfig } from './config.js';
 import { hashToken, SESSION_REFRESH_INTERVAL_MS, SESSION_TTL_MS } from './auth.js';
+import * as auth from './auth.js';
 import * as schema from './db/schema.js';
+import type { sendInvitationMail } from './modules/family/invitation-mail.js';
 
 describe('authentication regressions', () => {
   let database: ReturnType<typeof createDatabase>;
@@ -13,6 +15,7 @@ describe('authentication regressions', () => {
   let admin: { user: { id: string }; family: { joinCode: string } };
   let cookie: string;
   const headers = { origin: 'http://localhost:3000', host: 'localhost:3000' };
+  const sendInvitation = vi.fn<typeof sendInvitationMail>().mockResolvedValue(undefined);
   const registerBody = {
     familyName: 'Test Family',
     displayName: 'Admin',
@@ -26,17 +29,24 @@ describe('authentication regressions', () => {
       headers: { ...headers, ...(session ? { cookie: session } : {}) },
       ...(payload ? { payload } : {}),
     });
+  const mailProof = (index: number) =>
+    new URLSearchParams(new URL(sendInvitation.mock.calls[index]![1].link).hash.slice(1)).get('token')!;
 
   beforeEach(async () => {
+    sendInvitation.mockReset().mockResolvedValue(undefined);
     const config = loadConfig({
       NODE_ENV: 'test',
       RODZINA_DATABASE_PATH: ':memory:',
       RODZINA_PUBLIC_URL: 'http://localhost:3000',
       RODZINA_ALLOW_REGISTRATION: 'true',
+      RODZINA_SMTP_HOST: 'unused.example.com',
+      RODZINA_SMTP_USER: 'test',
+      RODZINA_SMTP_PASSWORD: 'test-only',
+      RODZINA_MAIL_FROM: 'sender@example.com',
     });
     database = createDatabase(config);
     migrate(database.db, { migrationsFolder: './apps/api/drizzle' });
-    app = await buildApp(config, database);
+    app = await buildApp(config, database, undefined, undefined, sendInvitation);
     const response = await post('/api/test/families', registerBody);
     expect(response.statusCode).toBe(201);
     admin = response.json();
@@ -50,6 +60,7 @@ describe('authentication regressions', () => {
   });
 
   it('distinguishes invalid login credentials from missing sessions', async () => {
+    const verify = vi.spyOn(auth, 'verifyPassword');
     const child = await post('/api/members/child', { displayName: 'Child', pin: '1234' }, cookie);
     const attempts = [
       { url: '/api/auth/login', payload: { email: registerBody.email, password: 'incorrect123' } },
@@ -73,6 +84,11 @@ describe('authentication regressions', () => {
     const anonymous = await app.inject({ method: 'GET', url: '/api/auth/me' });
     expect(anonymous.statusCode).toBe(401);
     expect(anonymous.json().error.code).toBe('UNAUTHORIZED');
+    expect(verify).toHaveBeenCalledTimes(2);
+    expect(verify.mock.calls.map(([hash]) => hash.split('$').slice(1, 4))).toEqual([
+      ['argon2id', 'v=19', 'm=65536,t=3,p=1'],
+      ['argon2id', 'v=19', 'm=65536,t=3,p=1'],
+    ]);
   });
 
   it('blocks the eleventh incorrect PIN and invalidates the old family code', async () => {
@@ -161,17 +177,94 @@ describe('authentication regressions', () => {
 
   it('consumes an invitation once even when two accounts accept concurrently', async () => {
     const invitation = await post('/api/invitations', { role: 'member' }, cookie);
-    const url = `/api/invitations/${invitation.json().token}/accept`;
+    const url = `/api/invitations/${invitation.json().token}`;
+    for (const email of ['person0@example.com', 'person1@example.com']) {
+      expect((await post(`${url}/email-verification`, { email })).statusCode).toBe(202);
+    }
     const responses = await Promise.all(
       [0, 1].map((i) =>
-        post(url, { displayName: `Person ${i}`, email: `person${i}@example.com`, password: 'password123' }),
+        post(`${url}/accept`, {
+          displayName: `Person ${i}`,
+          emailVerificationToken: mailProof(i),
+          password: 'password123',
+        }),
       ),
     );
     expect(responses.map((r) => r.statusCode).sort()).toEqual([201, 410]);
     expect(database.db.select().from(schema.users).all()).toHaveLength(2);
+    expect(database.db.select().from(schema.invitationEmailVerifications).all()).toEqual([]);
     expect((await app.inject({ method: 'GET', url: `/api/invitations/${invitation.json().token}` })).statusCode).toBe(
       410,
     );
+  });
+
+  it('only discloses an invitation email conflict after proof of that address', async () => {
+    const invite = (await post('/api/invitations', { role: 'member' }, cookie)).json();
+    const otherInvite = (await post('/api/invitations', { role: 'member' }, cookie)).json();
+    const url = `/api/invitations/${invite.token}`;
+    const credentials = { displayName: 'Person', password: 'password123' };
+    const freeEmail = 'available@example.com';
+    for (const [route, status] of [
+      ['accept', 409],
+      ['email-verification', 202],
+    ] as const) {
+      const existing = await post(`${url}/${route}`, { ...credentials, email: registerBody.email });
+      const available = await post(`${url}/${route}`, { ...credentials, email: freeEmail });
+      expect(existing.statusCode).toBe(status);
+      expect(available.statusCode).toBe(status);
+      expect(existing.body).toBe(available.body);
+      expect(existing.headers['set-cookie']).toBeUndefined();
+      expect(available.headers['set-cookie']).toBeUndefined();
+    }
+    expect(database.db.select().from(schema.users).all()).toHaveLength(1);
+    expect(sendInvitation.mock.calls.map(([, mail]) => mail.to)).toEqual([
+      registerBody.email,
+      freeEmail,
+      registerBody.email,
+      freeEmail,
+    ]);
+    const accept = (proof: string, extra = {}) =>
+      post(`${url}/accept`, {
+        ...credentials,
+        emailVerificationToken: proof,
+        ...extra,
+      });
+    const wrongInvite = await post(`/api/invitations/${otherInvite.token}/accept`, {
+      ...credentials,
+      emailVerificationToken: mailProof(3),
+    });
+    expect(wrongInvite.statusCode).toBe(410);
+    expect((await accept('a'.repeat(64))).statusCode).toBe(410);
+    expect((await accept(mailProof(2))).json().error.code).toBe('CONFLICT');
+    const accepted = await accept(mailProof(3), { email: registerBody.email });
+    expect(accepted.statusCode).toBe(201);
+    expect(accepted.json().user.email).toBe(freeEmail);
+    expect((await accept(mailProof(1))).statusCode).toBe(410);
+  });
+
+  it('rejects expired or undelivered email proof and limits requests across invitation routes', async () => {
+    const invite = (await post('/api/invitations', { role: 'member' }, cookie)).json();
+    const url = `/api/invitations/${invite.token}`;
+    const email = 'person@example.com';
+    const request = () => post(`${url}/email-verification`, { email });
+    const credentials = { displayName: 'Person', password: 'password123' };
+    const accept = (index: number) =>
+      post(`${url}/accept`, { ...credentials, emailVerificationToken: mailProof(index) });
+    sendInvitation.mockRejectedValueOnce(new Error('SMTP failure'));
+    expect((await request()).statusCode).toBe(202);
+    expect((await accept(0)).statusCode).toBe(410);
+    expect((await request()).statusCode).toBe(202);
+    database.db
+      .update(schema.invitationEmailVerifications)
+      .set({ expiresAt: Date.now() - 1 })
+      .run();
+    expect((await accept(1)).statusCode).toBe(410);
+    expect((await request()).statusCode).toBe(202);
+    const limited = await post(`${url}/accept`, { ...credentials, email: ' PERSON@EXAMPLE.COM ' });
+    expect(limited.statusCode).toBe(429);
+    expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+    expect(sendInvitation).toHaveBeenCalledTimes(3);
+    expect((await accept(2)).statusCode).toBe(201);
   });
 
   it('consumes a reset once under concurrent requests and rejects expired tokens', async () => {
@@ -266,9 +359,13 @@ describe('authentication regressions', () => {
 
   it('enforces adult and child permissions, family isolation and removal of sessions', async () => {
     const invitation = await post('/api/invitations', { role: 'member' }, cookie);
+    expect(
+      (await post(`/api/invitations/${invitation.json().token}/email-verification`, { email: 'matrix@example.com' }))
+        .statusCode,
+    ).toBe(202);
     const adult = await post(`/api/invitations/${invitation.json().token}/accept`, {
       displayName: 'Adult',
-      email: 'matrix@example.com',
+      emailVerificationToken: mailProof(0),
       password: 'password123',
     });
     const adultCookie = String(adult.headers['set-cookie']).split(';')[0]!;

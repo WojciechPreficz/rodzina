@@ -19,8 +19,9 @@ export async function buildFixtureApp(
   database: DatabaseConnection,
   resetSender?: Parameters<typeof buildApp>[2],
   registrationSender?: Parameters<typeof buildApp>[3],
+  invitationSender?: Parameters<typeof buildApp>[5],
 ) {
-  const app = await buildApp(config, database, resetSender, registrationSender);
+  const app = await buildApp(config, database, resetSender, registrationSender, undefined, invitationSender);
   const repository = createAuthRepository(database);
   const createSession = createSessionFactory(database, config);
   async function registerFamily(data: RegisterFamilyInput, startSession: StartSession) {

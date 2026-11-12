@@ -59,6 +59,7 @@ it('declares the expected idempotency policy for every API mutation', async () =
       'DELETE /api/family': false,
       'POST /api/family/join-code/rotate': false,
       'POST /api/invitations': false,
+      'POST /api/invitations/:token/email-verification': false,
       'POST /api/invitations/:token/accept': false,
       'PUT /api/meals/:date/:slot': false,
       'DELETE /api/meals/:date/:slot': false,

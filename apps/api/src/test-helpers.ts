@@ -5,7 +5,10 @@ import { buildFixtureApp as buildApp } from './test-fixtures.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 
-export async function createTestApp(overrides?: Record<string, string>) {
+export async function createTestApp(
+  overrides?: Record<string, string>,
+  invitationSender?: Parameters<typeof buildApp>[4],
+) {
   const config = loadConfig({
     NODE_ENV: 'test',
     RODZINA_DATABASE_PATH: ':memory:',
@@ -15,7 +18,7 @@ export async function createTestApp(overrides?: Record<string, string>) {
   });
   const database = createDatabase(config);
   migrate(database.db, { migrationsFolder: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../drizzle') });
-  const app = await buildApp(config, database);
+  const app = await buildApp(config, database, undefined, undefined, invitationSender);
   return { app, database, config };
 }
 

@@ -38,7 +38,7 @@ export function createAuthRateLimitService(database: DatabaseConnection) {
         throw new ApiError(429, 'RATE_LIMITED', loginMessage);
       }
     },
-    consumeEmailAttempt(scope: 'registration' | 'reset', ip: string, email: string, now: number) {
+    consumeEmailAttempt(scope: 'registration' | 'reset' | 'invitation', ip: string, email: string, now: number) {
       return repository.consumeAll(
         [
           { key: rateLimitKey(scope + '-ip', ip), max: 10, windowMs: 15 * 60_000 },

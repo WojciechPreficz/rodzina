@@ -62,10 +62,19 @@ aplikacja podczas obsługi żądania.
 - Założenie rodziny wymaga akceptacji regulaminu i potwierdzenia e-mail.
   Wysłanie zgłoszenia zapisuje wyłącznie tymczasowy rekord. Jawne potwierdzenie
   atomowo tworzy rodzinę, administratora i domyślne grupy kontaktów. Zalogowanie
-  jest osobną czynnością. Błąd SMTP unieważnia tylko bieżące zgłoszenie.
-- Zaproszenie jest jednorazowe. Rotacja kodu rodziny zachowuje istniejące
-  sesje. Starsze kody pozostają aktywne do rotacji, a starsze APK mogą wymagać
-  przeglądarki lub aktualizacji, aby założyć rodzinę albo podać nowy kod.
+  jest osobną czynnością. Publiczna odpowiedź i minimalny czas obsługi są
+  takie same dla zajętego i dostępnego adresu oraz przy błędzie SMTP. Błąd
+  dostawy unieważnia bieżące zgłoszenie.
+- Logowanie hasłem wykonuje Argon2 również dla adresu bez konta z hasłem.
+  Wszystkie niepoprawne poświadczenia otrzymują ten sam błąd.
+- Zaproszenie jest jednorazowe. Każdy podany adres dostaje taką samą próbę
+  wysyłki. Jednorazowy link z poczty wiąże adres z zaproszeniem. Dopiero po
+  okazaniu tego potwierdzenia API sprawdza dostępność adresu. Utworzenie
+  konta zużywa zaproszenie i usuwa wszystkie powiązane potwierdzenia w jednej
+  transakcji. Starsze APK zamawia link z dotychczasowego formularza, a
+  użytkownik kończy dołączanie w przeglądarce.
+- Rotacja kodu rodziny zachowuje istniejące sesje. Starsze kody pozostają
+  aktywne do rotacji, a starsze APK mogą wymagać aktualizacji, aby podać nowy kod.
 - Reset hasła atomowo zużywa token i unieważnia pozostałe linki oraz sesje
   resetowanej osoby. Zamówienie lub otwarcie linku samo nie zmienia konta.
   Odpowiedź zamówienia nie ujawnia, czy konto istnieje. Tokeny przechowujemy

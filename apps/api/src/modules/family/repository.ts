@@ -1,9 +1,14 @@
-import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte } from 'drizzle-orm';
 import { generateJoinCode } from '../../auth.js';
 import type { DatabaseConnection } from '../../db/client.js';
 import * as schema from '../../db/schema.js';
 
 export function createFamilyRepository(database: DatabaseConnection) {
+  function validEmailVerification(invitationId: string, tokenHash: string, now: number) {
+    const table = schema.invitationEmailVerifications;
+    return and(eq(table.invitationId, invitationId), eq(table.tokenHash, tokenHash), gt(table.expiresAt, now));
+  }
+
   return {
     findMember: (familyId: string, id: string) =>
       database.db
@@ -25,8 +30,6 @@ export function createFamilyRepository(database: DatabaseConnection) {
         .orderBy(asc(schema.users.createdAt))
         .all(),
     findUser: (id: string) => database.db.select().from(schema.users).where(eq(schema.users.id, id)).get(),
-    findUserByEmail: (email: string) =>
-      database.db.select().from(schema.users).where(eq(schema.users.email, email)).get(),
     timezone: (familyId: string) =>
       database.db
         .select({ timezone: schema.families.timezone })
@@ -46,6 +49,34 @@ export function createFamilyRepository(database: DatabaseConnection) {
       ),
     insertInvitation: (values: typeof schema.invitations.$inferInsert) =>
       database.db.insert(schema.invitations).values(values).run(),
+    insertInvitationEmailVerification(values: typeof schema.invitationEmailVerifications.$inferInsert) {
+      database.db.transaction(
+        (tx) => {
+          const now = Date.now();
+          const invitation = schema.invitations;
+          const active = tx
+            .select({ id: invitation.id })
+            .from(invitation)
+            .where(
+              and(eq(invitation.id, values.invitationId), isNull(invitation.usedAt), gt(invitation.expiresAt, now)),
+            )
+            .get();
+          if (active && values.expiresAt > now) tx.insert(schema.invitationEmailVerifications).values(values).run();
+        },
+        { behavior: 'immediate' },
+      );
+    },
+    deleteExpiredInvitationEmailVerifications: (now: number) =>
+      database.db
+        .delete(schema.invitationEmailVerifications)
+        .where(lte(schema.invitationEmailVerifications.expiresAt, now))
+        .run(),
+    findInvitationEmailVerification: (invitationId: string, tokenHash: string, now: number) =>
+      database.db
+        .select({ email: schema.invitationEmailVerifications.email })
+        .from(schema.invitationEmailVerifications)
+        .where(validEmailVerification(invitationId, tokenHash, now))
+        .get(),
     insertPasswordReset: (values: typeof schema.passwordResets.$inferInsert) =>
       database.db.insert(schema.passwordResets).values(values).run(),
     updateMember: (familyId: string, id: string, values: Partial<typeof schema.users.$inferInsert>) =>
@@ -83,25 +114,39 @@ export function createFamilyRepository(database: DatabaseConnection) {
         })
         .immediate();
     },
-    acceptInvitation(invitationId: string, values: typeof schema.users.$inferInsert, now: number) {
-      return database.db.transaction((tx) => {
-        const claimed = tx
-          .update(schema.invitations)
-          .set({ usedAt: now })
-          .where(
-            and(
-              eq(schema.invitations.id, invitationId),
-              eq(schema.invitations.familyId, values.familyId),
-              isNull(schema.invitations.usedAt),
-              gt(schema.invitations.expiresAt, now),
-            ),
-          )
-          .run();
-        if (claimed.changes !== 1) return false;
-        database.familyRecordLimits.requireCapacity('members', values.familyId);
-        tx.insert(schema.users).values(values).run();
-        return true;
-      });
+    acceptInvitation(invitationId: string, verificationHash: string, values: typeof schema.users.$inferInsert) {
+      return database.db.transaction(
+        (tx) => {
+          const now = Date.now();
+          const verifications = schema.invitationEmailVerifications;
+          const verification = tx
+            .select({ email: verifications.email })
+            .from(verifications)
+            .where(validEmailVerification(invitationId, verificationHash, now))
+            .get();
+          if (!verification) return false;
+          const claimed = tx
+            .update(schema.invitations)
+            .set({ usedAt: now })
+            .where(
+              and(
+                eq(schema.invitations.id, invitationId),
+                eq(schema.invitations.familyId, values.familyId),
+                isNull(schema.invitations.usedAt),
+                gt(schema.invitations.expiresAt, now),
+              ),
+            )
+            .run();
+          if (claimed.changes !== 1) return false;
+          database.familyRecordLimits.requireCapacity('members', values.familyId);
+          tx.insert(schema.users)
+            .values({ ...values, email: verification.email })
+            .run();
+          tx.delete(verifications).where(eq(verifications.invitationId, invitationId)).run();
+          return true;
+        },
+        { behavior: 'immediate' },
+      );
     },
   };
 }

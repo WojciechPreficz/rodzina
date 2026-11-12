@@ -76,7 +76,7 @@ Po obniżeniu limitu można nadal odczytywać, edytować i usuwać zapisane reko
 Dodawanie wznawia się po zejściu poniżej limitu. Zmiany wartości stosuje się
 po restarcie procesów aplikacji w cPanel.
 
-### Rejestracja i reset hasła przez e-mail
+### Rejestracja, zaproszenia i reset hasła przez e-mail
 
 Nowe rodziny zawsze wymagają potwierdzenia e-mail. Istniejące konta i sesje
 pozostają bez zmian, bez wezwania do weryfikacji. Rejestracja korzysta z SMTP
@@ -90,8 +90,9 @@ ani sessions. Wykonaj backup i jawny job migracji przed startem nowego API.
 Zgłoszenie przechowuje dane formularza, hash hasła i hash tokenu; wygasłe
 rekordy usuwamy przy następnym żądaniu rejestracji lub potwierdzenia, bez crona.
 Prawidłowe potwierdzenie usuwa wszystkie zgłoszenia tego adresu. Błąd SMTP
-unieważnia tylko nowo wysyłany link. Limity rejestracji: 10 prób/15 minut/IP
-i 3/godzinę/adres, niezależne od resetu hasła.
+unieważnia tylko nowo wysyłany link. Odpowiedź publiczna pozostaje neutralna
+również przy błędzie wysyłki. Limity rejestracji to 10 prób na 15 minut na IP
+i 3 na godzinę na adres, niezależnie od resetu hasła.
 
 Link /potwierdz-rodzine#token=… jest ważny 24 godziny i przechowuje sekret we
 fragmencie URL, który nie jest wysyłany w żądaniu strony. Otwarcie linku nie
@@ -100,6 +101,16 @@ się w WWW lub wraca do APK. Nowa ścieżka otwiera się w przeglądarce, bez
 rozszerzania Android App Links. Starsze APK pokazuje instrukcję potwierdzenia
 przez e-mail w komunikacie API; logowanie istniejących kont pozostaje zgodne.
 Nowy interfejs APK wymaga osobnego builda i publikacji.
+
+Zaproszenia używają tej samej konfiguracji SMTP. Dotychczasowy link rodzinny
+pozostaje ważny do wygaśnięcia lub użycia. Podanie e-maila zamawia link
+`/potwierdz-zaproszenie` z danymi potwierdzenia we fragmencie URL. Link z poczty
+działa w przeglądarce do 30 minut i co najwyżej do wygaśnięcia zaproszenia.
+Starsze APK zleca wysyłkę przy użyciu dotychczasowego formularza. Po zakończeniu
+w przeglądarce użytkownik loguje się w APK. Zamówienie linku wymaga SMTP i ma
+niezależne limity 10 prób na 15 minut na IP i 3 na godzinę na adres.
+Migracja 0036 dodaje tymczasowe potwierdzenia zaproszeń. Wygasłe wpisy usuwa
+istniejący job po backupie i kolejne żądanie wysyłki potwierdzenia.
 
 RODZINA_PASSWORD_RESET_EMAIL_ENABLED=false ukrywa akcję odzyskiwania; obecne
 logowanie i linki administratora działają nadal. Aby włączyć funkcję, przygotuj

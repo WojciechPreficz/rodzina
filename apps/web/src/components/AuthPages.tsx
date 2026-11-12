@@ -77,8 +77,8 @@ export function RegisterPage() {
         {sent ? (
           <>
             <Alert color="green" role="status" title="Sprawdź pocztę" style={{ overflowWrap: 'anywhere' }}>
-              Wysłaliśmy link potwierdzający na {form.email.trim()}. Konto rodziny jeszcze nie istnieje. Otwórz
-              wiadomość i potwierdź rejestrację. Link jest ważny przez 24 godziny.
+              Jeśli możesz założyć konto pod adresem {form.email.trim()}, otrzymasz link potwierdzający. Otwórz
+              wiadomość i potwierdź rejestrację w ciągu 24 godzin.
             </Alert>
             <Text size="sm">
               Jeśli wiadomość nie dotarła, sprawdź folder Spam. Możesz wrócić do formularza, poprawić adres i ponowić

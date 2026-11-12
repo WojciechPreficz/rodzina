@@ -92,6 +92,14 @@ describe('SQLite backup', () => {
         .values({ ...operation, listId: 'list', response: '{}', status: 200 })
         .run();
     }
+    database.db
+      .insert(schema.invitationEmailVerifications)
+      .values([
+        { tokenHash: 'old', invitationId: 'active', email: 'a@example.com', expiresAt: now - 1 },
+        { tokenHash: 'boundary', invitationId: 'active', email: 'a@example.com', expiresAt: now },
+        { tokenHash: 'active', invitationId: 'active', email: 'a@example.com', expiresAt: now + 1 },
+      ])
+      .run();
   };
   beforeEach(() => {
     directory = mkdtempSync(path.join(tmpdir(), 'rodzina-backup-'));
@@ -149,7 +157,7 @@ describe('SQLite backup', () => {
       'backup_finished',
       'expired_sessions_deleted',
       'expired_auth_rate_limits_deleted',
-      ...Array<string>(5).fill('expired_records_deleted'),
+      ...Array<string>(6).fill('expired_records_deleted'),
     ]);
   });
 
@@ -168,6 +176,10 @@ describe('SQLite backup', () => {
       expect(database.db.select({ id: table.id }).from(table).all()).toEqual([{ id: 'active' }]);
       expect(copy.db.select().from(table).all()).toHaveLength(3);
     }
+    expect(database.db.select().from(schema.invitationEmailVerifications).all()).toMatchObject([
+      { tokenHash: 'active' },
+    ]);
+    expect(copy.db.select().from(schema.invitationEmailVerifications).all()).toHaveLength(3);
     for (const table of [schema.eventImportOperations, schema.shoppingOperations, schema.taskOperations]) {
       expect(database.db.select({ id: table.id }).from(table).orderBy(table.id).all()).toEqual([
         { id: 'active' },

@@ -302,6 +302,12 @@ export const labels = {
   invitationLoading: 'Wczytywanie zaproszenia…',
   invitationError: 'Nie udało się odczytać zaproszenia.',
   acceptInvitation: 'Dołącz do rodziny',
+  invitationSendVerification: 'Wyślij link potwierdzający',
+  invitationCheckEmail: 'Sprawdź pocztę',
+  invitationCheckEmailHint:
+    'Jeśli otrzymasz link potwierdzający, otwórz go w przeglądarce, aby dokończyć dołączanie do rodziny.',
+  invitationChangeEmail: 'Wróć do podania adresu',
+  invitationInvalidVerification: 'Link potwierdzający jest nieprawidłowy. Otwórz pełny link z wiadomości.',
   alreadyLoggedIn: 'Aby dołączyć jako nowy domownik, najpierw wyloguj się z obecnego konta.',
   resetPassword: 'Ustaw nowe hasło',
   forgotPassword: 'Nie pamiętam hasła',

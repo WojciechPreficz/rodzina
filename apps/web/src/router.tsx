@@ -43,6 +43,7 @@ export const router = createBrowserRouter([
         element: <AuthLayout />,
         children: [
           { path: 'zaproszenie/:token', element: <InvitationPage /> },
+          { path: 'potwierdz-zaproszenie', element: <InvitationPage confirmEmail /> },
           { path: 'reset-hasla/:token', element: <ResetPasswordPage /> },
           { path: 'nie-pamietam-hasla', element: <ForgotPasswordPage /> },
           { path: 'potwierdz-rodzine', element: <ConfirmRegistrationPage /> },

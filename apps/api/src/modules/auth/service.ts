@@ -7,6 +7,10 @@ import { serializeUser, type PublicAuthUser } from '../../http/user.js';
 import { createAuthRepository, type SessionCredential } from './repository.js';
 import { createAuthRateLimitService, createLoginRateLimitKey } from './rate-limit-service.js';
 
+// Precomputed with the same Argon2id parameters as hashPassword.
+const dummyPasswordHash =
+  '$argon2id$v=19$m=65536,t=3,p=1$gdUua/m1ykjYUe7zBfab3w$IxpH7J8tLe0/eC00XnCP0TYXkhQqIyZg98zGgsgLCLw';
+
 export type StartSession = (userId: string, createdAt?: number, credential?: SessionCredential) => Promise<void>;
 export function createAuthService(database: DatabaseConnection) {
   const repository = createAuthRepository(database);
@@ -18,12 +22,8 @@ export function createAuthService(database: DatabaseConnection) {
     rateLimits.consume(loginKey);
 
     const user = repository.findUserByEmail(normalizedEmail);
-    if (!user || !user.passwordHash) {
-      throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy e-mail lub hasło.');
-    }
-
-    const isValid = await verifyPassword(user.passwordHash, password);
-    if (!isValid) {
+    const isValid = await verifyPassword(user?.passwordHash || dummyPasswordHash, password);
+    if (!user?.passwordHash || !isValid) {
       throw new ApiError(403, 'INVALID_CREDENTIALS', 'Nieprawidłowy e-mail lub hasło.');
     }
 

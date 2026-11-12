@@ -371,7 +371,18 @@ describe('auth API', () => {
   });
 
   it('supports invitations, child login, and password resets', async () => {
-    const testApp = await createTestApp();
+    let emailVerificationToken: string | null = null;
+    const testApp = await createTestApp(
+      {
+        RODZINA_SMTP_HOST: 'unused.example.com',
+        RODZINA_SMTP_USER: 'test',
+        RODZINA_SMTP_PASSWORD: 'test-only',
+        RODZINA_MAIL_FROM: 'sender@example.com',
+      },
+      async (_config, mail) => {
+        emailVerificationToken = new URLSearchParams(new URL(mail.link).hash.slice(1)).get('token');
+      },
+    );
     app = testApp.app;
     database = testApp.database;
 
@@ -410,13 +421,20 @@ describe('auth API', () => {
     expect(invitationPreview.statusCode).toBe(200);
     expect(invitationPreview.json().family.name).toBe('Rodzina Zaproszeń');
 
+    const verification = await app.inject({
+      method: 'POST',
+      url: `/api/invitations/${token}/email-verification`,
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
+      payload: { email: 'kamil@example.com' },
+    });
+    expect(verification.statusCode).toBe(202);
     const acceptResponse = await app.inject({
       method: 'POST',
       url: `/api/invitations/${token}/accept`,
       headers: { 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:3000' },
       payload: {
         displayName: 'Kamil',
-        email: 'kamil@example.com',
+        emailVerificationToken,
         password: 'noweHaslo123',
       },
     });

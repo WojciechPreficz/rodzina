@@ -6,6 +6,15 @@ import type { AppConfig } from '../../config.js';
 export const SMTP_TIMEOUT_MS = 4000;
 export type ResetMail = { to: string; link: string; expiresAt: number };
 
+export function smtpConfigured(config: AppConfig): boolean {
+  return !!(
+    config.RODZINA_SMTP_HOST &&
+    config.RODZINA_SMTP_USER &&
+    config.RODZINA_SMTP_PASSWORD &&
+    config.RODZINA_MAIL_FROM
+  );
+}
+
 export function resetMailContent({ link, expiresAt }: ResetMail) {
   const expiry = new Date(expiresAt).toISOString();
   return {

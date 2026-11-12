@@ -9,6 +9,8 @@ import { hashToken, verifyPassword } from '../../auth.js';
 import { registerFamily } from './registration.js';
 import type { sendRegistrationMail } from './registration-mail.js';
 
+vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn().mockResolvedValue(undefined) }));
+
 const environment = {
   NODE_ENV: 'test',
   RODZINA_DATABASE_PATH: ':memory:',
@@ -146,7 +148,8 @@ describe('email confirmation for new families', () => {
     await request();
     send.mockRejectedValueOnce(new Error('private SMTP details'));
     const response = await request();
-    expect(response.statusCode).toBe(503);
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({ ok: true });
     expect(response.body).not.toContain('private SMTP');
     expect((await confirm(token(1))).statusCode).toBe(410);
     emptyAccounts();
@@ -175,7 +178,7 @@ describe('email confirmation for new families', () => {
     expect((await confirm()).statusCode).toBe(200);
   });
 
-  it('keeps existing accounts and sessions unchanged and handles a competing invitation', async () => {
+  it('keeps existing accounts and sessions and returns the same public responses for new and existing addresses', async () => {
     await request();
     const pending = database.db.select().from(pendingRegistrations).get()!;
     registerFamily(database, {
@@ -191,11 +194,25 @@ describe('email confirmation for new families', () => {
     expect(login.statusCode).toBe(200);
     const cookie = String(login.headers['set-cookie']).split(';')[0]!;
     expect((await confirm()).statusCode).toBe(409);
-    expect((await request()).statusCode).toBe(409);
+    for (const [url, expected] of [
+      ['/api/auth/registration-requests', 202],
+      ['/api/auth/register-family', 409],
+    ] as const) {
+      const existing = await post(url, data, '192.0.2.2');
+      const available = await post(url, { ...data, email: 'available@example.com' }, '192.0.2.3');
+      expect(existing.statusCode).toBe(expected);
+      expect(available.statusCode).toBe(expected);
+      expect(existing.body).toBe(available.body);
+      expect(existing.headers['set-cookie']).toBeUndefined();
+    }
     expect((await app.inject({ url: '/api/auth/me', headers: { cookie } })).statusCode).toBe(200);
     expect(database.db.select().from(families).all()).toMatchObject([{ id: 'existing-family', name: 'Existing' }]);
     expect(database.db.select().from(users).all()).toHaveLength(1);
-    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls.map(([, mail]) => mail.to)).toEqual([
+      data.email,
+      'available@example.com',
+      'available@example.com',
+    ]);
   });
 
   it('enforces persistent email limits across IPs and service restarts', async () => {
@@ -218,7 +235,7 @@ describe('email confirmation for new families', () => {
   it('limits IP attempts across addresses including SMTP errors', async () => {
     send.mockRejectedValue(new Error('unavailable'));
     for (let i = 0; i < 10; i++)
-      expect((await request({ ...data, email: `new-${i}@example.com` })).statusCode).toBe(503);
+      expect((await request({ ...data, email: `new-${i}@example.com` })).statusCode).toBe(202);
     const response = await request({ ...data, email: 'another@example.com' });
     expect(response.statusCode).toBe(429);
     expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
