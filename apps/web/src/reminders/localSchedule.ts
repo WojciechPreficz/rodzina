@@ -35,8 +35,7 @@ export type ScheduleResult = {
   planningError?: string | undefined;
   lastSuccessfulAt?: number | undefined;
 };
-export type ScheduleIssue =
-  'display' | 'exact' | 'background' | 'limit' | 'missing' | 'unexpected' | 'expired' | 'planning';
+export type ScheduleIssue = 'display' | 'background' | 'limit' | 'missing' | 'unexpected' | 'expired' | 'planning';
 
 export function hashAlarmKey(key: string) {
   let hash = 2166136261;
@@ -77,7 +76,8 @@ function notification(alarm: Alarm): LocalNotificationSchema {
     largeBody: body,
     channelId,
     smallIcon: 'ic_stat_reminder',
-    isExactMandatory: true,
+    // Capacitor stores the payload without prompting. The native scheduler selects the alarm mode.
+    isExactNotification: false,
     schedule: { at: new Date(alarm.fireAt), allowWhileIdle: true },
     extra: { key: alarm.key, fingerprint: JSON.stringify(alarm), url: first.url, reminders: alarm.items },
   };
@@ -152,7 +152,6 @@ export function createLocalScheduler(deps: Dependencies) {
     const missing = future.find((alarm) => !confirmed.includes(alarm));
     const issues: ScheduleIssue[] = [];
     if (access.display !== 'granted') issues.push('display');
-    if (access.exact !== 'granted') issues.push('exact');
     if (access.backgroundRestricted) issues.push('background');
     if (future.length > alarmLimit) issues.push('limit');
     if (missing) issues.push('missing');
@@ -192,7 +191,7 @@ export function createLocalScheduler(deps: Dependencies) {
       reminders: data.snapshot.reminders.filter((item) => item.sourceType !== 'task' || !blocked.has(item.sourceId)),
     };
     const access = await permissions();
-    if (access.display !== 'granted' || access.exact !== 'granted') throw new Error(text.permissionRequired);
+    if (access.display !== 'granted') throw new Error(text.permissionRequired);
     const all = buildAlarms(data.snapshot, data.ids, deps.now());
     const desired = all.slice(0, alarmLimit).map(notification);
     // Commit desired state and ID allocations before touching system alarms, so a crash is retryable.
@@ -292,7 +291,8 @@ export function createLocalScheduler(deps: Dependencies) {
     clear() {
       generation += 1;
       return serial(async () => {
-        const notifications = await scheduled();
+        // The plugin excludes alarms past their requested time from SCHEDULED, even if Android is still deferring them.
+        const { notifications } = await deps.notifications.getAll();
         if (notifications.length)
           await deps.notifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) });
         await deps.notifications.removeAllDeliveredNotifications();

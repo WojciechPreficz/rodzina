@@ -97,6 +97,9 @@ export function LocalAlarmsPage() {
             <Alert color={result.complete && !failure ? 'teal' : 'orange'} role="status">
               <Text>{result.complete && !failure ? text.complete : text.incomplete}</Text>
               <Text>{text.saved(result.count, result.total)}</Text>
+              {result.count > 0 && access?.display === 'granted' && access.exact !== 'granted' && (
+                <Text>{text.approximate}</Text>
+              )}
               {result.issues?.map((issue) => (
                 <Text key={issue}>{text.issues[issue]}</Text>
               ))}

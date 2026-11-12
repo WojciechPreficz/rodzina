@@ -8,7 +8,11 @@ import java.util.Set;
 
 /** Reconciles durable registration receipts with the native alarm operations. */
 final class SystemAlarmReconciler {
-    record Alarm(int id, long fireAt, String fingerprint) {}
+    record Alarm(int id, long fireAt, String fingerprint) {
+        String receipt(boolean exact) {
+            return exact ? fingerprint : "approximate:" + fingerprint;
+        }
+    }
     record Result(List<Integer> registeredIds, List<Integer> failedIds) {}
     interface Registry {
         boolean hasOperation(int id);
@@ -16,20 +20,21 @@ final class SystemAlarmReconciler {
     }
 
     static Result reconcile(List<Alarm> alarms, Map<Integer, String> receipts,
-                            Set<Integer> forceIds, long now, Registry registry) {
+                            Set<Integer> forceIds, long now, boolean exact, Registry registry) {
         List<Integer> registered = new ArrayList<>();
         List<Integer> failed = new ArrayList<>();
         Set<Integer> futureIds = new HashSet<>();
         for (Alarm alarm : alarms) {
             if (alarm.fireAt() <= now) continue;
             futureIds.add(alarm.id());
-            boolean ready = alarm.fingerprint().equals(receipts.get(alarm.id()))
+            String receipt = alarm.receipt(exact);
+            boolean ready = receipt.equals(receipts.get(alarm.id()))
                 && registry.hasOperation(alarm.id()) && !forceIds.contains(alarm.id());
             if (!ready) {
                 receipts.remove(alarm.id());
                 try {
                     registry.register(alarm);
-                    receipts.put(alarm.id(), alarm.fingerprint());
+                    receipts.put(alarm.id(), receipt);
                     ready = true;
                 } catch (Exception error) {
                     failed.add(alarm.id());

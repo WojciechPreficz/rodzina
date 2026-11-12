@@ -35,7 +35,7 @@ public class RodzinaAlarmsPlugin extends Plugin {
                 result.put("failedIds", new JSONArray(applied.failedIds()));
                 call.resolve(result);
             } catch (Exception error) {
-                call.reject("Nie udało się zarejestrować alarmów systemowych. Sprawdź zgodę na dokładne alarmy i ponów zapis.");
+                call.reject("Nie udało się zarejestrować alarmów systemowych. Ponów zapis z urządzenia.");
             }
         }
     }

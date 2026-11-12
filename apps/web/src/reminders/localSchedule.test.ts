@@ -1,7 +1,7 @@
 import '../offline/testing.js';
 import { updateTaskData, createTaskOfflineStore } from '../features/tasks/index.js';
 import { expect, it, vi } from 'vitest';
-import type { LocalNotificationSchema } from '@capacitor/local-notifications';
+import type { LocalNotificationSchema, LocalNotificationsPlugin } from '@capacitor/local-notifications';
 import type { ReminderSchedule, ScheduledReminder } from '@rodzina/shared';
 import { alarmLimit, buildAlarms, createLocalScheduler } from './localSchedule.js';
 
@@ -28,7 +28,9 @@ function fixture(items = [reminder('one')], blockedTasks?: (account: string) => 
   const notifications = {
     listChannels: vi.fn(async () => ({ channels: [] })),
     checkPermissions: vi.fn(async () => ({ display: 'granted' as const })),
-    checkExactNotificationSetting: vi.fn(async () => ({ exact_alarm: 'granted' as const })),
+    checkExactNotificationSetting: vi.fn<LocalNotificationsPlugin['checkExactNotificationSetting']>(async () => ({
+      exact_alarm: 'granted',
+    })),
     createChannel: vi.fn(async () => undefined),
     // Plugin 8.3.1 getPending also includes retained, already-triggered records.
     getPending: vi.fn(async () => ({ notifications: [...pending.values(), ...delivered.values()] })),
@@ -296,7 +298,7 @@ it('groups nearby alarms at the earliest UTC instant and preserves every reminde
   const first = [...f.pending.values()][0]!;
   expect(first.extra.reminders).toHaveLength(2);
   expect(first.schedule).toMatchObject({ at: new Date(now + 60_000), allowWhileIdle: true });
-  expect(first.isExactMandatory).toBe(true);
+  expect(first.isExactNotification).toBe(false);
 });
 it('repeated reads and a new JS process do not duplicate persisted alarms', async () => {
   const f = fixture();
@@ -354,13 +356,31 @@ it('network errors, invalid partial snapshots and old snapshots preserve existin
   expect(f.pending.size).toBe(1);
   expect(f.notifications.cancel).not.toHaveBeenCalled();
 });
-it.each(['display', 'exact'])('does not schedule or claim success without %s permission', async (permission) => {
+it('does not schedule or claim success without permission to show notifications', async () => {
   const f = fixture();
-  if (permission === 'display') f.notifications.checkPermissions.mockResolvedValue({ display: 'denied' } as never);
-  else f.notifications.checkExactNotificationSetting.mockResolvedValue({ exact_alarm: 'denied' } as never);
+  f.notifications.checkPermissions.mockResolvedValue({ display: 'denied' } as never);
   await expect(f.scheduler.sync('family:user')).rejects.toThrow('Zezwól');
   expect(f.notifications.schedule).not.toHaveBeenCalled();
   expect(f.store.write).not.toHaveBeenCalled();
+});
+it('saves and confirms alarms without permission to schedule exact alarms', async () => {
+  const f = fixture();
+  f.notifications.checkExactNotificationSetting.mockResolvedValue({ exact_alarm: 'denied' });
+  expect(await f.scheduler.sync('family:user')).toMatchObject({
+    complete: true,
+    count: 1,
+    issues: [],
+    lastSuccessfulAt: now,
+  });
+  expect(f.notifications.schedule).toHaveBeenCalledWith({
+    notifications: [
+      expect.objectContaining({
+        isExactNotification: false,
+        schedule: expect.objectContaining({ allowWhileIdle: true }),
+      }),
+    ],
+  });
+  expect(await f.scheduler.status('family:user')).toMatchObject({ complete: true, count: 1 });
 });
 it('reports the device cap and the actual protection horizon without silently dropping alarms', async () => {
   const f = fixture(
@@ -380,6 +400,16 @@ it('serializes operations and clears pending and visible notifications on logout
   await f.scheduler.clear();
   expect(f.pending.size).toBe(0);
   expect(f.notifications.removeAllDeliveredNotifications).toHaveBeenCalledOnce();
+});
+it('cancels alarms whose requested time has passed when clearing the account', async () => {
+  const f = fixture();
+  await f.scheduler.sync('family:user');
+  const [delayed] = [...f.pending.values()];
+  // Capacitor excludes a delayed one-shot from SCHEDULED as soon as its requested time passes.
+  f.notifications.getAll.mockImplementation(async (options) => ({ notifications: options ? [] : [delayed!] }));
+  await f.scheduler.clear();
+  expect(f.notifications.cancel).toHaveBeenCalledWith({ notifications: [{ id: delayed!.id }] });
+  expect(f.pending.size).toBe(0);
 });
 it('rejects a download interrupted by logout before planning', async () => {
   const f = fixture();

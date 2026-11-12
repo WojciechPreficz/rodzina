@@ -166,7 +166,7 @@ export const labels = {
     title: 'Przypomnienia offline',
     channelName: 'Przypomnienia kalendarza',
     groupTitle: (count: number) => `Przypomnienia kalendarza (${count})`,
-    permissionRequired: 'Zezwól na powiadomienia i dokładne alarmy, następnie ponów zapis.',
+    permissionRequired: 'Zezwól na powiadomienia, następnie ponów zapis.',
     corrupt: 'Zapis harmonogramu jest uszkodzony. Pobierz go ponownie.',
     sessionChanged: 'Konto zostało zmienione. Pobierz harmonogram ponownie.',
     invalidSnapshot: 'Nieprawidłowy lub nieaktualny harmonogram. Poprzednie alarmy zachowano.',
@@ -189,6 +189,7 @@ export const labels = {
     retry: 'Ponów zapis z urządzenia',
     displayStatus: (allowed: boolean) => `Powiadomienia: ${allowed ? 'dozwolone' : 'brak zgody'}`,
     exactStatus: (allowed: boolean) => `Dokładne alarmy: ${allowed ? 'dozwolone' : 'brak zgody'}`,
+    approximate: 'Zapisane przypomnienia mogą przychodzić z opóźnieniem.',
     saved: (count: number, total: number) => `Zapisane alarmy systemowe: ${count} z ${total} grup.`,
     noUpcoming:
       'W pobranym harmonogramie nie ma przyszłych przypomnień dla Twojego konta. Sprawdź termin i odbiorców przypomnienia w wydarzeniu.',
@@ -198,10 +199,9 @@ export const labels = {
     nativeRegistrationFailed:
       'Nie udało się zarejestrować części alarmów wybudzających telefon. Ponów zapis z urządzenia.',
     systemAlarmHint:
-      'Przypomnienia są zapisywane jako systemowe alarmy wybudzające telefon. Android może pokazywać ikonę budzika i godzinę najbliższego alarmu. Powiadomienie nie wymaga otwierania aplikacji ani internetu.',
+      'Przypomnienia wybudzają telefon i działają bez otwierania aplikacji ani internetu. Przy dokładnych alarmach Android może pokazywać ikonę budzika i godzinę najbliższego alarmu.',
     issues: {
       display: 'Powiadomienia lub ich kanał są zablokowane w ustawieniach Androida.',
-      exact: 'Brak zgody Androida na dokładne alarmy.',
       background:
         'Android ogranicza pracę Rodziny w tle. Otwórz „Ustawienia pracy w tle” i usuń ograniczenie baterii aplikacji.',
       limit: 'Przekroczono limit 400 grup alarmów. Część przypomnień nie została zapisana.',
@@ -217,7 +217,7 @@ export const labels = {
     error: 'Nie udało się zapisać lub sprawdzić alarmów. Spróbuj ponownie.',
     hint: 'Harmonogram odświeża się po zalogowaniu, zmianach, wznowieniu, odzyskaniu sieci i co 20 sekund w aktywnej aplikacji. Zmiany z serwera przy zamkniętym APK wymagają wznowienia i synchronizacji. Terminy oddalone o mniej niż 9 minut łączymy w jeden alarm o najwcześniejszej godzinie. Limit wynosi 400 grup.',
     limitations:
-      'Po restarcie odblokuj telefon przynajmniej raz. Wymuszone zatrzymanie aplikacji, wyłączony telefon, cofnięte zgody, przestrzeń prywatna i ograniczenia baterii producenta mogą zablokować alarmy.',
+      'Po restarcie odblokuj telefon przynajmniej raz. Po cofnięciu zgody na dokładne alarmy otwórz aplikację, aby ponownie zapisać przypomnienia. Wymuszone zatrzymanie aplikacji, wyłączony telefon, zablokowane powiadomienia, przestrzeń prywatna i ograniczenia baterii producenta mogą zablokować alarmy.',
     oppoHint:
       'Na telefonach OPPO sprawdź też Ustawienia → Aplikacje → Automatyczne uruchamianie → Rodzina. Ograniczenia działania w tle są niezależne od zgód na powiadomienia i dokładne alarmy.',
   },
@@ -233,7 +233,7 @@ export const labels = {
     title: 'Powiadomienia',
     androidOnly: 'Przypomnienia są dostępne w aplikacji na Androida.',
     offlineHint:
-      'Zainstaluj APK, zezwól na powiadomienia i dokładne alarmy oraz zsynchronizuj harmonogram. Zapisane alarmy mogą działać bez internetu. Strona służy do przeglądania i zarządzania danymi.',
+      'Zainstaluj APK, zezwól na powiadomienia i zsynchronizuj harmonogram. Zapisane przypomnienia działają bez internetu. Możesz zezwolić na dokładne alarmy, aby przypomnienia przychodziły o wyznaczonej porze.',
   },
   welcomeTitle: 'Witamy w Rodzinie',
   welcomeSubtitle: 'Zarządzaj domem, wydarzeniami i zadaniami w jednym miejscu.',

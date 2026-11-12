@@ -58,6 +58,10 @@ A-7: generowanie OpenAPI z tras Fastify i używanych przez nie schematów Zod.
 Architektura opisuje reguły i niezmienniki w krótkich sekcjach modułowych.
 Zweryfikowane lokalnie. Wynik pełnych kontroli jest przypisany do commita A-7 w CI.
 
+R-1: przybliżone alarmy Androida przy braku zgody na dokładne, z odtwarzaniem
+po restarcie i informacją o możliwym opóźnieniu. Końcowe CI i próba trybu
+przybliżonego na fizycznym telefonie do potwierdzenia według DEVELOPMENT.md.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

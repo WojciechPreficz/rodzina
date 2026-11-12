@@ -34,6 +34,7 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
   const { event } = await created.json();
   await page.addInitScript(() => {
     let saved: string | null = null;
+    let exact = false;
     const pending = new Map<number, Record<string, unknown>>();
     const methods = {
       RodzinaApi: ['request', 'clearSession'],
@@ -74,11 +75,19 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
             return {};
           }
           if (method === 'checkPermissions') return { display: 'granted' };
-          if (method === 'checkExactNotificationSetting') return { exact_alarm: 'granted' };
+          if (method === 'checkExactNotificationSetting') return { exact_alarm: exact ? 'granted' : 'denied' };
+          if (method === 'changeExactNotificationSetting') {
+            exact = true;
+            return { exact_alarm: 'granted' };
+          }
           if (method === 'listChannels') return { channels: [] };
           if (method === 'getAll') return { notifications: [...pending.values()] };
           if (method === 'schedule') {
-            for (const item of options.notifications as { id: number }[]) pending.set(item.id, item);
+            for (const item of options.notifications as { id: number; isExactNotification?: boolean }[]) {
+              if (!exact && item.isExactNotification !== false)
+                throw new Error('Exact alarm would prompt for permission');
+              pending.set(item.id, item);
+            }
           }
           if (method === 'cancel') {
             for (const item of options.notifications as { id: number }[]) pending.delete(item.id);
@@ -90,21 +99,27 @@ test('Android schedule sync screen fits the viewport with a mocked native bridge
   });
   await page.goto('/wiecej/powiadomienia');
   await expect(page.getByRole('heading', { name: 'Przypomnienia offline' })).toBeVisible();
-  await expect(page.getByText('Dokładne alarmy: dozwolone')).toBeVisible();
+  await expect(page.getByText('Dokładne alarmy: brak zgody')).toBeVisible();
   await page.getByRole('button', { name: 'Synchronizuj teraz' }).click();
   await expect(page.getByRole('status')).toContainText('Harmonogram zapisany.');
   await expect(page.getByRole('status')).toContainText('1 z 1');
+  const delay = 'Zapisane przypomnienia mogą przychodzić z opóźnieniem.';
+  await expect(page.getByRole('status')).toContainText(delay);
   await expect(page.getByRole('status')).toContainText('Najbliższy zapisany alarm:');
   await expect(page.getByRole('button', { name: 'Powiadomienia dozwolone' })).toBeDisabled();
   await expect(page.getByText(/Na telefonach OPPO/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath('local-alarms.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('local-alarms-approximate.png'), fullPage: true });
   const alarms = () =>
     page.evaluate(() =>
       (window as unknown as { readTestAlarms: () => { id: number; title: string }[] }).readTestAlarms(),
     );
   const original = await alarms();
   expect(original).toHaveLength(1);
+  await page.getByRole('button', { name: 'Zezwól na dokładne alarmy' }).click();
+  await expect(page.getByText('Dokładne alarmy: dozwolone')).toBeVisible();
+  await expect(page.getByRole('status')).not.toContainText(delay);
+  expect(await alarms()).toEqual(original);
 
   // The API request represents an edit from another device, outside this React client.
   const edited = await page.request.patch(`/api/events/${event.id}`, {

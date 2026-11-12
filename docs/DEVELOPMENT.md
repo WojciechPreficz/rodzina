@@ -417,6 +417,13 @@ APK, urządzenia i wyniki pomiarów, wymagają danych z prób.
       odblokowaniu, także po zmianie strefy telefonu. Zapisz czas lokalny/UTC,
       faktyczny odbiór i wynik kliknięcia. Zakres obejmuje też regresję
       zgłoszenia OPPO deploy.3 na aktualnej wersji.
+- [ ] Tryb przybliżony: na Androidzie 12 lub nowszym zostaw zgodę na powiadomienia
+      i odmów zgody na dokładne alarmy. Zsynchronizuj wydarzenie, sprawdź zapis
+      i komunikat o opóźnieniu. Sprawdź odbiór przy zablokowanym ekranie bez
+      sieci, także po restarcie i pierwszym odblokowaniu. Zapisz czas planowany
+      i faktyczny. Udziel zgody i sprawdź pojedyncze dokładne powiadomienie,
+      następnie cofnij zgodę i sprawdź powrót do trybu przybliżonego po
+      uruchomieniu APK.
 - [x] Alarm dokumentu: termin za 31 dni i offset 30 dni, następnego dnia
       09:00 Europe/Warsaw. Odbiór po zamknięciu APK i po restarcie; kliknięcie
       otwiera zapisany podgląd. Zdalne odnowienie/usunięcie po sync anuluje

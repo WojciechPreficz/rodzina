@@ -27,15 +27,38 @@ public class SystemAlarmReconcilerTest {
     @Test public void registersOnceAndReusesReceiptsAcrossNativeRestarts() {
         Map<Integer, String> receipts = new HashMap<>();
         Registry registry = new Registry();
-        assertEquals(List.of(7), SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, registry).registeredIds());
-        SystemAlarmReconciler.reconcile(List.of(alarm), new HashMap<>(receipts), Set.of(), now, registry);
+        assertEquals(List.of(7), SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, true, registry).registeredIds());
+        SystemAlarmReconciler.reconcile(List.of(alarm), new HashMap<>(receipts), Set.of(), now, true, registry);
+        assertEquals(List.of(7), registry.registrations);
+    }
+
+    @Test public void changesModeUnderTheSameIdEvenWithAnExistingOperation() {
+        Map<Integer, String> receipts = new HashMap<>(Map.of(7, "payload-a"));
+        Registry registry = new Registry();
+        registry.operations.add(7);
+
+        for (boolean exact : new boolean[] {false, false, true}) {
+            SystemAlarmReconciler.Result result =
+                SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, exact, registry);
+            assertEquals(List.of(7), result.registeredIds());
+            assertEquals(alarm.receipt(exact), receipts.get(7));
+        }
+        assertEquals(List.of(7, 7), registry.registrations);
+    }
+
+    @Test public void restoresAnApproximateAlarmWhenTheSystemOperationIsLost() {
+        Map<Integer, String> receipts = new HashMap<>(Map.of(7, alarm.receipt(false)));
+        Registry registry = new Registry();
+        SystemAlarmReconciler.Result result =
+            SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, false, registry);
+        assertEquals(List.of(7), result.registeredIds());
         assertEquals(List.of(7), registry.registrations);
     }
 
     @Test public void recreatesMissingOperationsDespiteAnExistingReceipt() {
         Map<Integer, String> receipts = new HashMap<>(Map.of(7, "payload-a"));
         Registry registry = new Registry();
-        SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, registry);
+        SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, true, registry);
         assertEquals(List.of(7), registry.registrations);
     }
 
@@ -43,9 +66,9 @@ public class SystemAlarmReconcilerTest {
         Map<Integer, String> receipts = new HashMap<>(Map.of(7, "old-payload"));
         Registry registry = new Registry();
         registry.operations.add(7);
-        SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, registry);
+        SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), now, true, registry);
         assertEquals("payload-a", receipts.get(7));
-        SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(7), now, registry);
+        SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(7), now, true, registry);
         assertEquals(List.of(7, 7), registry.registrations);
     }
 
@@ -54,19 +77,19 @@ public class SystemAlarmReconcilerTest {
         Registry registry = new Registry();
         registry.failId = 7;
         List<SystemAlarmReconciler.Alarm> alarms = List.of(alarm, new SystemAlarmReconciler.Alarm(8, 7000, "payload-b"));
-        SystemAlarmReconciler.Result result = SystemAlarmReconciler.reconcile(alarms, receipts, Set.of(), now, registry);
+        SystemAlarmReconciler.Result result = SystemAlarmReconciler.reconcile(alarms, receipts, Set.of(), now, true, registry);
         assertEquals(List.of(8), result.registeredIds());
         assertEquals(List.of(7), result.failedIds());
         assertFalse(receipts.containsKey(7));
         registry.failId = -1;
-        assertEquals(List.of(7, 8), SystemAlarmReconciler.reconcile(alarms, receipts, Set.of(), now, registry).registeredIds());
+        assertEquals(List.of(7, 8), SystemAlarmReconciler.reconcile(alarms, receipts, Set.of(), now, true, registry).registeredIds());
         assertEquals(List.of(8, 7), registry.registrations);
     }
 
     @Test public void expiredOrRemovedPayloadsLoseTheirReceiptsAndAreNeverResurrected() {
         Map<Integer, String> receipts = new HashMap<>(Map.of(7, "payload-a", 9, "removed"));
         Registry registry = new Registry();
-        SystemAlarmReconciler.Result result = SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), 5000, registry);
+        SystemAlarmReconciler.Result result = SystemAlarmReconciler.reconcile(List.of(alarm), receipts, Set.of(), 5000, true, registry);
         assertTrue(result.registeredIds().isEmpty());
         assertTrue(receipts.isEmpty());
         assertTrue(registry.registrations.isEmpty());

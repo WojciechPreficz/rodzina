@@ -201,6 +201,12 @@ aplikacja podczas obsługi żądania.
 - Osobiste przypomnienia należą wyłącznie do wskazanej osoby. Edycja źródła
   zachowuje cudze przypomnienia osobiste. Offset podąża za terminem, a data
   stała zachowuje swój moment. Bez godziny podstawą offsetu jest 09:00.
+- Za zgodą na dokładne alarmy Android używa `setAlarmClock`. Bez tej zgody
+  zapisuje alarmy przez `setAndAllowWhileIdle`, więc przypomnienia mogą
+  przyjść po wyznaczonym czasie. Po restarcie i pierwszym odblokowaniu
+  odtwarza przyszłe alarmy z urządzenia. Udzielenie zgody zastępuje je
+  dokładnymi. Cofnięcie zgody usuwa dokładne alarmy w Androidzie. Przy
+  następnym uruchomieniu APK odtwarza je w trybie przybliżonym.
 - Zmiana konta lub utrata sesji czyści alarmy. Cofnięcie dostępu na innym
   urządzeniu jest widoczne po synchronizacji. Powiadomienie o prywatnym zadaniu
   ma ogólną treść, a otwarcie wymaga ponownej autoryzacji.

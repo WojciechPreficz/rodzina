@@ -137,6 +137,23 @@ it('confirms granted permissions on disabled buttons and shows the next saved al
   await waitFor(() => expect(mocks.settings).toHaveBeenCalledOnce());
 });
 
+it('shows delayed delivery with a saved schedule and an option to enable exact alarms', async () => {
+  mocks.permissions.mockResolvedValue({ display: 'granted', exact: 'denied', backgroundRestricted: false });
+  mocks.sync.mockResolvedValue({
+    count: 1,
+    total: 1,
+    complete: true,
+    generatedAt: Date.now(),
+    validUntil: Date.now() + 60000,
+  });
+  show();
+  const status = await screen.findByRole('status');
+  expect(status).toHaveTextContent('Harmonogram zapisany.');
+  expect(status).toHaveTextContent('Zapisane przypomnienia mogą przychodzić z opóźnieniem.');
+  expect(screen.getByRole('button', { name: 'Zezwól na dokładne alarmy' })).toBeEnabled();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
 it('explains a background restriction even when all expected alarms are saved', async () => {
   mocks.permissions.mockResolvedValue({
     display: 'granted',

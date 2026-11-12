@@ -81,19 +81,20 @@ final class SystemAlarmScheduler {
         return PendingIntent.getBroadcast(context, id, intent, flags);
     }
 
-    private boolean permitted() {
-        return manager != null && (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager.canScheduleExactAlarms());
+    private boolean canScheduleExact() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager.canScheduleExactAlarms();
     }
 
     SystemAlarmReconciler.Result reconcile(Set<Integer> forceIds) {
         UserManager users = context.getSystemService(UserManager.class);
         if (users == null || !users.isUserUnlocked()) return new SystemAlarmReconciler.Result(Collections.emptyList(), Collections.emptyList());
+        if (manager == null) throw new IllegalStateException("Alarm manager unavailable");
+        boolean exact = canScheduleExact();
         Map<Integer, String> known = readReceipts();
         SystemAlarmReconciler.Result result = SystemAlarmReconciler.reconcile(
-            futureAlarms(), known, forceIds, System.currentTimeMillis(), new SystemAlarmReconciler.Registry() {
-                public boolean hasOperation(int id) { return permitted() && operation(id) != null; }
+            futureAlarms(), known, forceIds, System.currentTimeMillis(), exact, new SystemAlarmReconciler.Registry() {
+                public boolean hasOperation(int id) { return operation(id) != null; }
                 public void register(SystemAlarmReconciler.Alarm alarm) throws Exception {
-                    if (!permitted()) throw new IllegalStateException("Exact alarms unavailable");
                     PendingIntent target = operation(alarm.id());
                     if (target == null) {
                         LocalNotification notification = storage.getSavedNotification(Integer.toString(alarm.id()));
@@ -103,6 +104,10 @@ final class SystemAlarmScheduler {
                         target = operation(alarm.id());
                     }
                     if (target == null) throw new IllegalStateException("Alarm operation unavailable");
+                    if (!exact) {
+                        manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.fireAt(), target);
+                        return;
+                    }
                     Intent show = new Intent(context, MainActivity.class).setAction(Intent.ACTION_MAIN)
                         .addCategory(Intent.CATEGORY_LAUNCHER).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     PendingIntent showAlarm = PendingIntent.getActivity(context, 0, show,
@@ -118,10 +123,11 @@ final class SystemAlarmScheduler {
 
     List<Integer> registeredIds() {
         List<Integer> result = new ArrayList<>();
-        if (!permitted()) return result;
+        if (manager == null) return result;
+        boolean exact = canScheduleExact();
         Map<Integer, String> known = readReceipts();
         for (SystemAlarmReconciler.Alarm alarm : futureAlarms()) {
-            if (alarm.fingerprint().equals(known.get(alarm.id())) && operation(alarm.id()) != null) result.add(alarm.id());
+            if (alarm.receipt(exact).equals(known.get(alarm.id())) && operation(alarm.id()) != null) result.add(alarm.id());
         }
         return result;
     }
