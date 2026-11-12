@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type onRouteHookHandler } from 'fastify';
+import { z } from 'zod';
 import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
@@ -9,6 +10,7 @@ import type { AppConfig } from './config.js';
 import type { DatabaseConnection } from './db/client.js';
 import { registerApiErrorHandler, sendError } from './http/errors.js';
 import { registerIdempotency } from './http/idempotency.js';
+import { routeOptions } from './http/route-contract.js';
 import { registerSecurityHeaders } from './http/security-headers.js';
 import { registerSessionAuth } from './http/session-auth.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
@@ -24,7 +26,7 @@ import { registerAndroidDownloads } from './android-downloads.js';
 import type { sendResetMail } from './modules/auth/reset-mail.js';
 import type { sendRegistrationMail } from './modules/auth/registration-mail.js';
 
-const { version } = JSON.parse(
+export const { version: apiVersion } = JSON.parse(
   readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'),
 ) as {
   version: string;
@@ -35,6 +37,7 @@ export async function buildApp(
   database: DatabaseConnection,
   mailSender?: typeof sendResetMail,
   registrationMailSender?: typeof sendRegistrationMail,
+  observeRoute?: onRouteHookHandler,
 ): Promise<FastifyInstance> {
   const app = Fastify({
     trustProxy: config.RODZINA_TRUSTED_PROXIES.length ? config.RODZINA_TRUSTED_PROXIES : false,
@@ -50,6 +53,7 @@ export async function buildApp(
   registerApiErrorHandler(app);
   registerSecurityHeaders(app, config);
   const registerProfiles = registerIdempotency(app, database);
+  if (observeRoute) app.addHook('onRoute', observeRoute);
 
   await app.register(fastifyRateLimit, {
     global: false,
@@ -79,17 +83,23 @@ export async function buildApp(
   registerAuthRoutes(app, database, config, mailSender, registrationMailSender);
   registerFamilyRoutes(app, database, config);
 
-  app.get('/api/health', { config: { auth: 'public' } }, async (_request, reply) => {
-    let dbOk = false;
-    try {
-      database.sqlite.prepare('SELECT 1').get();
-      dbOk = true;
-    } catch (error) {
-      app.log.error({ err: error }, 'Health check failed to query SQLite');
-    }
+  const healthResponse = <Ready extends boolean>(ready: Ready) =>
+    z.object({ ok: z.literal(ready), version: z.string(), dbOk: z.literal(ready) });
+  app.get(
+    '/api/health',
+    routeOptions({ responses: { 200: healthResponse(true), 503: healthResponse(false) } }, { auth: 'public' }),
+    async (_request, reply) => {
+      let dbOk = false;
+      try {
+        database.sqlite.prepare('SELECT 1').get();
+        dbOk = true;
+      } catch (error) {
+        app.log.error({ err: error }, 'Health check failed to query SQLite');
+      }
 
-    return reply.code(dbOk ? 200 : 503).send({ ok: dbOk, version, dbOk });
-  });
+      return reply.code(dbOk ? 200 : 503).send({ ok: dbOk, version: apiVersion, dbOk });
+    },
+  );
 
   registerEventRoutes(app, database);
   registerShoppingRoutes(app, database, registerProfiles);

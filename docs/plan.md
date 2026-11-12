@@ -54,6 +54,10 @@ rodziny w zapisach. Zweryfikowane lokalnie, oczekuje na CI.
 A-5: indeksy, codzienne czyszczenie po backupie i jawne włączenie kluczy obcych.
 Zweryfikowane lokalnie, oczekuje na CI.
 
+A-7: generowanie OpenAPI z tras Fastify i używanych przez nie schematów Zod.
+Architektura opisuje reguły i niezmienniki w krótkich sekcjach modułowych.
+Zweryfikowane lokalnie. Wynik pełnych kontroli jest przypisany do commita A-7 w CI.
+
 Próby wymagające potwierdzenia zbiera [DEVELOPMENT.md](DEVELOPMENT.md#pozostały-odbiór).
 Wdrożenie jest osobną czynnością na polecenie właściciela.
 

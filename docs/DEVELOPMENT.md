@@ -55,6 +55,22 @@ i [ustawa o prawach konsumenta](https://eli.gov.pl/api/acts/DU/2024/1796/text.ht
 
 ## Testy
 
+### Kontrakt HTTP
+
+Po `npm ci` uruchom `npm run openapi:generate` i otwórz `docs/openapi.json`
+w narzędziu obsługującym OpenAPI 3.1. Polecenie rejestruje trasy na
+tymczasowej bazie SQLite w pamięci i nie uruchamia nasłuchu. Plik powstaje
+lokalnie po każdym uruchomieniu i jest ignorowany przez Git.
+
+Przy zmianie trasy podaj w `config.contract` schematy używane przez jej
+handler i rzeczywiste statusy odpowiedzi. Dla mutacji objętej profilem
+idempotencji podaj kontrakt jako ostatni argument rejestracji. Profil sam
+dołącza schemat query. Test `npm test -- apps/api/src/openapi` sprawdza
+generowanie ze wszystkich zarejestrowanych tras `/api`, wymagane parametry,
+sesję i zgodność starszego klienta.
+
+### Testy modułów
+
 Nowe rodziny: skonfiguruj SMTP według DEPLOY.md. Samo
 RODZINA_ALLOW_REGISTRATION=true bez poczty nie pozwala utworzyć konta.
 Testy auth/registration, registration-migration i registration-mail sprawdzają

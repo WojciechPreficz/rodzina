@@ -114,30 +114,31 @@ export const mealOfflineWriteSchema = z
     data: putMealSchema.nullable(),
   })
   .strict();
+const mealOfflineWriteChange = z
+  .object({
+    type: z.literal('write'),
+    weekStart: mealWeekStartSchema,
+    // Omitted by older clients, whose writes target the first meal on a date.
+    byId: z.literal(true).optional(),
+    expectedDays: z.record(calendarDateSchema, z.array(z.string().uuid())).optional(),
+    writes: z
+      .array(mealOfflineWriteSchema)
+      .refine(
+        (writes) => new Set(writes.map((write) => write.id)).size === writes.length,
+        'Identyfikatory zapisów nie mogą się powtarzać.',
+      ),
+  })
+  .strict();
+const isSupportedMealWrite = (change: z.infer<typeof mealOfflineWriteChange>) =>
+  change.byId ||
+  (!change.expectedDays && new Set(change.writes.map((write) => write.date)).size === change.writes.length);
+const invalidLegacyWrite = 'Nieprawidłowy zapis dla starszego klienta.';
+
+export const mealOfflineWriteChangeSchema = mealOfflineWriteChange.refine(isSupportedMealWrite, invalidLegacyWrite);
 export const mealOfflineChangeSchema = z
   .discriminatedUnion('type', [
-    z
-      .object({
-        type: z.literal('write'),
-        weekStart: mealWeekStartSchema,
-        // Omitted by older clients, whose writes target the first meal on a date.
-        byId: z.literal(true).optional(),
-        expectedDays: z.record(calendarDateSchema, z.array(z.string().uuid())).optional(),
-        writes: z
-          .array(mealOfflineWriteSchema)
-          .refine(
-            (writes) => new Set(writes.map((write) => write.id)).size === writes.length,
-            'Identyfikatory zapisów nie mogą się powtarzać.',
-          ),
-      })
-      .strict(),
+    mealOfflineWriteChange,
     z.object({ type: z.literal('export'), data: mealsToShoppingListSchema }).strict(),
   ])
-  .refine(
-    (change) =>
-      change.type !== 'write' ||
-      change.byId ||
-      (!change.expectedDays && new Set(change.writes.map((write) => write.date)).size === change.writes.length),
-    'Nieprawidłowy zapis dla starszego klienta.',
-  );
+  .refine((change) => change.type !== 'write' || isSupportedMealWrite(change), invalidLegacyWrite);
 export type MealOfflineChange = z.infer<typeof mealOfflineChangeSchema>;

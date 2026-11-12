@@ -1,7 +1,10 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { z } from 'zod';
+
+export const apiErrorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 
 export function sendError(reply: FastifyReply, status: number, code: string, message: string) {
-  return reply.code(status).send({ error: { code, message } });
+  return reply.code(status).send({ error: { code, message } } satisfies z.infer<typeof apiErrorSchema>);
 }
 
 export class ApiError extends Error {
@@ -32,8 +35,7 @@ const clientErrors: Record<number, { code: string; message: string }> = {
 
 export function registerApiErrorHandler(app: FastifyInstance) {
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof ApiError)
-      return reply.code(error.status).send({ error: { code: error.code, message: error.message } });
+    if (error instanceof ApiError) return sendError(reply, error.status, error.code, error.message);
     if (
       request.routeOptions.config.primaryKeyConflictMessage &&
       error instanceof Error &&

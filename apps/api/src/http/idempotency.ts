@@ -6,6 +6,7 @@ import type { DatabaseConnection } from '../db/client.js';
 import { OPERATION_RETENTION_MS } from '../db/operation-retention.js';
 import { ApiError } from './errors.js';
 import { requireUser } from './session-auth.js';
+import type { RouteContract } from './route-contract.js';
 
 const querySchema = z
   .object({
@@ -51,9 +52,11 @@ export function registerIdempotency(app: FastifyInstance, database: DatabaseConn
     const handler = route.handler;
     if (wrappedHandlers.has(handler)) throw new Error(`Idempotency already applied to ${route.method} ${route.url}`);
     unusedProfiles.delete(name);
+    const operationQuery = options.querySchema ?? querySchema;
+    if (route.config?.contract) route.config.contract = { ...route.config.contract, query: operationQuery };
     route.handler = function (request, reply) {
       const user = requireUser(request);
-      const { operationId, actorId } = parse(options.querySchema ?? querySchema, request.query);
+      const { operationId, actorId } = parse(operationQuery, request.query);
       if (actorId && actorId !== user.id)
         throw new ApiError(401, 'SESSION_CHANGED', 'Konto zostało zmienione. Zaloguj się ponownie.');
       if (!operationId) return handler.call(this, request, reply);
@@ -117,8 +120,8 @@ export function registerIdempotency(app: FastifyInstance, database: DatabaseConn
       profiles.set(name, definitions[name]);
       unusedProfiles.add(name);
     }
-    return (method: MutationMethod, url: string, idempotency: Name, handler: SyncHandler) => {
-      routes.route({ method, url, config: { idempotency }, handler });
+    return (method: MutationMethod, url: string, idempotency: Name, handler: SyncHandler, contract?: RouteContract) => {
+      routes.route({ method, url, config: { idempotency, ...(contract && { contract }) }, handler });
     };
   };
 }

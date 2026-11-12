@@ -1,3 +1,4 @@
+import { routeOptions } from '../../http/route-contract.js';
 import { parse } from '../../http/validation.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -20,49 +21,82 @@ export function registerContactRoutes(app: FastifyInstance, database: DatabaseCo
   const service = createContactService(database);
   const idSchema = z.object({ id: z.string().uuid() });
   app.register(async (routes) => {
-    routes.get('/api/contacts', async (request) =>
+    routes.get('/api/contacts', routeOptions({ responses: { 200: contactsResponseSchema } }), async (request) =>
       contactsResponseSchema.parse({ ok: true, ...service.snapshot(requireUser(request).familyId) }),
     );
-    routes.post('/api/contacts', { config: { idempotency: false } }, (request, reply) => {
-      const user = requireUser(request);
-      const contact = service.create(user.familyId, user.id, user.role, parse(createContactSchema, request.body));
-      return reply.code(201).send(contactResponseSchema.parse({ ok: true, contact }));
-    });
-    routes.patch('/api/contacts/:id', { config: { idempotency: false } }, (request) => {
-      const user = requireUser(request);
-      const { id } = parse(idSchema, request.params);
-      return contactResponseSchema.parse({
-        ok: true,
-        contact: service.update(user.familyId, id, user.role, parse(patchContactSchema, request.body)),
-      });
-    });
-    routes.delete('/api/contacts/:id', { config: { idempotency: false } }, (request) => {
-      const user = requireUser(request);
-      service.remove(user.familyId, parse(idSchema, request.params).id, user.role);
-      return contactDeletedResponseSchema.parse({ ok: true, deleted: true });
-    });
-    routes.post('/api/contact-groups', { config: { idempotency: false } }, (request, reply) => {
-      const user = requireUser(request);
-      const group = service.createGroup(
-        user.familyId,
-        user.id,
-        user.role,
-        parse(createContactGroupSchema, request.body).name,
-      );
-      return reply.code(201).send(contactGroupResponseSchema.parse({ ok: true, group }));
-    });
-    routes.patch('/api/contact-groups/:id', { config: { idempotency: false } }, (request) => {
-      const user = requireUser(request);
-      const { id } = parse(idSchema, request.params);
-      return contactGroupResponseSchema.parse({
-        ok: true,
-        group: service.updateGroup(user.familyId, id, user.role, parse(patchContactGroupSchema, request.body).name),
-      });
-    });
-    routes.delete('/api/contact-groups/:id', { config: { idempotency: false } }, (request) => {
-      const user = requireUser(request);
-      service.removeGroup(user.familyId, parse(idSchema, request.params).id, user.role);
-      return contactDeletedResponseSchema.parse({ ok: true, deleted: true });
-    });
+    routes.post(
+      '/api/contacts',
+      routeOptions({ body: createContactSchema, responses: { 201: contactResponseSchema } }, { idempotency: false }),
+      (request, reply) => {
+        const user = requireUser(request);
+        const contact = service.create(user.familyId, user.id, user.role, parse(createContactSchema, request.body));
+        return reply.code(201).send(contactResponseSchema.parse({ ok: true, contact }));
+      },
+    );
+    routes.patch(
+      '/api/contacts/:id',
+      routeOptions(
+        { params: idSchema, body: patchContactSchema, responses: { 200: contactResponseSchema } },
+        { idempotency: false },
+      ),
+      (request) => {
+        const user = requireUser(request);
+        const { id } = parse(idSchema, request.params);
+        return contactResponseSchema.parse({
+          ok: true,
+          contact: service.update(user.familyId, id, user.role, parse(patchContactSchema, request.body)),
+        });
+      },
+    );
+    routes.delete(
+      '/api/contacts/:id',
+      routeOptions({ params: idSchema, responses: { 200: contactDeletedResponseSchema } }, { idempotency: false }),
+      (request) => {
+        const user = requireUser(request);
+        service.remove(user.familyId, parse(idSchema, request.params).id, user.role);
+        return contactDeletedResponseSchema.parse({ ok: true, deleted: true });
+      },
+    );
+    routes.post(
+      '/api/contact-groups',
+      routeOptions(
+        { body: createContactGroupSchema, responses: { 201: contactGroupResponseSchema } },
+        { idempotency: false },
+      ),
+      (request, reply) => {
+        const user = requireUser(request);
+        const group = service.createGroup(
+          user.familyId,
+          user.id,
+          user.role,
+          parse(createContactGroupSchema, request.body).name,
+        );
+        return reply.code(201).send(contactGroupResponseSchema.parse({ ok: true, group }));
+      },
+    );
+    routes.patch(
+      '/api/contact-groups/:id',
+      routeOptions(
+        { params: idSchema, body: patchContactGroupSchema, responses: { 200: contactGroupResponseSchema } },
+        { idempotency: false },
+      ),
+      (request) => {
+        const user = requireUser(request);
+        const { id } = parse(idSchema, request.params);
+        return contactGroupResponseSchema.parse({
+          ok: true,
+          group: service.updateGroup(user.familyId, id, user.role, parse(patchContactGroupSchema, request.body).name),
+        });
+      },
+    );
+    routes.delete(
+      '/api/contact-groups/:id',
+      routeOptions({ params: idSchema, responses: { 200: contactDeletedResponseSchema } }, { idempotency: false }),
+      (request) => {
+        const user = requireUser(request);
+        service.removeGroup(user.familyId, parse(idSchema, request.params).id, user.role);
+        return contactDeletedResponseSchema.parse({ ok: true, deleted: true });
+      },
+    );
   });
 }
